@@ -126,13 +126,28 @@ def _setup_figure(lng, lat):
     return fig, ax, aspect_ratio, plot_height, plot_width
 
 
+# Global flag for cache configuration
+_CONTEXTILY_CACHE_CONFIGURED = False
+
+
+def _configure_contextily_cache():
+    global _CONTEXTILY_CACHE_CONFIGURED
+    if not _CONTEXTILY_CACHE_CONFIGURED:
+        try:
+            cache_dir = os.path.join(os.getcwd(), "cache", "tiles")
+            os.makedirs(cache_dir, exist_ok=True)
+            ctx.set_cache_dir(cache_dir)
+            print(f"Contextily cache configured at: {cache_dir}")
+            _CONTEXTILY_CACHE_CONFIGURED = True
+        except Exception as e:
+            print(f"Failed to configure contextily cache: {e}")
+
+
 def _add_basemap_and_boundaries(ax, city_name):
     # Add basemap with administrative boundaries
     try:
-        # Configure contextily cache to avoid re-downloading tiles
-        cache_dir = os.path.join(os.getcwd(), "cache", "tiles")
-        os.makedirs(cache_dir, exist_ok=True)
-        ctx.set_cache_dir(cache_dir)
+        # Ensure cache is configured
+        _configure_contextily_cache()
 
         # Add basemap
         ctx.add_basemap(
@@ -142,7 +157,7 @@ def _add_basemap_and_boundaries(ax, city_name):
             alpha=1.0,  # Map fully opaque (or slightly transparent if desired)
             zorder=0,  # Map at bottom
         )
-        print("\nBasemap added successfully")
+        print("Basemap added successfully")
     except Exception as e:
         print(f"Could not add basemap: {e}")
 

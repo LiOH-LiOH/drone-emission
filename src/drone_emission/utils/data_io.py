@@ -1,6 +1,5 @@
 import pandas as pd
 
-
 PADDING = 0.05
 
 
@@ -15,19 +14,19 @@ def calculate_bounds(city_df):
     print("-" * 20)
 
     return {
-        "min_lat": city_df["lat"].quantile(0.001) - PADDING,
-        "max_lat": city_df["lat"].quantile(0.999) + PADDING,
-        "min_lng": city_df["lng"].quantile(0.001) - PADDING,
-        "max_lng": city_df["lng"].quantile(0.999) + PADDING,
+        "min_lat": city_df["lat"].quantile(0.01) - PADDING,
+        "max_lat": city_df["lat"].quantile(0.99) + PADDING,
+        "min_lng": city_df["lng"].quantile(0.01) - PADDING,
+        "max_lng": city_df["lng"].quantile(0.99) + PADDING,
     }
 
 
-def filter_city_data(df, city_name_cn, boundaries_dict=None):
-    tmp_data = df[df["city"] == city_name_cn]
-    print(f"{city_name_cn} has {len(tmp_data)} entries.")
+def read_region_data(data_path, region_name, region_level="city"):
+    df = pd.read_csv(data_path)
+    tmp_data = df[df[region_level] == region_name]
+    print(f"{region_name} has {len(tmp_data)} entries.")
 
-    if boundaries_dict is None:
-        boundaries_dict = calculate_bounds(tmp_data)
+    boundaries_dict = calculate_bounds(tmp_data)
 
     min_lat = boundaries_dict["min_lat"]
     max_lat = boundaries_dict["max_lat"]
@@ -48,11 +47,5 @@ def filter_city_data(df, city_name_cn, boundaries_dict=None):
         & (tmp_data["lng"] <= max_lng)
     ].copy()
 
-    print(f"After filtering, {city_name_cn} has {len(valid_data)} valid entries.\n")
+    print(f"After filtering, {region_name} has {len(valid_data)} valid entries.\n")
     return valid_data
-
-
-def read_city_data(data_path, city_name_cn, boundaries_dict=None):
-    df = pd.read_csv(data_path)
-    city_data = filter_city_data(df, city_name_cn, boundaries_dict)
-    return city_data

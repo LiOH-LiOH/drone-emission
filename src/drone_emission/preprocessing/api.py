@@ -1,6 +1,6 @@
 import os
 
-from utils import read_city_data
+from utils import read_region_data
 
 from .visualization import (
     plot_sales_distribution,
@@ -9,15 +9,17 @@ from .visualization import (
 )
 
 
-def preprocessing(city_name_cn, city_name_en, config):
+def preprocessing(region_name_cn, region_name_en, region_level, config):
     data_path = os.path.join(config["data_dir"], "combined_data.csv")
 
-    city_data = read_city_data(data_path, city_name_cn)
-    city_save_dir = os.path.join(config["output_dir"], city_name_en.lower())
-    if not os.path.exists(city_save_dir):
-        os.makedirs(city_save_dir)
+    region_data = read_region_data(data_path, region_name_cn, region_level=region_level)
+    region_save_dir = os.path.join(
+        config["figures_dir"], region_level, region_name_en.lower()
+    )
+    if not os.path.exists(region_save_dir):
+        os.makedirs(region_save_dir)
 
-    plot_sales_distribution(city_data, city_name_en, save_dir=city_save_dir)
-    plot_sales_heatmap(city_data, city_name_en, save_dir=city_save_dir)
-    plot_store_scatter(city_data, city_name_en, save_dir=city_save_dir)
-    print(f"Preprocessing for {city_name_en} completed.\n")
+    plot_sales_distribution(region_data, region_name_en, save_dir=region_save_dir)
+    plot_sales_heatmap(region_data, region_name_en, save_dir=region_save_dir)
+    plot_store_scatter(region_data, region_name_en, save_dir=region_save_dir)
+    print(f"Preprocessing for {region_name_en} completed.\n")
