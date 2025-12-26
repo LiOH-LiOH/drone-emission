@@ -9,17 +9,31 @@ from .visualization import (
 )
 
 
-def preprocessing(region_name_cn, region_name_en, region_level, config):
-    data_path = os.path.join(config["data_dir"], "combined_data.csv")
+def visualize_region_data(region_config, exp_config):
+    region_name_cn = region_config["region_name_cn"]
+    region_name_en = region_config["region_name_en"]
+    region_level = region_config["region_level"]
+    boundaries_dict = region_config.get("boundaries_dict", None)
 
-    region_data = read_region_data(data_path, region_name_cn, region_level=region_level)
+    data_path = os.path.join(exp_config["data_dir"], "combined_data.csv")
+
+    region_data = read_region_data(
+        data_path,
+        region_name_cn,
+        boundaries_dict=boundaries_dict,
+        region_level=region_level,
+    )
     region_save_dir = os.path.join(
-        config["figures_dir"], region_level, region_name_en.lower()
+        exp_config["figures_dir"], region_level, region_name_en.lower()
     )
     if not os.path.exists(region_save_dir):
         os.makedirs(region_save_dir)
 
     plot_sales_distribution(region_data, region_name_en, save_dir=region_save_dir)
-    plot_sales_heatmap(region_data, region_name_en, save_dir=region_save_dir)
-    plot_store_scatter(region_data, region_name_en, save_dir=region_save_dir)
-    print(f"Preprocessing for {region_name_en} completed.\n")
+    plot_sales_heatmap(
+        region_data, region_name_en, region_name_cn, save_dir=region_save_dir
+    )
+    plot_store_scatter(
+        region_data, region_name_en, region_name_cn, save_dir=region_save_dir
+    )
+    print(f"Visualization for {region_name_en} completed.\n")

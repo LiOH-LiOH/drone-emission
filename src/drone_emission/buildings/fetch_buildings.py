@@ -1,24 +1,10 @@
-"""
-Query GlobalBuildingAtlas WFS for Shenzhen city building data
-
-Requirements:
-    pip install requests
-
-Usage:
-    python shenzhen_buildings.py
-
-This script will:
-1. Connect to the GlobalBuildingAtlas WFS server
-2. List available layers
-3. Download building data for Shenzhen city
-4. Save as GeoJSON file
-"""
-
-import requests
 import json
 import os
-from xml.etree import ElementTree as ET
 from datetime import datetime
+from xml.etree import ElementTree as ET
+
+import requests
+from utils.coordinates import wgs84_to_3857
 
 # WFS endpoint
 WFS_URL = "https://tubvsig-so2sat-vm1.srv.mwn.de/geoserver/ows"
@@ -26,39 +12,18 @@ WFS_URL = "https://tubvsig-so2sat-vm1.srv.mwn.de/geoserver/ows"
 # The server uses EPSG:3857 (Web Mercator) as its native CRS
 # We need to convert WGS84 (EPSG:4326) coordinates to EPSG:3857
 
-def wgs84_to_web_mercator(lon, lat):
-    """Convert WGS84 (EPSG:4326) to Web Mercator (EPSG:3857)"""
-    import math
-    x = lon * 20037508.34 / 180
-    y = math.log(math.tan((90 + lat) * math.pi / 360)) / (math.pi / 180)
-    y = y * 20037508.34 / 180
-    return x, y
 
 def convert_bbox_to_3857(bbox_4326):
-    """Convert bbox from EPSG:4326 to EPSG:3857"""
+    """Convert bbox from EPSG:4326 to EPSG:3857 using shared utility"""
     min_lon, min_lat, max_lon, max_lat = bbox_4326
-    min_x, min_y = wgs84_to_web_mercator(min_lon, min_lat)
-    max_x, max_y = wgs84_to_web_mercator(max_lon, max_lat)
+    min_x, min_y = wgs84_to_3857(min_lon, min_lat)
+    max_x, max_y = wgs84_to_3857(max_lon, max_lat)
     return (min_x, min_y, max_x, max_y)
-
-# Shenzhen bounding box in WGS84 (EPSG:4326)
-# Longitude: 113.75°E to 114.65°E
-# Latitude: 22.45°N to 22.85°N
-SHENZHEN_BBOX_4326 = (113.75, 22.45, 114.65, 22.85)
-SHENZHEN_BBOX = convert_bbox_to_3857(SHENZHEN_BBOX_4326)
-
-# For testing with a smaller area (Futian District center)
-SHENZHEN_SMALL_BBOX_4326 = (114.03, 22.52, 114.08, 22.56)
-SHENZHEN_SMALL_BBOX = convert_bbox_to_3857(SHENZHEN_SMALL_BBOX_4326)
 
 
 def get_capabilities():
     """Get WFS capabilities to see available layers"""
-    params = {
-        "service": "WFS",
-        "version": "2.0.0",
-        "request": "GetCapabilities"
-    }
+    params = {"service": "WFS", "version": "2.0.0", "request": "GetCapabilities"}
 
     print("Fetching WFS capabilities...")
     response = requests.get(WFS_URL, params=params, timeout=60)
@@ -69,18 +34,18 @@ def get_capabilities():
 
     # Find all FeatureType elements (layers)
     namespaces = {
-        'wfs': 'http://www.opengis.net/wfs/2.0',
-        'ows': 'http://www.opengis.net/ows/1.1'
+        "wfs": "http://www.opengis.net/wfs/2.0",
+        "ows": "http://www.opengis.net/ows/1.1",
     }
 
     layers = []
-    for feature_type in root.findall('.//wfs:FeatureType', namespaces):
-        name = feature_type.find('wfs:Name', namespaces)
-        title = feature_type.find('wfs:Title', namespaces)
+    for feature_type in root.findall(".//wfs:FeatureType", namespaces):
+        name = feature_type.find("wfs:Name", namespaces)
+        title = feature_type.find("wfs:Title", namespaces)
         if name is not None:
             layer_info = {
-                'name': name.text,
-                'title': title.text if title is not None else name.text
+                "name": name.text,
+                "title": title.text if title is not None else name.text,
             }
             layers.append(layer_info)
 
@@ -98,7 +63,7 @@ def get_feature_count(layer_name, bbox):
         "typeName": layer_name,
         "bbox": bbox_str,
         "srsName": "EPSG:3857",  # Server's native CRS
-        "resultType": "hits"
+        "resultType": "hits",
     }
 
     response = requests.get(WFS_URL, params=params, timeout=120)
@@ -109,11 +74,13 @@ def get_feature_count(layer_name, bbox):
 
     # Parse the response to get the count
     root = ET.fromstring(response.content)
-    count = root.get('numberMatched') or root.get('numberOfFeatures')
+    count = root.get("numberMatched") or root.get("numberOfFeatures")
     return int(count) if count else 0
 
 
-def get_features(layer_name, bbox, max_features=10000, output_format="application/json"):
+def get_features(
+    layer_name, bbox, max_features=10000, output_format="application/json"
+):
     """
     Get features from WFS within a bounding box
 
@@ -137,7 +104,7 @@ def get_features(layer_name, bbox, max_features=10000, output_format="applicatio
         "bbox": bbox_str,
         "srsName": "EPSG:3857",  # Server's native CRS
         "outputFormat": output_format,
-        "count": max_features
+        "count": max_features,
         # NOTE: startIndex removed - this layer doesn't support pagination
     }
 
@@ -152,7 +119,9 @@ def get_features(layer_name, bbox, max_features=10000, output_format="applicatio
     return response.json() if "json" in output_format.lower() else response.text
 
 
-def download_all_features(layer_name, bbox, output_file="shenzhen_buildings.geojson", max_features=100000):
+def download_all_features(
+    city_name, layer_name, bbox, output_file="buildings.geojson", max_features=100000
+):
     """
     Download features from a single bbox query (no pagination).
 
@@ -168,7 +137,7 @@ def download_all_features(layer_name, bbox, output_file="shenzhen_buildings.geoj
     print(f"Downloading from layer: {layer_name}")
     print(f"Bounding box: {bbox}")
     print(f"Output file: {output_file}")
-    print('=' * 60)
+    print("=" * 60)
 
     # First get the total count
     print("\nCounting features in area...")
@@ -180,7 +149,9 @@ def download_all_features(layer_name, bbox, output_file="shenzhen_buildings.geoj
         return None
 
     if total_count > max_features:
-        print(f"\nWARNING: Area contains {total_count:,} features, but max is {max_features:,}")
+        print(
+            f"\nWARNING: Area contains {total_count:,} features, but max is {max_features:,}"
+        )
         print("Consider using download_by_grid() for large areas.")
 
     # Download features
@@ -205,14 +176,14 @@ def download_all_features(layer_name, bbox, output_file="shenzhen_buildings.geoj
     # Combine into single GeoJSON
     result = {
         "type": "FeatureCollection",
-        "name": "GlobalBuildingAtlas_Shenzhen",
+        "name": f"GlobalBuildingAtlas_{city_name}",
         "crs": {"type": "name", "properties": {"name": "urn:ogc:def:crs:EPSG::3857"}},
-        "features": features
+        "features": features,
     }
 
     # Save to file
     print(f"\nSaving to {output_file}...")
-    with open(output_file, 'w', encoding='utf-8') as f:
+    with open(output_file, "w", encoding="utf-8") as f:
         json.dump(result, f)
 
     file_size_mb = os.path.getsize(output_file) / (1024 * 1024)
@@ -221,7 +192,9 @@ def download_all_features(layer_name, bbox, output_file="shenzhen_buildings.geoj
     return result
 
 
-def download_by_grid(layer_name, bbox_3857, output_dir="shenzhen_tiles", grid_size_meters=5000):
+def download_by_grid(
+    city_name, layer_name, bbox_3857, output_dir="tiles", grid_size_meters=5000
+):
     """
     Download large areas by dividing into a grid (required since server doesn't support pagination)
 
@@ -246,7 +219,7 @@ def download_by_grid(layer_name, bbox_3857, output_dir="shenzhen_tiles", grid_si
     print(f"Grid-based download for layer: {layer_name}")
     print(f"Dividing into {cols}x{rows} = {total_tiles} tiles")
     print(f"Grid cell size: {grid_size_meters}m")
-    print('=' * 60)
+    print("=" * 60)
 
     all_features = []
     tile_num = 0
@@ -259,7 +232,7 @@ def download_by_grid(layer_name, bbox_3857, output_dir="shenzhen_tiles", grid_si
                 min_x + col * grid_size_meters,
                 min_y + row * grid_size_meters,
                 min(min_x + (col + 1) * grid_size_meters, max_x),
-                min(min_y + (row + 1) * grid_size_meters, max_y)
+                min(min_y + (row + 1) * grid_size_meters, max_y),
             )
 
             print(f"\nTile {tile_num}/{total_tiles}")
@@ -277,21 +250,23 @@ def download_by_grid(layer_name, bbox_3857, output_dir="shenzhen_tiles", grid_si
                 if "features" in data:
                     all_features.extend(data["features"])
                     elapsed = (datetime.now() - start_time).seconds
-                    print(f"  Total collected: {len(all_features):,} ({elapsed}s elapsed)")
+                    print(
+                        f"  Total collected: {len(all_features):,} ({elapsed}s elapsed)"
+                    )
 
             except Exception as e:
                 print(f"  Error: {e}")
                 continue
 
     # Save combined result
-    output_file = os.path.join(output_dir, "shenzhen_all_buildings.geojson")
+    output_file = os.path.join(output_dir, f"{city_name.lower()}_all_buildings.geojson")
     result = {
         "type": "FeatureCollection",
         "crs": {"type": "name", "properties": {"name": "urn:ogc:def:crs:EPSG::3857"}},
-        "features": all_features
+        "features": all_features,
     }
 
-    with open(output_file, 'w', encoding='utf-8') as f:
+    with open(output_file, "w", encoding="utf-8") as f:
         json.dump(result, f)
 
     file_size_mb = os.path.getsize(output_file) / (1024 * 1024)
@@ -304,9 +279,27 @@ def download_by_grid(layer_name, bbox_3857, output_dir="shenzhen_tiles", grid_si
     return result
 
 
-def main():
+def fetch_region_buildings(region_name, bbox_4326, output_dir):
+    bbox = convert_bbox_to_3857(bbox_4326)
+    output_file = os.path.join(output_dir, f"{region_name.lower()}_buildings.geojson")
+
+    return download_all_features(region_name, "lod1_global", bbox, output_file)
+
+
+# Shenzhen bounding box in WGS84 (EPSG:4326)
+# Longitude: 113.75°E to 114.65°E
+# Latitude: 22.45°N to 22.85°N
+SHENZHEN_BBOX_4326 = (113.75, 22.45, 114.65, 22.85)
+SHENZHEN_BBOX = convert_bbox_to_3857(SHENZHEN_BBOX_4326)
+
+# For testing with a smaller area (Futian District center)
+SHENZHEN_SMALL_BBOX_4326 = (114.03, 22.52, 114.08, 22.56)
+SHENZHEN_SMALL_BBOX = convert_bbox_to_3857(SHENZHEN_SMALL_BBOX_4326)
+
+
+def test_download(city_name, bbox_3857):
     print("=" * 60)
-    print("GlobalBuildingAtlas WFS Query - Shenzhen City")
+    print(f"GlobalBuildingAtlas WFS Query - {city_name}")
     print("=" * 60)
 
     # Step 1: Get available layers
@@ -327,17 +320,16 @@ def main():
     # Step 2: Find building layers
     # GlobalBuildingAtlas uses "lod1" (Level of Detail 1) and "polygon" naming
     building_layers = [
-        l for l in layers
-        if 'lod1' in l['name'].lower()
-        or 'polygon' in l['name'].lower()
-        or 'global3d' in l['name'].lower()
+        l
+        for l in layers
+        if "lod1" in l["name"].lower()
+        or "polygon" in l["name"].lower()
+        or "global3d" in l["name"].lower()
     ]
 
     if not building_layers:
         print("\nNo building-specific layers found automatically.")
         print("Please check the layer names above and modify the script.")
-        print("\nYou can manually call:")
-        print("  download_all_features('LAYER_NAME', SHENZHEN_BBOX)")
         return
 
     print(f"\nBuilding-related layers found:")
@@ -345,21 +337,21 @@ def main():
         print(f"  - {layer['name']}")
 
     # Prefer the main global LoD1 layer, or Asia-specific polygon layer
-    preferred_order = ['lod1_global', 'asia_oceania', 'lod1_global_sipeo', 'polygon']
-    layer_name = building_layers[0]['name']  # Default to first
+    preferred_order = ["lod1_global", "asia_oceania", "lod1_global_sipeo", "polygon"]
+    layer_name = building_layers[0]["name"]  # Default to first
 
     for preferred in preferred_order:
-        matching = [l for l in building_layers if preferred in l['name'].lower()]
+        matching = [l for l in building_layers if preferred in l["name"].lower()]
         if matching:
-            layer_name = matching[0]['name']
+            layer_name = matching[0]["name"]
             break
 
     print(f"\nSelected layer: {layer_name}")
 
     # Step 3: Test with small sample first
     print(f"\n{'=' * 60}")
-    print(f"Testing with small area (Futian District center)...")
-    print(f"Bbox (EPSG:3857): {SHENZHEN_SMALL_BBOX}")
+    print(f"Download area {city_name}...")
+    print(f"Bbox (EPSG:3857): {bbox_3857}")
 
     # Try different output formats (from GetCapabilities)
     output_formats = ["application/json", "json"]
@@ -368,7 +360,9 @@ def main():
     for fmt in output_formats:
         try:
             print(f"\n  Trying format: {fmt}")
-            sample = get_features(layer_name, SHENZHEN_SMALL_BBOX, max_features=100, output_format=fmt)
+            sample = get_features(
+                layer_name, bbox_3857, max_features=100, output_format=fmt
+            )
 
             if isinstance(sample, dict) and "features" in sample:
                 print(f"  Success with format: {fmt}")
@@ -390,9 +384,9 @@ def main():
             print(f"  {key}: {value}")
 
         # Save sample
-        with open("shenzhen_sample.geojson", 'w') as f:
+        with open(f"{city_name.lower()}_sample.geojson", "w") as f:
             json.dump(sample, f, indent=2)
-        print("\nSample saved to: shenzhen_sample.geojson")
+        print(f"\nSample saved to: {city_name.lower()}_sample.geojson")
 
     else:
         print("\nFailed to fetch sample with all formats.")
@@ -406,7 +400,8 @@ def main():
     print("NEXT STEPS - Choose one option:")
     print("=" * 60)
 
-    print(f"""
+    print(
+        f"""
 Option 1: Download all Shenzhen buildings (may be large!)
     download_all_features('{layer_name}', SHENZHEN_BBOX)
 
@@ -417,26 +412,9 @@ Option 3: Download a smaller test area first
     download_all_features('{layer_name}', SHENZHEN_SMALL_BBOX, 'futian_test.geojson')
 
 To run, uncomment one of these lines at the bottom of this script.
-""")
+"""
+    )
 
 
 if __name__ == "__main__":
-    main()
-
-    # Uncomment ONE of these to download data:
-    # Available layers:
-    #   - global3D:lod1_global          (main LoD1 3D building data)
-    #   - global3D:lod1_global_sipeo    (LoD1 SIPEO variant)
-    #   - global3D:polygon_2023q2_gcp_asia_oceania  (Asia/Oceania polygons 2023)
-
-    # Option 1: Direct download using main LoD1 layer
-    # download_all_features('global3D:lod1_global', SHENZHEN_BBOX)
-
-    # Option 2: Grid-based download (more reliable for large areas)
-    # download_by_grid('global3D:lod1_global', SHENZHEN_BBOX)
-
-    # Option 3: Test with small area first
-    # download_all_features('global3D:lod1_global', SHENZHEN_SMALL_BBOX, 'futian_sample.geojson')
-
-    # Option 4: Use Asia-specific polygon layer (might be more recent)
-    # download_all_features('global3D:polygon_2023q2_gcp_asia_oceania', SHENZHEN_BBOX)
+    test_download("Shenzhen", SHENZHEN_SMALL_BBOX)

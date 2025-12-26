@@ -2,24 +2,27 @@ import json
 import os
 
 import contextily as ctx
+import cpca
 import matplotlib.pyplot as plt
 import numpy as np
 import requests
 from matplotlib.colors import LinearSegmentedColormap
 from scipy.ndimage import gaussian_filter
+from utils.coordinates import convert_coords_array, gcj02_to_wgs84
 
-from ._utils import convert_coords_array, gcj02_to_wgs84
+# Global padding coefficient for plotting
+PADDING_COEFF = 0.1
 
 
-def get_adcode(city_name):
-    # Simple mapping for major cities
-    mapping = {
-        "beijing": 110000,
-        "shanghai": 310000,
-        "guangzhou": 440100,
-        "shenzhen": 440300,
-    }
-    return mapping.get(city_name.lower())
+def get_adcode(city_name_cn):
+    """Get adcode using cpca library"""
+    try:
+        df = cpca.transform([city_name_cn])
+        if not df.empty:
+            return df.iloc[0]["adcode"]
+    except Exception as e:
+        print(f"Error getting adcode for {city_name_cn}: {e}")
+    return None
 
 
 def fetch_boundaries(adcode):
@@ -112,17 +115,26 @@ def _setup_figure(lng, lat):
     aspect_ratio = 1.0 / np.cos(np.radians(avg_lat))
 
     # Calculate suitable figsize based on data bounds
-    padding = 0.04
-    lat_range = (lat.max() - lat.min()) + padding
-    lng_range = (lng.max() - lng.min()) + padding
+    lat_range = lat.max() - lat.min()
+    lng_range = lng.max() - lng.min()
 
-    plot_height = lat_range * aspect_ratio
-    plot_width = lng_range
+    pad_lat = lat_range * PADDING_COEFF
+    pad_lng = lng_range * PADDING_COEFF
+
+    lat_range_padded = lat_range + 2 * pad_lat
+    lng_range_padded = lng_range + 2 * pad_lng
+
+    plot_height = lat_range_padded * aspect_ratio
+    plot_width = lng_range_padded
 
     base_width = 15
     fig_height = base_width * (plot_height / plot_width)
 
     fig, ax = plt.subplots(figsize=(base_width, fig_height), dpi=150)
+
+    # Set aspect ratio to ensure consistent geometry across different plot types
+    ax.set_aspect(aspect_ratio)
+
     return fig, ax, aspect_ratio, plot_height, plot_width
 
 
@@ -143,7 +155,7 @@ def _configure_contextily_cache():
             print(f"Failed to configure contextily cache: {e}")
 
 
-def _add_basemap_and_boundaries(ax, city_name):
+def _add_basemap_and_boundaries(ax, city_name_cn):
     # Add basemap with administrative boundaries
     try:
         # Ensure cache is configured
@@ -162,12 +174,12 @@ def _add_basemap_and_boundaries(ax, city_name):
         print(f"Could not add basemap: {e}")
 
     # Add administrative boundaries (counties/districts)
-    adcode = get_adcode(city_name)
+    adcode = get_adcode(city_name_cn)
     if adcode:
         geojson_data = fetch_boundaries(adcode)
         plot_geojson_boundaries(ax, geojson_data, zorder=15)
     else:
-        print(f"No adcode found for {city_name}, skipping boundaries.")
+        print(f"No adcode found for {city_name_cn}, skipping boundaries.")
 
 
 def _finalize_plot(fig, ax, lng, lat, city_name, save_dir, filename, title, stats_text):
@@ -184,6 +196,9 @@ def _finalize_plot(fig, ax, lng, lat, city_name, save_dir, filename, title, stat
     # Add grid
     ax.grid(True, alpha=0.3, linestyle="--", color="white")
 
+    # Disable scientific notation for coordinates
+    ax.ticklabel_format(useOffset=False, style="plain")
+
     # Add statistics
     ax.text(
         0.02,
@@ -196,10 +211,14 @@ def _finalize_plot(fig, ax, lng, lat, city_name, save_dir, filename, title, stat
     )
 
     # Set axis limits
-    ax.set_xlim(lng.min() - 0.02, lng.max() + 0.02)
-    ax.set_ylim(lat.min() - 0.02, lat.max() + 0.02)
+    lng_range = lng.max() - lng.min()
+    lat_range = lat.max() - lat.min()
 
-    plt.tight_layout()
+    pad_lng = lng_range * PADDING_COEFF
+    pad_lat = lat_range * PADDING_COEFF
+
+    ax.set_xlim(lng.min() - pad_lng, lng.max() + pad_lng)
+    ax.set_ylim(lat.min() - pad_lat, lat.max() + pad_lat)
 
     if save_dir:
         save_path = os.path.join(save_dir, filename)
@@ -231,7 +250,7 @@ def _get_custom_cmap():
     )
 
 
-def plot_sales_heatmap(df, city_name, save_dir):
+def plot_sales_heatmap(df, city_name, city_name_cn, save_dir):
     lng, lat, sales = _prepare_data(df)
     fig, ax, aspect_ratio, plot_height, plot_width = _setup_figure(lng, lat)
 
@@ -240,9 +259,17 @@ def plot_sales_heatmap(df, city_name, save_dir):
     bins_x = 1000
     bins_y = int(bins_x * (plot_height / plot_width))
 
+    # Add padding to prevent heatmap clipping at data boundaries
+    pad_x = (lng.max() - lng.min()) * PADDING_COEFF
+    pad_y = (lat.max() - lat.min()) * PADDING_COEFF
+    heatmap_range = [
+        [lng.min() - pad_x, lng.max() + pad_x],
+        [lat.min() - pad_y, lat.max() + pad_y],
+    ]
+
     # Generate weighted 2D histogram
     heatmap, xedges, yedges = np.histogram2d(
-        lng, lat, bins=[bins_x, bins_y], weights=sales
+        lng, lat, bins=[bins_x, bins_y], weights=sales, range=heatmap_range
     )
 
     # Apply Gaussian filter to spread heat around each point
@@ -270,7 +297,7 @@ def plot_sales_heatmap(df, city_name, save_dir):
         zorder=10,  # Ensure heatmap is on top of basemap
     )
 
-    _add_basemap_and_boundaries(ax, city_name)
+    _add_basemap_and_boundaries(ax, city_name_cn)
 
     # Add colorbar
     cbar = plt.colorbar(im, ax=ax, label="Sales Density (Weighted)")
@@ -291,7 +318,7 @@ def plot_sales_heatmap(df, city_name, save_dir):
     )
 
 
-def plot_store_scatter(df, city_name, save_dir):
+def plot_store_scatter(df, city_name, city_name_cn, save_dir):
     lng, lat, sales = _prepare_data(df)
     fig, ax, aspect_ratio, _, _ = _setup_figure(lng, lat)
 
@@ -310,7 +337,7 @@ def plot_store_scatter(df, city_name, save_dir):
         edgecolors="none",
     )
 
-    _add_basemap_and_boundaries(ax, city_name)
+    _add_basemap_and_boundaries(ax, city_name_cn)
 
     # Add colorbar
     cbar = plt.colorbar(sc, ax=ax, label="Monthly Sales")

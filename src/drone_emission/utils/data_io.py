@@ -6,10 +6,10 @@ PADDING = 0.05
 def calculate_bounds(city_df):
     print("-" * 20)
     print(
-        f"  Lat: min={city_df['lat'].min():.4f}, 0.1%={city_df['lat'].quantile(0.001):.4f}, 50%={city_df['lat'].median():.4f}, 99.9%={city_df['lat'].quantile(0.999):.4f}, max={city_df['lat'].max():.4f}"
+        f"  Lat: min={city_df['lat'].min():.4f}, 1%={city_df['lat'].quantile(0.01):.4f}, 50%={city_df['lat'].median():.4f}, 99%={city_df['lat'].quantile(0.99):.4f}, max={city_df['lat'].max():.4f}"
     )
     print(
-        f"  Lng: min={city_df['lng'].min():.4f}, 0.1%={city_df['lng'].quantile(0.001):.4f}, 50%={city_df['lng'].median():.4f}, 99.9%={city_df['lng'].quantile(0.999):.4f}, max={city_df['lng'].max():.4f}"
+        f"  Lng: min={city_df['lng'].min():.4f}, 1%={city_df['lng'].quantile(0.01):.4f}, 50%={city_df['lng'].median():.4f}, 99%={city_df['lng'].quantile(0.99):.4f}, max={city_df['lng'].max():.4f}"
     )
     print("-" * 20)
 
@@ -21,12 +21,13 @@ def calculate_bounds(city_df):
     }
 
 
-def read_region_data(data_path, region_name, region_level="city"):
+def read_region_data(data_path, region_name, boundaries_dict=None, region_level="city"):
     df = pd.read_csv(data_path)
     tmp_data = df[df[region_level] == region_name]
     print(f"{region_name} has {len(tmp_data)} entries.")
 
-    boundaries_dict = calculate_bounds(tmp_data)
+    if boundaries_dict is None:
+        boundaries_dict = calculate_bounds(tmp_data)
 
     min_lat = boundaries_dict["min_lat"]
     max_lat = boundaries_dict["max_lat"]

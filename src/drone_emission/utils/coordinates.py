@@ -1,15 +1,14 @@
 import numpy as np
 from coord_convert.transform import gcj2wgs
+from pyproj import Transformer
 
+# Alias directly to avoid redundant function wrappers
+gcj02_to_wgs84 = gcj2wgs
 
-def gcj02_to_wgs84(lng, lat):
-    """
-    GCJ02(Mars Coordinates) to WGS84
-    :param lng: GCJ02 longitude
-    :param lat: GCJ02 latitude
-    :return: (wgs84_lng, wgs84_lat)
-    """
-    return gcj2wgs(lng, lat)
+# Initialize transformer globally
+# EPSG:4326 (WGS84) -> EPSG:3857 (Web Mercator)
+_TRANSFORMER = Transformer.from_crs("EPSG:4326", "EPSG:3857", always_xy=True)
+wgs84_to_3857 = _TRANSFORMER.transform
 
 
 def convert_coords_array(lng_array, lat_array):
@@ -19,7 +18,7 @@ def convert_coords_array(lng_array, lat_array):
     wgs_lngs = []
     wgs_lats = []
     for lng, lat in zip(lng_array, lat_array):
-        w_lng, w_lat = gcj02_to_wgs84(lng, lat)
+        w_lng, w_lat = gcj2wgs(lng, lat)
         wgs_lngs.append(w_lng)
         wgs_lats.append(w_lat)
     return np.array(wgs_lngs), np.array(wgs_lats)

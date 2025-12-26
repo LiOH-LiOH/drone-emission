@@ -1,5 +1,6 @@
 # TODO
 
 - [ ] OD generator
-    - [ ] fetch building data
+    - [x] fetch building data
+    - [ ] visualize building data
 - [ ] add emissiom model
