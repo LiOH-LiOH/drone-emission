@@ -2,5 +2,5 @@
 
 - [ ] OD generator
     - [x] fetch building data
-    - [ ] visualize building data
+    - [x] visualize building data
 - [ ] add emissiom model

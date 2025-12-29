@@ -279,11 +279,10 @@ def download_by_grid(
     return result
 
 
-def fetch_region_buildings(region_name, bbox_4326, output_dir):
+def fetch_region_buildings(region_name, bbox_4326, save_path):
     bbox = convert_bbox_to_3857(bbox_4326)
-    output_file = os.path.join(output_dir, f"{region_name.lower()}_buildings.geojson")
 
-    return download_all_features(region_name, "lod1_global", bbox, output_file)
+    return download_all_features(region_name, "lod1_global", bbox, save_path)
 
 
 # Shenzhen bounding box in WGS84 (EPSG:4326)
