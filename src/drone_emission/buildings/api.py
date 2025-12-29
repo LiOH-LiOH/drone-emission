@@ -1,6 +1,6 @@
 import os
 
-from visualization.buildings import visualize_buildings
+from visualization.buildings import visualize_building_heights, visualize_buildings
 
 from .fetch_buildings import fetch_region_buildings
 
@@ -32,11 +32,13 @@ def visualize_region_buildings(region_config, exp_config):
     geojson_file = os.path.join(
         region_save_dir, f"{region_name_en.lower()}_buildings.geojson"
     )
-    # fetch_region_buildings(
-    #     region_name=region_name_en,
-    #     bbox_4326=bbox_4326,
-    #     save_path=geojson_file,
-    # )
+
+    if exp_config.get("fetch_buildings", False):
+        fetch_region_buildings(
+            region_name=region_name_en,
+            bbox_4326=bbox_4326,
+            save_path=geojson_file,
+        )
 
     # Visualization
     fig_dir = os.path.join(
@@ -53,4 +55,17 @@ def visualize_region_buildings(region_config, exp_config):
         city_name_cn=region_name_cn,
         boundaries_dict=boundaries_dict,
         save_path=save_path,
+    )
+
+    # Height heatmap visualization
+    height_save_path = os.path.join(
+        fig_dir, f"{region_name_en.lower()}_buildings_height.png"
+    )
+
+    visualize_building_heights(
+        geojson_file,
+        city_name=region_name_en,
+        city_name_cn=region_name_cn,
+        boundaries_dict=boundaries_dict,
+        save_path=height_save_path,
     )

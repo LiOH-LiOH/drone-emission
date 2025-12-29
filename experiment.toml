@@ -1,3 +1,5 @@
 data_dir = "/Users/linjingxian/Code/drone-emission/data"
 figures_dir = "/Users/linjingxian/Code/drone-emission/figures"
 buildings_dir = "/Users/linjingxian/Code/drone-emission/data/buildings"
+
+fetch_buildings = false

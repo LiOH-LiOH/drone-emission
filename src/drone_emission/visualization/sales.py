@@ -2,7 +2,6 @@ import os
 
 import matplotlib.pyplot as plt
 import numpy as np
-from matplotlib.colors import LinearSegmentedColormap
 from scipy.ndimage import gaussian_filter
 from utils.coordinates import convert_coords_array
 
@@ -10,6 +9,7 @@ from ._utils import (
     PADDING_COEFF,
     add_basemap_and_boundaries,
     finalize_plot,
+    get_custom_cmap,
     setup_figure,
 )
 
@@ -37,30 +37,6 @@ def _prepare_data(df):
     sales = df["month_sales"].values
     lng, lat = convert_coords_array(lng, lat)
     return lng, lat, sales
-
-
-def _get_custom_cmap():
-    # Create custom colormap with transparency gradient
-    # Base colormap: Spectral_r (Blue -> Green -> Yellow -> Red)
-    ncolors = 256
-    color_array = plt.cm.Spectral_r(np.linspace(0, 1, ncolors))
-
-    # Create alpha gradient
-    # "Rapid decay": Alpha should be high (1.0) for most values, but drop quickly to 0 at the low end.
-    # Below 10% of the range, it fades from 0 to 1.0. Above 10%, it stays fully opaque (1.0).
-    threshold_idx = int(ncolors * 0.1)
-    alphas = np.concatenate(
-        (
-            np.linspace(0, 1.0, threshold_idx),  # Rapid rise from 0 to 1.0
-            np.ones(ncolors - threshold_idx),  # Stable high opacity (1.0)
-        )
-    )
-    color_array[:, -1] = alphas
-
-    # Create new colormap
-    return LinearSegmentedColormap.from_list(
-        name="Spectral_r_alpha", colors=color_array
-    )
 
 
 def plot_sales_heatmap(df, city_name, city_name_cn, save_path=None):
@@ -96,7 +72,7 @@ def plot_sales_heatmap(df, city_name, city_name_cn, save_path=None):
     heatmap_masked = np.ma.masked_where(heatmap_smooth < mask_threshold, heatmap_smooth)
 
     # Get custom colormap
-    map_cmap = _get_custom_cmap()
+    map_cmap = get_custom_cmap(0.1)
 
     # Plot heatmap
     extent = [xedges[0], xedges[-1], yedges[0], yedges[-1]]
@@ -134,7 +110,7 @@ def plot_store_scatter(df, city_name, city_name_cn, save_path=None):
     fig, ax, aspect_ratio, _, _ = setup_figure(lng, lat)
 
     # Get custom colormap
-    map_cmap = _get_custom_cmap()
+    map_cmap = get_custom_cmap(0.1)
 
     # Scatter plot
     sc = ax.scatter(

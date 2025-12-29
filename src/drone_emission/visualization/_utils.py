@@ -6,6 +6,7 @@ import cpca
 import matplotlib.pyplot as plt
 import numpy as np
 import requests
+from matplotlib.colors import LinearSegmentedColormap
 from utils.coordinates import gcj02_to_wgs84
 
 # Global padding coefficient for plotting
@@ -208,3 +209,32 @@ def setup_figure(lng, lat):
     ax.set_aspect(aspect_ratio)
 
     return fig, ax, aspect_ratio, plot_height, plot_width
+
+
+def get_custom_cmap(threshold):
+    """Create custom colormap with transparency gradient.
+
+    Base colormap: Spectral_r (Blue -> Green -> Yellow -> Red)
+    Alpha gradient: rapid rise from 0 to 1.0 at the low end.
+    """
+    ncolors = 256
+    color_array = plt.cm.Spectral_r(np.linspace(0, 1, ncolors))
+
+    # Create alpha gradient
+    if threshold > 0:
+        threshold_idx = int(ncolors * threshold)
+        alphas = np.concatenate(
+            (
+                np.linspace(0, 1.0, threshold_idx),  # Rapid rise from 0 to 1.0
+                np.ones(ncolors - threshold_idx),  # Stable high opacity (1.0)
+            )
+        )
+        color_array[:, -1] = alphas
+    elif threshold == 0:
+        color_array[:, -1] = 1.0  # Fully opaque
+    else:
+        raise ValueError("Threshold must be non-negative.")
+
+    return LinearSegmentedColormap.from_list(
+        name="Spectral_r_alpha", colors=color_array
+    )
