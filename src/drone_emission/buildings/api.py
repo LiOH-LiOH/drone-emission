@@ -1,9 +1,11 @@
 import os
-import geopandas as gpd
 
+import geopandas as gpd
 from visualization.buildings import visualize_building_heights, visualize_buildings
 
 from .fetch_buildings import fetch_region_buildings
+
+ENLARGE_DEG = 0.05
 
 
 def visualize_region_buildings(region_config, exp_config):
@@ -17,11 +19,19 @@ def visualize_region_buildings(region_config, exp_config):
         )
         return
 
-    bbox_4326 = (
+    origin_bbox_4326 = (
         boundaries_dict["min_lng"],
         boundaries_dict["min_lat"],
         boundaries_dict["max_lng"],
         boundaries_dict["max_lat"],
+    )
+
+    # Enlarge bbox slightly to ensure full coverage
+    bbox_4326 = (
+        origin_bbox_4326[0] - ENLARGE_DEG,
+        origin_bbox_4326[1] - ENLARGE_DEG,
+        origin_bbox_4326[2] + ENLARGE_DEG,
+        origin_bbox_4326[3] + ENLARGE_DEG,
     )
 
     region_save_dir = os.path.join(

@@ -3,4 +3,5 @@
 - [ ] OD generator
     - [x] fetch building data
     - [x] visualize building data
-- [ ] add emissiom model
+    - [x] enlarge the building data (5km)
+- [ ] add emission model
