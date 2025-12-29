@@ -1,4 +1,5 @@
 import os
+import geopandas as gpd
 
 from visualization.buildings import visualize_building_heights, visualize_buildings
 
@@ -24,7 +25,7 @@ def visualize_region_buildings(region_config, exp_config):
     )
 
     region_save_dir = os.path.join(
-        exp_config["buildings_dir"], region_level, region_name_en.lower()
+        exp_config["data_dir"], region_level, region_name_en.lower()
     )
     if not os.path.exists(region_save_dir):
         os.makedirs(region_save_dir)
@@ -40,6 +41,19 @@ def visualize_region_buildings(region_config, exp_config):
             save_path=geojson_file,
         )
 
+    print(f"Reading {geojson_file}...")
+    try:
+        gdf = gpd.read_file(geojson_file)
+    except Exception as e:
+        print(f"Error reading file: {e}")
+        return
+
+    if gdf.empty:
+        print("GeoJSON file is empty.")
+        return
+
+    print(f"Loaded {len(gdf)} buildings.")
+
     # Visualization
     fig_dir = os.path.join(
         exp_config["figures_dir"], region_level, region_name_en.lower()
@@ -50,7 +64,7 @@ def visualize_region_buildings(region_config, exp_config):
     save_path = os.path.join(fig_dir, f"{region_name_en.lower()}_buildings_vis.png")
 
     visualize_buildings(
-        geojson_file,
+        gdf,
         city_name=region_name_en,
         city_name_cn=region_name_cn,
         boundaries_dict=boundaries_dict,
@@ -63,7 +77,7 @@ def visualize_region_buildings(region_config, exp_config):
     )
 
     visualize_building_heights(
-        geojson_file,
+        gdf,
         city_name=region_name_en,
         city_name_cn=region_name_cn,
         boundaries_dict=boundaries_dict,

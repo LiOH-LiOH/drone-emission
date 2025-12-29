@@ -13,7 +13,7 @@ from ._utils import (
 
 
 def visualize_buildings(
-    geojson_path, city_name, city_name_cn=None, boundaries_dict=None, save_path=None
+    gdf, city_name, city_name_cn=None, boundaries_dict=None, save_path=None
 ):
     """
     Read a GeoJSON file of buildings and visualize it.
@@ -24,23 +24,6 @@ def visualize_buildings(
         boundaries_dict (dict, optional): Dictionary with min_lng, max_lng, min_lat, max_lat.
         save_path (str, optional): Path to save the visualization. If None, shows the plot.
     """
-    if not os.path.exists(geojson_path):
-        print(f"File not found: {geojson_path}")
-        return
-
-    print(f"Reading {geojson_path}...")
-    try:
-        gdf = gpd.read_file(geojson_path)
-    except Exception as e:
-        print(f"Error reading file: {e}")
-        return
-
-    if gdf.empty:
-        print("GeoJSON file is empty.")
-        return
-
-    print(f"Loaded {len(gdf)} buildings.")
-
     # Convert to EPSG:4326 (WGS84) if needed for basemap
     if gdf.crs is not None and gdf.crs.to_epsg() != 4326:
         print(f"Converting CRS from {gdf.crs} to EPSG:4326...")
@@ -65,7 +48,7 @@ def visualize_buildings(
 
 
 def visualize_building_heights(
-    geojson_path, city_name, city_name_cn=None, boundaries_dict=None, save_path=None
+    gdf, city_name, city_name_cn=None, boundaries_dict=None, save_path=None
 ):
     """
     Visualize building heights using a heatmap.
@@ -77,26 +60,9 @@ def visualize_building_heights(
         boundaries_dict (dict, optional): Dictionary with min_lng, max_lng, min_lat, max_lat.
         save_path (str, optional): Path to save the visualization. If None, shows the plot.
     """
-    if not os.path.exists(geojson_path):
-        print(f"File not found: {geojson_path}")
-        return
-
-    print(f"Reading {geojson_path}...")
-    try:
-        gdf = gpd.read_file(geojson_path)
-    except Exception as e:
-        print(f"Error reading file: {e}")
-        return
-
-    if gdf.empty:
-        print("GeoJSON file is empty.")
-        return
-
     if "height" not in gdf.columns:
         print("No 'height' column found in GeoJSON.")
         return
-
-    print(f"Loaded {len(gdf)} buildings.")
 
     # Convert to EPSG:4326 (WGS84) if needed for basemap
     if gdf.crs is not None and gdf.crs.to_epsg() != 4326:

@@ -21,7 +21,9 @@ def calculate_bounds(city_df):
     }
 
 
-def read_region_data(data_path, region_name, boundaries_dict=None, region_level="city"):
+def filter_region_data(
+    data_path, region_name, boundaries_dict=None, region_level="city", save_path=None
+):
     df = pd.read_csv(data_path)
     tmp_data = df[df[region_level] == region_name]
     print(f"{region_name} has {len(tmp_data)} entries.")
@@ -49,4 +51,7 @@ def read_region_data(data_path, region_name, boundaries_dict=None, region_level=
     ].copy()
 
     print(f"After filtering, {region_name} has {len(valid_data)} valid entries.\n")
-    return valid_data
+
+    if save_path:
+        valid_data.to_csv(save_path, index=False)
+        print(f"Saved filtered data to {save_path}\n")

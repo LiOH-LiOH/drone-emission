@@ -1,7 +1,7 @@
 import os
+import pandas as pd
 
-from utils import read_region_data
-
+from utils import filter_region_data
 from visualization.sales import (
     plot_sales_distribution,
     plot_sales_heatmap,
@@ -17,39 +17,46 @@ def visualize_region_data(region_config, exp_config):
 
     data_path = os.path.join(exp_config["data_dir"], "combined_data.csv")
 
-    region_data = read_region_data(
+    save_dir = os.path.join(
+        exp_config["data_dir"], region_level, region_name_en.lower()
+    )
+    if not os.path.exists(save_dir):
+        os.makedirs(save_dir)
+
+    save_path = os.path.join(save_dir, f"{region_name_en.lower()}_sales.csv")
+    filter_region_data(
         data_path,
         region_name_cn,
         boundaries_dict=boundaries_dict,
         region_level=region_level,
+        save_path=save_path,
     )
-    region_save_dir = os.path.join(
+
+    region_data = pd.read_csv(save_path)
+
+    fig_dir = os.path.join(
         exp_config["figures_dir"], region_level, region_name_en.lower()
     )
-    if not os.path.exists(region_save_dir):
-        os.makedirs(region_save_dir)
+    if not os.path.exists(fig_dir):
+        os.makedirs(fig_dir)
 
     plot_sales_distribution(
         region_data,
         region_name_en,
         save_path=os.path.join(
-            region_save_dir, f"{region_name_en.lower()}_month_sales_distribution.png"
+            fig_dir, f"{region_name_en.lower()}_month_sales_distribution.png"
         ),
     )
     plot_sales_heatmap(
         region_data,
         region_name_en,
         region_name_cn,
-        save_path=os.path.join(
-            region_save_dir, f"{region_name_en.lower()}_heatmap.png"
-        ),
+        save_path=os.path.join(fig_dir, f"{region_name_en.lower()}_heatmap.png"),
     )
     plot_store_scatter(
         region_data,
         region_name_en,
         region_name_cn,
-        save_path=os.path.join(
-            region_save_dir, f"{region_name_en.lower()}_scatter.png"
-        ),
+        save_path=os.path.join(fig_dir, f"{region_name_en.lower()}_scatter.png"),
     )
     print(f"Visualization for {region_name_en} completed.\n")

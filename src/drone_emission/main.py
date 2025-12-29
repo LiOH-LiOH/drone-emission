@@ -56,10 +56,10 @@ def run_region_analysis(region_key, config):
 
     print(f"Running analysis for {region_key}...")
     region_conf = CITY_CONFIGS[region_key]
-    # visualize_region_data(
-    #     region_config=region_conf,
-    #     exp_config=config,
-    # )
+    visualize_region_data(
+        region_config=region_conf,
+        exp_config=config,
+    )
     visualize_region_buildings(
         region_config=region_conf,
         exp_config=config,

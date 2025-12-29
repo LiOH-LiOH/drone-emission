@@ -2,6 +2,7 @@ import os
 
 import matplotlib.pyplot as plt
 import numpy as np
+from mpl_toolkits.axes_grid1 import make_axes_locatable
 from scipy.ndimage import gaussian_filter
 from utils.coordinates import convert_coords_array
 
@@ -14,11 +15,11 @@ from ._utils import (
 )
 
 
-def plot_sales_distribution(df, city_name, save_path=None):
+def plot_sales_distribution(df, region_name, save_path=None):
     plt.figure(figsize=(10, 6))
 
     plt.hist(df["month_sales"], bins=30, color="skyblue", edgecolor="black")
-    plt.title("The Distribution of Monthly Sales in " + city_name)
+    plt.title("The Distribution of Monthly Sales in " + region_name)
     plt.xlabel("Monthly Sales")
     plt.ylabel("Frequency")
     plt.grid(axis="y", alpha=0.75)
@@ -39,7 +40,7 @@ def _prepare_data(df):
     return lng, lat, sales
 
 
-def plot_sales_heatmap(df, city_name, city_name_cn, save_path=None):
+def plot_sales_heatmap(df, region_name, region_name_cn, save_path=None):
     lng, lat, sales = _prepare_data(df)
     fig, ax, aspect_ratio, plot_height, plot_width = setup_figure(lng, lat)
 
@@ -86,10 +87,12 @@ def plot_sales_heatmap(df, city_name, city_name_cn, save_path=None):
         zorder=10,  # Ensure heatmap is on top of basemap
     )
 
-    add_basemap_and_boundaries(ax, city_name_cn)
+    add_basemap_and_boundaries(ax, region_name_cn)
 
-    # Add colorbar
-    cbar = plt.colorbar(im, ax=ax, label="Sales Density (Weighted)")
+    # Add colorbar aligned with map height using make_axes_locatable
+    divider = make_axes_locatable(ax)
+    cax = divider.append_axes("right", size="4%", pad=0.1)
+    cbar = plt.colorbar(im, cax=cax, label="Sales Density (Weighted)")
     cbar.ax.tick_params(labelsize=10)
 
     stats_text = f"Total Stores: {len(df)}\nAvg Sales: {sales.mean():.1f}\nMax Sales: {sales.max():.0f}"
@@ -100,12 +103,12 @@ def plot_sales_heatmap(df, city_name, city_name_cn, save_path=None):
         lng,
         lat,
         save_path,
-        f"{city_name} Food Delivery Heatmap by Monthly Sales",
+        f"{region_name} Food Delivery Heatmap by Monthly Sales",
         stats_text,
     )
 
 
-def plot_store_scatter(df, city_name, city_name_cn, save_path=None):
+def plot_store_scatter(df, region_name, region_name_cn, save_path=None):
     lng, lat, sales = _prepare_data(df)
     fig, ax, aspect_ratio, _, _ = setup_figure(lng, lat)
 
@@ -124,10 +127,12 @@ def plot_store_scatter(df, city_name, city_name_cn, save_path=None):
         edgecolors="none",
     )
 
-    add_basemap_and_boundaries(ax, city_name_cn)
+    add_basemap_and_boundaries(ax, region_name_cn)
 
-    # Add colorbar
-    cbar = plt.colorbar(sc, ax=ax, label="Monthly Sales")
+    # Add colorbar aligned with map height using make_axes_locatable
+    divider = make_axes_locatable(ax)
+    cax = divider.append_axes("right", size="4%", pad=0.1)
+    cbar = plt.colorbar(sc, cax=cax, label="Monthly Sales")
     cbar.ax.tick_params(labelsize=10)
 
     stats_text = f"Total Stores: {len(df)}\nAvg Sales: {sales.mean():.1f}\nMax Sales: {sales.max():.0f}"
@@ -138,6 +143,6 @@ def plot_store_scatter(df, city_name, city_name_cn, save_path=None):
         lng,
         lat,
         save_path,
-        f"{city_name} Food Delivery Store Locations",
+        f"{region_name} Food Delivery Store Locations",
         stats_text,
     )
