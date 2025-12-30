@@ -1,6 +1,6 @@
 import os
-import pandas as pd
 
+import pandas as pd
 from utils import filter_region_data
 from visualization.sales import (
     plot_sales_distribution,
@@ -51,12 +51,14 @@ def visualize_region_data(region_config, exp_config):
         region_data,
         region_name_en,
         region_name_cn,
+        boundaries_dict=boundaries_dict,
         save_path=os.path.join(fig_dir, f"{region_name_en.lower()}_heatmap.png"),
     )
     plot_store_scatter(
         region_data,
         region_name_en,
         region_name_cn,
+        boundaries_dict=boundaries_dict,
         save_path=os.path.join(fig_dir, f"{region_name_en.lower()}_scatter.png"),
     )
     print(f"Visualization for {region_name_en} completed.\n")

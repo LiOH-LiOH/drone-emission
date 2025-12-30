@@ -40,9 +40,13 @@ def _prepare_data(df):
     return lng, lat, sales
 
 
-def plot_sales_heatmap(df, region_name, region_name_cn, save_path=None):
+def plot_sales_heatmap(
+    df, region_name, region_name_cn, boundaries_dict=None, save_path=None
+):
     lng, lat, sales = _prepare_data(df)
-    fig, ax, aspect_ratio, plot_height, plot_width = setup_figure(lng, lat)
+    fig, ax, aspect_ratio, plot_height, plot_width = setup_figure(
+        lng, lat, boundaries_dict
+    )
 
     # Create weighted 2D histogram (weighted by sales)
     # Increase resolution (approx 5x previous)
@@ -100,17 +104,18 @@ def plot_sales_heatmap(df, region_name, region_name_cn, save_path=None):
     finalize_plot(
         fig,
         ax,
-        lng,
-        lat,
         save_path,
         f"{region_name} Food Delivery Heatmap by Monthly Sales",
         stats_text,
+        boundaries_dict,
     )
 
 
-def plot_store_scatter(df, region_name, region_name_cn, save_path=None):
+def plot_store_scatter(
+    df, region_name, region_name_cn, boundaries_dict=None, save_path=None
+):
     lng, lat, sales = _prepare_data(df)
-    fig, ax, aspect_ratio, _, _ = setup_figure(lng, lat)
+    fig, ax, aspect_ratio, _, _ = setup_figure(lng, lat, boundaries_dict)
 
     # Get custom colormap
     map_cmap = get_custom_cmap(0.1)
@@ -140,9 +145,8 @@ def plot_store_scatter(df, region_name, region_name_cn, save_path=None):
     finalize_plot(
         fig,
         ax,
-        lng,
-        lat,
         save_path,
         f"{region_name} Food Delivery Store Locations",
         stats_text,
+        boundaries_dict,
     )

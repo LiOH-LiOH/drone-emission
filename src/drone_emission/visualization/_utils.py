@@ -100,21 +100,22 @@ def configure_contextily_cache():
             print(f"Failed to configure contextily cache: {e}")
 
 
-def add_basemap_and_boundaries(ax, city_name_cn):
+def add_basemap_and_boundaries(ax, city_name_cn, zoom=14, alpha=0.6):
     # Add basemap with administrative boundaries
     try:
         # Ensure cache is configured
         configure_contextily_cache()
 
-        # Add basemap
+        # Add basemap with higher resolution (zoom level) and reduced opacity
         ctx.add_basemap(
             ax,
             crs="EPSG:4326",
             source=ctx.providers.OpenStreetMap.Mapnik,
-            alpha=1.0,  # Map fully opaque (or slightly transparent if desired)
+            zoom=zoom,  # Higher zoom = higher resolution
+            alpha=alpha,  # Reduced opacity for better data visibility
             zorder=0,  # Map at bottom
         )
-        print("Basemap added successfully")
+        print(f"Basemap added successfully (zoom={zoom}, alpha={alpha})")
     except Exception as e:
         print(f"Could not add basemap: {e}")
 
@@ -127,7 +128,18 @@ def add_basemap_and_boundaries(ax, city_name_cn):
         print(f"No adcode found for {city_name_cn}, skipping boundaries.")
 
 
-def finalize_plot(fig, ax, lng, lat, save_path, title, stats_text):
+def finalize_plot(fig, ax, save_path, title, stats_text, boundaries_dict=None):
+    """Finalize plot with title, labels, and axis limits.
+
+    Args:
+        fig: Matplotlib figure
+        ax: Matplotlib axes
+        save_path: Path to save the figure (or None to show)
+        title: Plot title
+        stats_text: Statistics text to display
+        boundaries_dict: Optional dict with min_lng, max_lng, min_lat, max_lat
+                        If provided, uses fixed boundaries for axis limits
+    """
     # Set title and labels
     ax.set_xlabel("Longitude", fontsize=12)
     ax.set_ylabel("Latitude", fontsize=12)
@@ -155,15 +167,25 @@ def finalize_plot(fig, ax, lng, lat, save_path, title, stats_text):
         bbox=dict(boxstyle="round", facecolor="wheat", alpha=0.8),
     )
 
-    # Set axis limits
-    lng_range = lng.max() - lng.min()
-    lat_range = lat.max() - lat.min()
+    # Set axis limits using boundaries_dict
+    if boundaries_dict:
+        min_lng = boundaries_dict["min_lng"]
+        max_lng = boundaries_dict["max_lng"]
+        min_lat = boundaries_dict["min_lat"]
+        max_lat = boundaries_dict["max_lat"]
 
-    pad_lng = lng_range * PADDING_COEFF
-    pad_lat = lat_range * PADDING_COEFF
+        print("Using fixed boundaries:")
+        print(f"Longitude: {min_lng} to {max_lng}")
+        print(f"Latitude: {min_lat} to {max_lat}")
 
-    ax.set_xlim(lng.min() - pad_lng, lng.max() + pad_lng)
-    ax.set_ylim(lat.min() - pad_lat, lat.max() + pad_lat)
+        lng_range = max_lng - min_lng
+        lat_range = max_lat - min_lat
+
+        pad_lng = lng_range * PADDING_COEFF
+        pad_lat = lat_range * PADDING_COEFF
+
+        ax.set_xlim(min_lng - pad_lng, max_lng + pad_lng)
+        ax.set_ylim(min_lat - pad_lat, max_lat + pad_lat)
 
     if save_path:
         os.makedirs(os.path.dirname(save_path), exist_ok=True)
@@ -173,23 +195,35 @@ def finalize_plot(fig, ax, lng, lat, save_path, title, stats_text):
         plt.show()
 
 
-def setup_figure(lng, lat):
+def setup_figure(lng, lat, boundaries_dict=None):
     """Setup figure with proper aspect ratio for geographic data.
 
     Args:
-        lng: Array of longitude values
-        lat: Array of latitude values
+        lng: Array of longitude values (used if boundaries_dict is None)
+        lat: Array of latitude values (used if boundaries_dict is None)
+        boundaries_dict: Optional dict with min_lng, max_lng, min_lat, max_lat
+                        If provided, uses fixed boundaries instead of data range
 
     Returns:
         fig, ax, aspect_ratio, plot_height, plot_width
     """
+    # Use boundaries_dict if provided, otherwise use data range
+    if boundaries_dict:
+        min_lng = boundaries_dict["min_lng"]
+        max_lng = boundaries_dict["max_lng"]
+        min_lat = boundaries_dict["min_lat"]
+        max_lat = boundaries_dict["max_lat"]
+    else:
+        min_lng, max_lng = lng.min(), lng.max()
+        min_lat, max_lat = lat.min(), lat.max()
+
     # Calculate aspect ratio to maintain geographic proportions
-    avg_lat = np.mean(lat)
+    avg_lat = (min_lat + max_lat) / 2
     aspect_ratio = 1.0 / np.cos(np.radians(avg_lat))
 
-    # Calculate suitable figsize based on data bounds
-    lat_range = lat.max() - lat.min()
-    lng_range = lng.max() - lng.min()
+    # Calculate suitable figsize based on bounds
+    lat_range = max_lat - min_lat
+    lng_range = max_lng - min_lng
 
     pad_lat = lat_range * PADDING_COEFF
     pad_lng = lng_range * PADDING_COEFF

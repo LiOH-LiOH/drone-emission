@@ -29,11 +29,7 @@ def visualize_buildings(
         print(f"Converting CRS from {gdf.crs} to EPSG:4326...")
         gdf = gdf.to_crs(epsg=4326)
 
-    # Get bounds from boundaries_dict
-    lng = np.array([boundaries_dict["min_lng"], boundaries_dict["max_lng"]])
-    lat = np.array([boundaries_dict["min_lat"], boundaries_dict["max_lat"]])
-
-    fig, ax, _, _, _ = setup_figure(lng, lat)
+    fig, ax, _, _, _ = setup_figure(None, None, boundaries_dict)
     gdf.plot(ax=ax, color="blue", edgecolor=None, alpha=0.7, zorder=10)
 
     # Add basemap and boundaries if city_name_cn is provided
@@ -43,7 +39,7 @@ def visualize_buildings(
     title = f"{city_name} Buildings Visualization"
     stats_text = f"Total Buildings: {len(gdf)}"
 
-    finalize_plot(fig, ax, lng, lat, save_path, title, stats_text)
+    finalize_plot(fig, ax, save_path, title, stats_text, boundaries_dict)
     plt.close(fig)
 
 
@@ -69,11 +65,7 @@ def visualize_building_heights(
         print(f"Converting CRS from {gdf.crs} to EPSG:4326...")
         gdf = gdf.to_crs(epsg=4326)
 
-    # Get bounds from boundaries_dict
-    lng = np.array([boundaries_dict["min_lng"], boundaries_dict["max_lng"]])
-    lat = np.array([boundaries_dict["min_lat"], boundaries_dict["max_lat"]])
-
-    fig, ax, aspect_ratio, _, _ = setup_figure(lng, lat)
+    fig, ax, aspect_ratio, _, _ = setup_figure(None, None, boundaries_dict)
 
     # Get custom colormap
     cmap = get_custom_cmap(0)
@@ -102,5 +94,5 @@ def visualize_building_heights(
         f"Max Height: {heights.max():.1f}m"
     )
 
-    finalize_plot(fig, ax, lng, lat, save_path, title, stats_text)
+    finalize_plot(fig, ax, save_path, title, stats_text, boundaries_dict)
     plt.close(fig)

@@ -5,8 +5,6 @@ from visualization.buildings import visualize_building_heights, visualize_buildi
 
 from .fetch_buildings import fetch_region_buildings
 
-ENLARGE_DEG = 0.05
-
 
 def visualize_region_buildings(region_config, exp_config):
     region_name_en = region_config["region_name_en"]
@@ -19,19 +17,21 @@ def visualize_region_buildings(region_config, exp_config):
         )
         return
 
-    origin_bbox_4326 = (
-        boundaries_dict["min_lng"],
-        boundaries_dict["min_lat"],
-        boundaries_dict["max_lng"],
-        boundaries_dict["max_lat"],
-    )
+    enlarge_deg = exp_config.get("delivery_radius_deg", 0.05)
+
+    large_bounds_dict = {
+        "min_lat": boundaries_dict["min_lat"] - enlarge_deg,
+        "max_lat": boundaries_dict["max_lat"] + enlarge_deg,
+        "min_lng": boundaries_dict["min_lng"] - enlarge_deg,
+        "max_lng": boundaries_dict["max_lng"] + enlarge_deg,
+    }
 
     # Enlarge bbox slightly to ensure full coverage
     bbox_4326 = (
-        origin_bbox_4326[0] - ENLARGE_DEG,
-        origin_bbox_4326[1] - ENLARGE_DEG,
-        origin_bbox_4326[2] + ENLARGE_DEG,
-        origin_bbox_4326[3] + ENLARGE_DEG,
+        large_bounds_dict["min_lng"],
+        large_bounds_dict["min_lat"],
+        large_bounds_dict["max_lng"],
+        large_bounds_dict["max_lat"],
     )
 
     region_save_dir = os.path.join(
@@ -77,7 +77,7 @@ def visualize_region_buildings(region_config, exp_config):
         gdf,
         city_name=region_name_en,
         city_name_cn=region_name_cn,
-        boundaries_dict=boundaries_dict,
+        boundaries_dict=large_bounds_dict,
         save_path=save_path,
     )
 
@@ -90,6 +90,6 @@ def visualize_region_buildings(region_config, exp_config):
         gdf,
         city_name=region_name_en,
         city_name_cn=region_name_cn,
-        boundaries_dict=boundaries_dict,
+        boundaries_dict=large_bounds_dict,
         save_path=height_save_path,
     )
