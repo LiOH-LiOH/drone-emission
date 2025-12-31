@@ -1,4 +1,5 @@
 import time
+import math
 from urllib.parse import quote
 
 import requests
@@ -61,3 +62,27 @@ def get_lat_lon(city):
     lon = float(city_data["lon"])
     print(f"City: {city}, Lat: {lat}, Lon: {lon}")
     return lat, lon
+
+
+def get_epsg_code(city_name: str) -> str:
+    """
+    Get the EPSG code for the UTM zone of a city.
+
+    Args:
+        city_name (str): The name of the city.
+
+    Returns:
+        str: The EPSG code (e.g., "EPSG:32650").
+    """
+    lat, lon = get_lat_lon(city_name)
+
+    # Calculate UTM zone
+    zone = math.floor((lon + 180) / 6) + 1
+
+    # Determine EPSG code
+    if lat >= 0:
+        epsg_code = 32600 + zone
+    else:
+        epsg_code = 32700 + zone
+
+    return epsg_code

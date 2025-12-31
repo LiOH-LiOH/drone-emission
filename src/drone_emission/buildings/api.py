@@ -1,9 +1,13 @@
 import os
 
 import geopandas as gpd
+import numpy as np
 from visualization.buildings import visualize_building_heights, visualize_buildings
 
 from .fetch_buildings import fetch_region_buildings
+
+# Earth radius in kilometers
+EARTH_RADIUS_KM = 6371.0
 
 
 def visualize_region_buildings(region_config, exp_config):
@@ -17,13 +21,23 @@ def visualize_region_buildings(region_config, exp_config):
         )
         return
 
-    enlarge_deg = exp_config.get("delivery_radius_deg", 0.05)
+    enlarge_km = exp_config.get("delivery_radius_km", 5.0)
+
+    # Convert km to degrees for boundary padding
+    # Latitude: 1° ≈ 111.32 km (constant)
+    # Longitude: 1° ≈ 111.32 × cos(lat) km (varies with latitude)
+    center_lat = (boundaries_dict["min_lat"] + boundaries_dict["max_lat"]) / 2
+    km_per_deg_lat = EARTH_RADIUS_KM * np.pi / 180  # ≈ 111.32 km
+    km_per_deg_lng = km_per_deg_lat * np.cos(np.radians(center_lat))
+
+    enlarge_lat = enlarge_km / km_per_deg_lat
+    enlarge_lng = enlarge_km / km_per_deg_lng
 
     large_bounds_dict = {
-        "min_lat": boundaries_dict["min_lat"] - enlarge_deg,
-        "max_lat": boundaries_dict["max_lat"] + enlarge_deg,
-        "min_lng": boundaries_dict["min_lng"] - enlarge_deg,
-        "max_lng": boundaries_dict["max_lng"] + enlarge_deg,
+        "min_lat": boundaries_dict["min_lat"] - enlarge_lat,
+        "max_lat": boundaries_dict["max_lat"] + enlarge_lat,
+        "min_lng": boundaries_dict["min_lng"] - enlarge_lng,
+        "max_lng": boundaries_dict["max_lng"] + enlarge_lng,
     }
 
     # Enlarge bbox slightly to ensure full coverage

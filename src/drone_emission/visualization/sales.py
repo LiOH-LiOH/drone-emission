@@ -7,12 +7,15 @@ from scipy.ndimage import gaussian_filter
 from utils.coordinates import convert_coords_array
 
 from ._utils import (
-    PADDING_COEFF,
     add_basemap_and_boundaries,
     finalize_plot,
     get_custom_cmap,
     setup_figure,
 )
+
+# Padding coefficient for heatmap Gaussian smoothing boundary extension
+# This ensures heat diffusion doesn't get clipped at data boundaries
+HEATMAP_PADDING_COEFF = 0.05
 
 
 def plot_sales_distribution(df, region_name, save_path=None):
@@ -54,8 +57,9 @@ def plot_sales_heatmap(
     bins_y = int(bins_x * (plot_height / plot_width))
 
     # Add padding to prevent heatmap clipping at data boundaries
-    pad_x = (lng.max() - lng.min()) * PADDING_COEFF
-    pad_y = (lat.max() - lat.min()) * PADDING_COEFF
+    # This allows Gaussian smoothing to diffuse naturally at edges
+    pad_x = (lng.max() - lng.min()) * HEATMAP_PADDING_COEFF
+    pad_y = (lat.max() - lat.min()) * HEATMAP_PADDING_COEFF
     heatmap_range = [
         [lng.min() - pad_x, lng.max() + pad_x],
         [lat.min() - pad_y, lat.max() + pad_y],
@@ -91,7 +95,7 @@ def plot_sales_heatmap(
         zorder=10,  # Ensure heatmap is on top of basemap
     )
 
-    add_basemap_and_boundaries(ax, region_name_cn)
+    add_basemap_and_boundaries(ax, region_name_cn, boundaries_dict)
 
     # Add colorbar aligned with map height using make_axes_locatable
     divider = make_axes_locatable(ax)
@@ -132,7 +136,7 @@ def plot_store_scatter(
         edgecolors="none",
     )
 
-    add_basemap_and_boundaries(ax, region_name_cn)
+    add_basemap_and_boundaries(ax, region_name_cn, boundaries_dict)
 
     # Add colorbar aligned with map height using make_axes_locatable
     divider = make_axes_locatable(ax)

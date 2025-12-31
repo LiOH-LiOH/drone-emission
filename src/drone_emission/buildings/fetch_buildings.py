@@ -282,7 +282,9 @@ def download_by_grid(
 def fetch_region_buildings(region_name, bbox_4326, save_path):
     bbox = convert_bbox_to_3857(bbox_4326)
 
-    return download_all_features(region_name, "lod1_global", bbox, save_path)
+    return download_all_features(
+        region_name, "lod1_global", bbox, save_path, max_features=500000
+    )
 
 
 # Shenzhen bounding box in WGS84 (EPSG:4326)

@@ -1,6 +1,6 @@
 data_dir = "/Users/linjingxian/Code/drone-emission/data"
 figures_dir = "/Users/linjingxian/Code/drone-emission/figures"
 
-fetch_buildings = false
+fetch_buildings = true
 
-delivery_radius_deg = 0.05
+delivery_radius_km = 3

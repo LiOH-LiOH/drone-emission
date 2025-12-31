@@ -100,7 +100,19 @@ def configure_contextily_cache():
             print(f"Failed to configure contextily cache: {e}")
 
 
-def add_basemap_and_boundaries(ax, city_name_cn, zoom=14, alpha=0.6):
+def add_basemap_and_boundaries(
+    ax, city_name_cn, boundaries_dict=None, zoom=14, alpha=0.6
+):
+    # Set axis limits BEFORE adding basemap to ensure correct coverage
+    if boundaries_dict:
+        min_lng = boundaries_dict["min_lng"]
+        max_lng = boundaries_dict["max_lng"]
+        min_lat = boundaries_dict["min_lat"]
+        max_lat = boundaries_dict["max_lat"]
+
+        ax.set_xlim(min_lng, max_lng)
+        ax.set_ylim(min_lat, max_lat)
+
     # Add basemap with administrative boundaries
     try:
         # Ensure cache is configured
@@ -165,6 +177,7 @@ def finalize_plot(fig, ax, save_path, title, stats_text, boundaries_dict=None):
         fontsize=10,
         verticalalignment="top",
         bbox=dict(boxstyle="round", facecolor="wheat", alpha=0.8),
+        zorder=100,  # Ensure text is on top of all plot elements
     )
 
     # Set axis limits using boundaries_dict
@@ -178,14 +191,8 @@ def finalize_plot(fig, ax, save_path, title, stats_text, boundaries_dict=None):
         print(f"Longitude: {min_lng} to {max_lng}")
         print(f"Latitude: {min_lat} to {max_lat}")
 
-        lng_range = max_lng - min_lng
-        lat_range = max_lat - min_lat
-
-        pad_lng = lng_range * PADDING_COEFF
-        pad_lat = lat_range * PADDING_COEFF
-
-        ax.set_xlim(min_lng - pad_lng, max_lng + pad_lng)
-        ax.set_ylim(min_lat - pad_lat, max_lat + pad_lat)
+        ax.set_xlim(min_lng, max_lng)
+        ax.set_ylim(min_lat, max_lat)
 
     if save_path:
         os.makedirs(os.path.dirname(save_path), exist_ok=True)
