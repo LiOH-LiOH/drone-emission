@@ -14,13 +14,15 @@ from .cal_area import preprocess_buildings
 EARTH_RADIUS_KM = 6371.0
 
 
-def generate_od_pairs(region_config, exp_config):
+def generate_od_pairs(region_info, exp_config):
     """
     Generate Origin-Destination pairs by matching stores to nearby buildings.
 
     For each store (origin), find all buildings (potential destinations)
     within SEARCH_RADIUS_KM using BallTree with Haversine distance.
     """
+    region_config = region_info.to_dict()
+
     region_name_en = region_config["region_name_en"]
     region_level = region_config["region_level"]
 

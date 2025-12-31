@@ -10,7 +10,9 @@ from .fetch_buildings import fetch_region_buildings
 EARTH_RADIUS_KM = 6371.0
 
 
-def visualize_region_buildings(region_config, exp_config):
+def visualize_region_buildings(region_info, exp_config):
+    region_config = region_info.to_dict()
+
     region_name_en = region_config["region_name_en"]
     region_name_cn = region_config["region_name_cn"]
     region_level = region_config["region_level"]
@@ -23,11 +25,8 @@ def visualize_region_buildings(region_config, exp_config):
 
     enlarge_km = exp_config.get("delivery_radius_km", 5.0)
 
-    # Convert km to degrees for boundary padding
-    # Latitude: 1° ≈ 111.32 km (constant)
-    # Longitude: 1° ≈ 111.32 × cos(lat) km (varies with latitude)
     center_lat = (boundaries_dict["min_lat"] + boundaries_dict["max_lat"]) / 2
-    km_per_deg_lat = EARTH_RADIUS_KM * np.pi / 180  # ≈ 111.32 km
+    km_per_deg_lat = EARTH_RADIUS_KM * np.pi / 180
     km_per_deg_lng = km_per_deg_lat * np.cos(np.radians(center_lat))
 
     enlarge_lat = enlarge_km / km_per_deg_lat
@@ -39,6 +38,8 @@ def visualize_region_buildings(region_config, exp_config):
         "min_lng": boundaries_dict["min_lng"] - enlarge_lng,
         "max_lng": boundaries_dict["max_lng"] + enlarge_lng,
     }
+
+    region_info.set_stat("enlarged_boundaries", large_bounds_dict)
 
     # Enlarge bbox slightly to ensure full coverage
     bbox_4326 = (

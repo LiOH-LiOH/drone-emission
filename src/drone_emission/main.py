@@ -1,93 +1,69 @@
 import argparse
+from pathlib import Path
 
 from buildings import visualize_region_buildings
 from demand import generate_od_pairs
 from preprocessing import visualize_region_data
 from utils import load_config
+from utils.region_config import get_registry, init_registry
 
-CITY_CONFIGS = {
-    "shenzhen": {
-        "region_name_cn": "深圳市",
-        "region_name_en": "Shenzhen",
-        "region_level": "city",
-    },
-    "beijing": {
-        "region_name_cn": "北京市",
-        "region_name_en": "Beijing",
-        "region_level": "city",
-    },
-    "shanghai": {
-        "region_name_cn": "上海市",
-        "region_name_en": "Shanghai",
-        "region_level": "city",
-    },
-    "guangzhou": {
-        "region_name_cn": "广州市",
-        "region_name_en": "Guangzhou",
-        "region_level": "city",
-    },
-    "futian": {
-        "region_name_cn": "福田区",
-        "region_name_en": "Futian",
-        "region_level": "district",
-        "boundaries_dict": {
-            "min_lat": 22.50,
-            "max_lat": 22.58,
-            "min_lng": 114.01,
-            "max_lng": 114.10,
-        },
-    },
-    "nanshan": {
-        "region_name_cn": "南山区",
-        "region_name_en": "Nanshan",
-        "region_level": "district",
-        "boundaries_dict": {
-            "min_lat": 22.49,
-            "max_lat": 22.60,
-            "min_lng": 113.90,
-            "max_lng": 114.03,
-        },
-    },
-    "longhua": {
-        "region_name_cn": "龙华区",
-        "region_name_en": "Longhua",
-        "region_level": "district",
-    },
-    "luohu": {
-        "region_name_cn": "罗湖区",
-        "region_name_en": "Luohu",
-        "region_level": "district",
-    },
-}
+# Project root directory
+PROJECT_ROOT = Path(__file__).parent.parent.parent
+REGIONS_CONFIG_PATH = PROJECT_ROOT / "regions.json"
+EXP_CONFIG_PATH = PROJECT_ROOT / "experiment.toml"
 
 
-def run_region_analysis(region_key, config):
-    if region_key not in CITY_CONFIGS:
+def run_region_analysis(region_key: str, config: dict):
+    """Run region analysis"""
+    registry = get_registry()
+
+    if region_key not in registry:
         print(f"Region '{region_key}' not found in configuration.")
         return
 
     print(f"Running analysis for {region_key}...")
-    region_conf = CITY_CONFIGS[region_key]
+    region = registry[region_key]
+    region_conf = region.to_dict()
+
     visualize_region_data(
-        region_config=region_conf,
+        region_info=region,
         exp_config=config,
     )
     visualize_region_buildings(
-        region_config=region_conf,
+        region_info=region,
         exp_config=config,
     )
     generate_od_pairs(
-        region_config=region_conf,
+        region_info=region,
         exp_config=config,
     )
+
+    # Example: Add statistics and save
+    # region.set_stat("building_count", 12345)
+    # registry.save()
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--env", type=str, default="default", help="Environment name")
-    args = parser.parse_args()
-    config = load_config(
-        "/Users/linjingxian/Code/drone-emission/experiment.toml", env=args.env
+    parser.add_argument(
+        "--region", type=str, default="nanshan", help="Region to analyze"
     )
+    args = parser.parse_args()
 
-    run_region_analysis("nanshan", config)
+    # Initialize region configuration
+    registry = init_registry(str(REGIONS_CONFIG_PATH))
+
+    # Example: Dynamically add new region at runtime
+    # registry.register(
+    #     "baoan",
+    #     region_name_cn="Baoan District",
+    #     region_name_en="Baoan",
+    #     region_level="district",
+    #     parent_city="shenzhen",
+    # )
+
+    config = load_config(str(EXP_CONFIG_PATH), env=args.env)
+
+    run_region_analysis(args.region, config)
+    registry.save()
