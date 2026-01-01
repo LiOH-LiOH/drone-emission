@@ -162,6 +162,7 @@ def generate_od_pairs(region_info, exp_config):
     )
 
     # === Process each store and its nearby buildings ===
+    od_params = exp_config.get("od_params", {})
     od_pairs = []
     total_sales = 0
     output_total_sales = 0
@@ -175,7 +176,7 @@ def generate_od_pairs(region_info, exp_config):
         store_coord_wgs84 = store_coords[store_idx]  # (lat, lng)
 
         tmp_od_pairs = generate_one_store_od_pairs_vectorized(
-            nearby_buildings, store_row["month_sales"], store_coord_wgs84
+            nearby_buildings, store_row["month_sales"], store_coord_wgs84, od_params
         )
         od_pairs.extend(tmp_od_pairs)
 
@@ -184,6 +185,10 @@ def generate_od_pairs(region_info, exp_config):
 
     print(f"\nTotal store annual sales: {total_sales}")
     print(f"Total output annual sales from OD pairs: {output_total_sales}")
+
+    region_info.set_stat("total_store_annual_sales", total_sales)
+    region_info.set_stat("total_odpair_annual_sales", output_total_sales)
+    region_info.set_stat("odpair_count", len(od_pairs))
 
     od_df = pd.DataFrame(od_pairs)
     od_save_path = os.path.join(
@@ -196,28 +201,31 @@ def generate_od_pairs(region_info, exp_config):
     print(f"Saved OD pairs to {od_save_path}")
 
 
-def generate_one_store_od_pairs(nearby_buildings, month_sales, store_coord_wgs84):
+def generate_one_store_od_pairs(nearby_buildings, month_sales, store_coord_wgs84, od_params):
     """Generate OD pairs for one store.
 
     Args:
-        store_row: Store data row from DataFrame
         nearby_buildings: GeoDataFrame of nearby buildings
+        month_sales: Monthly sales of the store
         store_coord_wgs84: Store coordinates in WGS84 (lat, lng)
+        od_params: Dict with g_param, min_distance_km, min_sales
     """
-    g_param = [1, 1, 2]
-    min_distance_km = 0.05
-    min_sales = 5
+    g_param = od_params.get("g_param", [1, 1, 2])
+    min_distance_km = od_params.get("min_distance_km", 0.05)
+    min_sales = od_params.get("min_sales", 5)
 
     total_demand = month_sales * 12  # Annual demand
     store_lat, store_lng = store_coord_wgs84
 
     ratios = {}
+    distances = {}
     for idx, building in nearby_buildings.iterrows():
         distance_km = haversine(
             (store_lat, store_lng),
             (building["centroid"].y, building["centroid"].x),
             unit=Unit.KILOMETERS,
         )
+        distances[idx] = distance_km
         volume = building.get("volume_m3")
         tmp_ratio = (
             g_param[0]
@@ -241,6 +249,7 @@ def generate_one_store_od_pairs(nearby_buildings, month_sales, store_coord_wgs84
                 "from_lng": store_lng,
                 "to_lat": nearby_buildings.loc[b_idx]["centroid"].y,
                 "to_lng": nearby_buildings.loc[b_idx]["centroid"].x,
+                "distance_km": distances[b_idx],
                 "annual_sales": sales,
             }
         )
@@ -249,20 +258,21 @@ def generate_one_store_od_pairs(nearby_buildings, month_sales, store_coord_wgs84
 
 
 def generate_one_store_od_pairs_vectorized(
-    nearby_buildings, month_sales, store_coord_wgs84
+    nearby_buildings, month_sales, store_coord_wgs84, od_params
 ):
     """Vectorized version of generate_one_store_od_pairs.
 
     Uses haversine_vector and numpy operations for faster computation.
 
     Args:
-        store_row: Store data row from DataFrame
         nearby_buildings: GeoDataFrame of nearby buildings
+        month_sales: Monthly sales of the store
         store_coord_wgs84: Store coordinates in WGS84 (lat, lng)
+        od_params: Dict with g_param, min_distance_km, min_sales
     """
-    g_param = [1, 1, 2]
-    min_distance_km = 0.05
-    min_sales = 5
+    g_param = od_params.get("g_param", [1, 1, 2])
+    min_distance_km = od_params.get("min_distance_km", 0.05)
+    min_sales = od_params.get("min_sales", 5)
 
     total_demand = month_sales * 12  # Annual demand
     store_lat, store_lng = store_coord_wgs84
@@ -315,6 +325,7 @@ def generate_one_store_od_pairs_vectorized(
             "from_lng": store_lng,
             "to_lat": building_lats[i],
             "to_lng": building_lngs[i],
+            "distance_km": distances_km[i],
             "annual_sales": sales[i],
         }
         for i in valid_indices

@@ -5,3 +5,9 @@ fetch_buildings = false
 fetch_roadnet = false
 
 delivery_radius_km = 3
+
+# OD pair generation parameters
+[od_params]
+g_param = [1, 1, 2]       # Gravity model parameters: [alpha, beta, gamma]
+min_distance_km = 0.05    # Minimum distance to avoid division issues
+min_sales = 5             # Minimum annual sales threshold per building

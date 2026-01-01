@@ -66,33 +66,6 @@
         "max_lat": 22.626979648177564,
         "min_lng": 113.87078792689049,
         "max_lng": 114.05921207310952
-      }
-    },
-    "cache": {
-      "enlarged_boundaries": {
-        "min_lat": 22.463020351822436,
-        "max_lat": 22.626979648177564,
-        "min_lng": 113.87078792689049,
-        "max_lng": 114.05921207310952
-      }
-    }
-  },
-  "longhua": {
-    "region_name_cn": "龙华区",
-    "region_name_en": "Longhua",
-    "region_level": "district",
-    "parent_city": "shenzhen",
-    "boundaries_dict": null,
-    "stats": {},
-    "cache": {}
-  },
-  "luohu": {
-    "region_name_cn": "罗湖区",
-    "region_name_en": "Luohu",
-    "region_level": "district",
-    "parent_city": "shenzhen",
-    "boundaries_dict": null,
-    "stats": {},
-    "cache": {}
-  }
-}
+      },
+      "total_store_annual_sales": 37064556.0,
+      "total_odpair_annual_sales": 

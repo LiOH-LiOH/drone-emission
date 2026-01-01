@@ -12,7 +12,6 @@ def load_roadnet(region_info, exp_config):
     region_name_en = region_config["region_name_en"]
     region_name_cn = region_config.get("region_name_cn")
     region_level = region_config["region_level"]
-    # boundaries_dict 使用 WGS84 (EPSG:4326) 坐标系
     boundaries_dict = region_config.get("boundaries_dict")
     large_bounds_dict = region_info.get_cache("enlarged_boundaries")
 
