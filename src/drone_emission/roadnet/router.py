@@ -256,3 +256,109 @@ class RoadNetRouter:
     def num_edges(self) -> int:
         """Number of edges in the graph."""
         return self.G.number_of_edges()
+
+    def find_nearest_nodes_batch(
+        self, points: np.ndarray
+    ) -> Tuple[np.ndarray, np.ndarray]:
+        """Find nearest nodes for multiple points efficiently.
+
+        Args:
+            points: Array of shape (N, 2) with (lat, lng) coordinates
+
+        Returns:
+            Tuple of (node_ids array, distances array in meters)
+        """
+        # Query KD-Tree for all points at once
+        _, indices = self._kdtree.query(points)
+        node_ids = np.array([self._node_ids[i] for i in indices])
+
+        # Calculate distances using haversine (vectorized approximation)
+        node_coords = self._node_coords[indices]
+        # Simple Euclidean approximation for speed, or use haversine_vector
+        lat_diff = np.radians(points[:, 0] - node_coords[:, 0])
+        lng_diff = np.radians(points[:, 1] - node_coords[:, 1])
+        lat_avg = np.radians((points[:, 0] + node_coords[:, 0]) / 2)
+        # Approximate meters using equirectangular projection
+        x = lng_diff * np.cos(lat_avg) * 6371000
+        y = lat_diff * 6371000
+        distances = np.sqrt(x**2 + y**2)
+
+        return node_ids, distances
+
+    def compute_od_distances_batch(
+        self,
+        origins: np.ndarray,
+        destinations: np.ndarray,
+        weight: Optional[str] = None,
+        show_progress: bool = True,
+    ) -> np.ndarray:
+        """Compute road network distances for many OD pairs efficiently.
+
+        Uses caching of node-pair distances to avoid redundant shortest path calculations.
+
+        Args:
+            origins: Array of shape (N, 2) with (lat, lng) coordinates
+            destinations: Array of shape (N, 2) with (lat, lng) coordinates
+            weight: Edge weight to minimize ('length' or 'travel_time')
+            show_progress: If True, print progress
+
+        Returns:
+            Array of distances in meters (-1 for no path found)
+        """
+        weight = weight or self.weight
+        n_pairs = len(origins)
+
+        if show_progress:
+            print(f"Computing road network distances for {n_pairs:,} OD pairs...")
+
+        # Step 1: Batch find nearest nodes for all origins and destinations
+        if show_progress:
+            print("  Finding nearest nodes...")
+        origin_nodes, origin_snap_dist = self.find_nearest_nodes_batch(origins)
+        dest_nodes, dest_snap_dist = self.find_nearest_nodes_batch(destinations)
+
+        # Step 2: Find unique node pairs to minimize shortest path calculations
+        node_pairs = list(zip(origin_nodes, dest_nodes))
+        unique_pairs = list(set(node_pairs))
+
+        if show_progress:
+            print(
+                f"  Unique node pairs: {len(unique_pairs):,} "
+                f"(reduced from {n_pairs:,}, {100*len(unique_pairs)/n_pairs:.1f}%)"
+            )
+
+        # Step 3: Compute shortest path distance for each unique node pair
+        pair_distances = {}
+        total_unique = len(unique_pairs)
+
+        for i, (o_node, d_node) in enumerate(unique_pairs):
+            if show_progress and (i + 1) % 10000 == 0:
+                print(f"  Computing paths: {i + 1:,}/{total_unique:,}")
+
+            if o_node == d_node:
+                pair_distances[(o_node, d_node)] = 0.0
+            else:
+                try:
+                    dist = nx.shortest_path_length(
+                        self.G, o_node, d_node, weight=weight
+                    )
+                    pair_distances[(o_node, d_node)] = dist
+                except nx.NetworkXNoPath:
+                    pair_distances[(o_node, d_node)] = -1.0
+
+        # Step 4: Map back to original OD pairs
+        if show_progress:
+            print("  Mapping distances to OD pairs...")
+        distances = np.array(
+            [pair_distances[(o, d)] for o, d in node_pairs], dtype=np.float64
+        )
+
+        # Count statistics
+        valid_count = np.sum(distances >= 0)
+        if show_progress:
+            print(
+                f"  Done: {valid_count:,}/{n_pairs:,} valid paths "
+                f"({100*valid_count/n_pairs:.1f}%)"
+            )
+
+        return distances

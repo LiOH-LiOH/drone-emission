@@ -1,9 +1,11 @@
 import os
 
 import osmnx as ox
+import pandas as pd
 from visualization.roadnet import visualize_roadnet
 
 from .osm_raodnet import fetch_bikeable_roadnet
+from .router import RoadNetRouter
 
 
 def load_roadnet(region_info, exp_config):
@@ -42,6 +44,8 @@ def load_roadnet(region_info, exp_config):
         return
 
     print(f"Loaded road network: {len(G.nodes)} nodes, {len(G.edges)} edges.")
+    region_info.set_stat("roadnet_node_count", len(G.nodes))
+    region_info.set_stat("roadnet_edge_count", len(G.edges))
 
     # Visualize road network
     fig_dir = os.path.join(
@@ -59,3 +63,48 @@ def load_roadnet(region_info, exp_config):
         original_boundaries_dict=boundaries_dict,
         save_path=roadnet_fig_path,
     )
+
+    od_save_path = os.path.join(
+        exp_config["data_dir"],
+        region_level,
+        region_name_en.lower(),
+        f"{region_name_en.lower()}_od_pairs.csv",
+    )
+    od_df = pd.read_csv(od_save_path)
+    print(f"Loaded {len(od_df)} OD pairs")
+
+    router = RoadNetRouter(G)
+
+    # Compute road network distances for all OD pairs
+    import numpy as np
+
+    origins = od_df[["from_lat", "from_lng"]].values
+    destinations = od_df[["to_lat", "to_lng"]].values
+
+    road_distances = router.compute_od_distances_batch(origins, destinations)
+
+    # Add road distance to dataframe
+    od_df["road_distance_m"] = road_distances
+
+    # Save updated OD pairs
+    od_df.to_csv(od_save_path, index=False)
+    print(f"Updated OD pairs with road distances saved to {od_save_path}")
+
+    # Statistics
+    valid_mask = road_distances >= 0
+    if valid_mask.sum() > 0:
+        avg_road_dist = road_distances[valid_mask].mean()
+        avg_straight_dist = od_df.loc[valid_mask, "distance_km"].mean() * 1000
+        detour_ratio = avg_road_dist / avg_straight_dist if avg_straight_dist > 0 else 0
+
+        region_info.set_stat("avg_road_distance_m", avg_road_dist)
+        region_info.set_stat("avg_straight_distance_m", avg_straight_dist)
+        region_info.set_stat("detour_ratio", detour_ratio)
+        region_info.set_stat("valid_path_count", int(valid_mask.sum()))
+        region_info.set_stat("invalid_path_count", int((~valid_mask).sum()))
+
+        print(f"\n=== Road Distance Statistics ===")
+        print(f"Valid paths: {valid_mask.sum():,} / {len(od_df):,}")
+        print(f"Avg straight-line distance: {avg_straight_dist:.1f} m")
+        print(f"Avg road network distance: {avg_road_dist:.1f} m")
+        print(f"Detour ratio: {detour_ratio:.2f}")

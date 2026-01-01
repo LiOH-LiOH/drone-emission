@@ -32,7 +32,7 @@ class RegionConfig:
     def set_stat(self, key: str, value: Any):
         """Set a statistics value"""
         # Convert numpy types to Python native types for JSON serialization
-        if hasattr(value, 'item'):
+        if hasattr(value, "item"):
             value = value.item()
         self.stats[key] = value
 

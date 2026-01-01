@@ -201,7 +201,9 @@ def generate_od_pairs(region_info, exp_config):
     print(f"Saved OD pairs to {od_save_path}")
 
 
-def generate_one_store_od_pairs(nearby_buildings, month_sales, store_coord_wgs84, od_params):
+def generate_one_store_od_pairs(
+    nearby_buildings, month_sales, store_coord_wgs84, od_params
+):
     """Generate OD pairs for one store.
 
     Args:

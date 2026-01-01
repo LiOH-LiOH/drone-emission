@@ -6,3 +6,4 @@ data/
 figures/
 archive/
 .DS_Store
+backup_*
