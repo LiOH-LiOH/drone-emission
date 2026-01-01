@@ -120,25 +120,7 @@ def generate_od_pairs(region_info, exp_config):
         store_coords[example_idx][0],
     )  # (lng, lat)
 
-    # Get boundaries_dict from region_config
-    boundaries_dict = region_config.get("boundaries_dict", None)
-
-    # Convert km to degrees for boundary padding
-    # Latitude: 1° ≈ 111.32 km (constant)
-    # Longitude: 1° ≈ 111.32 × cos(lat) km (varies with latitude)
-    center_lat = (boundaries_dict["min_lat"] + boundaries_dict["max_lat"]) / 2
-    km_per_deg_lat = EARTH_RADIUS_KM * np.pi / 180  # ≈ 111.32 km
-    km_per_deg_lng = km_per_deg_lat * np.cos(np.radians(center_lat))
-
-    padding_lat = delivery_radius_km / km_per_deg_lat
-    padding_lng = delivery_radius_km / km_per_deg_lng
-
-    large_bounds_dict = {
-        "min_lat": boundaries_dict["min_lat"] - padding_lat,
-        "max_lat": boundaries_dict["max_lat"] + padding_lat,
-        "min_lng": boundaries_dict["min_lng"] - padding_lng,
-        "max_lng": boundaries_dict["max_lng"] + padding_lng,
-    }
+    large_bounds_dict = region_info.get_cache("enlarged_boundaries")
 
     visualize_store_coverage(
         buildings_gdf=buildings_gdf,
@@ -147,6 +129,7 @@ def generate_od_pairs(region_info, exp_config):
         city_name=region_name_en,
         city_name_cn=region_config.get("region_name_cn"),
         boundaries_dict=large_bounds_dict,
+        original_boundaries_dict=region_config.get("boundaries_dict"),
         radius_km=delivery_radius_km,
         save_path=os.path.join(fig_dir, f"{region_name_en.lower()}_store_coverage.png"),
     )

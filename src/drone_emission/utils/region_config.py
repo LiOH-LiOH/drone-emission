@@ -3,7 +3,8 @@ Region Configuration Management Module
 
 Using Dataclass + JSON serialization, supports:
 1. Static region configuration
-2. Runtime statistics data persistence
+2. Runtime statistics data persistence (stats)
+3. Computed data caching for reuse (cache)
 """
 
 import json
@@ -21,7 +22,8 @@ class RegionConfig:
     region_level: str  # "city" or "district"
     parent_city: Optional[str] = None
     boundaries_dict: Optional[Dict[str, float]] = None
-    stats: Dict[str, Any] = field(default_factory=dict)
+    stats: Dict[str, Any] = field(default_factory=dict)  # Statistics for output
+    cache: Dict[str, Any] = field(default_factory=dict)  # Computed data for reuse
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary format"""
@@ -34,6 +36,14 @@ class RegionConfig:
     def get_stat(self, key: str, default: Any = None) -> Any:
         """Get a statistics value"""
         return self.stats.get(key, default)
+
+    def set_cache(self, key: str, value: Any):
+        """Set a cached computed value"""
+        self.cache[key] = value
+
+    def get_cache(self, key: str, default: Any = None) -> Any:
+        """Get a cached computed value"""
+        return self.cache.get(key, default)
 
 
 class RegionRegistry:
@@ -66,6 +76,7 @@ class RegionRegistry:
                 parent_city=region_data.get("parent_city"),
                 boundaries_dict=region_data.get("boundaries_dict"),
                 stats=region_data.get("stats", {}),
+                cache=region_data.get("cache", {}),
             )
         self._config_path = config_path
 

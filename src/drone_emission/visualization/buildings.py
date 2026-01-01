@@ -10,20 +10,28 @@ from ._utils import (
     add_basemap_and_boundaries,
     finalize_plot,
     get_custom_cmap,
+    plot_boundary_box,
     setup_figure,
 )
 
 
 def visualize_buildings(
-    gdf, city_name, city_name_cn=None, boundaries_dict=None, save_path=None
+    gdf,
+    city_name,
+    city_name_cn=None,
+    boundaries_dict=None,
+    original_boundaries_dict=None,
+    save_path=None,
 ):
     """
     Read a GeoJSON file of buildings and visualize it.
 
     Args:
-        geojson_path (str): Path to the GeoJSON file.
+        gdf: GeoDataFrame of buildings.
+        city_name (str): English name of the city.
         city_name_cn (str, optional): Chinese name of the city for basemap and boundaries.
-        boundaries_dict (dict, optional): Dictionary with min_lng, max_lng, min_lat, max_lat.
+        boundaries_dict (dict, optional): Dictionary with min_lng, max_lng, min_lat, max_lat (enlarged).
+        original_boundaries_dict (dict, optional): Original boundary dict for drawing dashed box.
         save_path (str, optional): Path to save the visualization. If None, shows the plot.
     """
     # Convert to EPSG:4326 (WGS84) if needed for basemap
@@ -38,6 +46,9 @@ def visualize_buildings(
     if city_name_cn:
         add_basemap_and_boundaries(ax, city_name_cn, boundaries_dict)
 
+    # Plot original boundary as dashed box
+    plot_boundary_box(ax, original_boundaries_dict)
+
     title = f"{city_name} Buildings Visualization"
     stats_text = f"Total Buildings: {len(gdf)}"
 
@@ -46,16 +57,22 @@ def visualize_buildings(
 
 
 def visualize_building_heights(
-    gdf, city_name, city_name_cn=None, boundaries_dict=None, save_path=None
+    gdf,
+    city_name,
+    city_name_cn=None,
+    boundaries_dict=None,
+    original_boundaries_dict=None,
+    save_path=None,
 ):
     """
     Visualize building heights using a heatmap.
 
     Args:
-        geojson_path (str): Path to the GeoJSON file.
+        gdf: GeoDataFrame of buildings.
         city_name (str): English name of the city.
         city_name_cn (str, optional): Chinese name of the city for basemap and boundaries.
-        boundaries_dict (dict, optional): Dictionary with min_lng, max_lng, min_lat, max_lat.
+        boundaries_dict (dict, optional): Dictionary with min_lng, max_lng, min_lat, max_lat (enlarged).
+        original_boundaries_dict (dict, optional): Original boundary dict for drawing dashed box.
         save_path (str, optional): Path to save the visualization. If None, shows the plot.
     """
     if "height" not in gdf.columns:
@@ -88,6 +105,9 @@ def visualize_building_heights(
     if city_name_cn:
         add_basemap_and_boundaries(ax, city_name_cn, boundaries_dict)
 
+    # Plot original boundary as dashed box
+    plot_boundary_box(ax, original_boundaries_dict)
+
     title = f"{city_name} Building Heights"
     heights = gdf["height"].dropna()
     stats_text = (
@@ -107,6 +127,7 @@ def visualize_store_coverage(
     city_name,
     city_name_cn=None,
     boundaries_dict=None,
+    original_boundaries_dict=None,
     radius_km=5.0,
     save_path=None,
 ):
@@ -119,7 +140,8 @@ def visualize_store_coverage(
         nearby_indices: Array of indices for buildings within delivery radius.
         city_name: English name of the city/region.
         city_name_cn: Chinese name for basemap and boundaries.
-        boundaries_dict: Dictionary with min_lng, max_lng, min_lat, max_lat.
+        boundaries_dict: Dictionary with min_lng, max_lng, min_lat, max_lat (enlarged).
+        original_boundaries_dict: Original boundary dict for drawing dashed box.
         radius_km: Delivery radius in kilometers.
         save_path: Path to save the visualization.
     """
@@ -189,6 +211,9 @@ def visualize_store_coverage(
     # Add basemap and boundaries
     if city_name_cn:
         add_basemap_and_boundaries(ax, city_name_cn, boundaries_dict)
+
+    # Plot original boundary as dashed box
+    plot_boundary_box(ax, original_boundaries_dict)
 
     # Add legend with high zorder to ensure visibility
     legend = ax.legend(loc="upper right", fontsize=10)

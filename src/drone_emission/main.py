@@ -4,6 +4,7 @@ from pathlib import Path
 from buildings import visualize_region_buildings
 from demand import generate_od_pairs
 from preprocessing import visualize_region_data
+from roadnet import add_roadnet_info
 from utils import load_config
 from utils.region_config import get_registry, init_registry
 
@@ -25,11 +26,15 @@ def run_region_analysis(region_key: str, config: dict):
     region = registry[region_key]
     region_conf = region.to_dict()
 
-    visualize_region_data(
+    # visualize_region_data(
+    #     region_info=region,
+    #     exp_config=config,
+    # )
+    visualize_region_buildings(
         region_info=region,
         exp_config=config,
     )
-    visualize_region_buildings(
+    add_roadnet_info(
         region_info=region,
         exp_config=config,
     )

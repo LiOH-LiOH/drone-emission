@@ -100,6 +100,49 @@ def configure_contextily_cache():
             print(f"Failed to configure contextily cache: {e}")
 
 
+def plot_boundary_box(
+    ax,
+    boundaries_dict,
+    color="orange",
+    linestyle="--",
+    linewidth=2,
+    label="Original Boundary",
+    zorder=16,
+):
+    """Plot a rectangular boundary box on the axes.
+
+    Args:
+        ax: Matplotlib axes
+        boundaries_dict: Dictionary with min_lng, max_lng, min_lat, max_lat
+        color: Line color
+        linestyle: Line style (default dashed)
+        linewidth: Line width
+        label: Label for legend
+        zorder: Z-order for layering
+    """
+    if not boundaries_dict:
+        return
+
+    min_lng = boundaries_dict["min_lng"]
+    max_lng = boundaries_dict["max_lng"]
+    min_lat = boundaries_dict["min_lat"]
+    max_lat = boundaries_dict["max_lat"]
+
+    # Draw rectangle (closed path)
+    rect_x = [min_lng, max_lng, max_lng, min_lng, min_lng]
+    rect_y = [min_lat, min_lat, max_lat, max_lat, min_lat]
+
+    ax.plot(
+        rect_x,
+        rect_y,
+        color=color,
+        linestyle=linestyle,
+        linewidth=linewidth,
+        label=label,
+        zorder=zorder,
+    )
+
+
 def add_basemap_and_boundaries(
     ax, city_name_cn, boundaries_dict=None, zoom=14, alpha=0.6
 ):

@@ -5,7 +5,8 @@
     "region_level": "city",
     "parent_city": null,
     "boundaries_dict": null,
-    "stats": {}
+    "stats": {},
+    "cache": {}
   },
   "beijing": {
     "region_name_cn": "北京市",
@@ -13,7 +14,8 @@
     "region_level": "city",
     "parent_city": null,
     "boundaries_dict": null,
-    "stats": {}
+    "stats": {},
+    "cache": {}
   },
   "shanghai": {
     "region_name_cn": "上海市",
@@ -21,7 +23,8 @@
     "region_level": "city",
     "parent_city": null,
     "boundaries_dict": null,
-    "stats": {}
+    "stats": {},
+    "cache": {}
   },
   "guangzhou": {
     "region_name_cn": "广州市",
@@ -29,7 +32,8 @@
     "region_level": "city",
     "parent_city": null,
     "boundaries_dict": null,
-    "stats": {}
+    "stats": {},
+    "cache": {}
   },
   "futian": {
     "region_name_cn": "福田区",
@@ -42,7 +46,8 @@
       "min_lng": 114.01,
       "max_lng": 114.1
     },
-    "stats": {}
+    "stats": {},
+    "cache": {}
   },
   "nanshan": {
     "region_name_cn": "南山区",
@@ -62,6 +67,14 @@
         "min_lng": 113.87078792689049,
         "max_lng": 114.05921207310952
       }
+    },
+    "cache": {
+      "enlarged_boundaries": {
+        "min_lat": 22.463020351822436,
+        "max_lat": 22.626979648177564,
+        "min_lng": 113.87078792689049,
+        "max_lng": 114.05921207310952
+      }
     }
   },
   "longhua": {
@@ -70,7 +83,8 @@
     "region_level": "district",
     "parent_city": "shenzhen",
     "boundaries_dict": null,
-    "stats": {}
+    "stats": {},
+    "cache": {}
   },
   "luohu": {
     "region_name_cn": "罗湖区",
@@ -78,6 +92,7 @@
     "region_level": "district",
     "parent_city": "shenzhen",
     "boundaries_dict": null,
-    "stats": {}
+    "stats": {},
+    "cache": {}
   }
 }

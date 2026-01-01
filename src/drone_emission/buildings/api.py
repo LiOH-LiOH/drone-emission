@@ -10,21 +10,7 @@ from .fetch_buildings import fetch_region_buildings
 EARTH_RADIUS_KM = 6371.0
 
 
-def visualize_region_buildings(region_info, exp_config):
-    region_config = region_info.to_dict()
-
-    region_name_en = region_config["region_name_en"]
-    region_name_cn = region_config["region_name_cn"]
-    region_level = region_config["region_level"]
-    boundaries_dict = region_config.get("boundaries_dict", None)
-    if not boundaries_dict:
-        print(
-            f"No boundaries_dict found for {region_name_en}. Skipping building fetch."
-        )
-        return
-
-    enlarge_km = exp_config.get("delivery_radius_km", 5.0)
-
+def enlarge_boundaries(boundaries_dict, enlarge_km):
     center_lat = (boundaries_dict["min_lat"] + boundaries_dict["max_lat"]) / 2
     km_per_deg_lat = EARTH_RADIUS_KM * np.pi / 180
     km_per_deg_lng = km_per_deg_lat * np.cos(np.radians(center_lat))
@@ -39,7 +25,28 @@ def visualize_region_buildings(region_info, exp_config):
         "max_lng": boundaries_dict["max_lng"] + enlarge_lng,
     }
 
-    region_info.set_stat("enlarged_boundaries", large_bounds_dict)
+    return large_bounds_dict
+
+
+def visualize_region_buildings(region_info, exp_config):
+    region_config = region_info.to_dict()
+
+    region_name_en = region_config["region_name_en"]
+    region_name_cn = region_config["region_name_cn"]
+    region_level = region_config["region_level"]
+    boundaries_dict = region_config.get("boundaries_dict", None)
+    if not boundaries_dict:
+        print(
+            f"No boundaries_dict found for {region_name_en}. Skipping building fetch."
+        )
+        return
+
+    large_bounds_dict = region_info.get_stat("enlarged_boundaries")
+
+    if not large_bounds_dict:
+        enlarge_km = exp_config.get("delivery_radius_km", 5.0)
+        large_bounds_dict = enlarge_boundaries(boundaries_dict, enlarge_km)
+        region_info.set_stat("enlarged_boundaries", large_bounds_dict)
 
     # Enlarge bbox slightly to ensure full coverage
     bbox_4326 = (
@@ -59,13 +66,15 @@ def visualize_region_buildings(region_info, exp_config):
         region_save_dir, f"{region_name_en.lower()}_buildings.geojson"
     )
 
-    if exp_config.get("fetch_buildings", False):
+    # Fetch buildings if requested or file doesn't exist
+    if exp_config.get("fetch_buildings", False) or not os.path.exists(geojson_file):
         fetch_region_buildings(
             region_name=region_name_en,
             bbox_4326=bbox_4326,
             save_path=geojson_file,
         )
 
+    # Load buildings from file
     print(f"Reading {geojson_file}...")
     try:
         gdf = gpd.read_file(geojson_file)
@@ -93,6 +102,7 @@ def visualize_region_buildings(region_info, exp_config):
         city_name=region_name_en,
         city_name_cn=region_name_cn,
         boundaries_dict=large_bounds_dict,
+        original_boundaries_dict=boundaries_dict,
         save_path=save_path,
     )
 
@@ -106,5 +116,6 @@ def visualize_region_buildings(region_info, exp_config):
         city_name=region_name_en,
         city_name_cn=region_name_cn,
         boundaries_dict=large_bounds_dict,
+        original_boundaries_dict=boundaries_dict,
         save_path=height_save_path,
     )
