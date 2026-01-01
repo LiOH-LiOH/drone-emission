@@ -26,22 +26,22 @@ def run_region_analysis(region_key: str, config: dict):
     region = registry[region_key]
     region_conf = region.to_dict()
 
-    # visualize_region_data(
+    visualize_region_data(
+        region_info=region,
+        exp_config=config,
+    )
+    # visualize_region_buildings(
     #     region_info=region,
     #     exp_config=config,
     # )
-    visualize_region_buildings(
-        region_info=region,
-        exp_config=config,
-    )
-    add_roadnet_info(
-        region_info=region,
-        exp_config=config,
-    )
-    generate_od_pairs(
-        region_info=region,
-        exp_config=config,
-    )
+    # add_roadnet_info(
+    #     region_info=region,
+    #     exp_config=config,
+    # )
+    # generate_od_pairs(
+    #     region_info=region,
+    #     exp_config=config,
+    # )
 
     # Example: Add statistics and save
     # region.set_stat("building_count", 12345)

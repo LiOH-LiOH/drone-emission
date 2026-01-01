@@ -18,12 +18,35 @@ from ._utils import (
 HEATMAP_PADDING_COEFF = 0.05
 
 
-def plot_sales_distribution(df, region_name, save_path=None):
+def plot_sales_distribution(df, region_name, log_scale=False, save_path=None):
+    """Plot sales distribution histogram.
+
+    Args:
+        df: DataFrame with 'month_sales' column
+        region_name: Name of the region for title
+        log_scale: If True, use logarithmic x-axis scale
+        save_path: Path to save the figure
+    """
     plt.figure(figsize=(10, 6))
 
-    plt.hist(df["month_sales"], bins=30, color="skyblue", edgecolor="black")
-    plt.title("The Distribution of Monthly Sales in " + region_name)
-    plt.xlabel("Monthly Sales")
+    sales = df["month_sales"]
+    if log_scale:
+        # Filter out zero or negative values for log scale
+        sales = sales[sales > 0]
+        bins = np.logspace(np.log10(sales.min()), np.log10(sales.max()), 30)
+    else:
+        bins = 30
+
+    plt.hist(sales, bins=bins, color="skyblue", edgecolor="black")
+
+    if log_scale:
+        plt.xscale("log")
+        plt.title(f"The Distribution of Monthly Sales in {region_name} (Log Scale)")
+        plt.xlabel("Monthly Sales (log scale)")
+    else:
+        plt.title(f"The Distribution of Monthly Sales in {region_name}")
+        plt.xlabel("Monthly Sales")
+
     plt.ylabel("Frequency")
     plt.grid(axis="y", alpha=0.75)
 

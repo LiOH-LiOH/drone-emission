@@ -45,8 +45,17 @@ def visualize_region_data(region_info, exp_config):
     plot_sales_distribution(
         region_data,
         region_name_en,
+        log_scale=False,
         save_path=os.path.join(
             fig_dir, f"{region_name_en.lower()}_month_sales_distribution.png"
+        ),
+    )
+    plot_sales_distribution(
+        region_data,
+        region_name_en,
+        log_scale=True,
+        save_path=os.path.join(
+            fig_dir, f"{region_name_en.lower()}_month_sales_distribution_log.png"
         ),
     )
     plot_sales_heatmap(
