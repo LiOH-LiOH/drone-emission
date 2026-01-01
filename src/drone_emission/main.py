@@ -1,10 +1,10 @@
 import argparse
 from pathlib import Path
 
-from buildings import visualize_region_buildings
+from buildings import load_buildings
 from demand import generate_od_pairs
-from preprocessing import visualize_region_data
-from roadnet import add_roadnet_info
+from preprocessing import prepare_sales
+from roadnet import load_roadnet
 from utils import load_config
 from utils.region_config import get_registry, init_registry
 
@@ -24,24 +24,23 @@ def run_region_analysis(region_key: str, config: dict):
 
     print(f"Running analysis for {region_key}...")
     region = registry[region_key]
-    region_conf = region.to_dict()
 
-    visualize_region_data(
+    prepare_sales(
         region_info=region,
         exp_config=config,
     )
-    # visualize_region_buildings(
-    #     region_info=region,
-    #     exp_config=config,
-    # )
-    # add_roadnet_info(
-    #     region_info=region,
-    #     exp_config=config,
-    # )
-    # generate_od_pairs(
-    #     region_info=region,
-    #     exp_config=config,
-    # )
+    load_buildings(
+        region_info=region,
+        exp_config=config,
+    )
+    load_roadnet(
+        region_info=region,
+        exp_config=config,
+    )
+    generate_od_pairs(
+        region_info=region,
+        exp_config=config,
+    )
 
     # Example: Add statistics and save
     # region.set_stat("building_count", 12345)

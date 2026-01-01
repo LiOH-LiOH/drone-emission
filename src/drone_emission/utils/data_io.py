@@ -25,6 +25,8 @@ def filter_region_data(
     data_path, region_name, boundaries_dict=None, region_level="city", save_path=None
 ):
     df = pd.read_csv(data_path)
+    print(f"Total entries in dataset: {len(df)}")
+
     tmp_data = df[df[region_level] == region_name]
     print(f"{region_name} has {len(tmp_data)} entries.")
 

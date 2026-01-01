@@ -6,7 +6,7 @@ from visualization.roadnet import visualize_roadnet
 from .osm_raodnet import fetch_bikeable_roadnet
 
 
-def add_roadnet_info(region_info, exp_config):
+def load_roadnet(region_info, exp_config):
     region_config = region_info.to_dict()
 
     region_name_en = region_config["region_name_en"]

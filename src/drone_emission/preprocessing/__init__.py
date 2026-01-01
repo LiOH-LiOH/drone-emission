@@ -1,3 +1,3 @@
-from .api import visualize_region_data
+from .api import prepare_sales
 
-__all__ = ["visualize_region_data"]
+__all__ = ["prepare_sales"]

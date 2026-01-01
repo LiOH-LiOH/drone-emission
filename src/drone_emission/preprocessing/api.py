@@ -9,7 +9,7 @@ from visualization.sales import (
 )
 
 
-def visualize_region_data(region_info, exp_config):
+def prepare_sales(region_info, exp_config):
     region_config = region_info.to_dict()
 
     region_name_cn = region_config["region_name_cn"]

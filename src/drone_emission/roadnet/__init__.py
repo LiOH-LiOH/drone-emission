@@ -1,3 +1,3 @@
-from .api import add_roadnet_info
+from .api import load_roadnet
 
-__all__ = ["add_roadnet_info"]
+__all__ = ["load_roadnet"]

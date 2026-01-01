@@ -28,7 +28,7 @@ def enlarge_boundaries(boundaries_dict, enlarge_km):
     return large_bounds_dict
 
 
-def visualize_region_buildings(region_info, exp_config):
+def load_buildings(region_info, exp_config):
     region_config = region_info.to_dict()
 
     region_name_en = region_config["region_name_en"]
