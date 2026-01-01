@@ -22,3 +22,31 @@ def convert_coords_array(lng_array, lat_array):
         wgs_lngs.append(w_lng)
         wgs_lats.append(w_lat)
     return np.array(wgs_lngs), np.array(wgs_lats)
+
+
+# Earth radius in kilometers
+EARTH_RADIUS_KM = 6371.0
+
+
+def haversine_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    """Calculate the great-circle distance between two points in meters.
+
+    Args:
+        lat1, lon1: Latitude and longitude of point 1 (in degrees)
+        lat2, lon2: Latitude and longitude of point 2 (in degrees)
+
+    Returns:
+        Distance in meters
+    """
+    lat1_rad = np.radians(lat1)
+    lat2_rad = np.radians(lat2)
+    dlat = np.radians(lat2 - lat1)
+    dlon = np.radians(lon2 - lon1)
+
+    a = (
+        np.sin(dlat / 2) ** 2
+        + np.cos(lat1_rad) * np.cos(lat2_rad) * np.sin(dlon / 2) ** 2
+    )
+    c = 2 * np.arcsin(np.sqrt(a))
+
+    return EARTH_RADIUS_KM * c  # in kilometers

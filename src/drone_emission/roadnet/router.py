@@ -6,34 +6,8 @@ from typing import Any, Dict, List, Optional, Tuple
 import networkx as nx
 import numpy as np
 import osmnx as ox
+from haversine import Unit, haversine
 from scipy.spatial import cKDTree
-
-# Earth radius in kilometers
-EARTH_RADIUS_KM = 6371.0
-
-
-def haversine_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
-    """Calculate the great-circle distance between two points in meters.
-
-    Args:
-        lat1, lon1: Latitude and longitude of point 1 (in degrees)
-        lat2, lon2: Latitude and longitude of point 2 (in degrees)
-
-    Returns:
-        Distance in meters
-    """
-    lat1_rad = np.radians(lat1)
-    lat2_rad = np.radians(lat2)
-    dlat = np.radians(lat2 - lat1)
-    dlon = np.radians(lon2 - lon1)
-
-    a = (
-        np.sin(dlat / 2) ** 2
-        + np.cos(lat1_rad) * np.cos(lat2_rad) * np.sin(dlon / 2) ** 2
-    )
-    c = 2 * np.arcsin(np.sqrt(a))
-
-    return EARTH_RADIUS_KM * c * 1000  # Convert km to meters
 
 
 class RoadNetRouter:
@@ -84,9 +58,9 @@ class RoadNetRouter:
 
         node_id = self._node_ids[idx]
 
-        # Calculate actual distance using haversine formula
+        # Calculate actual distance using haversine
         node_lat, node_lon = self._node_coords[idx]
-        dist_meters = haversine_distance(lat, lon, node_lat, node_lon)
+        dist_meters = haversine((lat, lon), (node_lat, node_lon), unit=Unit.METERS)
 
         return node_id, dist_meters
 

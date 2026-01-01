@@ -3,8 +3,9 @@ import os
 import geopandas as gpd
 import numpy as np
 import pandas as pd
+from haversine import Unit, haversine, haversine_vector
 from sklearn.neighbors import BallTree
-from utils.coordinates import gcj02_to_wgs84
+from utils.coordinates import gcj02_to_wgs84, haversine_distance
 from utils.tools import get_epsg_code
 from visualization.buildings import visualize_store_coverage
 
@@ -14,12 +15,18 @@ from .cal_area import preprocess_buildings
 EARTH_RADIUS_KM = 6371.0
 
 
-def generate_od_pairs(region_info, exp_config):
-    """
-    Generate Origin-Destination pairs by matching stores to nearby buildings.
+def prepare_store_building_matching(region_info, exp_config):
+    """Prepare data for store-building matching.
 
-    For each store (origin), find all buildings (potential destinations)
-    within SEARCH_RADIUS_KM using BallTree with Haversine distance.
+    Loads store and building data, builds spatial index, and finds nearby buildings
+    for each store within delivery radius.
+
+    Returns:
+        Tuple of (indices_list, stores_df, buildings_gdf, store_coords)
+        - indices_list: List of arrays, each containing building indices near a store
+        - stores_df: DataFrame of store data
+        - buildings_gdf: GeoDataFrame of buildings with centroid column
+        - store_coords: Array of store coordinates in WGS84 (lat, lng)
     """
     region_config = region_info.to_dict()
 
@@ -96,13 +103,33 @@ def generate_od_pairs(region_info, exp_config):
     # Find all buildings within radius for each store
     indices_list = tree.query_radius(store_coords_rad, r=radius_rad)
 
-    print(f"\n=== OD Generation Summary ===")
+    print(f"\n=== Store-Building Matching Summary ===")
     total_pairs = sum(len(idx) for idx in indices_list)
     stores_with_buildings = sum(1 for idx in indices_list if len(idx) > 0)
     print(f"Total stores: {len(stores_df)}")
     print(f"Stores with nearby buildings: {stores_with_buildings}")
-    print(f"Total OD pairs: {total_pairs}")
+    print(f"Total store-building pairs: {total_pairs}")
     print(f"Avg buildings per store: {total_pairs / len(stores_df):.1f}")
+
+    return indices_list, stores_df, buildings_gdf, store_coords
+
+
+def generate_od_pairs(region_info, exp_config):
+    """
+    Generate Origin-Destination pairs by matching stores to nearby buildings.
+
+    For each store (origin), find all buildings (potential destinations)
+    within SEARCH_RADIUS_KM using BallTree with Haversine distance.
+    """
+    region_config = region_info.to_dict()
+    region_name_en = region_config["region_name_en"]
+    region_level = region_config["region_level"]
+    delivery_radius_km = exp_config.get("delivery_radius_km", 5.0)
+
+    # Prepare store-building matching data
+    indices_list, stores_df, buildings_gdf, store_coords = (
+        prepare_store_building_matching(region_info, exp_config)
+    )
 
     # === Plot store coverage example ===
     # Find a store with many nearby buildings for visualization
@@ -135,17 +162,162 @@ def generate_od_pairs(region_info, exp_config):
     )
 
     # === Process each store and its nearby buildings ===
-    # for store_idx, building_indices in enumerate(indices_list):
-    #     if len(building_indices) == 0:
-    #         continue
+    od_pairs = []
+    total_sales = 0
+    output_total_sales = 0
+    for store_idx, building_indices in enumerate(indices_list):
+        if len(building_indices) == 0:
+            continue
 
-    #     store_row = stores_df.iloc[store_idx]
-    #     nearby_buildings = buildings_gdf.iloc[building_indices]
+        store_row = stores_df.iloc[store_idx]
+        nearby_buildings = buildings_gdf.iloc[building_indices]
+        # Use WGS84 coordinates for store (converted from GCJ02)
+        store_coord_wgs84 = store_coords[store_idx]  # (lat, lng)
 
-    #     # TODO: Process store and nearby buildings
-    #     # - Calculate distances
-    #     # - Distribute demand based on building attributes (height, area, etc.)
-    #     # - Generate OD matrix entries
-    #     pass
+        tmp_od_pairs = generate_one_store_od_pairs_vectorized(
+            nearby_buildings, store_row["month_sales"], store_coord_wgs84
+        )
+        od_pairs.extend(tmp_od_pairs)
 
-    return indices_list
+        total_sales += store_row["month_sales"] * 12  # Annual sales
+        output_total_sales += sum([pair["annual_sales"] for pair in tmp_od_pairs])
+
+    print(f"\nTotal store annual sales: {total_sales}")
+    print(f"Total output annual sales from OD pairs: {output_total_sales}")
+
+    od_df = pd.DataFrame(od_pairs)
+    od_save_path = os.path.join(
+        exp_config["data_dir"],
+        region_level,
+        region_name_en.lower(),
+        f"{region_name_en.lower()}_od_pairs.csv",
+    )
+    od_df.to_csv(od_save_path, index=False)
+    print(f"Saved OD pairs to {od_save_path}")
+
+
+def generate_one_store_od_pairs(nearby_buildings, month_sales, store_coord_wgs84):
+    """Generate OD pairs for one store.
+
+    Args:
+        store_row: Store data row from DataFrame
+        nearby_buildings: GeoDataFrame of nearby buildings
+        store_coord_wgs84: Store coordinates in WGS84 (lat, lng)
+    """
+    g_param = [1, 1, 2]
+    min_distance_km = 0.05
+    min_sales = 5
+
+    total_demand = month_sales * 12  # Annual demand
+    store_lat, store_lng = store_coord_wgs84
+
+    ratios = {}
+    for idx, building in nearby_buildings.iterrows():
+        distance_km = haversine(
+            (store_lat, store_lng),
+            (building["centroid"].y, building["centroid"].x),
+            unit=Unit.KILOMETERS,
+        )
+        volume = building.get("volume_m3")
+        tmp_ratio = (
+            g_param[0]
+            * volume ** g_param[1]
+            / (distance_km + min_distance_km) ** g_param[2]
+        )
+        ratios[idx] = tmp_ratio
+
+    sales_dict = {}
+    total_ratio = sum(ratios.values())
+    for k, v in ratios.items():
+        tmp_sales = int((v / total_ratio) * total_demand)
+        if tmp_sales >= min_sales:
+            sales_dict[k] = tmp_sales
+
+    od_pairs = []
+    for b_idx, sales in sales_dict.items():
+        od_pairs.append(
+            {
+                "from_lat": store_lat,
+                "from_lng": store_lng,
+                "to_lat": nearby_buildings.loc[b_idx]["centroid"].y,
+                "to_lng": nearby_buildings.loc[b_idx]["centroid"].x,
+                "annual_sales": sales,
+            }
+        )
+
+    return od_pairs
+
+
+def generate_one_store_od_pairs_vectorized(
+    nearby_buildings, month_sales, store_coord_wgs84
+):
+    """Vectorized version of generate_one_store_od_pairs.
+
+    Uses haversine_vector and numpy operations for faster computation.
+
+    Args:
+        store_row: Store data row from DataFrame
+        nearby_buildings: GeoDataFrame of nearby buildings
+        store_coord_wgs84: Store coordinates in WGS84 (lat, lng)
+    """
+    g_param = [1, 1, 2]
+    min_distance_km = 0.05
+    min_sales = 5
+
+    total_demand = month_sales * 12  # Annual demand
+    store_lat, store_lng = store_coord_wgs84
+
+    n_buildings = len(nearby_buildings)
+    if n_buildings == 0:
+        return []
+
+    # Extract building coordinates as numpy array
+    building_lats = np.array([c.y for c in nearby_buildings["centroid"]])
+    building_lngs = np.array([c.x for c in nearby_buildings["centroid"]])
+    building_coords = np.column_stack([building_lats, building_lngs])
+
+    # Store coordinates repeated for vectorized distance calculation
+    store_coords_arr = np.array([[store_lat, store_lng]] * n_buildings)
+
+    # Vectorized haversine distance calculation
+    distances_km = haversine_vector(
+        store_coords_arr, building_coords, unit=Unit.KILOMETERS
+    )
+
+    # Extract volumes as numpy array
+    volumes = nearby_buildings["volume_m3"].values
+
+    # Vectorized ratio calculation
+    ratios = (
+        g_param[0]
+        * (volumes ** g_param[1])
+        / ((distances_km + min_distance_km) ** g_param[2])
+    )
+
+    # Normalize and calculate sales
+    total_ratio = ratios.sum()
+    if total_ratio == 0:
+        return []
+
+    sales = (ratios / total_ratio * total_demand).astype(int)
+
+    # Filter by minimum sales threshold
+    mask = sales >= min_sales
+    valid_indices = np.where(mask)[0]
+
+    if len(valid_indices) == 0:
+        return []
+
+    # Build result using vectorized operations
+    od_pairs = [
+        {
+            "from_lat": store_lat,
+            "from_lng": store_lng,
+            "to_lat": building_lats[i],
+            "to_lng": building_lngs[i],
+            "annual_sales": sales[i],
+        }
+        for i in valid_indices
+    ]
+
+    return od_pairs
