@@ -5,8 +5,11 @@
     - [x] visualize building data
     - [x] enlarge the building data (5km)
     - [x] fetch OSM to get delivery distance
-    - [ ] output trips data
+    - [x] output trips data
     - [ ] calibration with real data
-- [ ] add emission model
+- [x] for some random trips, draw ground and air route
+- [x] add emission model
+    - [ ] check LCA emission calculation
+- [ ] write a entrypoint for large scale OD generation
     
     

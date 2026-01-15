@@ -1,11 +1,14 @@
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
+import contextily as ctx
 import matplotlib.pyplot as plt
 import networkx as nx
+import numpy as np
 import osmnx as ox
 
 from ._utils import (
     add_basemap_and_boundaries,
+    configure_contextily_cache,
     finalize_plot,
     plot_boundary_box,
     setup_figure,
@@ -116,8 +119,160 @@ def visualize_path(
     )
     finalize_plot(fig, ax, save_path, title, stats_text, boundaries_dict)
     plt.close(fig)
-    stats_text = (
-        f"Nodes: {len(G.nodes)}, Edges: {len(G.edges)}\nPath Length: {len(route_nodes)}"
+
+
+def visualize_distance_comparison(
+    G: nx.MultiDiGraph,
+    sample_paths: List[Dict[str, Any]],
+    city_name_cn: Optional[str] = None,
+    boundaries_dict: Optional[Dict[str, float]] = None,
+    save_path: Optional[str] = None,
+) -> None:
+    """Visualize comparison between straight-line and road network distances.
+
+    Args:
+        G: The road network graph
+        sample_paths: List of path results with 'origin', 'destination',
+                     'straight_distance', 'road_distance', 'path_result' keys
+        city_name_cn: Chinese name of the city for basemap
+        boundaries_dict: Dictionary with min_lng, max_lng, min_lat, max_lat
+        save_path: If provided, save the figure to this path
+    """
+    n_samples = len(sample_paths)
+
+    # Create figure with subplots: one map per sample
+    n_cols = min(5, n_samples)
+    n_rows = (n_samples + n_cols - 1) // n_cols
+
+    fig, axes = plt.subplots(n_rows, n_cols, figsize=(4 * n_cols, 4 * n_rows))
+    if n_samples == 1:
+        axes = np.array([axes])
+    axes = axes.flatten()
+
+    for idx, sample in enumerate(sample_paths):
+        ax = axes[idx]
+
+        path_result = sample["path_result"]
+        origin = sample["origin"]  # (lat, lng)
+        destination = sample["destination"]  # (lat, lng)
+        straight_dist = sample["straight_distance"]
+        road_dist = sample["road_distance"]
+        detour = road_dist / straight_dist if straight_dist > 0 else 0
+
+        # Plot road network in light gray
+        ox.plot_graph(
+            G,
+            ax=ax,
+            show=False,
+            close=False,
+            node_size=0,
+            edge_color="#ddd",
+            edge_linewidth=0.3,
+            bgcolor="white",
+        )
+
+        # Plot road path if available
+        if path_result["success"] and len(path_result["path_nodes"]) > 1:
+            ox.plot_graph_route(
+                G,
+                path_result["path_nodes"],
+                ax=ax,
+                route_color="blue",
+                route_linewidth=2,
+                route_alpha=0.8,
+                node_size=0,
+                show=False,
+                close=False,
+            )
+
+        # Plot straight line (origin to destination)
+        ax.plot(
+            [origin[1], destination[1]],  # lng
+            [origin[0], destination[0]],  # lat
+            color="red",
+            linewidth=2,
+            linestyle="--",
+            alpha=0.8,
+            zorder=20,
+            label="Straight line",
+        )
+
+        # Plot origin and destination points
+        ax.scatter(
+            origin[1],
+            origin[0],
+            c="green",
+            s=80,
+            marker="o",
+            zorder=25,
+            edgecolors="white",
+            linewidth=1.5,
+            label="Origin",
+        )
+        ax.scatter(
+            destination[1],
+            destination[0],
+            c="red",
+            s=80,
+            marker="s",
+            zorder=25,
+            edgecolors="white",
+            linewidth=1.5,
+            label="Destination",
+        )
+
+        # Add basemap
+        if boundaries_dict:
+            ax.set_xlim(boundaries_dict["min_lng"], boundaries_dict["max_lng"])
+            ax.set_ylim(boundaries_dict["min_lat"], boundaries_dict["max_lat"])
+
+        try:
+            configure_contextily_cache()
+            ctx.add_basemap(
+                ax,
+                crs="EPSG:4326",
+                source=ctx.providers.OpenStreetMap.Mapnik,
+                zoom=14,
+                alpha=0.5,
+                zorder=0,
+            )
+        except Exception as e:
+            print(f"Could not add basemap for sample {idx}: {e}")
+
+        # Title with distance info
+        ax.set_title(
+            f"Sample {idx + 1}\n"
+            f"Straight: {straight_dist:.0f}m | Road: {road_dist:.0f}m\n"
+            f"Detour ratio: {detour:.2f}",
+            fontsize=9,
+        )
+        ax.set_xlabel("Longitude", fontsize=8)
+        ax.set_ylabel("Latitude", fontsize=8)
+        ax.tick_params(labelsize=7)
+
+        # Only show legend on first subplot
+        if idx == 0:
+            ax.legend(loc="upper right", fontsize=7)
+
+    # Hide unused subplots
+    for idx in range(n_samples, len(axes)):
+        axes[idx].set_visible(False)
+
+    plt.suptitle(
+        "Straight-line vs Road Network Distance Comparison",
+        fontsize=14,
+        fontweight="bold",
+        y=1.02,
     )
-    finalize_plot(fig, ax, save_path, title, stats_text, boundaries_dict)
+    plt.tight_layout()
+
+    if save_path:
+        import os
+
+        os.makedirs(os.path.dirname(save_path), exist_ok=True)
+        plt.savefig(save_path, dpi=200, bbox_inches="tight")
+        print(f"Comparison plot saved to {save_path}")
+    else:
+        plt.show()
+
     plt.close(fig)

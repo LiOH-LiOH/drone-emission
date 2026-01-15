@@ -1,8 +1,9 @@
 import os
 
+import numpy as np
 import osmnx as ox
 import pandas as pd
-from visualization.roadnet import visualize_roadnet
+from visualization.roadnet import visualize_distance_comparison, visualize_roadnet
 
 from .osm_raodnet import fetch_bikeable_roadnet
 from .router import RoadNetRouter
@@ -76,8 +77,6 @@ def load_roadnet(region_info, exp_config):
     router = RoadNetRouter(G)
 
     # Compute road network distances for all OD pairs
-    import numpy as np
-
     origins = od_df[["from_lat", "from_lng"]].values
     destinations = od_df[["to_lat", "to_lng"]].values
 
@@ -108,3 +107,94 @@ def load_roadnet(region_info, exp_config):
         print(f"Avg straight-line distance: {avg_straight_dist:.1f} m")
         print(f"Avg road network distance: {avg_road_dist:.1f} m")
         print(f"Detour ratio: {detour_ratio:.2f}")
+
+        # Visualize distance comparison with 10 samples
+        _visualize_sample_paths(
+            od_df, router, valid_mask, boundaries_dict, fig_dir, region_name_en
+        )
+
+
+def _visualize_sample_paths(
+    od_df, router, valid_mask, boundaries_dict, fig_dir, region_name_en, n_samples=10
+):
+    """抽取样本并绘制直线距离与路网距离对比图"""
+    # 筛选有效路径，并确保有一定的路网距离
+    valid_df = od_df[valid_mask & (od_df["road_distance_m"] > 100)].copy()
+
+    if len(valid_df) < n_samples:
+        print(f"Warning: Only {len(valid_df)} valid samples available")
+        n_samples = len(valid_df)
+
+    if n_samples == 0:
+        print("No valid samples for distance comparison visualization")
+        return
+
+    # 按绕行比分层抽样，获取不同绕行程度的样本
+    valid_df["detour_ratio"] = valid_df["road_distance_m"] / (
+        valid_df["distance_km"] * 1000
+    )
+
+    # 分5个分位数区间，每个区间抽2个样本
+    samples = []
+    for q in [0.1, 0.3, 0.5, 0.7, 0.9]:
+        quantile_val = valid_df["detour_ratio"].quantile(q)
+        # 找到最接近该分位数的样本
+        closest_idx = (valid_df["detour_ratio"] - quantile_val).abs().nsmallest(2).index
+        samples.extend(closest_idx.tolist())
+
+    # 去重并取前n_samples个
+    samples = list(dict.fromkeys(samples))[:n_samples]
+    sample_df = valid_df.loc[samples]
+
+    print(f"\n=== Visualizing {len(sample_df)} sample paths ===")
+
+    # 计算每个样本的完整路径
+    sample_paths = []
+    for _, row in sample_df.iterrows():
+        origin = (row["from_lat"], row["from_lng"])
+        destination = (row["to_lat"], row["to_lng"])
+
+        path_result = router.find_shortest_path(origin, destination)
+
+        sample_paths.append(
+            {
+                "origin": origin,
+                "destination": destination,
+                "straight_distance": row["distance_km"] * 1000,
+                "road_distance": row["road_distance_m"],
+                "path_result": path_result,
+            }
+        )
+
+        print(
+            f"  Sample: straight={row['distance_km']*1000:.0f}m, "
+            f"road={row['road_distance_m']:.0f}m, "
+            f"detour={row['detour_ratio']:.2f}"
+        )
+
+    # 计算样本的边界范围
+    all_lats = []
+    all_lngs = []
+    for sp in sample_paths:
+        all_lats.extend([sp["origin"][0], sp["destination"][0]])
+        all_lngs.extend([sp["origin"][1], sp["destination"][1]])
+
+    padding = 0.005
+    sample_bounds = {
+        "min_lat": min(all_lats) - padding,
+        "max_lat": max(all_lats) + padding,
+        "min_lng": min(all_lngs) - padding,
+        "max_lng": max(all_lngs) + padding,
+    }
+
+    # 绘制对比图
+    comparison_fig_path = os.path.join(
+        fig_dir, f"{region_name_en.lower()}_distance_comparison.png"
+    )
+
+    visualize_distance_comparison(
+        router.G,
+        sample_paths,
+        boundaries_dict=sample_bounds,
+        save_path=comparison_fig_path,
+    )
