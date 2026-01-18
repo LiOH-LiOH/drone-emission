@@ -10,10 +10,14 @@ nanshan_path = (
 
 def cali_mean_distance():
     distance_data = pd.read_csv(distance_nanshan_path)
-    print(distance_data.columns)
+    # print(distance_data.columns)
 
-    data = pd.read_csv(nanshan_path)
-    print(data.columns)
+    raw_data = pd.read_csv(nanshan_path)
+    data = raw_data[
+        ["from_lat", "from_lng", "to_lat", "to_lng", "distance_km", "annual_sales"]
+    ].copy()
+    del raw_data
+    # print(data.columns)
 
     # Merge road_distance_m from distance_data to data using (from_lat, from_lng, to_lat, to_lng) as key
     # Round coordinates to 6 decimal places (~0.1m precision) to handle floating point precision issues
@@ -33,8 +37,12 @@ def cali_mean_distance():
         how="left",
     )
 
-    # Drop the temporary rounded columns
+    # Drop the temporary rounded columns before saving
     data = data.drop(columns=round_key_columns)
+
+    # save the data to csv
+    data.to_csv(nanshan_path, index=False)
+    print(f"Saved data to {nanshan_path}")
 
     print(data.head())
 

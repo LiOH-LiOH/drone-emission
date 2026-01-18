@@ -1,5 +1,6 @@
 """Road network routing functionality."""
 
+import time
 import warnings
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -331,9 +332,16 @@ class RoadNetRouter:
         pair_distances = {}
         total_unique = len(unique_pairs)
 
+        start_time = time.time()
         for i, (o_node, d_node) in enumerate(unique_pairs):
             if show_progress and (i + 1) % 10000 == 0:
-                print(f"  Computing paths: {i + 1:,}/{total_unique:,}")
+                elapsed = time.time() - start_time
+                speed = (i + 1) / elapsed
+                remaining = (total_unique - i - 1) / speed
+                print(
+                    f"  Computing paths: {i + 1:,}/{total_unique:,} "
+                    f"({elapsed:.1f}s elapsed, {remaining:.1f}s remaining, {speed:.1f} pairs/s)"
+                )
 
             if o_node == d_node:
                 pair_distances[(o_node, d_node)] = 0.0
@@ -345,6 +353,10 @@ class RoadNetRouter:
                     pair_distances[(o_node, d_node)] = dist
                 except nx.NetworkXNoPath:
                     pair_distances[(o_node, d_node)] = -1.0
+
+        total_time = time.time() - start_time
+        if show_progress:
+            print(f"  Path computation completed in {total_time:.1f}s")
 
         # Step 4: Map back to original OD pairs
         if show_progress:

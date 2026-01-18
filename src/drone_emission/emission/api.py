@@ -59,12 +59,13 @@ def cal_emission(region_info, exp_config):
     max_dist = road_distances.max()
     print(f"道路距离范围: {min_dist:.2f} - {max_dist:.2f} km")
 
-    # 生成10个合理的阈值
-    thresholds = np.linspace(
+    # 生成10个合理的阈值，前后加上0和无限大
+    middle_thresholds = np.linspace(
         max(0.3, np.percentile(road_distances, 5)),
         np.percentile(road_distances, 95),
         10,
     )
+    thresholds = np.concatenate([[0], middle_thresholds, [np.inf]])
 
     # 计算每个阈值下的结果
     results = []

@@ -76,18 +76,33 @@ def load_roadnet(region_info, exp_config):
 
     router = RoadNetRouter(G)
 
-    # Compute road network distances for all OD pairs
-    origins = od_df[["from_lat", "from_lng"]].values
-    destinations = od_df[["to_lat", "to_lng"]].values
+    # Only compute road distances for rows with NaN values
+    if "road_distance_m" not in od_df.columns:
+        od_df["road_distance_m"] = np.nan
 
-    road_distances = router.compute_od_distances_batch(origins, destinations)
+    nan_mask = od_df["road_distance_m"].isna()
+    nan_count = nan_mask.sum()
 
-    # Add road distance to dataframe
-    od_df["road_distance_m"] = road_distances
+    if nan_count > 0:
+        print(f"Computing road distances for {nan_count} rows with NaN values...")
 
-    # Save updated OD pairs
-    od_df.to_csv(od_save_path, index=False)
-    print(f"Updated OD pairs with road distances saved to {od_save_path}")
+        # Get only the rows that need computation
+        nan_df = od_df[nan_mask]
+        origins = nan_df[["from_lat", "from_lng"]].values
+        destinations = nan_df[["to_lat", "to_lng"]].values
+
+        road_distances = router.compute_od_distances_batch(origins, destinations)
+
+        # Update only the NaN rows
+        od_df.loc[nan_mask, "road_distance_m"] = road_distances
+
+        # Save updated OD pairs
+        od_df.to_csv(od_save_path, index=False)
+        print(f"Updated OD pairs with road distances saved to {od_save_path}")
+    else:
+        print("All road distances already computed, skipping...")
+
+    road_distances = od_df["road_distance_m"].values
 
     # Statistics
     valid_mask = road_distances >= 0
