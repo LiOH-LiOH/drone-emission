@@ -7,10 +7,11 @@
     - [x] fetch OSM to get delivery distance
     - [x] output trips data
     - [x] calibration with real data
-    - [ ] update route comparison figure
+    - [x] update route comparison figure
 - [x] for some random trips, draw ground and air route
 - [x] add emission model
-    - [ ] update legend of figures
+    - [x] update legend of figures
+    - [ ] get grid emission factor from file
     - [ ] check LCA emission calculation
 - [ ] write a entrypoint for large scale OD generation
 - [ ] add POI data for equity analysis

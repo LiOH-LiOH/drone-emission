@@ -4,7 +4,12 @@ import numpy as np
 import pandas as pd
 from visualization.emission import plot_emission_reduction_analysis
 
-from .cal_single_delivery import LifeCycleEmissions
+from .cal_single_delivery import (
+    LifeCycleEmissions,
+    create_drone_params,
+    create_ebike_params,
+    get_emission_params,
+)
 
 
 def cal_emission(region_info, exp_config):
@@ -24,8 +29,22 @@ def cal_emission(region_info, exp_config):
     print("OD pair columns:", end=" ")
     print(od_df.columns.tolist())
 
-    lca = LifeCycleEmissions()
+    # 从配置文件读取排放模型参数
+    ebike_params = create_ebike_params(exp_config)
+    drone_params = create_drone_params(exp_config)
+    emission_cfg = get_emission_params(exp_config)
+
+    payload_kg = emission_cfg["payload_kg"]
+    rider_weight = emission_cfg["rider_weight"]
+
+    lca = LifeCycleEmissions(
+        ebike_params=ebike_params,
+        drone_params=drone_params,
+    )
     total_orders = len(od_df)
+
+    print(f"Using payload_kg = {payload_kg} kg, rider_weight = {rider_weight} kg")
+    print(f"E-bike velocity = {ebike_params.velocity} km/h, Drone velocity = {drone_params.v_level} km/h")
 
     # 先计算每个订单的无人机和电动自行车排放
     drone_emissions_list = []
@@ -36,8 +55,8 @@ def cal_emission(region_info, exp_config):
         distance_km = row.distance_km  # 直线距离，用于无人机
         road_distance_km = row.road_distance_m / 1000.0  # 道路距离，用于电动自行车
 
-        result_drone = lca.calculate_drone_use_phase_emissions(distance_km, 1.0)
-        result_ebike = lca.calculate_ebike_use_phase_emissions(road_distance_km, 1.0)
+        result_drone = lca.calculate_drone_use_phase_emissions(distance_km, payload_kg)
+        result_ebike = lca.calculate_ebike_use_phase_emissions(road_distance_km, payload_kg, rider_weight)
 
         drone_emissions_list.append(result_drone["emissions_kg_co2e"])
         ebike_emissions_list.append(result_ebike["emissions_kg_co2e"])

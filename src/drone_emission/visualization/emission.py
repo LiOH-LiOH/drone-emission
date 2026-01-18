@@ -459,6 +459,92 @@ def plot_velocity_power_emission(
         return None
 
 
+def plot_energy_consumption_vs_speed(
+    velocities: list,
+    energy_per_km: list,
+    vehicle_type: str = "E-bike",
+    empirical_range: tuple = None,
+    save_path: str = None,
+    dpi: int = 150,
+    experiment_settings: Dict[str, str] = None,
+) -> str:
+    """
+    绘制能耗(Wh/km)与速度的关系图
+
+    参数:
+        velocities: 速度列表 (km/h)
+        energy_per_km: 每公里能耗列表 (Wh/km)
+        vehicle_type: 车辆类型
+        empirical_range: 经验值范围元组 (min, max)，用于对比
+        save_path: 保存路径
+        dpi: 图像分辨率
+        experiment_settings: 实验设置字典
+
+    返回:
+        保存的图像路径
+    """
+    import numpy as np
+
+    fig, ax = plt.subplots(figsize=(10, 6))
+
+    # 选择颜色
+    if vehicle_type.lower() == "drone":
+        color = "#2196F3"
+        xlabel = "Drone Horizontal Velocity (km/h)"
+    else:
+        color = "#4CAF50"
+        xlabel = "E-bike Velocity (km/h)"
+
+    # 绘制模型预测曲线
+    ax.plot(
+        velocities,
+        energy_per_km,
+        "o-",
+        color=color,
+        linewidth=2,
+        markersize=8,
+        label=f"{vehicle_type} Model",
+    )
+
+    # 添加经验值范围
+    if empirical_range:
+        min_val, max_val = empirical_range
+        ax.axhspan(
+            min_val,
+            max_val,
+            alpha=0.2,
+            color="orange",
+            label=f"Empirical Range ({min_val}-{max_val} Wh/km)",
+        )
+        ax.axhline(
+            y=(min_val + max_val) / 2,
+            color="orange",
+            linestyle="--",
+            linewidth=1.5,
+            alpha=0.7,
+        )
+
+    ax.set_xlabel(xlabel, fontsize=12)
+    ax.set_ylabel("Energy Consumption (Wh/km)", fontsize=12)
+    ax.set_title(f"{vehicle_type} Energy Consumption vs Velocity", fontsize=14)
+    ax.legend(loc="upper left")
+    ax.grid(True, alpha=0.3)
+
+    # 添加实验设置信息框
+    add_experiment_info_box(ax, experiment_settings, loc="lower right")
+
+    plt.tight_layout()
+
+    if save_path:
+        os.makedirs(os.path.dirname(save_path), exist_ok=True)
+        plt.savefig(save_path, dpi=dpi, bbox_inches="tight")
+        plt.close()
+        return save_path
+    else:
+        plt.show()
+        return None
+
+
 def plot_combined_velocity_power(
     drone_velocities: list,
     drone_powers: list,

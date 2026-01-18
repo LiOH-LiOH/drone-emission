@@ -99,6 +99,94 @@ class CabinetParams:
     lifespan: int = 5  # 使用寿命 (年)
 
 
+def create_ebike_params(exp_config: Dict = None) -> EbikeParams:
+    """Create EbikeParams with config overrides from experiment.toml.
+
+    Args:
+        exp_config: Experiment config dict from load_config()
+
+    Returns:
+        EbikeParams with values from config or defaults
+    """
+    if exp_config is None:
+        return EbikeParams()
+
+    emission_params = exp_config.get("emission_params", {})
+    ebike_config = emission_params.get("ebike", {})
+
+    return EbikeParams(
+        velocity=ebike_config.get("velocity", 30),
+        e_use=emission_params.get("e_use", 0.6),
+    )
+
+
+def create_drone_params(exp_config: Dict = None) -> DroneParams:
+    """Create DroneParams with config overrides from experiment.toml.
+
+    Args:
+        exp_config: Experiment config dict from load_config()
+
+    Returns:
+        DroneParams with values from config or defaults
+    """
+    if exp_config is None:
+        return DroneParams()
+
+    emission_params = exp_config.get("emission_params", {})
+    drone_config = emission_params.get("drone", {})
+
+    return DroneParams(
+        v_level=drone_config.get("v_level", 60),
+        v_vertical=drone_config.get("v_vertical", 20),
+        h_takeoff=drone_config.get("h_takeoff", 100),
+        hover_time=drone_config.get("hover_time", 30),
+        e_use=emission_params.get("e_use", 0.6),
+    )
+
+
+def create_cabinet_params(exp_config: Dict = None) -> CabinetParams:
+    """Create CabinetParams with config overrides from experiment.toml.
+
+    Args:
+        exp_config: Experiment config dict from load_config()
+
+    Returns:
+        CabinetParams with values from config or defaults
+    """
+    if exp_config is None:
+        return CabinetParams()
+
+    emission_params = exp_config.get("emission_params", {})
+
+    return CabinetParams(
+        e_use=emission_params.get("e_use", 0.6),
+    )
+
+
+def get_emission_params(exp_config: Dict = None) -> Dict:
+    """Get emission parameters from config.
+
+    Args:
+        exp_config: Experiment config dict from load_config()
+
+    Returns:
+        Dict with payload_kg, rider_weight, and other common params
+    """
+    if exp_config is None:
+        return {
+            "payload_kg": 1.0,
+            "rider_weight": 70,
+            "e_use": 0.6,
+        }
+
+    emission_params = exp_config.get("emission_params", {})
+    return {
+        "payload_kg": emission_params.get("payload_kg", 1.0),
+        "rider_weight": emission_params.get("rider_weight", 70),
+        "e_use": emission_params.get("e_use", 0.6),
+    }
+
+
 class EbikeEnergyModel:
     """电动自行车能耗模型"""
 
@@ -135,7 +223,7 @@ class EbikeEnergyModel:
         P_grade = m_t * g * self.p.grade * v_ms  # kW
 
         # 加速功率 (简化)
-        P_acc = self.p.n_acc * (0.504 * v_kmh**3 * m_t / (2 * 1000 * 3.6))  # kW
+        P_acc = (self.p.n_acc * 0.504 * v_kmh**3 * m_t) / (2 * 1000 * 3.6)  # kW
 
         P_total = P_rolling + P_air + P_grade + P_acc
         result = (
@@ -147,6 +235,10 @@ class EbikeEnergyModel:
                 "P_acc": P_acc,
             },
         )
+
+        # print(
+        #     f"Power breakdown: P_rolling={P_rolling:.2f} kW, P_air={P_air:.2f} kW, P_grade={P_grade:.2f} kW, P_acc={P_acc:.2f} kW"
+        # )
 
         self._power_cache[cache_key] = result
         return result
@@ -568,14 +660,19 @@ class LifeCycleEmissions:
         }
 
     def calculate_ebike_use_phase_emissions(
-        self, distance_km: float, payload_kg: float = 1.0
+        self, distance_km: float, payload_kg: float = 1.0, rider_weight: float = 70
     ) -> Dict:
         """
         计算电动自行车使用阶段排放
         公式 (3)
+
+        参数:
+            distance_km: 配送距离 (km)
+            payload_kg: 货物重量 (kg)
+            rider_weight: 骑手体重 (kg)
         """
         energy_result = self.ebike_energy.calculate_energy_consumption(
-            distance_km, payload_kg
+            distance_km, payload_kg, rider_weight
         )
 
         # 往返距离
@@ -868,12 +965,13 @@ def run_validation_tests():
     return lca
 
 
-def run_sensitivity_analysis(save_dir: str = None):
+def run_sensitivity_analysis(save_dir: str = None, exp_config: Dict = None):
     """
     运行敏感性分析
 
     参数:
         save_dir: 图片保存目录，如果为 None 则显示图形
+        exp_config: 实验配置字典，从 experiment.toml 加载
     """
     import os
     import sys
@@ -883,6 +981,7 @@ def run_sensitivity_analysis(save_dir: str = None):
     from visualization.emission import (
         plot_combined_velocity_power,
         plot_distance_route_factor_heatmap,
+        plot_energy_consumption_vs_speed,
         plot_sensitivity_analysis,
         plot_velocity_power_emission,
     )
@@ -891,8 +990,26 @@ def run_sensitivity_analysis(save_dir: str = None):
     print("敏感性分析")
     print("=" * 80)
 
-    lca = LifeCycleEmissions()
+    # 从配置文件读取参数，使用默认值作为后备
+    emission_cfg = get_emission_params(exp_config)
+    payload_default = emission_cfg["payload_kg"]
+    rider_weight_default = emission_cfg["rider_weight"]
+
+    # 创建带配置的参数对象
+    default_ebike_params = create_ebike_params(exp_config)
+    default_drone_params = create_drone_params(exp_config)
+
+    lca = LifeCycleEmissions(
+        ebike_params=default_ebike_params,
+        drone_params=default_drone_params,
+    )
     r_default = 1.4  # 默认路径系数
+
+    print(f"Config: payload={payload_default}kg, rider_weight={rider_weight_default}kg")
+    print(f"E-bike: velocity={default_ebike_params.velocity}km/h")
+    print(
+        f"Drone: v_level={default_drone_params.v_level}km/h, h_takeoff={default_drone_params.h_takeoff}m"
+    )
 
     # ========================================================================
     # A2: 配送距离敏感性分析 (0.5 - 8 km)
@@ -906,8 +1023,10 @@ def run_sensitivity_analysis(save_dir: str = None):
     drone_emissions_a2 = []
 
     for d in distances:
-        ebike_result = lca.calculate_ebike_use_phase_emissions(d * r_default, 1.0)
-        drone_result = lca.calculate_drone_use_phase_emissions(d, 1.0)
+        ebike_result = lca.calculate_ebike_use_phase_emissions(
+            d * r_default, payload_default
+        )
+        drone_result = lca.calculate_drone_use_phase_emissions(d, payload_default)
         ebike_emissions_a2.append(ebike_result["emissions_g_co2e"])
         drone_emissions_a2.append(drone_result["emissions_g_co2e"])
 
@@ -931,8 +1050,10 @@ def run_sensitivity_analysis(save_dir: str = None):
         "km",
         save_path=save_path,
         experiment_settings={
-            "Payload": "1.0 kg",
-            "Route Factor": f"{r_default}",
+            "Payload": f"{payload_default:.2f} kg",
+            "Route Factor": f"{r_default:.2f}",
+            "E-bike Velocity": f"{default_ebike_params.velocity:.2f} km/h",
+            "Drone Velocity": f"{default_drone_params.v_level:.2f} km/h",
         },
     )
     if save_path:
@@ -951,8 +1072,10 @@ def run_sensitivity_analysis(save_dir: str = None):
     drone_emissions_a3 = []
 
     for r in route_factors:
-        ebike_result = lca.calculate_ebike_use_phase_emissions(d_fixed * r, 1.0)
-        drone_result = lca.calculate_drone_use_phase_emissions(d_fixed, 1.0)
+        ebike_result = lca.calculate_ebike_use_phase_emissions(
+            d_fixed * r, payload_default
+        )
+        drone_result = lca.calculate_drone_use_phase_emissions(d_fixed, payload_default)
         ebike_emissions_a3.append(ebike_result["emissions_g_co2e"])
         drone_emissions_a3.append(drone_result["emissions_g_co2e"])
 
@@ -976,8 +1099,10 @@ def run_sensitivity_analysis(save_dir: str = None):
         "",
         save_path=save_path,
         experiment_settings={
-            "Distance": f"{d_fixed} km",
-            "Payload": "1.0 kg",
+            "Distance": f"{d_fixed:.2f} km",
+            "Payload": f"{payload_default:.2f} kg",
+            "E-bike Velocity": f"{default_ebike_params.velocity:.2f} km/h",
+            "Drone Velocity": f"{default_drone_params.v_level:.2f} km/h",
         },
     )
     if save_path:
@@ -1020,8 +1145,10 @@ def run_sensitivity_analysis(save_dir: str = None):
         "kg",
         save_path=save_path,
         experiment_settings={
-            "Distance": f"{d_fixed} km",
-            "Route Factor": f"{r_default}",
+            "Distance": f"{d_fixed:.2f} km",
+            "Route Factor": f"{r_default:.2f}",
+            "E-bike Velocity": f"{default_ebike_params.velocity:.2f} km/h",
+            "Drone Velocity": f"{default_drone_params.v_level:.2f} km/h",
         },
     )
     if save_path:
@@ -1078,8 +1205,10 @@ def run_sensitivity_analysis(save_dir: str = None):
         distance_info=f"distance={d_fixed}km",
         save_path=save_path,
         experiment_settings={
-            "Distance": f"{d_fixed} km",
-            "Payload": f"{payload_fixed} kg",
+            "Distance": f"{d_fixed:.2f} km",
+            "Payload": f"{payload_fixed:.2f} kg",
+            "Takeoff Height": f"{default_drone_params.h_takeoff:.2f} m",
+            "Hover Time": f"{default_drone_params.hover_time:.2f} s",
         },
     )
     if save_path:
@@ -1095,6 +1224,7 @@ def run_sensitivity_analysis(save_dir: str = None):
     ebike_velocities = np.linspace(20, 40, 9)
     ebike_powers = []
     ebike_emissions_vel = []
+    ebike_energy_per_km = []  # Wh/km
 
     for v in ebike_velocities:
         # 创建新的参数对象，修改速度
@@ -1102,22 +1232,39 @@ def run_sensitivity_analysis(save_dir: str = None):
         ebike_energy = EbikeEnergyModel(ebike_params)
 
         # 计算功率
-        total_weight = ebike_params.w_body + ebike_params.w_battery + 70 + payload_fixed
+        total_weight = (
+            ebike_params.w_body
+            + ebike_params.w_battery
+            + rider_weight_default
+            + payload_fixed
+        )
         v_ms = v / 3.6
         power, _ = ebike_energy.calculate_power(total_weight, v_ms)
         ebike_powers.append(power)
 
-        # 计算排放
+        # 计算能耗 (1km距离)
+        energy_result_1km = ebike_energy.calculate_energy_consumption(
+            1.0, payload_fixed, rider_weight_default
+        )
+        energy_wh_per_km = energy_result_1km["energy_kwh"] * 1000
+        ebike_energy_per_km.append(energy_wh_per_km)
+
+        # 计算排放 (固定距离)
         energy_result = ebike_energy.calculate_energy_consumption(
             d_fixed * r_default, payload_fixed
         )
         emissions_g = energy_result["energy_kwh"] * ebike_params.e_use * 1000
         ebike_emissions_vel.append(emissions_g)
 
-    print(f"{'速度(km/h)':<12} {'功率(kW)':<12} {'排放(g CO2e)':<15}")
-    print("-" * 40)
+    print(
+        f"{'速度(km/h)':<12} {'功率(kW)':<12} {'能耗(Wh/km)':<12} {'排放(g CO2e)':<15}"
+    )
+    print("-" * 55)
     for i, v in enumerate(ebike_velocities):
-        print(f"{v:<12.0f} {ebike_powers[i]:<12.4f} {ebike_emissions_vel[i]:<15.2f}")
+        print(
+            f"{v:<12.0f} {ebike_powers[i]:<12.4f} "
+            f"{ebike_energy_per_km[i]:<12.2f} {ebike_emissions_vel[i]:<15.2f}"
+        )
 
     save_path = None
     if save_dir:
@@ -1130,9 +1277,10 @@ def run_sensitivity_analysis(save_dir: str = None):
         distance_info=f"distance={d_fixed * r_default}km",
         save_path=save_path,
         experiment_settings={
-            "Distance": f"{d_fixed * r_default} km (road)",
-            "Payload": f"{payload_fixed} kg",
-            "Route Factor": f"{r_default}",
+            "Distance": f"{d_fixed * r_default:.2f} km (road)",
+            "Payload": f"{payload_fixed:.2f} kg",
+            "Route Factor": f"{r_default:.2f}",
+            "Rider Weight": f"{rider_weight_default:.2f} kg",
         },
     )
     if save_path:
@@ -1155,7 +1303,10 @@ def run_sensitivity_analysis(save_dir: str = None):
         ebike_powers,
         save_path=save_path,
         experiment_settings={
-            "Payload": f"{payload_fixed} kg",
+            "Payload": f"{payload_fixed:.2f} kg",
+            "Rider Weight": f"{rider_weight_default:.2f} kg",
+            "Drone Body": f"{default_drone_params.w_body:.2f} kg",
+            "E-bike Body": f"{default_ebike_params.w_body:.2f} kg",
         },
     )
     if save_path:
@@ -1175,8 +1326,10 @@ def run_sensitivity_analysis(save_dir: str = None):
 
     for i, r in enumerate(route_factors_hm):
         for j, d in enumerate(distances_hm):
-            ebike_result = lca.calculate_ebike_use_phase_emissions(d * r, 1.0)
-            drone_result = lca.calculate_drone_use_phase_emissions(d, 1.0)
+            ebike_result = lca.calculate_ebike_use_phase_emissions(
+                d * r, payload_default
+            )
+            drone_result = lca.calculate_drone_use_phase_emissions(d, payload_default)
             diff = (
                 drone_result["emissions_g_co2e"] / ebike_result["emissions_g_co2e"] - 1
             ) * 100
@@ -1196,7 +1349,9 @@ def run_sensitivity_analysis(save_dir: str = None):
         emission_diff_matrix,
         save_path=save_path,
         experiment_settings={
-            "Payload": "1.0 kg",
+            "Payload": f"{payload_default:.2f} kg",
+            "E-bike Velocity": f"{default_ebike_params.velocity:.2f} km/h",
+            "Drone Velocity": f"{default_drone_params.v_level:.2f} km/h",
         },
     )
     if save_path:
@@ -1223,4 +1378,7 @@ if __name__ == "__main__":
     figures_dir = exp_config["figures_dir"]
 
     lca = run_validation_tests()
-    run_sensitivity_analysis(save_dir=os.path.join(figures_dir, "sensitivity"))
+    run_sensitivity_analysis(
+        save_dir=os.path.join(figures_dir, "sensitivity"),
+        exp_config=exp_config,
+    )
