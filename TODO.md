@@ -11,7 +11,7 @@
 - [x] for some random trips, draw ground and air route
 - [x] add emission model
     - [x] update legend of figures
-    - [ ] get grid emission factor from file
+    - [x] get grid emission factor from file
     - [ ] check LCA emission calculation
 - [ ] write a entrypoint for large scale OD generation
 - [ ] add POI data for equity analysis

@@ -1,6 +1,8 @@
 data_dir = "/Users/linjingxian/Code/drone-emission/data"
 figures_dir = "/Users/linjingxian/Code/drone-emission/figures"
 
+gef_path = "/Users/linjingxian/Code/drone-emission/data/gef_china.csv"
+
 fetch_buildings = false
 fetch_roadnet = false
 

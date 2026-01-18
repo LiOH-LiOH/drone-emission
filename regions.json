@@ -1,40 +1,4 @@
 {
-  "shenzhen": {
-    "region_name_cn": "深圳市",
-    "region_name_en": "Shenzhen",
-    "region_level": "city",
-    "parent_city": null,
-    "boundaries_dict": null,
-    "stats": {},
-    "cache": {}
-  },
-  "beijing": {
-    "region_name_cn": "北京市",
-    "region_name_en": "Beijing",
-    "region_level": "city",
-    "parent_city": null,
-    "boundaries_dict": null,
-    "stats": {},
-    "cache": {}
-  },
-  "shanghai": {
-    "region_name_cn": "上海市",
-    "region_name_en": "Shanghai",
-    "region_level": "city",
-    "parent_city": null,
-    "boundaries_dict": null,
-    "stats": {},
-    "cache": {}
-  },
-  "guangzhou": {
-    "region_name_cn": "广州市",
-    "region_name_en": "Guangzhou",
-    "region_level": "city",
-    "parent_city": null,
-    "boundaries_dict": null,
-    "stats": {},
-    "cache": {}
-  },
   "futian": {
     "region_name_cn": "福田区",
     "region_name_en": "Futian",
@@ -86,23 +50,5 @@
         "max_lng": 114.05921207310952
       }
     }
-  },
-  "longhua": {
-    "region_name_cn": "龙华区",
-    "region_name_en": "Longhua",
-    "region_level": "district",
-    "parent_city": "shenzhen",
-    "boundaries_dict": null,
-    "stats": {},
-    "cache": {}
-  },
-  "luohu": {
-    "region_name_cn": "罗湖区",
-    "region_name_en": "Luohu",
-    "region_level": "district",
-    "parent_city": "shenzhen",
-    "boundaries_dict": null,
-    "stats": {},
-    "cache": {}
   }
 }

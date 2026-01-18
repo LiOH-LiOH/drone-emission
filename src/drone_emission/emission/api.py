@@ -2,6 +2,7 @@ import os
 
 import numpy as np
 import pandas as pd
+from utils.grid_emission_factor import get_factor
 from visualization.emission import plot_emission_reduction_analysis
 
 from .cal_single_delivery import (
@@ -30,12 +31,27 @@ def cal_emission(region_info, exp_config):
     print(od_df.columns.tolist())
 
     # 从配置文件读取排放模型参数
-    ebike_params = create_ebike_params(exp_config)
-    drone_params = create_drone_params(exp_config)
     emission_cfg = get_emission_params(exp_config)
-
     payload_kg = emission_cfg["payload_kg"]
     rider_weight = emission_cfg["rider_weight"]
+
+    # parent_city 是小写英文城市名 (如 "shenzhen")，与 CITY_EN_TO_CN 键匹配
+    parent_city = region_config["parent_city"]
+    print(f"Region parent city: {parent_city}")
+
+    # 获取城市对应的电网排放因子
+    gef_path = exp_config.get("gef_path")
+    if gef_path:
+        e_use = get_factor(parent_city, gef_path)
+    else:
+        e_use = emission_cfg.get("e_use", 0.4)
+        print(f"Warning: gef_path not found in config, using default e_use = {e_use}")
+
+    # 创建参数时覆盖 e_use
+    ebike_params = create_ebike_params(exp_config)
+    drone_params = create_drone_params(exp_config)
+    ebike_params.e_use = e_use
+    drone_params.e_use = e_use
 
     lca = LifeCycleEmissions(
         ebike_params=ebike_params,
@@ -44,7 +60,12 @@ def cal_emission(region_info, exp_config):
     total_orders = len(od_df)
 
     print(f"Using payload_kg = {payload_kg} kg, rider_weight = {rider_weight} kg")
-    print(f"E-bike velocity = {ebike_params.velocity} km/h, Drone velocity = {drone_params.v_level} km/h")
+    print(
+        f"Grid emission factor (e_use) = {e_use:.4f} kg CO2e/kWh ({e_use * 1000:.1f} g CO2e/kWh)"
+    )
+    print(
+        f"E-bike velocity = {ebike_params.velocity} km/h, Drone velocity = {drone_params.v_level} km/h"
+    )
 
     # 先计算每个订单的无人机和电动自行车排放
     drone_emissions_list = []
@@ -56,7 +77,9 @@ def cal_emission(region_info, exp_config):
         road_distance_km = row.road_distance_m / 1000.0  # 道路距离，用于电动自行车
 
         result_drone = lca.calculate_drone_use_phase_emissions(distance_km, payload_kg)
-        result_ebike = lca.calculate_ebike_use_phase_emissions(road_distance_km, payload_kg, rider_weight)
+        result_ebike = lca.calculate_ebike_use_phase_emissions(
+            road_distance_km, payload_kg, rider_weight
+        )
 
         drone_emissions_list.append(result_drone["emissions_kg_co2e"])
         ebike_emissions_list.append(result_ebike["emissions_kg_co2e"])
