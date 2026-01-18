@@ -881,8 +881,10 @@ def run_sensitivity_analysis(save_dir: str = None):
     # 添加 src/drone_emission 到路径
     sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     from visualization.emission import (
+        plot_combined_velocity_power,
         plot_distance_route_factor_heatmap,
         plot_sensitivity_analysis,
+        plot_velocity_power_emission,
     )
 
     print("\n" + "=" * 80)
@@ -928,6 +930,10 @@ def run_sensitivity_analysis(save_dir: str = None):
         "Delivery Distance",
         "km",
         save_path=save_path,
+        experiment_settings={
+            "Payload": "1.0 kg",
+            "Route Factor": f"{r_default}",
+        },
     )
     if save_path:
         print(f"\n图表已保存: {save_path}")
@@ -969,6 +975,10 @@ def run_sensitivity_analysis(save_dir: str = None):
         "Route Factor",
         "",
         save_path=save_path,
+        experiment_settings={
+            "Distance": f"{d_fixed} km",
+            "Payload": "1.0 kg",
+        },
     )
     if save_path:
         print(f"\n图表已保存: {save_path}")
@@ -1009,9 +1019,147 @@ def run_sensitivity_analysis(save_dir: str = None):
         "Payload Weight",
         "kg",
         save_path=save_path,
+        experiment_settings={
+            "Distance": f"{d_fixed} km",
+            "Route Factor": f"{r_default}",
+        },
     )
     if save_path:
         print(f"\n图表已保存: {save_path}")
+
+    # ========================================================================
+    # 无人机水平速度敏感性分析 (40 - 80 km/h)
+    # ========================================================================
+    print("\n" + "-" * 60)
+    print("无人机水平速度敏感性分析")
+    print("-" * 60)
+
+    drone_velocities = np.linspace(40, 80, 9)
+    drone_powers = []
+    drone_emissions_vel = []
+
+    # 固定参数
+    d_fixed = 3.0  # km
+    payload_fixed = 1.0  # kg
+
+    for v in drone_velocities:
+        # 创建新的参数对象，修改水平速度
+        drone_params = DroneParams(v_level=v)
+        drone_energy = DroneEnergyModel(drone_params)
+
+        # 计算功率 (水平飞行，满载)
+        weight_loaded = drone_params.w_body + drone_params.w_battery + payload_fixed
+        v_ms = v / 3.6
+        power, _ = drone_energy.calculate_flight_angle_power(
+            weight_loaded, v_ms, flight_angle_deg=0
+        )
+        drone_powers.append(power)
+
+        # 计算排放
+        energy_result = drone_energy.calculate_energy_consumption(
+            d_fixed, payload_fixed
+        )
+        emissions_g = energy_result["energy_total_kwh"] * drone_params.e_use * 1000
+        drone_emissions_vel.append(emissions_g)
+
+    print(f"{'速度(km/h)':<12} {'功率(kW)':<12} {'排放(g CO2e)':<15}")
+    print("-" * 40)
+    for i, v in enumerate(drone_velocities):
+        print(f"{v:<12.0f} {drone_powers[i]:<12.3f} {drone_emissions_vel[i]:<15.2f}")
+
+    save_path = None
+    if save_dir:
+        save_path = f"{save_dir}/sensitivity_drone_velocity.png"
+    plot_velocity_power_emission(
+        list(drone_velocities),
+        drone_powers,
+        drone_emissions_vel,
+        vehicle_type="Drone",
+        distance_info=f"distance={d_fixed}km",
+        save_path=save_path,
+        experiment_settings={
+            "Distance": f"{d_fixed} km",
+            "Payload": f"{payload_fixed} kg",
+        },
+    )
+    if save_path:
+        print(f"\n图表已保存: {save_path}")
+
+    # ========================================================================
+    # 电动车速度敏感性分析 (20 - 40 km/h)
+    # ========================================================================
+    print("\n" + "-" * 60)
+    print("电动车速度敏感性分析")
+    print("-" * 60)
+
+    ebike_velocities = np.linspace(20, 40, 9)
+    ebike_powers = []
+    ebike_emissions_vel = []
+
+    for v in ebike_velocities:
+        # 创建新的参数对象，修改速度
+        ebike_params = EbikeParams(velocity=v)
+        ebike_energy = EbikeEnergyModel(ebike_params)
+
+        # 计算功率
+        total_weight = ebike_params.w_body + ebike_params.w_battery + 70 + payload_fixed
+        v_ms = v / 3.6
+        power, _ = ebike_energy.calculate_power(total_weight, v_ms)
+        ebike_powers.append(power)
+
+        # 计算排放
+        energy_result = ebike_energy.calculate_energy_consumption(
+            d_fixed * r_default, payload_fixed
+        )
+        emissions_g = energy_result["energy_kwh"] * ebike_params.e_use * 1000
+        ebike_emissions_vel.append(emissions_g)
+
+    print(f"{'速度(km/h)':<12} {'功率(kW)':<12} {'排放(g CO2e)':<15}")
+    print("-" * 40)
+    for i, v in enumerate(ebike_velocities):
+        print(f"{v:<12.0f} {ebike_powers[i]:<12.4f} {ebike_emissions_vel[i]:<15.2f}")
+
+    save_path = None
+    if save_dir:
+        save_path = f"{save_dir}/sensitivity_ebike_velocity.png"
+    plot_velocity_power_emission(
+        list(ebike_velocities),
+        ebike_powers,
+        ebike_emissions_vel,
+        vehicle_type="E-bike",
+        distance_info=f"distance={d_fixed * r_default}km",
+        save_path=save_path,
+        experiment_settings={
+            "Distance": f"{d_fixed * r_default} km (road)",
+            "Payload": f"{payload_fixed} kg",
+            "Route Factor": f"{r_default}",
+        },
+    )
+    if save_path:
+        print(f"\n图表已保存: {save_path}")
+
+    # ========================================================================
+    # 合并速度-功率图 (无人机 + 电动车)
+    # ========================================================================
+    print("\n" + "-" * 60)
+    print("合并速度-功率对比图")
+    print("-" * 60)
+
+    save_path = None
+    if save_dir:
+        save_path = f"{save_dir}/sensitivity_velocity_power_combined.png"
+    plot_combined_velocity_power(
+        list(drone_velocities),
+        drone_powers,
+        list(ebike_velocities),
+        ebike_powers,
+        save_path=save_path,
+        experiment_settings={
+            "Payload": f"{payload_fixed} kg",
+        },
+    )
+    if save_path:
+        print(f"图表已保存: {save_path}")
 
     # ========================================================================
     # 方案4(b): 配送距离 × 路径系数 热力图
@@ -1041,12 +1189,15 @@ def run_sensitivity_analysis(save_dir: str = None):
 
     save_path = None
     if save_dir:
-        save_path = f"{save_dir}/heatmap_distance_route_factor.png"
+        save_path = f"{save_dir}/sensitivity_distance_route_factor.png"
     plot_distance_route_factor_heatmap(
         list(distances_hm),
         list(route_factors_hm),
         emission_diff_matrix,
         save_path=save_path,
+        experiment_settings={
+            "Payload": "1.0 kg",
+        },
     )
     if save_path:
         print(f"\n图表已保存: {save_path}")

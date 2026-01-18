@@ -11,7 +11,6 @@ def cal_emission(region_info, exp_config):
     region_config = region_info.to_dict()
 
     region_name_en = region_config["region_name_en"]
-    region_name_cn = region_config.get("region_name_cn")
     region_level = region_config["region_level"]
 
     od_save_path = os.path.join(
@@ -111,7 +110,9 @@ def cal_emission(region_info, exp_config):
         region_level,
         region_name_en.lower(),
     )
-    save_path = os.path.join(fig_save_dir, "emission_reduction_analysis.png")
+    save_path = os.path.join(
+        fig_save_dir, f"{region_name_en.lower()}_emission_reduction.png"
+    )
     fig_path = plot_emission_reduction_analysis(results_df, save_path=save_path)
     print(f"\n图表已保存: {fig_path}")
 

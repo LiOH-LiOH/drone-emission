@@ -3,9 +3,56 @@
 """
 
 import os
+from typing import Dict
 
 import matplotlib.pyplot as plt
 import pandas as pd
+
+
+def add_experiment_info_box(
+    ax,
+    experiment_settings: Dict[str, str],
+    loc: str = "upper right",
+    fontsize: int = 9,
+):
+    """
+    在图表上添加实验设定信息文本框
+
+    参数:
+        ax: Matplotlib axes 对象
+        experiment_settings: 实验设定字典，键为设定名称，值为设定值
+                            例如: {"Distance": "3 km", "Payload": "1 kg", "Route Factor": "1.4"}
+        loc: 文本框位置，可选 "upper right", "upper left", "lower right", "lower left"
+        fontsize: 字体大小
+    """
+    if not experiment_settings:
+        return
+
+    # 构建文本内容
+    lines = [f"{k}: {v}" for k, v in experiment_settings.items()]
+    text = "\n".join(lines)
+
+    # 根据位置设置坐标
+    loc_map = {
+        "upper right": (0.98, 0.98, "right", "top"),
+        "upper left": (0.02, 0.98, "left", "top"),
+        "lower right": (0.98, 0.02, "right", "bottom"),
+        "lower left": (0.02, 0.02, "left", "bottom"),
+    }
+
+    x, y, ha, va = loc_map.get(loc, loc_map["upper right"])
+
+    ax.text(
+        x,
+        y,
+        text,
+        transform=ax.transAxes,
+        fontsize=fontsize,
+        verticalalignment=va,
+        horizontalalignment=ha,
+        bbox=dict(boxstyle="round", facecolor="wheat", alpha=0.8),
+        zorder=100,
+    )
 
 
 def plot_emission_reduction_analysis(
@@ -185,6 +232,7 @@ def plot_sensitivity_analysis(
     drone_emissions: list,
     param_name: str,
     param_unit: str = "",
+    experiment_settings: Dict[str, str] = None,
     save_path: str = None,
     dpi: int = 150,
 ) -> str:
@@ -197,6 +245,7 @@ def plot_sensitivity_analysis(
         drone_emissions: 对应的无人机排放列表 (g CO2e)
         param_name: 参数名称
         param_unit: 参数单位
+        experiment_settings: 实验设定字典，用于显示在图表上
         save_path: 保存路径
         dpi: 图像分辨率
 
@@ -220,8 +269,12 @@ def plot_sensitivity_analysis(
     )
     ax1.set_ylabel("Emissions (g CO2e)", fontsize=12)
     ax1.set_title(f"Emissions vs {param_name}", fontsize=14)
-    ax1.legend(loc="best")
+    ax1.legend(loc="upper left")
     ax1.grid(True, alpha=0.3)
+
+    # 添加实验设定信息
+    if experiment_settings:
+        add_experiment_info_box(ax1, experiment_settings, loc="lower right")
 
     # 图2: 无人机相对电动车的排放变化百分比
     ax2 = axes[1]
@@ -272,6 +325,7 @@ def plot_distance_route_factor_heatmap(
     emission_diff_matrix,
     save_path: str = None,
     dpi: int = 150,
+    experiment_settings: Dict[str, str] = None,
 ) -> str:
     """
     绘制配送距离 × 路径系数的二维热力图
@@ -283,6 +337,7 @@ def plot_distance_route_factor_heatmap(
                               shape: (len(route_factors), len(distances))
         save_path: 保存路径
         dpi: 图像分辨率
+        experiment_settings: 实验设置字典，用于显示在图表上的信息框
 
     返回:
         保存的图像路径
@@ -316,6 +371,160 @@ def plot_distance_route_factor_heatmap(
     ax.set_title(
         "Emission Comparison: Drone vs E-bike\n(Negative = Drone Better)", fontsize=14
     )
+
+    # 添加实验设置信息框
+    add_experiment_info_box(ax, experiment_settings, loc="upper left")
+
+    plt.tight_layout()
+
+    if save_path:
+        os.makedirs(os.path.dirname(save_path), exist_ok=True)
+        plt.savefig(save_path, dpi=dpi, bbox_inches="tight")
+        plt.close()
+        return save_path
+    else:
+        plt.show()
+        return None
+
+
+def plot_velocity_power_emission(
+    velocities: list,
+    powers: list,
+    emissions: list,
+    vehicle_type: str = "Drone",
+    distance_info: str = "",
+    save_path: str = None,
+    dpi: int = 150,
+    experiment_settings: Dict[str, str] = None,
+) -> str:
+    """
+    绘制速度-功率-排放敏感性分析图
+
+    参数:
+        velocities: 速度列表 (km/h)
+        powers: 对应的功率列表 (kW)
+        emissions: 对应的排放列表 (g CO2e)
+        vehicle_type: 车辆类型 ("Drone" 或 "E-bike")
+        distance_info: 距离信息字符串，用于图表标题
+        save_path: 保存路径
+        dpi: 图像分辨率
+        experiment_settings: 实验设置字典，用于显示在图表上的信息框
+
+    返回:
+        保存的图像路径
+    """
+    fig, axes = plt.subplots(1, 2, figsize=(14, 5))
+
+    # 根据车辆类型选择颜色
+    if vehicle_type.lower() == "drone":
+        color_power = "b-o"
+        color_emission = "r-s"
+        xlabel = "Drone Horizontal Velocity (km/h)"
+    else:
+        color_power = "g-o"
+        color_emission = "m-s"
+        xlabel = "E-bike Velocity (km/h)"
+
+    # 图1: 速度 vs 功率
+    ax1 = axes[0]
+    ax1.plot(velocities, powers, color_power, linewidth=2, markersize=6)
+    ax1.set_xlabel(xlabel, fontsize=12)
+    ax1.set_ylabel("Power (kW)", fontsize=12)
+    ax1.set_title(f"{vehicle_type} Power vs Velocity", fontsize=14)
+    ax1.grid(True, alpha=0.3)
+
+    # 图2: 速度 vs 排放
+    ax2 = axes[1]
+    ax2.plot(velocities, emissions, color_emission, linewidth=2, markersize=6)
+    ax2.set_xlabel(xlabel, fontsize=12)
+    ax2.set_ylabel("Emissions (g CO2e)", fontsize=12)
+    title = f"{vehicle_type} Emissions vs Velocity"
+    if distance_info:
+        title += f" ({distance_info})"
+    ax2.set_title(title, fontsize=14)
+    ax2.grid(True, alpha=0.3)
+
+    # 添加实验设置信息框
+    add_experiment_info_box(ax1, experiment_settings, loc="lower right")
+
+    plt.tight_layout()
+
+    if save_path:
+        os.makedirs(os.path.dirname(save_path), exist_ok=True)
+        plt.savefig(save_path, dpi=dpi, bbox_inches="tight")
+        plt.close()
+        return save_path
+    else:
+        plt.show()
+        return None
+
+
+def plot_combined_velocity_power(
+    drone_velocities: list,
+    drone_powers: list,
+    ebike_velocities: list,
+    ebike_powers: list,
+    save_path: str = None,
+    dpi: int = 150,
+    experiment_settings: Dict[str, str] = None,
+) -> str:
+    """
+    将无人机和电动车的速度-功率曲线绘制在同一张图上（双X轴）
+
+    参数:
+        drone_velocities: 无人机速度列表 (km/h)
+        drone_powers: 无人机功率列表 (kW)
+        ebike_velocities: 电动车速度列表 (km/h)
+        ebike_powers: 电动车功率列表 (kW)
+        save_path: 保存路径
+        dpi: 图像分辨率
+        experiment_settings: 实验设置字典，用于显示在图表上的信息框
+
+    返回:
+        保存的图像路径
+    """
+    fig, ax1 = plt.subplots(figsize=(10, 6))
+
+    # 电动车曲线 (底部X轴)
+    color_ebike = "#4CAF50"
+    line1 = ax1.plot(
+        ebike_velocities,
+        ebike_powers,
+        "o-",
+        color=color_ebike,
+        linewidth=2,
+        markersize=6,
+        label="E-bike",
+    )
+    ax1.set_xlabel("E-bike Velocity (km/h)", fontsize=12, color=color_ebike)
+    ax1.set_ylabel("Power (kW)", fontsize=12)
+    ax1.tick_params(axis="x", labelcolor=color_ebike)
+    ax1.grid(True, alpha=0.3)
+
+    # 无人机曲线 (顶部X轴)
+    ax2 = ax1.twiny()
+    color_drone = "#2196F3"
+    line2 = ax2.plot(
+        drone_velocities,
+        drone_powers,
+        "s-",
+        color=color_drone,
+        linewidth=2,
+        markersize=6,
+        label="Drone",
+    )
+    ax2.set_xlabel("Drone Horizontal Velocity (km/h)", fontsize=12, color=color_drone)
+    ax2.tick_params(axis="x", labelcolor=color_drone)
+
+    # 合并图例
+    lines = line1 + line2
+    labels = [l.get_label() for l in lines]
+    ax1.legend(lines, labels, loc="upper left", fontsize=11)
+
+    ax1.set_title("Power vs Velocity Comparison", fontsize=14)
+
+    # 添加实验设置信息框
+    add_experiment_info_box(ax1, experiment_settings, loc="lower right")
 
     plt.tight_layout()
 
