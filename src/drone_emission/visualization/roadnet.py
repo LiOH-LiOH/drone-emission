@@ -141,7 +141,7 @@ def visualize_distance_comparison(
     n_samples = len(sample_paths)
 
     # Create figure with subplots: one map per sample
-    n_cols = min(5, n_samples)
+    n_cols = min(2, n_samples)
     n_rows = (n_samples + n_cols - 1) // n_cols
 
     fig, axes = plt.subplots(n_rows, n_cols, figsize=(4 * n_cols, 4 * n_rows))
@@ -221,10 +221,18 @@ def visualize_distance_comparison(
             label="Destination",
         )
 
-        # Add basemap
-        if boundaries_dict:
-            ax.set_xlim(boundaries_dict["min_lng"], boundaries_dict["max_lng"])
-            ax.set_ylim(boundaries_dict["min_lat"], boundaries_dict["max_lat"])
+        # Calculate bounds from origin and destination with padding
+        padding = 0.003  # ~300m padding
+        local_bounds = {
+            "min_lat": min(origin[0], destination[0]) - padding,
+            "max_lat": max(origin[0], destination[0]) + padding,
+            "min_lng": min(origin[1], destination[1]) - padding,
+            "max_lng": max(origin[1], destination[1]) + padding,
+        }
+
+        # Add basemap with local bounds
+        ax.set_xlim(local_bounds["min_lng"], local_bounds["max_lng"])
+        ax.set_ylim(local_bounds["min_lat"], local_bounds["max_lat"])
 
         try:
             configure_contextily_cache()
@@ -232,7 +240,7 @@ def visualize_distance_comparison(
                 ax,
                 crs="EPSG:4326",
                 source=ctx.providers.OpenStreetMap.Mapnik,
-                zoom=14,
+                zoom=16,  # Higher zoom for smaller area
                 alpha=0.5,
                 zorder=0,
             )

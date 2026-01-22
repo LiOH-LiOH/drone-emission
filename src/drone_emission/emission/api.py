@@ -3,7 +3,10 @@ import os
 import numpy as np
 import pandas as pd
 from utils.grid_emission_factor import get_factor
-from visualization.emission import plot_emission_reduction_analysis
+from visualization.emission import (
+    plot_emission_reduction_analysis,
+    plot_road_distance_distribution,
+)
 
 from .cal_single_delivery import (
     LifeCycleEmissions,
@@ -107,13 +110,13 @@ def cal_emission(region_info, exp_config):
         np.percentile(road_distances, 95),
         10,
     )
-    thresholds = np.concatenate([[0], middle_thresholds, [np.inf]])
+    thresholds = np.concatenate([[-0.01], middle_thresholds, [np.inf]])
 
     # 计算每个阈值下的结果
     results = []
     for threshold in thresholds:
-        # road_distance > threshold 用无人机，否则用电动自行车
-        use_drone = road_distances > threshold
+        # road_distance >= threshold 用无人机，否则用电动自行车
+        use_drone = road_distances >= threshold
 
         mixed_emissions = np.where(use_drone, drone_emissions, ebike_emissions).sum()
         drone_ratio = use_drone.sum() / total_orders * 100
@@ -158,5 +161,15 @@ def cal_emission(region_info, exp_config):
     )
     fig_path = plot_emission_reduction_analysis(results_df, save_path=save_path)
     print(f"\n图表已保存: {fig_path}")
+
+    # 绘制道路距离分布图（按年销量加权）
+    annual_sales = od_df["annual_sales"].values
+    dist_save_path = os.path.join(
+        fig_save_dir, f"{region_name_en.lower()}_road_distance_distribution.png"
+    )
+    dist_fig_path = plot_road_distance_distribution(
+        road_distances, annual_sales, save_path=dist_save_path
+    )
+    print(f"道路距离分布图已保存: {dist_fig_path}")
 
     return results_df

@@ -1,10 +1,11 @@
 import json
 import os
+import requests
 from datetime import datetime
 from xml.etree import ElementTree as ET
 
-import requests
 from utils.coordinates import wgs84_to_3857
+from utils.tools import create_retry_session
 
 # WFS endpoint
 WFS_URL = "https://tubvsig-so2sat-vm1.srv.mwn.de/geoserver/ows"
@@ -66,7 +67,8 @@ def get_feature_count(layer_name, bbox):
         "resultType": "hits",
     }
 
-    response = requests.get(WFS_URL, params=params, timeout=120)
+    session = create_retry_session()
+    response = session.get(WFS_URL, params=params, timeout=120)
 
     if response.status_code != 200:
         print(f"  Count error {response.status_code}: {response.text[:300]}")
@@ -109,7 +111,9 @@ def get_features(
     }
 
     print(f"  Fetching up to {max_features:,} features...")
-    response = requests.get(WFS_URL, params=params, timeout=300)
+
+    session = create_retry_session()
+    response = session.get(WFS_URL, params=params, timeout=300)
 
     # If request fails, show the error details
     if response.status_code != 200:

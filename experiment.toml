@@ -3,8 +3,8 @@ figures_dir = "/Users/linjingxian/Code/drone-emission/figures"
 
 gef_path = "/Users/linjingxian/Code/drone-emission/data/gef_china.csv"
 
-fetch_buildings = false
-fetch_roadnet = false
+fetch_buildings = true
+fetch_roadnet = true
 
 delivery_radius_km = 3
 

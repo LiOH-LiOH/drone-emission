@@ -33,9 +33,9 @@
       },
       "roadnet_node_count": 185582,
       "roadnet_edge_count": 349822,
-      "avg_road_distance_m": 1753.4363076592867,
-      "avg_straight_distance_m": 1235.7276208350934,
-      "detour_ratio": 1.418950485604854,
+      "avg_road_distance_m": 1596.9256927545025,
+      "avg_straight_distance_m": 1133.1225876047288,
+      "detour_ratio": 1.4093141467863526,
       "valid_path_count": 1325139,
       "invalid_path_count": 12774,
       "total_store_annual_sales": 37064556.0,
@@ -50,5 +50,131 @@
         "max_lng": 114.05921207310952
       }
     }
+  },
+  "pudong": {
+    "region_name_cn": "浦东新区",
+    "region_name_en": "Pudong",
+    "region_level": "district",
+    "parent_city": "shanghai",
+    "boundaries_dict": {
+      "min_lat": 31.2,
+      "max_lat": 31.28,
+      "min_lng": 121.48,
+      "max_lng": 121.56
+    },
+    "stats": {},
+    "cache": {}
+  },
+  "chaoyang": {
+    "region_name_cn": "朝阳区",
+    "region_name_en": "Chaoyang",
+    "region_level": "district",
+    "parent_city": "beijing",
+    "boundaries_dict": {
+      "min_lat": 39.85,
+      "max_lat": 39.98,
+      "min_lng": 116.4,
+      "max_lng": 116.55
+    },
+    "stats": {},
+    "cache": {}
+  },
+  "tianhe": {
+    "region_name_cn": "天河区",
+    "region_name_en": "Tianhe",
+    "region_level": "district",
+    "parent_city": "guangzhou",
+    "boundaries_dict": {
+      "min_lat": 23.1,
+      "max_lat": 23.18,
+      "min_lng": 113.28,
+      "max_lng": 113.4
+    },
+    "stats": {},
+    "cache": {}
+  },
+  "xihu": {
+    "region_name_cn": "西湖区",
+    "region_name_en": "Xihu",
+    "region_level": "district",
+    "parent_city": "hangzhou",
+    "boundaries_dict": {
+      "min_lat": 30.22,
+      "max_lat": 30.3,
+      "min_lng": 120.1,
+      "max_lng": 120.18
+    },
+    "stats": {},
+    "cache": {}
+  },
+  "wuhou": {
+    "region_name_cn": "武侯区",
+    "region_name_en": "Wuhou",
+    "region_level": "district",
+    "parent_city": "chengdu",
+    "boundaries_dict": {
+      "min_lat": 30.6,
+      "max_lat": 30.68,
+      "min_lng": 104.0,
+      "max_lng": 104.08
+    },
+    "stats": {},
+    "cache": {}
+  },
+  "jianghan": {
+    "region_name_cn": "江汉区",
+    "region_name_en": "Jianghan",
+    "region_level": "district",
+    "parent_city": "wuhan",
+    "boundaries_dict": {
+      "min_lat": 30.58,
+      "max_lat": 30.65,
+      "min_lng": 114.24,
+      "max_lng": 114.32
+    },
+    "stats": {},
+    "cache": {}
+  },
+  "gulou": {
+    "region_name_cn": "鼓楼区",
+    "region_name_en": "Gulou",
+    "region_level": "district",
+    "parent_city": "nanjing",
+    "boundaries_dict": {
+      "min_lat": 32.04,
+      "max_lat": 32.1,
+      "min_lng": 118.72,
+      "max_lng": 118.8
+    },
+    "stats": {},
+    "cache": {}
+  },
+  "siming": {
+    "region_name_cn": "思明区",
+    "region_name_en": "Siming",
+    "region_level": "district",
+    "parent_city": "xiamen",
+    "boundaries_dict": {
+      "min_lat": 24.43,
+      "max_lat": 24.5,
+      "min_lng": 118.06,
+      "max_lng": 118.14
+    },
+    "stats": {},
+    "cache": {}
+  },
+  "yuzhong": {
+    "region_name_cn": "渝中区",
+    "region_name_en": "Yuzhong",
+    "region_level": "district",
+    "parent_city": "chongqing",
+    "boundaries_dict": {
+      "min_lat": 29.53,
+      "max_lat": 29.58,
+      "min_lng": 106.5,
+      "max_lng": 106.58
+    },
+    "stats": {},
+    "cache": {}
   }
 }

@@ -6,6 +6,7 @@ import os
 from typing import Dict
 
 import matplotlib.pyplot as plt
+import numpy as np
 import pandas as pd
 
 
@@ -71,7 +72,7 @@ def plot_emission_reduction_analysis(
     返回:
         保存的图像路径
     """
-    fig, axes = plt.subplots(1, 2, figsize=(14, 5))
+    fig, axes = plt.subplots(2, 1, figsize=(8, 10))
 
     # 图1: 阈值 vs 减排百分比
     ax1 = axes[0]
@@ -102,6 +103,94 @@ def plot_emission_reduction_analysis(
     ax2.set_title("Emission Reduction vs Drone Ratio", fontsize=14)
     ax2.grid(True, alpha=0.3)
     ax2.axhline(y=0, color="gray", linestyle="--", alpha=0.5)
+
+    plt.tight_layout()
+
+    if save_path:
+        os.makedirs(os.path.dirname(save_path), exist_ok=True)
+        plt.savefig(save_path, dpi=dpi, bbox_inches="tight")
+        plt.close()
+        return save_path
+    else:
+        plt.show()
+        return None
+
+
+def plot_road_distance_distribution(
+    road_distances: "np.ndarray",
+    annual_sales: "np.ndarray",
+    save_path: str = None,
+    dpi: int = 150,
+    n_bins: int = 50,
+) -> str:
+    """
+    绘制道路距离分布图（按年销量加权）
+
+    参数:
+        road_distances: 道路距离数组 (km)
+        annual_sales: 年销量数组
+        save_path: 保存路径，如果为 None 则显示图形
+        dpi: 图像分辨率
+        n_bins: 直方图的柱数
+
+    返回:
+        保存的图像路径
+    """
+    # Filter out invalid distances (negative values)
+    valid_mask = road_distances >= 0
+    valid_distances = road_distances[valid_mask]
+    valid_sales = annual_sales[valid_mask]
+
+    fig, axes = plt.subplots(2, 1, figsize=(10, 10))
+
+    # 图1: 未加权的距离分布
+    ax1 = axes[0]
+    ax1.hist(
+        valid_distances,
+        bins=n_bins,
+        color="#2196F3",
+        edgecolor="white",
+        alpha=0.7,
+    )
+    ax1.set_xlabel("Road Distance (km)", fontsize=12)
+    ax1.set_ylabel("Count", fontsize=12)
+    ax1.set_title("Road Distance Distribution (Unweighted)", fontsize=14)
+    ax1.grid(True, alpha=0.3, axis="y")
+
+    # 添加统计信息
+    mean_dist = valid_distances.mean()
+    median_dist = np.median(valid_distances)
+    ax1.axvline(mean_dist, color="red", linestyle="--", linewidth=2, label=f"Mean: {mean_dist:.2f} km")
+    ax1.axvline(median_dist, color="orange", linestyle="--", linewidth=2, label=f"Median: {median_dist:.2f} km")
+    ax1.legend(loc="upper right")
+
+    # 图2: 按年销量加权的距离分布
+    ax2 = axes[1]
+    ax2.hist(
+        valid_distances,
+        bins=n_bins,
+        weights=valid_sales,
+        color="#4CAF50",
+        edgecolor="white",
+        alpha=0.7,
+    )
+    ax2.set_xlabel("Road Distance (km)", fontsize=12)
+    ax2.set_ylabel("Weighted Count (by Annual Sales)", fontsize=12)
+    ax2.set_title("Road Distance Distribution (Weighted by Annual Sales)", fontsize=14)
+    ax2.grid(True, alpha=0.3, axis="y")
+
+    # 添加加权统计信息
+    weighted_mean = np.average(valid_distances, weights=valid_sales)
+    # 计算加权中位数
+    sorted_idx = np.argsort(valid_distances)
+    sorted_distances = valid_distances[sorted_idx]
+    sorted_weights = valid_sales[sorted_idx]
+    cumsum = np.cumsum(sorted_weights)
+    weighted_median = sorted_distances[np.searchsorted(cumsum, cumsum[-1] / 2)]
+
+    ax2.axvline(weighted_mean, color="red", linestyle="--", linewidth=2, label=f"Weighted Mean: {weighted_mean:.2f} km")
+    ax2.axvline(weighted_median, color="orange", linestyle="--", linewidth=2, label=f"Weighted Median: {weighted_median:.2f} km")
+    ax2.legend(loc="upper right")
 
     plt.tight_layout()
 
@@ -611,6 +700,128 @@ def plot_combined_velocity_power(
 
     # 添加实验设置信息框
     add_experiment_info_box(ax1, experiment_settings, loc="lower right")
+
+    plt.tight_layout()
+
+    if save_path:
+        os.makedirs(os.path.dirname(save_path), exist_ok=True)
+        plt.savefig(save_path, dpi=dpi, bbox_inches="tight")
+        plt.close()
+        return save_path
+    else:
+        plt.show()
+        return None
+
+
+def plot_velocity_power_stacked(
+    drone_velocities: list,
+    drone_power_breakdowns: list,
+    ebike_velocities: list,
+    ebike_power_breakdowns: list,
+    save_path: str = None,
+    dpi: int = 150,
+    experiment_settings: Dict[str, str] = None,
+) -> str:
+    """
+    绘制速度-功率对比的堆叠柱状图，显示各功率分量
+
+    参数:
+        drone_velocities: 无人机速度列表 (km/h)
+        drone_power_breakdowns: 无人机功率分解列表，每个元素是包含
+            P_induced, P_profile, P_drag, P_climb, P_aux 的字典
+        ebike_velocities: 电动车速度列表 (km/h)
+        ebike_power_breakdowns: 电动车功率分解列表，每个元素是包含
+            P_rolling, P_air, P_grade, P_acc 的字典
+        save_path: 保存路径
+        dpi: 图像分辨率
+        experiment_settings: 实验设置字典
+
+    返回:
+        保存的图像路径
+    """
+    fig, axes = plt.subplots(1, 2, figsize=(14, 6))
+
+    # ========== 无人机堆叠柱状图 ==========
+    ax1 = axes[0]
+    x_drone = np.arange(len(drone_velocities))
+    bar_width = 0.7
+
+    # 无人机功率分量 (按显示顺序)
+    drone_components = ["P_induced", "P_profile", "P_drag", "P_climb", "P_aux"]
+    drone_labels = ["Induced", "Profile", "Drag", "Climb", "Auxiliary"]
+    drone_colors = ["#1976D2", "#42A5F5", "#90CAF9", "#BBDEFB", "#E3F2FD"]
+
+    # 提取各分量数据
+    drone_data = {comp: [] for comp in drone_components}
+    for breakdown in drone_power_breakdowns:
+        for comp in drone_components:
+            drone_data[comp].append(breakdown.get(comp, 0) * 1000)  # kW -> W
+
+    # 绘制堆叠柱状图
+    bottom = np.zeros(len(drone_velocities))
+    for comp, label, color in zip(drone_components, drone_labels, drone_colors):
+        values = np.array(drone_data[comp])
+        ax1.bar(
+            x_drone,
+            values,
+            bar_width,
+            bottom=bottom,
+            label=label,
+            color=color,
+            edgecolor="white",
+            linewidth=0.5,
+        )
+        bottom += values
+
+    ax1.set_xlabel("Drone Horizontal Velocity (km/h)", fontsize=12)
+    ax1.set_ylabel("Power (W)", fontsize=12)
+    ax1.set_title("Drone Power Breakdown vs Velocity", fontsize=14)
+    ax1.set_xticks(x_drone)
+    ax1.set_xticklabels([f"{v:.0f}" for v in drone_velocities])
+    ax1.legend(loc="upper left", fontsize=9)
+    ax1.grid(True, alpha=0.3, axis="y")
+
+    # ========== 电动车堆叠柱状图 ==========
+    ax2 = axes[1]
+    x_ebike = np.arange(len(ebike_velocities))
+
+    # 电动车功率分量 (按显示顺序)
+    ebike_components = ["P_rolling", "P_air", "P_grade", "P_acc"]
+    ebike_labels = ["Rolling", "Air Drag", "Grade", "Acceleration"]
+    ebike_colors = ["#388E3C", "#66BB6A", "#A5D6A7", "#C8E6C9"]
+
+    # 提取各分量数据
+    ebike_data = {comp: [] for comp in ebike_components}
+    for breakdown in ebike_power_breakdowns:
+        for comp in ebike_components:
+            ebike_data[comp].append(breakdown.get(comp, 0) * 1000)  # kW -> W
+
+    # 绘制堆叠柱状图
+    bottom = np.zeros(len(ebike_velocities))
+    for comp, label, color in zip(ebike_components, ebike_labels, ebike_colors):
+        values = np.array(ebike_data[comp])
+        ax2.bar(
+            x_ebike,
+            values,
+            bar_width,
+            bottom=bottom,
+            label=label,
+            color=color,
+            edgecolor="white",
+            linewidth=0.5,
+        )
+        bottom += values
+
+    ax2.set_xlabel("E-bike Velocity (km/h)", fontsize=12)
+    ax2.set_ylabel("Power (W)", fontsize=12)
+    ax2.set_title("E-bike Power Breakdown vs Velocity", fontsize=14)
+    ax2.set_xticks(x_ebike)
+    ax2.set_xticklabels([f"{v:.0f}" for v in ebike_velocities])
+    ax2.legend(loc="upper left", fontsize=9)
+    ax2.grid(True, alpha=0.3, axis="y")
+
+    # 添加实验设置信息框
+    add_experiment_info_box(ax2, experiment_settings, loc="lower right")
 
     plt.tight_layout()
 

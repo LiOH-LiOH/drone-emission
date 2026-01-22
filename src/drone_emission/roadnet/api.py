@@ -107,8 +107,18 @@ def load_roadnet(region_info, exp_config):
     # Statistics
     valid_mask = road_distances >= 0
     if valid_mask.sum() > 0:
-        avg_road_dist = road_distances[valid_mask].mean()
-        avg_straight_dist = od_df.loc[valid_mask, "distance_km"].mean() * 1000
+        # use weighted mean of road_distance_m and annual_sales
+        avg_road_dist = (
+            road_distances[valid_mask] * od_df.loc[valid_mask, "annual_sales"]
+        ).sum() / od_df.loc[valid_mask, "annual_sales"].sum()
+        avg_straight_dist = (
+            (
+                od_df.loc[valid_mask, "distance_km"]
+                * od_df.loc[valid_mask, "annual_sales"]
+            ).sum()
+            / od_df.loc[valid_mask, "annual_sales"].sum()
+            * 1000
+        )
         detour_ratio = avg_road_dist / avg_straight_dist if avg_straight_dist > 0 else 0
 
         region_info.set_stat("avg_road_distance_m", avg_road_dist)
@@ -149,12 +159,12 @@ def _visualize_sample_paths(
         valid_df["distance_km"] * 1000
     )
 
-    # 分5个分位数区间，每个区间抽2个样本
+    # 分4个分位数区间，每个区间抽1个样本
     samples = []
-    for q in [0.1, 0.3, 0.5, 0.7, 0.9]:
+    for q in [0.2, 0.4, 0.6, 0.8]:
         quantile_val = valid_df["detour_ratio"].quantile(q)
         # 找到最接近该分位数的样本
-        closest_idx = (valid_df["detour_ratio"] - quantile_val).abs().nsmallest(2).index
+        closest_idx = (valid_df["detour_ratio"] - quantile_val).abs().nsmallest(1).index
         samples.extend(closest_idx.tolist())
 
     # 去重并取前n_samples个

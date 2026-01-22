@@ -979,11 +979,11 @@ def run_sensitivity_analysis(save_dir: str = None, exp_config: Dict = None):
     # 添加 src/drone_emission 到路径
     sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     from visualization.emission import (
-        plot_combined_velocity_power,
         plot_distance_route_factor_heatmap,
         plot_energy_consumption_vs_speed,
         plot_sensitivity_analysis,
         plot_velocity_power_emission,
+        plot_velocity_power_stacked,
     )
 
     print("\n" + "=" * 80)
@@ -1163,6 +1163,7 @@ def run_sensitivity_analysis(save_dir: str = None, exp_config: Dict = None):
 
     drone_velocities = np.linspace(40, 80, 9)
     drone_powers = []
+    drone_power_breakdowns = []
     drone_emissions_vel = []
 
     # 固定参数
@@ -1177,10 +1178,11 @@ def run_sensitivity_analysis(save_dir: str = None, exp_config: Dict = None):
         # 计算功率 (水平飞行，满载)
         weight_loaded = drone_params.w_body + drone_params.w_battery + payload_fixed
         v_ms = v / 3.6
-        power, _ = drone_energy.calculate_flight_angle_power(
+        power, breakdown = drone_energy.calculate_flight_angle_power(
             weight_loaded, v_ms, flight_angle_deg=0
         )
         drone_powers.append(power)
+        drone_power_breakdowns.append(breakdown)
 
         # 计算排放
         energy_result = drone_energy.calculate_energy_consumption(
@@ -1223,6 +1225,7 @@ def run_sensitivity_analysis(save_dir: str = None, exp_config: Dict = None):
 
     ebike_velocities = np.linspace(20, 40, 9)
     ebike_powers = []
+    ebike_power_breakdowns = []
     ebike_emissions_vel = []
     ebike_energy_per_km = []  # Wh/km
 
@@ -1239,8 +1242,9 @@ def run_sensitivity_analysis(save_dir: str = None, exp_config: Dict = None):
             + payload_fixed
         )
         v_ms = v / 3.6
-        power, _ = ebike_energy.calculate_power(total_weight, v_ms)
+        power, breakdown = ebike_energy.calculate_power(total_weight, v_ms)
         ebike_powers.append(power)
+        ebike_power_breakdowns.append(breakdown)
 
         # 计算能耗 (1km距离)
         energy_result_1km = ebike_energy.calculate_energy_consumption(
@@ -1287,20 +1291,20 @@ def run_sensitivity_analysis(save_dir: str = None, exp_config: Dict = None):
         print(f"\n图表已保存: {save_path}")
 
     # ========================================================================
-    # 合并速度-功率图 (无人机 + 电动车)
+    # 合并速度-功率堆叠柱状图 (无人机 + 电动车)
     # ========================================================================
     print("\n" + "-" * 60)
-    print("合并速度-功率对比图")
+    print("合并速度-功率堆叠柱状图")
     print("-" * 60)
 
     save_path = None
     if save_dir:
-        save_path = f"{save_dir}/sensitivity_velocity_power_combined.png"
-    plot_combined_velocity_power(
+        save_path = f"{save_dir}/sensitivity_velocity_power_stacked.png"
+    plot_velocity_power_stacked(
         list(drone_velocities),
-        drone_powers,
+        drone_power_breakdowns,
         list(ebike_velocities),
-        ebike_powers,
+        ebike_power_breakdowns,
         save_path=save_path,
         experiment_settings={
             "Payload": f"{payload_fixed:.2f} kg",
