@@ -15,6 +15,11 @@ PADDING_COEFF = 0.1
 # Global flag for cache configuration
 _CONTEXTILY_CACHE_CONFIGURED = False
 
+# Project root directory (consistent cache location)
+_PROJECT_ROOT = os.path.dirname(
+    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+)
+
 
 def get_adcode(city_name_cn):
     """Get adcode using cpca library"""
@@ -28,8 +33,8 @@ def get_adcode(city_name_cn):
 
 
 def fetch_boundaries(adcode):
-    # Define cache directory
-    cache_dir = os.path.join(os.getcwd(), "cache", "boundaries")
+    # Define cache directory (use project root for consistency)
+    cache_dir = os.path.join(_PROJECT_ROOT, "cache", "boundaries")
     os.makedirs(cache_dir, exist_ok=True)
     cache_file = os.path.join(cache_dir, f"{adcode}.json")
 
@@ -91,7 +96,7 @@ def configure_contextily_cache():
     global _CONTEXTILY_CACHE_CONFIGURED
     if not _CONTEXTILY_CACHE_CONFIGURED:
         try:
-            cache_dir = os.path.join(os.getcwd(), "cache", "tiles")
+            cache_dir = os.path.join(_PROJECT_ROOT, "cache", "tiles")
             os.makedirs(cache_dir, exist_ok=True)
             ctx.set_cache_dir(cache_dir)
             print(f"Contextily cache configured at: {cache_dir}")
