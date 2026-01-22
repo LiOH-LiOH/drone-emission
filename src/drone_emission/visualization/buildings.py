@@ -22,6 +22,7 @@ def visualize_buildings(
     boundaries_dict=None,
     original_boundaries_dict=None,
     save_path=None,
+    for_latex=False,
 ):
     """
     Read a GeoJSON file of buildings and visualize it.
@@ -52,7 +53,7 @@ def visualize_buildings(
     title = f"{city_name} Buildings Visualization"
     stats_text = f"Total Buildings: {len(gdf)}"
 
-    finalize_plot(fig, ax, save_path, title, stats_text, boundaries_dict)
+    finalize_plot(fig, ax, save_path, title, stats_text, boundaries_dict, for_latex)
     plt.close(fig)
 
 
@@ -63,6 +64,7 @@ def visualize_building_heights(
     boundaries_dict=None,
     original_boundaries_dict=None,
     save_path=None,
+    for_latex=False,
 ):
     """
     Visualize building heights using a heatmap.
@@ -116,7 +118,7 @@ def visualize_building_heights(
         f"Max Height: {heights.max():.1f}m"
     )
 
-    finalize_plot(fig, ax, save_path, title, stats_text, boundaries_dict)
+    finalize_plot(fig, ax, save_path, title, stats_text, boundaries_dict, for_latex)
     plt.close(fig)
 
 
@@ -130,6 +132,7 @@ def visualize_store_coverage(
     original_boundaries_dict=None,
     radius_km=5.0,
     save_path=None,
+    for_latex=False,
 ):
     """
     Visualize a store and its nearby buildings within delivery radius.
@@ -226,5 +229,5 @@ def visualize_store_coverage(
         f"Radius: {radius_km}km"
     )
 
-    finalize_plot(fig, ax, save_path, title, stats_text, boundaries_dict)
+    finalize_plot(fig, ax, save_path, title, stats_text, boundaries_dict, for_latex)
     plt.close(fig)

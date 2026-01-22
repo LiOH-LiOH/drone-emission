@@ -21,6 +21,7 @@ def visualize_roadnet(
     boundaries_dict: Optional[Dict[str, float]] = None,
     original_boundaries_dict: Optional[Dict[str, float]] = None,
     save_path: Optional[str] = None,
+    for_latex: bool = False,
 ) -> None:
     """Visualize the road network.
 
@@ -54,7 +55,7 @@ def visualize_roadnet(
 
     title = "Road Network Visualization"
     stats_text = f"Nodes: {len(G.nodes)}, Edges: {len(G.edges)}"
-    finalize_plot(fig, ax, save_path, title, stats_text, boundaries_dict)
+    finalize_plot(fig, ax, save_path, title, stats_text, boundaries_dict, for_latex)
     plt.close(fig)
 
 
@@ -65,6 +66,7 @@ def visualize_path(
     boundaries_dict: Optional[Dict[str, float]] = None,
     original_boundaries_dict: Optional[Dict[str, float]] = None,
     save_path: Optional[str] = None,
+    for_latex: bool = False,
 ) -> None:
     """Visualize the shortest path on the road network.
 
@@ -117,7 +119,7 @@ def visualize_path(
     stats_text = (
         f"Nodes: {len(G.nodes)}, Edges: {len(G.edges)}\nPath Length: {len(route_nodes)}"
     )
-    finalize_plot(fig, ax, save_path, title, stats_text, boundaries_dict)
+    finalize_plot(fig, ax, save_path, title, stats_text, boundaries_dict, for_latex)
     plt.close(fig)
 
 
@@ -127,6 +129,7 @@ def visualize_distance_comparison(
     city_name_cn: Optional[str] = None,
     boundaries_dict: Optional[Dict[str, float]] = None,
     save_path: Optional[str] = None,
+    for_latex: bool = False,
 ) -> None:
     """Visualize comparison between straight-line and road network distances.
 
@@ -266,18 +269,21 @@ def visualize_distance_comparison(
     for idx in range(n_samples, len(axes)):
         axes[idx].set_visible(False)
 
-    plt.suptitle(
-        "Straight-line vs Road Network Distance Comparison",
-        fontsize=14,
-        fontweight="bold",
-        y=1.02,
-    )
+    if not for_latex:
+        plt.suptitle(
+            "Straight-line vs Road Network Distance Comparison",
+            fontsize=14,
+            fontweight="bold",
+            y=1.02,
+        )
     plt.tight_layout()
 
     if save_path:
         import os
 
         os.makedirs(os.path.dirname(save_path), exist_ok=True)
+        if for_latex and not save_path.endswith('.pdf'):
+            save_path = save_path.rsplit('.', 1)[0] + '.pdf'
         plt.savefig(save_path, dpi=200, bbox_inches="tight")
         print(f"Comparison plot saved to {save_path}")
     else:

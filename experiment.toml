@@ -3,10 +3,13 @@ figures_dir = "/Users/linjingxian/Code/drone-emission/figures"
 
 gef_path = "/Users/linjingxian/Code/drone-emission/data/gef_china.csv"
 
-fetch_buildings = true
-fetch_roadnet = true
+fetch_buildings = false
+fetch_roadnet = false
 
 delivery_radius_km = 3
+
+# Figure output settings
+for_latex = true  # Set to true for LaTeX export (PDF, no titles/info boxes)
 
 # OD pair generation parameters
 [od_params]

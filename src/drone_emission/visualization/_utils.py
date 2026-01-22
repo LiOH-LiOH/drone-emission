@@ -183,7 +183,7 @@ def add_basemap_and_boundaries(
         print(f"No adcode found for {city_name_cn}, skipping boundaries.")
 
 
-def finalize_plot(fig, ax, save_path, title, stats_text, boundaries_dict=None):
+def finalize_plot(fig, ax, save_path, title, stats_text, boundaries_dict=None, for_latex=False):
     """Finalize plot with title, labels, and axis limits.
 
     Args:
@@ -194,16 +194,19 @@ def finalize_plot(fig, ax, save_path, title, stats_text, boundaries_dict=None):
         stats_text: Statistics text to display
         boundaries_dict: Optional dict with min_lng, max_lng, min_lat, max_lat
                         If provided, uses fixed boundaries for axis limits
+        for_latex: If True, skip title and stats text for LaTeX export
     """
-    # Set title and labels
+    # Set labels
     ax.set_xlabel("Longitude", fontsize=12)
     ax.set_ylabel("Latitude", fontsize=12)
-    ax.set_title(
-        title,
-        fontsize=16,
-        fontweight="bold",
-        pad=20,
-    )
+
+    if not for_latex:
+        ax.set_title(
+            title,
+            fontsize=16,
+            fontweight="bold",
+            pad=20,
+        )
 
     # Add grid
     ax.grid(True, alpha=0.3, linestyle="--", color="white")
@@ -212,16 +215,17 @@ def finalize_plot(fig, ax, save_path, title, stats_text, boundaries_dict=None):
     ax.ticklabel_format(useOffset=False, style="plain")
 
     # Add statistics
-    ax.text(
-        0.02,
-        0.98,
-        stats_text,
-        transform=ax.transAxes,
-        fontsize=10,
-        verticalalignment="top",
-        bbox=dict(boxstyle="round", facecolor="wheat", alpha=0.8),
-        zorder=100,  # Ensure text is on top of all plot elements
-    )
+    if not for_latex:
+        ax.text(
+            0.02,
+            0.98,
+            stats_text,
+            transform=ax.transAxes,
+            fontsize=10,
+            verticalalignment="top",
+            bbox=dict(boxstyle="round", facecolor="wheat", alpha=0.8),
+            zorder=100,  # Ensure text is on top of all plot elements
+        )
 
     # Set axis limits using boundaries_dict
     if boundaries_dict:
@@ -239,6 +243,9 @@ def finalize_plot(fig, ax, save_path, title, stats_text, boundaries_dict=None):
 
     if save_path:
         os.makedirs(os.path.dirname(save_path), exist_ok=True)
+        # Use PDF for LaTeX, PNG otherwise
+        if for_latex and not save_path.endswith('.pdf'):
+            save_path = save_path.rsplit('.', 1)[0] + '.pdf'
         plt.savefig(save_path, dpi=300, bbox_inches="tight")
         print(f"\nPlot saved as {save_path}")
     else:

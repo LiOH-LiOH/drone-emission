@@ -159,7 +159,8 @@ def cal_emission(region_info, exp_config):
     save_path = os.path.join(
         fig_save_dir, f"{region_name_en.lower()}_emission_reduction.png"
     )
-    fig_path = plot_emission_reduction_analysis(results_df, save_path=save_path)
+    for_latex = exp_config.get("for_latex", False)
+    fig_path = plot_emission_reduction_analysis(results_df, save_path=save_path, for_latex=for_latex)
     print(f"\n图表已保存: {fig_path}")
 
     # 绘制道路距离分布图（按年销量加权）
@@ -168,7 +169,7 @@ def cal_emission(region_info, exp_config):
         fig_save_dir, f"{region_name_en.lower()}_road_distance_distribution.png"
     )
     dist_fig_path = plot_road_distance_distribution(
-        road_distances, annual_sales, save_path=dist_save_path
+        road_distances, annual_sales, save_path=dist_save_path, for_latex=for_latex
     )
     print(f"道路距离分布图已保存: {dist_fig_path}")
 

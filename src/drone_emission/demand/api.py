@@ -149,6 +149,7 @@ def generate_od_pairs(region_info, exp_config):
 
     large_bounds_dict = region_info.get_cache("enlarged_boundaries")
 
+    for_latex = exp_config.get("for_latex", False)
     visualize_store_coverage(
         buildings_gdf=buildings_gdf,
         store_coord=example_store_coord,
@@ -159,6 +160,7 @@ def generate_od_pairs(region_info, exp_config):
         original_boundaries_dict=region_config.get("boundaries_dict"),
         radius_km=delivery_radius_km,
         save_path=os.path.join(fig_dir, f"{region_name_en.lower()}_store_coverage.png"),
+        for_latex=for_latex,
     )
 
     # === Process each store and its nearby buildings ===

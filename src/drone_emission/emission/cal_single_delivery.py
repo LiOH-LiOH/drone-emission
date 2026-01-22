@@ -965,13 +965,14 @@ def run_validation_tests():
     return lca
 
 
-def run_sensitivity_analysis(save_dir: str = None, exp_config: Dict = None):
+def run_sensitivity_analysis(save_dir: str = None, exp_config: Dict = None, for_latex: bool = False):
     """
     运行敏感性分析
 
     参数:
         save_dir: 图片保存目录，如果为 None 则显示图形
         exp_config: 实验配置字典，从 experiment.toml 加载
+        for_latex: 是否为 LaTeX 导出模式（PDF格式，无标题和信息框）
     """
     import os
     import sys
@@ -1011,6 +1012,9 @@ def run_sensitivity_analysis(save_dir: str = None, exp_config: Dict = None):
         f"Drone: v_level={default_drone_params.v_level}km/h, h_takeoff={default_drone_params.h_takeoff}m"
     )
 
+    # 确定文件扩展名
+    ext = ".pdf" if for_latex else ".png"
+
     # ========================================================================
     # A2: 配送距离敏感性分析 (0.5 - 8 km)
     # ========================================================================
@@ -1041,7 +1045,7 @@ def run_sensitivity_analysis(save_dir: str = None, exp_config: Dict = None):
 
     save_path = None
     if save_dir:
-        save_path = f"{save_dir}/sensitivity_distance.png"
+        save_path = f"{save_dir}/sensitivity_distance{ext}"
     plot_sensitivity_analysis(
         list(distances),
         ebike_emissions_a2,
@@ -1055,6 +1059,7 @@ def run_sensitivity_analysis(save_dir: str = None, exp_config: Dict = None):
             "E-bike Velocity": f"{default_ebike_params.velocity:.2f} km/h",
             "Drone Velocity": f"{default_drone_params.v_level:.2f} km/h",
         },
+        for_latex=for_latex,
     )
     if save_path:
         print(f"\n图表已保存: {save_path}")
@@ -1090,7 +1095,7 @@ def run_sensitivity_analysis(save_dir: str = None, exp_config: Dict = None):
 
     save_path = None
     if save_dir:
-        save_path = f"{save_dir}/sensitivity_route_factor.png"
+        save_path = f"{save_dir}/sensitivity_route_factor{ext}"
     plot_sensitivity_analysis(
         list(route_factors),
         ebike_emissions_a3,
@@ -1104,6 +1109,7 @@ def run_sensitivity_analysis(save_dir: str = None, exp_config: Dict = None):
             "E-bike Velocity": f"{default_ebike_params.velocity:.2f} km/h",
             "Drone Velocity": f"{default_drone_params.v_level:.2f} km/h",
         },
+        for_latex=for_latex,
     )
     if save_path:
         print(f"\n图表已保存: {save_path}")
@@ -1136,7 +1142,7 @@ def run_sensitivity_analysis(save_dir: str = None, exp_config: Dict = None):
 
     save_path = None
     if save_dir:
-        save_path = f"{save_dir}/sensitivity_payload.png"
+        save_path = f"{save_dir}/sensitivity_payload{ext}"
     plot_sensitivity_analysis(
         list(payloads),
         ebike_emissions_a7,
@@ -1150,6 +1156,7 @@ def run_sensitivity_analysis(save_dir: str = None, exp_config: Dict = None):
             "E-bike Velocity": f"{default_ebike_params.velocity:.2f} km/h",
             "Drone Velocity": f"{default_drone_params.v_level:.2f} km/h",
         },
+        for_latex=for_latex,
     )
     if save_path:
         print(f"\n图表已保存: {save_path}")
@@ -1198,7 +1205,7 @@ def run_sensitivity_analysis(save_dir: str = None, exp_config: Dict = None):
 
     save_path = None
     if save_dir:
-        save_path = f"{save_dir}/sensitivity_drone_velocity.png"
+        save_path = f"{save_dir}/sensitivity_drone_velocity{ext}"
     plot_velocity_power_emission(
         list(drone_velocities),
         drone_powers,
@@ -1212,6 +1219,7 @@ def run_sensitivity_analysis(save_dir: str = None, exp_config: Dict = None):
             "Takeoff Height": f"{default_drone_params.h_takeoff:.2f} m",
             "Hover Time": f"{default_drone_params.hover_time:.2f} s",
         },
+        for_latex=for_latex,
     )
     if save_path:
         print(f"\n图表已保存: {save_path}")
@@ -1272,7 +1280,7 @@ def run_sensitivity_analysis(save_dir: str = None, exp_config: Dict = None):
 
     save_path = None
     if save_dir:
-        save_path = f"{save_dir}/sensitivity_ebike_velocity.png"
+        save_path = f"{save_dir}/sensitivity_ebike_velocity{ext}"
     plot_velocity_power_emission(
         list(ebike_velocities),
         ebike_powers,
@@ -1286,6 +1294,7 @@ def run_sensitivity_analysis(save_dir: str = None, exp_config: Dict = None):
             "Route Factor": f"{r_default:.2f}",
             "Rider Weight": f"{rider_weight_default:.2f} kg",
         },
+        for_latex=for_latex,
     )
     if save_path:
         print(f"\n图表已保存: {save_path}")
@@ -1299,7 +1308,7 @@ def run_sensitivity_analysis(save_dir: str = None, exp_config: Dict = None):
 
     save_path = None
     if save_dir:
-        save_path = f"{save_dir}/sensitivity_velocity_power_stacked.png"
+        save_path = f"{save_dir}/sensitivity_velocity_power_stacked{ext}"
     plot_velocity_power_stacked(
         list(drone_velocities),
         drone_power_breakdowns,
@@ -1312,6 +1321,7 @@ def run_sensitivity_analysis(save_dir: str = None, exp_config: Dict = None):
             "Drone Body": f"{default_drone_params.w_body:.2f} kg",
             "E-bike Body": f"{default_ebike_params.w_body:.2f} kg",
         },
+        for_latex=for_latex,
     )
     if save_path:
         print(f"图表已保存: {save_path}")
@@ -1346,7 +1356,7 @@ def run_sensitivity_analysis(save_dir: str = None, exp_config: Dict = None):
 
     save_path = None
     if save_dir:
-        save_path = f"{save_dir}/sensitivity_distance_route_factor.png"
+        save_path = f"{save_dir}/sensitivity_distance_route_factor{ext}"
     plot_distance_route_factor_heatmap(
         list(distances_hm),
         list(route_factors_hm),
@@ -1357,6 +1367,7 @@ def run_sensitivity_analysis(save_dir: str = None, exp_config: Dict = None):
             "E-bike Velocity": f"{default_ebike_params.velocity:.2f} km/h",
             "Drone Velocity": f"{default_drone_params.v_level:.2f} km/h",
         },
+        for_latex=for_latex,
     )
     if save_path:
         print(f"\n图表已保存: {save_path}")
@@ -1380,9 +1391,11 @@ if __name__ == "__main__":
     )
     exp_config = load_config(os.path.join(project_root, "experiment.toml"))
     figures_dir = exp_config["figures_dir"]
+    for_latex = exp_config.get("for_latex", False)
 
     lca = run_validation_tests()
     run_sensitivity_analysis(
         save_dir=os.path.join(figures_dir, "sensitivity"),
         exp_config=exp_config,
+        for_latex=for_latex,
     )

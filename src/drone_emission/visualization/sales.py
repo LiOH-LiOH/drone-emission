@@ -18,7 +18,7 @@ from ._utils import (
 HEATMAP_PADDING_COEFF = 0.05
 
 
-def plot_sales_distribution(df, region_name, log_scale=False, save_path=None):
+def plot_sales_distribution(df, region_name, log_scale=False, save_path=None, for_latex=False):
     """Plot sales distribution histogram.
 
     Args:
@@ -26,6 +26,7 @@ def plot_sales_distribution(df, region_name, log_scale=False, save_path=None):
         region_name: Name of the region for title
         log_scale: If True, use logarithmic x-axis scale
         save_path: Path to save the figure
+        for_latex: If True, skip title for LaTeX export
     """
     plt.figure(figsize=(10, 6))
 
@@ -41,10 +42,12 @@ def plot_sales_distribution(df, region_name, log_scale=False, save_path=None):
 
     if log_scale:
         plt.xscale("log")
-        plt.title(f"The Distribution of Monthly Sales in {region_name} (Log Scale)")
+        if not for_latex:
+            plt.title(f"The Distribution of Monthly Sales in {region_name} (Log Scale)")
         plt.xlabel("Monthly Sales (log scale)")
     else:
-        plt.title(f"The Distribution of Monthly Sales in {region_name}")
+        if not for_latex:
+            plt.title(f"The Distribution of Monthly Sales in {region_name}")
         plt.xlabel("Monthly Sales")
 
     plt.ylabel("Frequency")
@@ -52,6 +55,8 @@ def plot_sales_distribution(df, region_name, log_scale=False, save_path=None):
 
     if save_path:
         os.makedirs(os.path.dirname(save_path), exist_ok=True)
+        if for_latex and not save_path.endswith('.pdf'):
+            save_path = save_path.rsplit('.', 1)[0] + '.pdf'
         plt.savefig(save_path, dpi=300, bbox_inches="tight")
         print(f"Visualization saved to {save_path}")
     else:
@@ -67,7 +72,7 @@ def _prepare_data(df):
 
 
 def plot_sales_heatmap(
-    df, region_name, region_name_cn, boundaries_dict=None, save_path=None
+    df, region_name, region_name_cn, boundaries_dict=None, save_path=None, for_latex=False
 ):
     lng, lat, sales = _prepare_data(df)
     fig, ax, aspect_ratio, plot_height, plot_width = setup_figure(
@@ -135,11 +140,12 @@ def plot_sales_heatmap(
         f"{region_name} Food Delivery Heatmap by Monthly Sales",
         stats_text,
         boundaries_dict,
+        for_latex,
     )
 
 
 def plot_store_scatter(
-    df, region_name, region_name_cn, boundaries_dict=None, save_path=None
+    df, region_name, region_name_cn, boundaries_dict=None, save_path=None, for_latex=False
 ):
     lng, lat, sales = _prepare_data(df)
     fig, ax, aspect_ratio, _, _ = setup_figure(lng, lat, boundaries_dict)
@@ -176,4 +182,5 @@ def plot_store_scatter(
         f"{region_name} Food Delivery Store Locations",
         stats_text,
         boundaries_dict,
+        for_latex,
     )

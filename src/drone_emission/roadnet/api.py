@@ -57,12 +57,14 @@ def load_roadnet(region_info, exp_config):
 
     roadnet_fig_path = os.path.join(fig_dir, f"{region_name_en.lower()}_roadnet.png")
 
+    for_latex = exp_config.get("for_latex", False)
     visualize_roadnet(
         G,
         city_name_cn=region_name_cn,
         boundaries_dict=large_bounds_dict,
         original_boundaries_dict=boundaries_dict,
         save_path=roadnet_fig_path,
+        for_latex=for_latex,
     )
 
     od_save_path = os.path.join(
@@ -135,12 +137,12 @@ def load_roadnet(region_info, exp_config):
 
         # Visualize distance comparison with 10 samples
         _visualize_sample_paths(
-            od_df, router, valid_mask, boundaries_dict, fig_dir, region_name_en
+            od_df, router, valid_mask, boundaries_dict, fig_dir, region_name_en, exp_config
         )
 
 
 def _visualize_sample_paths(
-    od_df, router, valid_mask, boundaries_dict, fig_dir, region_name_en, n_samples=10
+    od_df, router, valid_mask, boundaries_dict, fig_dir, region_name_en, exp_config, n_samples=10
 ):
     """抽取样本并绘制直线距离与路网距离对比图"""
     # 筛选有效路径，并确保有一定的路网距离
@@ -217,9 +219,11 @@ def _visualize_sample_paths(
         fig_dir, f"{region_name_en.lower()}_distance_comparison.png"
     )
 
+    for_latex = exp_config.get("for_latex", False)
     visualize_distance_comparison(
         router.G,
         sample_paths,
         boundaries_dict=sample_bounds,
         save_path=comparison_fig_path,
+        for_latex=for_latex,
     )
