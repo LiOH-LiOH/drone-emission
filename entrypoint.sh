@@ -7,9 +7,20 @@
 #   ./entrypoint.sh 4         # 4 parallel jobs, remote env
 #   ./entrypoint.sh 1 local   # Sequential, local env
 
-cd "$(dirname "$0")/src/drone_emission"
+cd "$(dirname "$0")"
 
-REGIONS=(jianghan pudong yuzhong siming gulou)
+# Activate virtual environment if it exists
+if [ -d ".venv" ]; then
+    echo "Activating .venv..."
+    source .venv/bin/activate
+else
+    echo "Warning: .venv not found, using system Python"
+fi
+
+cd src/drone_emission
+
+# REGIONS=(jianghan pudong yuzhong siming gulou)
+REGIONS=(jianghan)
 
 PARALLEL=${1:-1}  # Default to 1 (sequential), pass number for parallel jobs
 ENV=${2:-remote}  # Default to remote (entrypoint.sh is typically run on server)

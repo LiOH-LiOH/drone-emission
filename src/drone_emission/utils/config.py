@@ -1,5 +1,10 @@
-import tomllib
+import sys
 from typing import Any, Dict
+
+if sys.version_info >= (3, 11):
+    import tomllib
+else:
+    import tomli as tomllib
 
 
 def load_config(config_path: str, env: str = None) -> Dict[str, Any]:

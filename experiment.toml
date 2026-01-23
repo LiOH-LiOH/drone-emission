@@ -38,10 +38,10 @@ fetch_roadnet = false
 
 # ============ Remote Environment ============
 [remote]
-data_dir = "~/code/drone-emission/data"
-figures_dir = "~/code/drone-emission/figures"
-sales_path = "~/code/drone-emission/data/combined_data.csv"
-gef_path = "~/code/drone-emission/data/gef_china.csv"
-buildings_data_dir = "~/data/province"  # CMAB building data directory
+data_dir = "/home/jingxian/code/drone-emission/data"
+figures_dir = "/home/jingxian/code/drone-emission/figures"
+sales_path = "/home/jingxian/code/drone-emission/data/combined_data.csv"
+gef_path = "/home/jingxian/code/drone-emission/data/gef_china.csv"
+buildings_data_dir = "/home/jingxian/data/province"  # CMAB building data directory
 fetch_buildings = true
 fetch_roadnet = true

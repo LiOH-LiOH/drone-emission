@@ -132,7 +132,14 @@
       "min_lng": 114.24,
       "max_lng": 114.32
     },
-    "stats": {},
+    "stats": {
+      "enlarged_boundaries": {
+        "min_lat": 30.553020351822436,
+        "max_lat": 30.67697964817756,
+        "min_lng": 114.20865050607469,
+        "max_lng": 114.3513494939253
+      }
+    },
     "cache": {}
   },
   "gulou": {
