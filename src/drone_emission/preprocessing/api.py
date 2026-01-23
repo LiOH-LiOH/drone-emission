@@ -17,7 +17,7 @@ def prepare_sales(region_info, exp_config):
     region_level = region_config["region_level"]
     boundaries_dict = region_config.get("boundaries_dict", None)
 
-    data_path = os.path.join(exp_config["data_dir"], "combined_data.csv")
+    data_path = exp_config["sales_path"]
 
     save_dir = os.path.join(
         exp_config["data_dir"], region_level, region_name_en.lower()

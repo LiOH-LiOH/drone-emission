@@ -4,7 +4,11 @@ import geopandas as gpd
 import numpy as np
 from visualization.buildings import visualize_building_heights, visualize_buildings
 
-from .fetch_buildings import fetch_region_buildings
+from .fetch_buildings import (
+    fetch_region_buildings,
+    get_province_from_district,
+    load_buildings_from_local,
+)
 
 # Earth radius in kilometers
 EARTH_RADIUS_KM = 6371.0
@@ -68,11 +72,37 @@ def load_buildings(region_info, exp_config):
 
     # Fetch buildings if requested or file doesn't exist
     if exp_config.get("fetch_buildings", False) or not os.path.exists(geojson_file):
-        fetch_region_buildings(
-            region_name=region_name_en,
-            bbox_4326=bbox_4326,
-            save_path=geojson_file,
-        )
+        # Check if we should use local CMAB data or WFS
+        buildings_data_dir = exp_config.get("buildings_data_dir", None)
+
+        if buildings_data_dir and os.path.isdir(buildings_data_dir):
+            # Use local CMAB data
+            try:
+                province_name = get_province_from_district(
+                    region_name_cn, exp_config["sales_path"]
+                )
+                print(f"Using local CMAB data: {province_name}")
+                load_buildings_from_local(
+                    region_name=region_name_en,
+                    bbox_4326=bbox_4326,
+                    save_path=geojson_file,
+                    buildings_data_dir=buildings_data_dir,
+                    province_name=province_name,
+                )
+            except Exception as e:
+                print(f"Error loading local data: {e}. Falling back to WFS.")
+                fetch_region_buildings(
+                    region_name=region_name_en,
+                    bbox_4326=bbox_4326,
+                    save_path=geojson_file,
+                )
+        else:
+            # Use WFS (original behavior)
+            fetch_region_buildings(
+                region_name=region_name_en,
+                bbox_4326=bbox_4326,
+                save_path=geojson_file,
+            )
 
     # Load buildings from file
     print(f"Reading {geojson_file}...")

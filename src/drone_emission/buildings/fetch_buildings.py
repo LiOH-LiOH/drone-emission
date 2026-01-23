@@ -291,6 +291,148 @@ def fetch_region_buildings(region_name, bbox_4326, save_path):
     )
 
 
+def get_province_from_district(district_name_cn: str, sales_path: str) -> str:
+    """
+    Get province name from district name using sales data CSV.
+
+    Args:
+        district_name_cn: Chinese district name (e.g., "南山区", "浦东新区")
+        sales_path: Path to sales CSV file (combined_data.csv)
+
+    Returns:
+        Province name in Chinese (e.g., "广东省", "上海市")
+    """
+    import pandas as pd
+
+    if not os.path.exists(sales_path):
+        raise FileNotFoundError(f"Sales data not found at {sales_path}")
+
+    # Read only necessary columns to save memory
+    df = pd.read_csv(sales_path, usecols=["province", "district"])
+
+    # Find province for the district
+    match = df[df["district"] == district_name_cn]["province"].drop_duplicates()
+
+    if match.empty:
+        raise ValueError(f"District '{district_name_cn}' not found in sales data")
+
+    return match.iloc[0]
+
+
+def load_buildings_from_local(
+    region_name: str,
+    bbox_4326: tuple,
+    save_path: str,
+    buildings_data_dir: str,
+    province_name: str,
+) -> dict:
+    """
+    Load buildings from local CMAB shapefiles by filtering with bbox.
+
+    Memory-efficient: processes one shapefile at a time.
+
+    Args:
+        region_name: Region name for output file naming
+        bbox_4326: Bounding box in WGS84 (min_lng, min_lat, max_lng, max_lat)
+        save_path: Path to save the output GeoJSON
+        buildings_data_dir: Base directory containing province folders
+        province_name: Chinese province name (e.g., "广东省")
+
+    Returns:
+        GeoJSON dict with filtered buildings
+    """
+    import gc
+
+    import geopandas as gpd
+    from shapely.geometry import box
+
+    province_dir = os.path.join(buildings_data_dir, province_name)
+    if not os.path.isdir(province_dir):
+        raise FileNotFoundError(f"Province directory not found: {province_dir}")
+
+    # Convert bbox to EPSG:3857 for filtering (CMAB data is in 3857)
+    bbox_3857 = convert_bbox_to_3857(bbox_4326)
+    filter_box = box(bbox_3857[0], bbox_3857[1], bbox_3857[2], bbox_3857[3])
+
+    # Get all shapefiles
+    shp_files = [f for f in os.listdir(province_dir) if f.endswith(".shp")]
+
+    print(f"\n{'=' * 60}")
+    print(f"Loading buildings from local CMAB data")
+    print(f"Province: {province_name}")
+    print(f"Shapefiles to scan: {len(shp_files)}")
+    print(f"Bbox (WGS84): {bbox_4326}")
+    print(f"Bbox (3857): {bbox_3857}")
+    print("=" * 60)
+
+    all_features = []
+    total_scanned = 0
+    total_matched = 0
+
+    for i, shp_file in enumerate(shp_files):
+        shp_path = os.path.join(province_dir, shp_file)
+
+        try:
+            # Read shapefile with bbox filter (geopandas optimization)
+            gdf = gpd.read_file(shp_path, bbox=filter_box)
+
+            if gdf.empty:
+                continue
+
+            # Filter buildings that intersect with bbox
+            gdf_filtered = gdf[gdf.geometry.intersects(filter_box)]
+
+            if not gdf_filtered.empty:
+                # Convert to GeoJSON features
+                for _, row in gdf_filtered.iterrows():
+                    feature = {
+                        "type": "Feature",
+                        "geometry": row.geometry.__geo_interface__,
+                        "properties": {
+                            k: v for k, v in row.items() if k != "geometry"
+                        },
+                    }
+                    all_features.append(feature)
+
+                matched = len(gdf_filtered)
+                total_matched += matched
+                print(f"  [{i+1}/{len(shp_files)}] {shp_file}: +{matched} buildings")
+
+            total_scanned += len(gdf)
+
+            # Memory cleanup
+            del gdf, gdf_filtered
+            gc.collect()
+
+        except Exception as e:
+            print(f"  [{i+1}/{len(shp_files)}] {shp_file}: Error - {e}")
+            continue
+
+    print(f"\nScanned {total_scanned:,} buildings, matched {total_matched:,}")
+
+    if not all_features:
+        print("No buildings found in the specified area.")
+        return None
+
+    # Create GeoJSON result
+    result = {
+        "type": "FeatureCollection",
+        "name": f"CMAB_{region_name}",
+        "crs": {"type": "name", "properties": {"name": "urn:ogc:def:crs:EPSG::3857"}},
+        "features": all_features,
+    }
+
+    # Save to file
+    print(f"\nSaving to {save_path}...")
+    with open(save_path, "w", encoding="utf-8") as f:
+        json.dump(result, f)
+
+    file_size_mb = os.path.getsize(save_path) / (1024 * 1024)
+    print(f"Saved {len(all_features):,} buildings ({file_size_mb:.1f} MB)")
+
+    return result
+
+
 # Shenzhen bounding box in WGS84 (EPSG:4326)
 # Longitude: 113.75°E to 114.65°E
 # Latitude: 22.45°N to 22.85°N
