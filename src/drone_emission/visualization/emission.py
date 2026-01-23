@@ -500,12 +500,27 @@ def plot_distance_route_factor_heatmap(
     cbar = plt.colorbar(im, ax=ax)
     cbar.set_label("Drone Emissions Relative to E-bike (%)", fontsize=12)
 
-    # 添加等值线
+    # 添加等值线 (类似等高线，显示不同排放差异水平)
     X, Y = np.meshgrid(distances, route_factors)
+
+    # 根据数据范围动态生成等值线水平，间隔20%
+    data_min = np.floor(emission_diff_matrix.min() / 20) * 20
+    data_max = np.ceil(emission_diff_matrix.max() / 20) * 20
+    contour_levels = np.arange(data_min, data_max + 1, 20)
+
+    # 绘制所有等值线
+    linewidths = [3 if lvl == 0 else 2 for lvl in contour_levels]
+    linestyles = ["-" if lvl == 0 else "--" for lvl in contour_levels]
     contour = ax.contour(
-        X, Y, emission_diff_matrix, levels=[0], colors="black", linewidths=2
+        X,
+        Y,
+        emission_diff_matrix,
+        levels=contour_levels,
+        colors="black",
+        linewidths=linewidths,
+        linestyles=linestyles,
     )
-    ax.clabel(contour, inline=True, fontsize=10, fmt="Breakeven")
+    ax.clabel(contour, inline=True, fontsize=9, fmt=lambda x: f"{x:+.0f}%")
 
     ax.set_xlabel("Delivery Distance (km)", fontsize=12)
     ax.set_ylabel("Route Factor (road/straight-line)", fontsize=12)
@@ -899,6 +914,105 @@ def plot_velocity_power_stacked(
     # 添加实验设置信息框
     if not for_latex:
         add_experiment_info_box(ax2, experiment_settings, loc="lower right")
+
+    plt.tight_layout()
+
+    if save_path:
+        os.makedirs(os.path.dirname(save_path), exist_ok=True)
+        if for_latex and not save_path.endswith(".pdf"):
+            save_path = save_path.rsplit(".", 1)[0] + ".pdf"
+        plt.savefig(save_path, dpi=dpi, bbox_inches="tight")
+        plt.close()
+        return save_path
+    else:
+        plt.show()
+        return None
+
+
+def plot_distance_detour_scatter(
+    straight_distances: "np.ndarray",
+    road_distances: "np.ndarray",
+    annual_sales: "np.ndarray" = None,
+    save_path: str = None,
+    dpi: int = 150,
+    for_latex: bool = False,
+) -> str:
+    """
+    绘制直线距离与绕行比的关系图（中位数线 + 10-90%区间）
+    """
+    # 计算绕行比
+    valid_mask = (straight_distances > 0) & (road_distances > 0)
+    distances = straight_distances[valid_mask]
+    detour_ratios = road_distances[valid_mask] / distances
+
+    fig, ax = plt.subplots(figsize=(10, 6))
+
+    # 分箱计算统计量
+    n_bins = 20
+    d_min, d_max = distances.min(), distances.max()
+    bin_edges = np.linspace(d_min, d_max, n_bins + 1)
+    bin_centers = (bin_edges[:-1] + bin_edges[1:]) / 2
+    # 首尾使用边界值而非中心
+    bin_centers[0] = d_min
+    bin_centers[-1] = d_max
+    bin_medians = []
+    bin_p10 = []
+    bin_p90 = []
+
+    for i in range(n_bins):
+        mask = (distances >= bin_edges[i]) & (distances < bin_edges[i + 1])
+        if mask.sum() > 5:
+            bin_medians.append(np.median(detour_ratios[mask]))
+            bin_p10.append(np.percentile(detour_ratios[mask], 10))
+            bin_p90.append(np.percentile(detour_ratios[mask], 90))
+        else:
+            bin_medians.append(np.nan)
+            bin_p10.append(np.nan)
+            bin_p90.append(np.nan)
+
+    bin_medians = np.array(bin_medians)
+    bin_p10 = np.array(bin_p10)
+    bin_p90 = np.array(bin_p90)
+
+    # 绘制中位数线和10-90%区间
+    valid_bins = ~np.isnan(bin_medians)
+    ax.fill_between(
+        bin_centers[valid_bins],
+        bin_p10[valid_bins],
+        bin_p90[valid_bins],
+        alpha=0.3,
+        color="#2196F3",
+        label="10-90% Range",
+    )
+    ax.plot(bin_centers[valid_bins], bin_medians[valid_bins], "#1565C0", linewidth=2.5, label="Median")
+
+    # 添加参考线
+    ax.axhline(y=1.0, color="gray", linestyle="--", linewidth=1.5, label="Direct (ratio=1)")
+
+    ax.set_xlabel("Straight-line Distance (km)", fontsize=12)
+    ax.set_ylabel("Detour Ratio (road / straight-line)", fontsize=12)
+    if not for_latex:
+        ax.set_title("Distance vs Detour Ratio", fontsize=14)
+    ax.legend(loc="upper right", fontsize=10)
+    ax.grid(True, alpha=0.3)
+    ax.set_xlim(d_min, d_max)
+
+    # 设置 y 轴范围
+    ax.set_ylim(0.9, np.nanmax(bin_p90) * 1.05)
+
+    # 添加统计信息
+    if not for_latex:
+        stats_text = (
+            f"n = {len(distances):,}\n"
+            f"Mean: {detour_ratios.mean():.2f}\n"
+            f"Median: {np.median(detour_ratios):.2f}"
+        )
+        ax.text(
+            0.02, 0.98, stats_text,
+            transform=ax.transAxes, fontsize=10,
+            verticalalignment="top",
+            bbox=dict(boxstyle="round", facecolor="wheat", alpha=0.8),
+        )
 
     plt.tight_layout()
 

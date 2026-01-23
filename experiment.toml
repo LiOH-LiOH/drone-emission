@@ -1,14 +1,9 @@
-data_dir = "/Users/linjingxian/Code/drone-emission/data"
-figures_dir = "/Users/linjingxian/Code/drone-emission/figures"
+# Active environment: "local" or "remote"
+# Override with --env flag: python main.py --env remote
+active_env = "local"
 
-gef_path = "/Users/linjingxian/Code/drone-emission/data/gef_china.csv"
-
-fetch_buildings = false
-fetch_roadnet = false
-
+# ============ Default Settings (shared) ============
 delivery_radius_km = 3
-
-# Figure output settings
 for_latex = true  # Set to true for LaTeX export (PDF, no titles/info boxes)
 
 # OD pair generation parameters
@@ -31,3 +26,19 @@ v_level = 60              # Horizontal flight speed (km/h)
 v_vertical = 20           # Vertical takeoff/landing speed (km/h)
 h_takeoff = 100           # Takeoff height (m)
 hover_time = 10           # Hover time per delivery (s)
+
+# ============ Local Environment ============
+[local]
+data_dir = "/Users/linjingxian/Code/drone-emission/data"
+figures_dir = "/Users/linjingxian/Code/drone-emission/figures"
+gef_path = "/Users/linjingxian/Code/drone-emission/data/gef_china.csv"
+fetch_buildings = false
+fetch_roadnet = false
+
+# ============ Remote Environment ============
+[remote]
+data_dir = "~/code/drone-emission/data"
+figures_dir = "~/code/drone-emission/figures"
+gef_path = "~/code/drone-emission/data/gef_china.csv"
+fetch_buildings = true
+fetch_roadnet = true

@@ -4,6 +4,7 @@ import numpy as np
 import pandas as pd
 from utils.grid_emission_factor import get_factor
 from visualization.emission import (
+    plot_distance_detour_scatter,
     plot_emission_reduction_analysis,
     plot_road_distance_distribution,
 )
@@ -70,27 +71,42 @@ def cal_emission(region_info, exp_config):
         f"E-bike velocity = {ebike_params.velocity} km/h, Drone velocity = {drone_params.v_level} km/h"
     )
 
-    # 先计算每个订单的无人机和电动自行车排放
-    drone_emissions_list = []
-    ebike_emissions_list = []
-    road_distances_list = []
+    # 检查是否已有排放列，避免重复计算
+    has_emission_cols = "drone_emission_kg" in od_df.columns and "ebike_emission_kg" in od_df.columns
 
-    for row in od_df.itertuples():
-        distance_km = row.distance_km  # 直线距离，用于无人机
-        road_distance_km = row.road_distance_m / 1000.0  # 道路距离，用于电动自行车
+    if has_emission_cols:
+        print("Emission columns already exist, loading from CSV...")
+        drone_emissions = od_df["drone_emission_kg"].values
+        ebike_emissions = od_df["ebike_emission_kg"].values
+        road_distances = od_df["road_distance_m"].values / 1000.0
+    else:
+        print("Calculating emissions for each OD pair...")
+        drone_emissions_list = []
+        ebike_emissions_list = []
+        road_distances_list = []
 
-        result_drone = lca.calculate_drone_use_phase_emissions(distance_km, payload_kg)
-        result_ebike = lca.calculate_ebike_use_phase_emissions(
-            road_distance_km, payload_kg, rider_weight
-        )
+        for row in od_df.itertuples():
+            distance_km = row.distance_km  # 直线距离，用于无人机
+            road_distance_km = row.road_distance_m / 1000.0  # 道路距离，用于电动自行车
 
-        drone_emissions_list.append(result_drone["emissions_kg_co2e"])
-        ebike_emissions_list.append(result_ebike["emissions_kg_co2e"])
-        road_distances_list.append(road_distance_km)
+            result_drone = lca.calculate_drone_use_phase_emissions(distance_km, payload_kg)
+            result_ebike = lca.calculate_ebike_use_phase_emissions(
+                road_distance_km, payload_kg, rider_weight
+            )
 
-    drone_emissions = np.array(drone_emissions_list)
-    ebike_emissions = np.array(ebike_emissions_list)
-    road_distances = np.array(road_distances_list)
+            drone_emissions_list.append(result_drone["emissions_kg_co2e"])
+            ebike_emissions_list.append(result_ebike["emissions_kg_co2e"])
+            road_distances_list.append(road_distance_km)
+
+        drone_emissions = np.array(drone_emissions_list)
+        ebike_emissions = np.array(ebike_emissions_list)
+        road_distances = np.array(road_distances_list)
+
+        # 保存排放数据到 CSV
+        od_df["drone_emission_kg"] = drone_emissions
+        od_df["ebike_emission_kg"] = ebike_emissions
+        od_df.to_csv(od_save_path, index=False)
+        print(f"Emission data saved to {od_save_path}")
 
     # 基准：全部电动自行车排放
     total_ebike_emissions = ebike_emissions.sum()
@@ -160,7 +176,9 @@ def cal_emission(region_info, exp_config):
         fig_save_dir, f"{region_name_en.lower()}_emission_reduction.png"
     )
     for_latex = exp_config.get("for_latex", False)
-    fig_path = plot_emission_reduction_analysis(results_df, save_path=save_path, for_latex=for_latex)
+    fig_path = plot_emission_reduction_analysis(
+        results_df, save_path=save_path, for_latex=for_latex
+    )
     print(f"\n图表已保存: {fig_path}")
 
     # 绘制道路距离分布图（按年销量加权）
@@ -172,5 +190,16 @@ def cal_emission(region_info, exp_config):
         road_distances, annual_sales, save_path=dist_save_path, for_latex=for_latex
     )
     print(f"道路距离分布图已保存: {dist_fig_path}")
+
+    # 绘制距离与绕行比散点图
+    straight_distances = od_df["distance_km"].values
+    detour_save_path = os.path.join(
+        fig_save_dir, f"{region_name_en.lower()}_distance_detour_scatter.png"
+    )
+    detour_fig_path = plot_distance_detour_scatter(
+        straight_distances, road_distances, annual_sales,
+        save_path=detour_save_path, for_latex=for_latex
+    )
+    print(f"距离-绕行比散点图已保存: {detour_fig_path}")
 
     return results_df
