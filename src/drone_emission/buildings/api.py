@@ -74,30 +74,33 @@ def load_buildings(region_info, exp_config):
     if exp_config.get("fetch_buildings", False) or not os.path.exists(geojson_file):
         # Check if we should use local CMAB data or WFS
         buildings_data_dir = exp_config.get("buildings_data_dir", None)
+        use_wfs = False
 
         if buildings_data_dir and os.path.isdir(buildings_data_dir):
-            # Use local CMAB data
+            # Try local CMAB data first
             try:
                 province_name = get_province_from_district(
                     region_name_cn, exp_config["sales_path"]
                 )
                 print(f"Using local CMAB data: {province_name}")
-                load_buildings_from_local(
+                result = load_buildings_from_local(
                     region_name=region_name_en,
                     bbox_4326=bbox_4326,
                     save_path=geojson_file,
                     buildings_data_dir=buildings_data_dir,
                     province_name=province_name,
                 )
+                # If no buildings found, fall back to WFS
+                if result is None:
+                    print("No CMAB coverage for this region. Falling back to WFS.")
+                    use_wfs = True
             except Exception as e:
                 print(f"Error loading local data: {e}. Falling back to WFS.")
-                fetch_region_buildings(
-                    region_name=region_name_en,
-                    bbox_4326=bbox_4326,
-                    save_path=geojson_file,
-                )
+                use_wfs = True
         else:
-            # Use WFS (original behavior)
+            use_wfs = True
+
+        if use_wfs:
             fetch_region_buildings(
                 region_name=region_name_en,
                 bbox_4326=bbox_4326,

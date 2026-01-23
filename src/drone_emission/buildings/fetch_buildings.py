@@ -383,14 +383,32 @@ def load_buildings_from_local(
             gdf_filtered = gdf[gdf.geometry.intersects(filter_box)]
 
             if not gdf_filtered.empty:
-                # Convert to GeoJSON features
+                # Column mapping: CMAB -> standard names
+                column_map = {
+                    "pred_h": "height",  # Building height
+                    "pred_h_r": "height",  # Alternative height column
+                    "Shape_A": "area",  # Building base area
+                    "Bu_Area": "total_area",  # Total building area
+                    "Floor": "floors",  # Number of floors
+                    "type_2023": "function",  # Building function
+                }
+
+                # Convert to GeoJSON features with column mapping
                 for _, row in gdf_filtered.iterrows():
+                    props = {}
+                    for k, v in row.items():
+                        if k == "geometry":
+                            continue
+                        # Apply column mapping
+                        key = column_map.get(k, k)
+                        # Don't overwrite if already set (e.g., height from pred_h)
+                        if key not in props:
+                            props[key] = v
+
                     feature = {
                         "type": "Feature",
                         "geometry": row.geometry.__geo_interface__,
-                        "properties": {
-                            k: v for k, v in row.items() if k != "geometry"
-                        },
+                        "properties": props,
                     }
                     all_features.append(feature)
 
