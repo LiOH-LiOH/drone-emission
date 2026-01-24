@@ -147,7 +147,7 @@ def generate_od_pairs(region_info, exp_config):
         store_coords[example_idx][0],
     )  # (lng, lat)
 
-    large_bounds_dict = region_info.get_cache("enlarged_boundaries")
+    large_bounds_dict = region_info.get_stat("enlarged_boundaries")
 
     for_latex = exp_config.get("for_latex", False)
     visualize_store_coverage(

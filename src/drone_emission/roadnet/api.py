@@ -16,7 +16,7 @@ def load_roadnet(region_info, exp_config):
     region_name_cn = region_config.get("region_name_cn")
     region_level = region_config["region_level"]
     boundaries_dict = region_config.get("boundaries_dict")
-    large_bounds_dict = region_info.get_cache("enlarged_boundaries")
+    large_bounds_dict = region_info.get_stat("enlarged_boundaries")
 
     # Setup data directory and file path
     data_dir = os.path.join(
