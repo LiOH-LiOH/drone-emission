@@ -72,7 +72,9 @@ def cal_emission(region_info, exp_config):
     )
 
     # 检查是否已有排放列，避免重复计算
-    has_emission_cols = "drone_emission_kg" in od_df.columns and "ebike_emission_kg" in od_df.columns
+    has_emission_cols = (
+        "drone_emission_kg" in od_df.columns and "ebike_emission_kg" in od_df.columns
+    )
 
     if has_emission_cols:
         print("Emission columns already exist, loading from CSV...")
@@ -89,7 +91,9 @@ def cal_emission(region_info, exp_config):
             distance_km = row.distance_km  # 直线距离，用于无人机
             road_distance_km = row.road_distance_m / 1000.0  # 道路距离，用于电动自行车
 
-            result_drone = lca.calculate_drone_use_phase_emissions(distance_km, payload_kg)
+            result_drone = lca.calculate_drone_use_phase_emissions(
+                distance_km, payload_kg
+            )
             result_ebike = lca.calculate_ebike_use_phase_emissions(
                 road_distance_km, payload_kg, rider_weight
             )
@@ -153,6 +157,13 @@ def cal_emission(region_info, exp_config):
 
     results_df = pd.DataFrame(results)
 
+    # Find max emission reduction and save stats
+    max_idx = results_df["reduction"].idxmax()
+    max_row = results_df.loc[max_idx]
+    region_info.set_stat("max_emission_reduction_pct", float(max_row["reduction"]))
+    region_info.set_stat("optimal_threshold_km", float(max_row["threshold"]))
+    region_info.set_stat("optimal_drone_ratio_pct", float(max_row["drone_ratio"]))
+
     # 打印结果表格
     print("\n" + "=" * 80)
     print("混合场景对比 (road_distance > 阈值 用无人机，否则用电动自行车)")
@@ -197,8 +208,11 @@ def cal_emission(region_info, exp_config):
         fig_save_dir, f"{region_name_en.lower()}_distance_detour_scatter.png"
     )
     detour_fig_path = plot_distance_detour_scatter(
-        straight_distances, road_distances, annual_sales,
-        save_path=detour_save_path, for_latex=for_latex
+        straight_distances,
+        road_distances,
+        annual_sales,
+        save_path=detour_save_path,
+        for_latex=for_latex,
     )
     print(f"距离-绕行比散点图已保存: {detour_fig_path}")
 
