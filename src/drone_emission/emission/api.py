@@ -2,7 +2,8 @@ import os
 
 import numpy as np
 import pandas as pd
-from utils.grid_emission_factor import get_factor
+from buildings.fetch_buildings import get_province_from_district
+from utils.grid_emission_factor import fetch_factor, normalize_province_name
 from visualization.emission import (
     plot_distance_detour_scatter,
     plot_emission_reduction_analysis,
@@ -39,14 +40,23 @@ def cal_emission(region_info, exp_config):
     payload_kg = emission_cfg["payload_kg"]
     rider_weight = emission_cfg["rider_weight"]
 
-    # parent_city 是小写英文城市名 (如 "shenzhen")，与 CITY_EN_TO_CN 键匹配
-    parent_city = region_config["parent_city"]
-    print(f"Region parent city: {parent_city}")
+    # 获取省份名称（用于电网排放因子查询）
+    province = region_info.get_stat("province")
+    if not province:
+        # 从 combined_data.csv 查询省份
+        region_name_cn = region_config["region_name_cn"]
+        sales_path = exp_config["sales_path"]
+        province_raw = get_province_from_district(region_name_cn, sales_path)
+        # 转换为 gef_china.csv 中的格式
+        province = normalize_province_name(province_raw)
+        region_info.set_stat("province", province)
+    print(f"Region province: {province}")
 
-    # 获取城市对应的电网排放因子
+    # 获取省份对应的电网排放因子
     gef_path = exp_config.get("gef_path")
     if gef_path:
-        e_use = get_factor(parent_city, gef_path)
+        e_use = fetch_factor(province, gef_path)
+        print(f"CO2 emission factor for {province}: {e_use} kgCO2eq/kWh")
     else:
         e_use = emission_cfg.get("e_use", 0.4)
         print(f"Warning: gef_path not found in config, using default e_use = {e_use}")
