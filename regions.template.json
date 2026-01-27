@@ -62,7 +62,34 @@
       "min_lng": 121.48,
       "max_lng": 121.56
     },
-    "stats": {},
+    "stats": {
+      "province": "上海",
+      "max_emission_reduction_pct": 60.110833310069054,
+      "optimal_threshold_km": 0.3782347318482397,
+      "optimal_drone_ratio_pct": 95.0002143010215,
+      "enlarged_boundaries": {
+        "min_lat": 31.173020351822437,
+        "max_lat": 31.306979648177563,
+        "min_lng": 121.44844494453284,
+        "max_lng": 121.59155505546717
+      },
+      "building_count": 69932,
+      "building_height_mean": 30.542748765288273,
+      "building_height_max": 155.10955810546875,
+      "building_height_min": 0.0,
+      "building_volume_total": 1408268468.4077265,
+      "building_area_total": 44391266.90553362,
+      "roadnet_node_count": 88566,
+      "roadnet_edge_count": 171338,
+      "roadnet_length_total": 5436516.71771382,
+      "avg_road_distance_m": 4412.910626920068,
+      "avg_straight_distance_m": 1680.1050188536094,
+      "detour_ratio": 2.6265683260271087,
+      "valid_path_count": 339078,
+      "invalid_path_count": 10897,
+      "max_lifecycle_reduction_pct": 64.7496914676654,
+      "lifecycle_all_drone_reduction_pct": 63.494527102033246
+    },
     "cache": {}
   },
   "chaoyang": {
@@ -82,7 +109,27 @@
         "max_lat": 40.006979648177555,
         "min_lng": 116.36482431960074,
         "max_lng": 116.58517568039926
-      }
+      },
+      "province": "北京",
+      "max_emission_reduction_pct": 17.411247025113788,
+      "optimal_threshold_km": 0.904905804956551,
+      "optimal_drone_ratio_pct": 90.71455827183516,
+      "building_count": 97308,
+      "building_height_mean": 18.05383336642842,
+      "building_height_max": 85.74557003278713,
+      "building_height_min": 3.0,
+      "building_volume_total": 1480763663.301058,
+      "building_area_total": 75476741.19943923,
+      "roadnet_node_count": 105339,
+      "roadnet_edge_count": 208982,
+      "roadnet_length_total": 8743452.82016075,
+      "avg_road_distance_m": 2620.3216917490004,
+      "avg_straight_distance_m": 1738.3821604925006,
+      "detour_ratio": 1.5073335146321554,
+      "valid_path_count": 1646255,
+      "invalid_path_count": 49324,
+      "max_lifecycle_reduction_pct": 28.972085703234885,
+      "lifecycle_all_drone_reduction_pct": 26.545257556169936
     },
     "cache": {}
   },
@@ -113,7 +160,20 @@
       "avg_straight_distance_m": 1664.9791513462437,
       "detour_ratio": 1.64452240649234,
       "valid_path_count": 1037311,
-      "invalid_path_count": 35792
+      "invalid_path_count": 35792,
+      "province": "广东",
+      "max_emission_reduction_pct": 20.9257408728433,
+      "optimal_threshold_km": 0.8563606384732412,
+      "optimal_drone_ratio_pct": 90.53809373377952,
+      "building_count": 77727,
+      "building_height_mean": 20.510665167674784,
+      "building_height_max": 137.57250966850543,
+      "building_height_min": 3.0,
+      "building_volume_total": 1085388178.3211896,
+      "building_area_total": 51350873.538232654,
+      "roadnet_length_total": 6170071.844468212,
+      "max_lifecycle_reduction_pct": 34.28324101839737,
+      "lifecycle_all_drone_reduction_pct": 31.869061928999585
     },
     "cache": {}
   },
@@ -128,7 +188,34 @@
       "min_lng": 120.1,
       "max_lng": 120.18
     },
-    "stats": {},
+    "stats": {
+      "province": "浙江",
+      "max_emission_reduction_pct": 12.526243861534796,
+      "optimal_threshold_km": 0.8812530013771959,
+      "optimal_drone_ratio_pct": 89.7499005138675,
+      "enlarged_boundaries": {
+        "min_lat": 30.193020351822437,
+        "max_lat": 30.326979648177563,
+        "min_lng": 120.06876442931778,
+        "max_lng": 120.21123557068222
+      },
+      "building_count": 42397,
+      "building_height_mean": 15.302074899315164,
+      "building_height_max": 115.96581588129048,
+      "building_height_min": 3.0,
+      "building_volume_total": 485434816.7908723,
+      "building_area_total": 31357255.878806807,
+      "roadnet_node_count": 92597,
+      "roadnet_edge_count": 185920,
+      "roadnet_length_total": 5458956.467335084,
+      "avg_road_distance_m": 2400.094172003597,
+      "avg_straight_distance_m": 1691.0070323314785,
+      "detour_ratio": 1.419328321003174,
+      "valid_path_count": 226662,
+      "invalid_path_count": 4526,
+      "max_lifecycle_reduction_pct": 25.555227411829705,
+      "lifecycle_all_drone_reduction_pct": 23.601757120077785
+    },
     "cache": {}
   },
   "wuhou": {
@@ -158,7 +245,20 @@
       "avg_straight_distance_m": 1748.0381529325323,
       "detour_ratio": 1.5665830165165946,
       "valid_path_count": 63153,
-      "invalid_path_count": 7681
+      "invalid_path_count": 7681,
+      "province": "四川",
+      "max_emission_reduction_pct": 18.702096623533734,
+      "optimal_threshold_km": 0.3,
+      "optimal_drone_ratio_pct": 88.2076403986786,
+      "building_count": 69076,
+      "building_height_mean": 17.567232883133716,
+      "building_height_max": 94.2106774026944,
+      "building_height_min": 3.0,
+      "building_volume_total": 861536649.3559706,
+      "building_area_total": 48920892.29652662,
+      "roadnet_length_total": 4627261.874864715,
+      "max_lifecycle_reduction_pct": 48.33934040948992,
+      "lifecycle_all_drone_reduction_pct": 43.37365298332586
     },
     "cache": {}
   },
@@ -207,10 +307,23 @@
       "roadnet_node_count": 36223,
       "roadnet_edge_count": 69069,
       "avg_road_distance_m": 2331.2105833544897,
-      "avg_straight_distance_m": 1637.643151716485,
+      "avg_straight_distance_m": 1637.6431517164847,
       "detour_ratio": 1.4235156058943896,
       "valid_path_count": 263084,
-      "invalid_path_count": 21779
+      "invalid_path_count": 21779,
+      "province": "江苏",
+      "max_emission_reduction_pct": 12.449604437561618,
+      "optimal_threshold_km": 1.1384249802920192,
+      "optimal_drone_ratio_pct": 77.86936176337397,
+      "building_count": 41519,
+      "building_height_mean": 27.027982184130224,
+      "building_height_max": 123.76815032958984,
+      "building_height_min": 0.0,
+      "building_volume_total": 690566316.070443,
+      "building_area_total": 26653504.839682247,
+      "roadnet_length_total": 2824024.4780261945,
+      "max_lifecycle_reduction_pct": 23.33099128909851,
+      "lifecycle_all_drone_reduction_pct": 16.40291545948456
     },
     "cache": {}
   },
@@ -253,7 +366,34 @@
       "min_lng": 114.08,
       "max_lng": 114.18
     },
-    "stats": {},
+    "stats": {
+      "province": "广东",
+      "max_emission_reduction_pct": 15.42136212113539,
+      "optimal_threshold_km": 0.7243917778383491,
+      "optimal_drone_ratio_pct": 87.82993206577454,
+      "enlarged_boundaries": {
+        "min_lat": 22.50302035182244,
+        "max_lat": 22.626979648177564,
+        "min_lng": 114.0507836914014,
+        "max_lng": 114.2092163085986
+      },
+      "building_count": 30936,
+      "building_height_mean": 20.074230637861664,
+      "building_height_max": 120.38167542707397,
+      "building_height_min": 3.0,
+      "building_volume_total": 328208713.3736023,
+      "building_area_total": 17963245.210294474,
+      "roadnet_node_count": 128453,
+      "roadnet_edge_count": 243108,
+      "roadnet_length_total": 5144831.475246484,
+      "avg_road_distance_m": 2294.804820088317,
+      "avg_straight_distance_m": 1501.5980044177763,
+      "detour_ratio": 1.528241788639094,
+      "valid_path_count": 552635,
+      "invalid_path_count": 32637,
+      "max_lifecycle_reduction_pct": 29.76069522419725,
+      "lifecycle_all_drone_reduction_pct": 25.540821351814163
+    },
     "cache": {}
   },
   "yanta": {
