@@ -2,11 +2,13 @@
 \usepackage[utf8]{inputenc}
 % \usepackage{enumitem}  % Conflicts with beamer's enumerate
 \usepackage{booktabs}
+\usepackage{tikz}
+\usetikzlibrary{shapes.geometric, arrows.meta, positioning, calc, patterns}
 \usepackage{fontspec}
-% \usepackage{unicode-math}
+\usepackage{unicode-math}
 
-\setmainfont{Times New Roman}
-% \setmathfont{TeX Gyre Termes Math}  % Commented out - font not installed
+% \setmainfont{Times New Roman}
+\setmathfont{Latin Modern Math}
 
 \usetheme{Madrid}
 \usecolortheme{default}
@@ -64,6 +66,81 @@
 }
 %------------------------------------------------------------
 
+% Reusable OD flowchart command
+\newcommand{\ODFlowchart}{%
+\begin{tikzpicture}[
+    node distance=0.6cm and 1.2cm,
+    data/.style={rectangle, draw=blue!60, fill=blue!10, minimum width=1.6cm, minimum height=0.6cm, align=center, font=\scriptsize},
+    processed/.style={rectangle, draw=orange!70, fill=orange!15, rounded corners=3pt, minimum width=1.6cm, minimum height=0.6cm, align=center, font=\scriptsize},
+    output/.style={rectangle, draw=gray!70, fill=gray!10, rounded corners=3pt, minimum width=1.6cm, minimum height=0.6cm, align=center, font=\scriptsize},
+    model/.style={diamond, draw=teal!70, fill=teal!15, minimum width=1cm, minimum height=0.8cm, align=center, font=\scriptsize, inner sep=1pt},
+    arrow/.style={-{Stealth[scale=0.6]}, thick, draw=gray!70}
+]
+
+% Row 1: Data sources (top)
+\node[data] (sales) {Monthly Sales};
+\node[data, right=1.2cm of sales] (building) {Building\\Footprint};
+
+% Row 2: Processed data
+\node[processed, below=0.8cm of sales] (merchant) {Merchant};
+\node[processed, below=0.8cm of building] (buildings) {Nearby\\Buildings};
+
+% Row 3: Gravity model (centered)
+\path (merchant) -- (buildings) coordinate[midway] (mid);
+\node[model, below=0.8cm of mid] (gravity) {Gravity\\Model};
+
+% Row 4: Output
+\node[output, below=0.8cm of gravity] (od) {OD Matrix};
+
+% Arrows - vertical
+\draw[arrow] (sales) -- (merchant);
+\draw[arrow] (building) -- (buildings);
+\draw[arrow] (gravity) -- (od);
+
+% Arrows - diagonal to gravity model
+\draw[arrow] (merchant.south) -- (gravity.north west);
+\draw[arrow] (buildings.south) -- (gravity.north east);
+
+\end{tikzpicture}%
+}
+
+% Reusable Road Distance flowchart command
+\newcommand{\RoadDistFlowchart}{%
+\begin{tikzpicture}[
+    node distance=0.6cm and 1.2cm,
+    data/.style={rectangle, draw=blue!60, fill=blue!10, minimum width=1.6cm, minimum height=0.6cm, align=center, font=\scriptsize},
+    processed/.style={rectangle, draw=orange!70, fill=orange!15, rounded corners=3pt, minimum width=1.6cm, minimum height=0.6cm, align=center, font=\scriptsize},
+    output/.style={rectangle, draw=gray!70, fill=gray!10, rounded corners=3pt, minimum width=1.6cm, minimum height=0.6cm, align=center, font=\scriptsize},
+    smallbox/.style={rectangle, draw=gray!90, fill=gray!90, text=white, minimum width=1.6cm, minimum height=0.4cm, align=center, font=\tiny, rounded corners=3pt},
+    model/.style={diamond, draw=teal!70, fill=teal!15, minimum width=1cm, minimum height=0.8cm, align=center, font=\scriptsize, inner sep=1pt},
+    arrow/.style={-{Stealth[scale=0.6]}, thick, draw=gray!70}
+]
+
+% Row 1: Data sources (top)
+\node[output] (od) {OD Matrix};
+\node[data, right=1.2cm of od] (roadnet) {Road\\Network};
+
+% Row 2: Shortest path (centered)
+\path (od) -- (roadnet) coordinate[midway] (mid);
+\node[model, below=0.8cm of mid] (shortest) {Shortest\\Path};
+
+% Row 3: OD Matrix output
+\node[output, below=0.8cm of shortest] (result) {OD Matrix};
+
+% Row 4-5: Small boxes stacked vertically below OD Matrix
+\node[smallbox, below=0cm of result.south, anchor=north] (airdist) {Air Distance};
+\node[smallbox, below=0cm of airdist.south, anchor=north] (roaddist) {Road Distance};
+
+% Arrows - vertical
+\draw[arrow] (shortest) -- (result);
+
+% Arrows - diagonal to shortest path
+\draw[arrow] (od.south) -- (shortest.north west);
+\draw[arrow] (roadnet.south) -- (shortest.north east);
+
+\end{tikzpicture}%
+}
+
 
 \begin{document}
 
@@ -87,7 +164,7 @@
 \begin{frame}{Food Delivery in China}
 \begin{figure}
     \centering
-    \includegraphics[width=0.8\linewidth]{../figures/market/china_food_delivery_market_size.pdf}
+    \includegraphics[width=0.8\linewidth]{../figures/misc/china_food_delivery_market_size.pdf}
     \caption{\textbf{China's online food delivery market size (2017–2027)}, showing historical values and forecasts \parencite{statista2024chinafooddelivery}. The market has grown from approximately 300 billion Yuan in 2017 to over 1 trillion Yuan by 2023, with projections suggesting continued expansion.}
     \label{fig:market_size}
 \end{figure}    
@@ -190,12 +267,158 @@
 \section{Method}
 
 
-\begin{frame}{OD Generation - Monthly Sales}
+\begin{frame}{OD Generation}
 
-
+\begin{columns}
+\begin{column}{0.35\textwidth}
+\centering
+\ODFlowchart
+\end{column}
+\begin{column}{0.6\textwidth}
+\textbf{Pipeline Overview}
+\begin{itemize}
+    \item Process sales data to extract merchants
+    \item Identify nearby buildings from footprint data
+    \item Apply gravity model to generate OD pairs
+\end{itemize}
+\end{column}
+\end{columns}
 
 \end{frame}
 
+
+\begin{frame}{OD Generation - Monthly Sales Data}
+
+\begin{columns}
+\begin{column}{0.35\textwidth}
+\centering
+\ODFlowchart
+\end{column}
+\begin{column}{0.6\textwidth}
+  \begin{figure}
+    \centering
+    \includegraphics[width=0.6\linewidth]{../figures/misc/screenshot.pdf}
+    \caption{\textbf{Screenshot of the Meituan Takeaway app showing merchant information.} The dataset includes latitude, longitude, and monthly sales data for 1,075,362 valid takeout merchants across China, collected in August 2021.}
+    \label{fig:meituan_app}
+\end{figure}   
+\end{column}
+\end{columns}
+
+\end{frame}
+
+
+\begin{frame}{OD Generation - Monthly Sales Data}
+
+\begin{columns}
+\begin{column}{0.35\textwidth}
+\centering
+\ODFlowchart
+\end{column}
+\begin{column}{0.6\textwidth}
+  \begin{figure}
+    \centering
+    \includegraphics[width=0.8\linewidth]{../figures/district/nanshan/nanshan_heatmap.pdf}
+    \caption{\textbf{Heatmap of the monthly sales data for the Nanshan district.} The heatmap is generated using the latitude and longitude of the merchants and the monthly sales data. }
+    \label{fig:nanshan_heatmap}
+\end{figure}   
+\end{column}
+\end{columns}
+
+\end{frame}
+
+
+\begin{frame}{OD Generation - Building Footprint Data}
+
+\begin{columns}
+\begin{column}{0.35\textwidth}
+\centering
+\ODFlowchart
+\end{column}
+\begin{column}{0.6\textwidth}
+  \begin{figure}
+    \centering
+    \includegraphics[width=0.8\linewidth]{../figures/district/nanshan/nanshan_store_coverage.pdf}
+    \caption{\textbf{Building footprint data and store coverage for the Nanshan district.} Nearby buildings are matched with takeout merchants as potential customers. The fetch area is enlarged by 3km beyond the district boundary to account for rider work radius \parencite{zhang_exploration_2023}.}
+    \label{fig:nanshan_buildings}
+\end{figure}   
+\end{column}
+\end{columns}
+
+\end{frame}
+
+
+\begin{frame}{OD Generation - Gravity Model}
+
+\begin{columns}
+\begin{column}{0.35\textwidth}
+\centering
+\ODFlowchart
+\end{column}
+\begin{column}{0.6\textwidth}
+Larger buildings attract more orders due to higher population density, while greater distances reduce demand owing to increased delivery time and cost.
+\[
+  D_{ij} = P_{i} \cdot \frac{f(d_{ij}, v_{j})}{\sum_{j \in \mathcal{D}} f(d_{ij}, v_{j})}, \quad \forall i \in \mathcal{O}, j \in \mathcal{D}
+\]
+
+where
+\[f(d_{ij}, v_{j}) = \frac{v_{j}^\alpha}{d_{ij}^{\beta}}.\]
+
+\footnotesize
+\centering
+\captionof{table}{Gravity model symbols and their descriptions}
+\begin{tabular}{c c}
+\toprule
+Symbol & Description \\
+\midrule
+$D_{ij}$ & Estimated deliveries from $i$ to $j$ \\
+$P_i$ & Total delivery demand at origin $i$ \\
+$d_{ij}$ & Distance from $i$ to $j$ \\
+$v_j$ & Building volume at destination $j$ \\
+$\alpha, \beta$ & Elasticity coefficients \\
+$\mathcal{O}$ & Set of origins \\
+$\mathcal{D}$ & Set of destinations \\
+\bottomrule
+\end{tabular}
+\end{column}
+\end{columns}
+
+\end{frame}
+
+
+\begin{frame}{Road Distance Calculation}
+\begin{columns}
+\begin{column}{0.35\textwidth}
+\centering
+\RoadDistFlowchart
+\end{column}
+\begin{column}{0.6\textwidth}
+\begin{figure}
+    \centering
+    \includegraphics[width=0.8\linewidth]{../figures/district/nanshan/nanshan_roadnet.pdf}
+    \caption{\textbf{Road network for the Nanshan district.} All road types except motorways are acquired from OpenStreetMap via the OSMnx library.}
+    \label{fig:nanshan_roadnet}
+\end{figure}
+\end{column}
+\end{columns}
+\end{frame}
+
+
+\begin{frame}{Road Distance Calculation}
+\begin{columns}
+\begin{column}{0.35\textwidth}
+\centering
+\RoadDistFlowchart
+\end{column}
+\begin{column}{0.6\textwidth}
+\begin{figure}
+    \centering
+    \includegraphics[width=0.8\linewidth]{../figures/district/nanshan/nanshan_distance_comparison.pdf}
+    \caption{\textbf{Air distance vs. road distance for OD pairs in the Nanshan district.} Each OD pair now includes both the straight-line (air) distance and the road network distance computed via Dijkstra's algorithm.}
+    \label{fig:nanshan_distance_comparison}
+\end{figure}
+\end{column}
+\end{columns}
+\end{frame}
 
 \begin{frame}{Emission Model - E-bike}
 
@@ -213,7 +436,7 @@ P_{\text{rolling}} + P_{\text{air}} + P_{\text{grade}} + P_{\text{acc}}
 
   \item[Aerodynamic Drag Power:]
     \[
-    P_{\text{air}} = \tfrac{\rho \cdot v^3}{2 \cdot 10^3} \cdot A \cdot C_{\text{air}} 
+    P_{\text{air}} = \frac{\rho \cdot v^3}{2 \cdot 10^3} \cdot A \cdot C_{\text{air}} 
     \]
 
   \item[Grade Climbing Power:]

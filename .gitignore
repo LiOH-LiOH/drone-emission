@@ -7,7 +7,7 @@ figures/
 archive/
 .DS_Store
 backup_*
-download_figures.sh
+scripts/
 regions.json
 build/
 *.pdf
