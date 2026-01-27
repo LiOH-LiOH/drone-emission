@@ -30,6 +30,13 @@ class EbikeParams:
     battery_lifespan: int = 2  # 电池寿命 (年)
     n_ebikes: int = 100  # 电动自行车数量
 
+    # 运营参数 (用于生命周期分摊计算)
+    # Sources: PMC9260233 (14.2% work >12h, 83% report >3.5 deliveries/hour)
+    # Brussels cargo bike study: 2 min service time
+    working_hours_per_day: float = 8.0  # 每日工作时间 (小时), typical shift length
+    working_days_per_year: int = 300  # 每年工作天数 (~6 days/week * 50 weeks)
+    loading_time_min: float = 3.0  # 装卸时间 (分钟), includes pickup + drop-off
+
     # 能耗模型参数 (Table S5)
     g: float = 9.81  # 重力加速度 (m/s²)
     C_d: float = 0.65  # 空气阻力系数
@@ -68,6 +75,15 @@ class DroneParams:
     battery_lifespan: int = 2  # 电池寿命 (年)
     n_drones: int = 100  # 无人机数量
 
+    # 运营参数 (用于生命周期分摊计算)
+    # Sources: Amazon UK operates 12h/day, 7 days/week; academic studies use 20 sec/package
+    # Wing autoloader system, field deployments use 45-sec pickup window
+    working_hours_per_day: float = 12.0  # 每日工作时间 (小时), Amazon UK: 12h/day
+    working_days_per_year: int = 300  # 每年工作天数 (7 days/week, some holidays)
+    loading_time_min: float = (
+        0.5  # 地面装载时间 (分钟), ~20-30 sec; hover time handled separately
+    )
+
     # 能耗模型参数 (Table S5)
     g: float = 9.81  # 重力加速度 (m/s²)
     rho: float = 1.225  # 空气密度 (kg/m³)
@@ -84,19 +100,19 @@ class DroneParams:
     hover_time: float = 30  # 每次飞行悬停时间 (秒)
 
 
-@dataclass
-class CabinetParams:
-    """取餐柜参数"""
+# @dataclass
+# class CabinetParams:
+#     """取餐柜参数"""
 
-    power_ebike: float = 0.2  # 普通取餐柜功率 (kW)
-    power_drone: float = 0.4  # 无人机取餐柜功率 (kW)
-    e_use: float = 0.6  # 使用阶段排放因子 (kg CO2e/kWh)
-    e_solar: float = 0.0847  # 太阳能排放因子 (kg CO2e/kWh)
-    operating_hours: int = 24  # 每日运行时间 (小时)
-    n_cabinets: int = 120  # 取餐柜数量
-    ghg_cabinet_ebike: float = 200  # 普通柜GHG (kg CO2e)
-    ghg_cabinet_drone: float = 500  # 无人机柜GHG (kg CO2e)
-    lifespan: int = 5  # 使用寿命 (年)
+#     power_ebike: float = 0.2  # 普通取餐柜功率 (kW)
+#     power_drone: float = 0.4  # 无人机取餐柜功率 (kW)
+#     e_use: float = 0.6  # 使用阶段排放因子 (kg CO2e/kWh)
+#     e_solar: float = 0.0847  # 太阳能排放因子 (kg CO2e/kWh)
+#     operating_hours: int = 24  # 每日运行时间 (小时)
+#     n_cabinets: int = 120  # 取餐柜数量
+#     ghg_cabinet_ebike: float = 200  # 普通柜GHG (kg CO2e)
+#     ghg_cabinet_drone: float = 500  # 无人机柜GHG (kg CO2e)
+#     lifespan: int = 5  # 使用寿命 (年)
 
 
 def create_ebike_params(exp_config: Dict = None) -> EbikeParams:
@@ -144,23 +160,23 @@ def create_drone_params(exp_config: Dict = None) -> DroneParams:
     )
 
 
-def create_cabinet_params(exp_config: Dict = None) -> CabinetParams:
-    """Create CabinetParams with config overrides from experiment.toml.
+# def create_cabinet_params(exp_config: Dict = None) -> CabinetParams:
+#     """Create CabinetParams with config overrides from experiment.toml.
 
-    Args:
-        exp_config: Experiment config dict from load_config()
+#     Args:
+#         exp_config: Experiment config dict from load_config()
 
-    Returns:
-        CabinetParams with values from config or defaults
-    """
-    if exp_config is None:
-        return CabinetParams()
+#     Returns:
+#         CabinetParams with values from config or defaults
+#     """
+#     if exp_config is None:
+#         return CabinetParams()
 
-    emission_params = exp_config.get("emission_params", {})
+#     emission_params = exp_config.get("emission_params", {})
 
-    return CabinetParams(
-        e_use=emission_params.get("e_use", 0.6),
-    )
+#     return CabinetParams(
+#         e_use=emission_params.get("e_use", 0.6),
+#     )
 
 
 def get_emission_params(exp_config: Dict = None) -> Dict:
@@ -588,11 +604,11 @@ class LifeCycleEmissions:
         self,
         ebike_params: EbikeParams = None,
         drone_params: DroneParams = None,
-        cabinet_params: CabinetParams = None,
+        # cabinet_params: CabinetParams = None,
     ):
         self.ebike_p = ebike_params or EbikeParams()
         self.drone_p = drone_params or DroneParams()
-        self.cabinet_p = cabinet_params or CabinetParams()
+        # self.cabinet_p = cabinet_params or CabinetParams()
 
         self.ebike_energy = EbikeEnergyModel(self.ebike_p)
         self.drone_energy = DroneEnergyModel(self.drone_p)
@@ -720,163 +736,238 @@ class LifeCycleEmissions:
             },
         }
 
-    def calculate_cabinet_emissions_per_day(
-        self, n_cabinets: int, is_drone: bool = False, use_solar: bool = False
-    ) -> Dict:
-        """
-        计算取餐柜每日排放
-        公式 (5): CO2e_CBuse = e_CBc * P_CB * t * n_CB
-        """
-        p = self.cabinet_p
+    # def calculate_cabinet_emissions_per_day(
+    #     self, n_cabinets: int, is_drone: bool = False, use_solar: bool = False
+    # ) -> Dict:
+    #     """
+    #     计算取餐柜每日排放
+    #     公式 (5): CO2e_CBuse = e_CBc * P_CB * t * n_CB
+    #     """
+    #     p = self.cabinet_p
 
-        power = p.power_drone if is_drone else p.power_ebike
-        e_factor = p.e_solar if use_solar else p.e_use
+    #     power = p.power_drone if is_drone else p.power_ebike
+    #     e_factor = p.e_solar if use_solar else p.e_use
 
-        # 每日能耗 (kWh)
-        daily_energy = power * p.operating_hours * n_cabinets
+    #     # 每日能耗 (kWh)
+    #     daily_energy = power * p.operating_hours * n_cabinets
 
-        # 每日排放 (kg CO2e)
-        daily_emissions = daily_energy * e_factor
+    #     # 每日排放 (kg CO2e)
+    #     daily_emissions = daily_energy * e_factor
 
-        return {
-            "power_kw": power,
-            "n_cabinets": n_cabinets,
-            "operating_hours": p.operating_hours,
-            "daily_energy_kwh": daily_energy,
-            "emission_factor": e_factor,
-            "daily_emissions_kg": daily_emissions,
-            "use_solar": use_solar,
-        }
+    #     return {
+    #         "power_kw": power,
+    #         "n_cabinets": n_cabinets,
+    #         "operating_hours": p.operating_hours,
+    #         "daily_energy_kwh": daily_energy,
+    #         "emission_factor": e_factor,
+    #         "daily_emissions_kg": daily_emissions,
+    #         "use_solar": use_solar,
+    #     }
 
-    def calculate_lifecycle_emissions_per_order(
+    # def calculate_lifecycle_emissions_per_order(
+    #     self,
+    #     distance_km: float,
+    #     n_orders_per_delivery: int,
+    #     annual_orders: int,
+    #     vehicle_type: str = "ebike",
+    #     use_solar: bool = False,
+    # ) -> Dict:
+    #     """
+    #     计算每订单生命周期碳排放
+
+    #     参数:
+    #         distance_km: 平均配送距离 (km)
+    #         n_orders_per_delivery: 每次配送订单数
+    #         daily_orders: 每日总订单数
+    #         working_days: 年工作天数
+    #         vehicle_type: 'ebike' 或 'drone'
+    #         use_solar: 是否使用太阳能
+    #     """
+    #     if vehicle_type == "ebike":
+    #         # 生产阶段排放
+    #         prod_emissions = self.calculate_ebike_production_emissions()
+
+    #         # 年化生产排放 (考虑寿命和电池更换)
+    #         annual_prod = (
+    #             prod_emissions["body_production_kg"]
+    #             + prod_emissions["body_disposal_kg"]
+    #         ) / self.ebike_p.lifespan
+    #         annual_battery = (
+    #             prod_emissions["battery_production_kg"]
+    #             + prod_emissions["battery_disposal_kg"]
+    #         ) / self.ebike_p.battery_lifespan
+
+    #         # 车队年化排放
+    #         fleet_annual_prod = (annual_prod + annual_battery) * self.ebike_p.n_ebikes
+
+    #         # 使用阶段排放
+    #         use_emissions = self.calculate_ebike_use_phase_emissions(
+    #             distance_km, 1.0 * n_orders_per_delivery
+    #         )
+
+    #     else:  # drone
+    #         # 生产阶段排放
+    #         prod_emissions = self.calculate_drone_production_emissions()
+
+    #         # 年化生产排放
+    #         annual_prod = (
+    #             prod_emissions["body_production_kg"]
+    #             + prod_emissions["body_disposal_kg"]
+    #         ) / self.drone_p.lifespan
+    #         annual_battery = (
+    #             prod_emissions["battery_production_kg"]
+    #             + prod_emissions["battery_disposal_kg"]
+    #         ) / self.drone_p.battery_lifespan
+
+    #         # 车队年化排放
+    #         fleet_annual_prod = (annual_prod + annual_battery) * self.drone_p.n_drones
+
+    #         # 使用阶段排放 (无人机每次配送一个订单)
+    #         use_emissions = self.calculate_drone_use_phase_emissions(distance_km, 1.0)
+
+    #     # 年度总排放计算
+    #     # 使用阶段: 每日订单数 / 每次配送订单数 = 每日配送次数
+    #     daily_deliveries = daily_orders / n_orders_per_delivery
+    #     daily_use_emissions = use_emissions["emissions_kg_co2e"] * daily_deliveries
+    #     annual_use_emissions = daily_use_emissions * working_days
+
+    #     # 总年度排放
+    #     total_annual_emissions = fleet_annual_prod + annual_use_emissions
+
+    #     # 每订单排放
+    #     emissions_per_order = (
+    #         total_annual_emissions / annual_orders * 1000
+    #     )  # g CO2e/order
+
+    #     return {
+    #         "vehicle_type": vehicle_type,
+    #         "distance_km": distance_km,
+    #         "n_orders_per_delivery": n_orders_per_delivery,
+    #         "daily_orders": daily_orders,
+    #         "annual_orders": annual_orders,
+    #         # 各阶段年度排放 (kg CO2e)
+    #         "fleet_production_annual_kg": fleet_annual_prod,
+    #         "cabinet_production_annual_kg": cabinet_prod_annual,
+    #         "use_phase_annual_kg": annual_use_emissions,
+    #         "cabinet_operation_annual_kg": annual_cabinet_emissions,
+    #         "total_annual_kg": total_annual_emissions,
+    #         # 每订单排放 (g CO2e)
+    #         "emissions_per_order_g": emissions_per_order,
+    #         # 排放占比
+    #         "production_share": (fleet_annual_prod + cabinet_prod_annual)
+    #         / total_annual_emissions,
+    #         "use_share": annual_use_emissions / total_annual_emissions,
+    #         "cabinet_share": annual_cabinet_emissions / total_annual_emissions,
+    #         # 单次配送详情
+    #         "single_delivery_emissions_g": use_emissions["emissions_g_co2e"],
+    #         "single_delivery_time_min": use_emissions.get("time_total_min"),
+    #     }
+
+    def calculate_lifecycle_emissions_per_order_simple(
         self,
         distance_km: float,
-        n_orders_per_delivery: int,
-        daily_orders: int,
-        working_days: int = 300,
+        n_orders_per_delivery: int = 1,
         vehicle_type: str = "ebike",
-        use_solar: bool = False,
     ) -> Dict:
         """
-        计算每订单生命周期碳排放
+        Calculate per-order lifecycle emissions using per-delivery allocation.
+        Does NOT require fleet size or annual orders.
 
-        参数:
-            distance_km: 平均配送距离 (km)
-            n_orders_per_delivery: 每次配送订单数
-            daily_orders: 每日总订单数
-            working_days: 年工作天数
-            vehicle_type: 'ebike' 或 'drone'
-            use_solar: 是否使用太阳能
+        Args:
+            distance_km: One-way delivery distance (km)
+            n_orders_per_delivery: Orders per delivery trip (1 for drone, can be >1 for ebike)
+            vehicle_type: 'ebike' or 'drone'
+
+        Returns:
+            Dict with production and use emissions per order (g CO2e)
         """
-        annual_orders = daily_orders * working_days
-
         if vehicle_type == "ebike":
-            # 生产阶段排放
-            prod_emissions = self.calculate_ebike_production_emissions()
-
-            # 年化生产排放 (考虑寿命和电池更换)
-            annual_prod = (
-                prod_emissions["body_production_kg"]
-                + prod_emissions["body_disposal_kg"]
-            ) / self.ebike_p.lifespan
-            annual_battery = (
-                prod_emissions["battery_production_kg"]
-                + prod_emissions["battery_disposal_kg"]
-            ) / self.ebike_p.battery_lifespan
-
-            # 车队年化排放
-            fleet_annual_prod = (annual_prod + annual_battery) * self.ebike_p.n_ebikes
-
-            # 使用阶段排放
-            use_emissions = self.calculate_ebike_use_phase_emissions(
-                distance_km, 1.0 * n_orders_per_delivery
+            p = self.ebike_p
+            # Round-trip time in minutes
+            delivery_time_min = (2 * distance_km / p.velocity) * 60 + p.loading_time_min
+            deliveries_per_day = p.working_hours_per_day * 60 / delivery_time_min
+            lifetime_deliveries = (
+                deliveries_per_day * p.working_days_per_year * p.lifespan
             )
 
-            # 取餐柜排放
-            cabinet_daily = self.calculate_cabinet_emissions_per_day(
-                self.cabinet_p.n_cabinets, is_drone=False, use_solar=use_solar
+            # Production emissions
+            prod = self.calculate_ebike_production_emissions()
+            body_lifetime_kg = (
+                prod["body_production_kg"] + prod["body_disposal_kg"]
+            ) / p.lifespan
+            battery_lifetime_kg = (
+                prod["battery_production_kg"] + prod["battery_disposal_kg"]
+            ) / p.battery_lifespan
+            annual_prod_kg = body_lifetime_kg + battery_lifetime_kg
+            prod_per_delivery_kg = annual_prod_kg * p.lifespan / lifetime_deliveries
+
+            # Use emissions
+            use = self.calculate_ebike_use_phase_emissions(
+                distance_km, n_orders_per_delivery
             )
+            use_per_delivery_kg = use["emissions_kg_co2e"]
 
         else:  # drone
-            # 生产阶段排放
-            prod_emissions = self.calculate_drone_production_emissions()
-
-            # 年化生产排放
-            annual_prod = (
-                prod_emissions["body_production_kg"]
-                + prod_emissions["body_disposal_kg"]
-            ) / self.drone_p.lifespan
-            annual_battery = (
-                prod_emissions["battery_production_kg"]
-                + prod_emissions["battery_disposal_kg"]
-            ) / self.drone_p.battery_lifespan
-
-            # 车队年化排放
-            fleet_annual_prod = (annual_prod + annual_battery) * self.drone_p.n_drones
-
-            # 使用阶段排放 (无人机每次配送一个订单)
-            use_emissions = self.calculate_drone_use_phase_emissions(distance_km, 1.0)
-
-            # 取餐柜排放
-            cabinet_daily = self.calculate_cabinet_emissions_per_day(
-                self.cabinet_p.n_cabinets, is_drone=True, use_solar=use_solar
+            p = self.drone_p
+            delivery_time_min = (2 * distance_km / p.v_level) * 60 + p.loading_time_min
+            deliveries_per_day = p.working_hours_per_day * 60 / delivery_time_min
+            lifetime_deliveries = (
+                deliveries_per_day * p.working_days_per_year * p.lifespan
             )
 
-        # 取餐柜年化生产排放
-        ghg_per_cabinet = (
-            self.cabinet_p.ghg_cabinet_drone
-            if vehicle_type == "drone"
-            else self.cabinet_p.ghg_cabinet_ebike
-        )
-        cabinet_prod_annual = (
-            ghg_per_cabinet * self.cabinet_p.n_cabinets / self.cabinet_p.lifespan
-        )
+            prod = self.calculate_drone_production_emissions()
+            body_lifetime_kg = (
+                prod["body_production_kg"] + prod["body_disposal_kg"]
+            ) / p.lifespan
+            battery_lifetime_kg = (
+                prod["battery_production_kg"] + prod["battery_disposal_kg"]
+            ) / p.battery_lifespan
+            annual_prod_kg = body_lifetime_kg + battery_lifetime_kg
+            prod_per_delivery_kg = annual_prod_kg * p.lifespan / lifetime_deliveries
 
-        # 年度总排放计算
-        # 使用阶段: 每日订单数 / 每次配送订单数 = 每日配送次数
-        daily_deliveries = daily_orders / n_orders_per_delivery
-        daily_use_emissions = use_emissions["emissions_kg_co2e"] * daily_deliveries
-        annual_use_emissions = daily_use_emissions * working_days
+            # Use emissions (drone carries 1 order)
+            use = self.calculate_drone_use_phase_emissions(distance_km, 1.0)
+            use_per_delivery_kg = use["emissions_kg_co2e"]
 
-        # 取餐柜年度排放
-        annual_cabinet_emissions = cabinet_daily["daily_emissions_kg"] * working_days
-
-        # 总年度排放
-        total_annual_emissions = (
-            fleet_annual_prod
-            + annual_use_emissions
-            + annual_cabinet_emissions
-            + cabinet_prod_annual
-        )
-
-        # 每订单排放
-        emissions_per_order = (
-            total_annual_emissions / annual_orders * 1000
-        )  # g CO2e/order
+        # Per order
+        prod_per_order_g = prod_per_delivery_kg * 1000 / n_orders_per_delivery
+        use_per_order_g = use_per_delivery_kg * 1000 / n_orders_per_delivery
+        total_per_order_g = prod_per_order_g + use_per_order_g
 
         return {
             "vehicle_type": vehicle_type,
             "distance_km": distance_km,
             "n_orders_per_delivery": n_orders_per_delivery,
-            "daily_orders": daily_orders,
-            "annual_orders": annual_orders,
-            # 各阶段年度排放 (kg CO2e)
-            "fleet_production_annual_kg": fleet_annual_prod,
-            "cabinet_production_annual_kg": cabinet_prod_annual,
-            "use_phase_annual_kg": annual_use_emissions,
-            "cabinet_operation_annual_kg": annual_cabinet_emissions,
-            "total_annual_kg": total_annual_emissions,
-            # 每订单排放 (g CO2e)
-            "emissions_per_order_g": emissions_per_order,
-            # 排放占比
-            "production_share": (fleet_annual_prod + cabinet_prod_annual)
-            / total_annual_emissions,
-            "use_share": annual_use_emissions / total_annual_emissions,
-            "cabinet_share": annual_cabinet_emissions / total_annual_emissions,
-            # 单次配送详情
-            "single_delivery_emissions_g": use_emissions["emissions_g_co2e"],
-            "single_delivery_time_min": use_emissions.get("time_total_min"),
+            "lifetime_deliveries": lifetime_deliveries,
+            "production_per_order_g": prod_per_order_g,
+            "use_per_order_g": use_per_order_g,
+            "total_per_order_g": total_per_order_g,
         }
+
+    def calculate_emissions_for_od_df(
+        self,
+        distances_km: np.ndarray,
+        n_orders_per_delivery: int = 1,
+        vehicle_type: str = "ebike",
+    ) -> np.ndarray:
+        """
+        Vectorized calculation for multiple OD pairs.
+
+        Args:
+            distances_km: Array of one-way delivery distances (km)
+            n_orders_per_delivery: Orders per delivery trip
+            vehicle_type: 'ebike' or 'drone'
+
+        Returns:
+            Array of per-order emissions (g CO2e)
+        """
+        results = np.zeros(len(distances_km))
+        for i, d in enumerate(distances_km):
+            r = self.calculate_lifecycle_emissions_per_order_simple(
+                d, n_orders_per_delivery, vehicle_type
+            )
+            results[i] = r["total_per_order_g"]
+        return results
 
 
 def run_validation_tests():
@@ -965,7 +1056,9 @@ def run_validation_tests():
     return lca
 
 
-def run_sensitivity_analysis(save_dir: str = None, exp_config: Dict = None, for_latex: bool = False):
+def run_sensitivity_analysis(
+    save_dir: str = None, exp_config: Dict = None, for_latex: bool = False
+):
     """
     运行敏感性分析
 
@@ -1377,6 +1470,231 @@ def run_sensitivity_analysis(save_dir: str = None, exp_config: Dict = None, for_
     print("=" * 80)
 
 
+def run_lifecycle_sensitivity_analysis(
+    save_dir: str = None,
+    exp_config: Dict = None,
+    for_latex: bool = False,
+    n_orders_ebike: int = 1,
+    n_orders_drone: int = 1,
+):
+    """
+    运行生命周期排放敏感性分析 (包含生产+使用阶段)
+
+    参数:
+        save_dir: 图片保存目录，如果为 None 则显示图形
+        exp_config: 实验配置字典，从 experiment.toml 加载
+        for_latex: 是否为 LaTeX 导出模式（PDF格式，无标题和信息框）
+        n_orders_ebike: 电动车每次配送订单数
+        n_orders_drone: 无人机每次配送订单数 (通常为1)
+    """
+    import os
+    import sys
+
+    # 添加 src/drone_emission 到路径
+    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    from visualization.emission import (
+        plot_distance_route_factor_heatmap,
+        plot_sensitivity_analysis,
+    )
+
+    print("\n" + "=" * 80)
+    print("生命周期排放敏感性分析 (生产 + 使用阶段)")
+    print("=" * 80)
+
+    # 从配置文件读取参数，使用默认值作为后备
+    emission_cfg = get_emission_params(exp_config)
+    payload_default = emission_cfg["payload_kg"]
+
+    # 创建带配置的参数对象
+    default_ebike_params = create_ebike_params(exp_config)
+    default_drone_params = create_drone_params(exp_config)
+
+    lca = LifeCycleEmissions(
+        ebike_params=default_ebike_params,
+        drone_params=default_drone_params,
+    )
+    r_default = 1.4  # 默认路径系数
+
+    print(f"Config: payload={payload_default}kg")
+    print(
+        f"E-bike: velocity={default_ebike_params.velocity}km/h, "
+        f"working_hours={default_ebike_params.working_hours_per_day}h/day, "
+        f"working_days={default_ebike_params.working_days_per_year}/year"
+    )
+    print(
+        f"Drone: v_level={default_drone_params.v_level}km/h, "
+        f"working_hours={default_drone_params.working_hours_per_day}h/day, "
+        f"working_days={default_drone_params.working_days_per_year}/year"
+    )
+    print(f"Orders per delivery: ebike={n_orders_ebike}, drone={n_orders_drone}")
+
+    # 确定文件扩展名
+    ext = ".pdf" if for_latex else ".png"
+
+    # 创建保存目录
+    if save_dir:
+        os.makedirs(save_dir, exist_ok=True)
+
+    # ========================================================================
+    # L1: 配送距离敏感性分析 (0.5 - 8 km) - 生命周期排放
+    # ========================================================================
+    print("\n" + "-" * 60)
+    print("L1: 配送距离敏感性分析 (生命周期)")
+    print("-" * 60)
+
+    distances = np.linspace(0.5, 8, 16)  # 0.5 到 8 km
+    ebike_emissions_l1 = []
+    drone_emissions_l1 = []
+
+    for d in distances:
+        # E-bike uses road distance (d * r), drone uses direct distance (d)
+        ebike_result = lca.calculate_lifecycle_emissions_per_order_simple(
+            d * r_default, n_orders_per_delivery=n_orders_ebike, vehicle_type="ebike"
+        )
+        drone_result = lca.calculate_lifecycle_emissions_per_order_simple(
+            d, n_orders_per_delivery=n_orders_drone, vehicle_type="drone"
+        )
+        ebike_emissions_l1.append(ebike_result["total_per_order_g"])
+        drone_emissions_l1.append(drone_result["total_per_order_g"])
+
+    print(f"{'距离(km)':<10} {'电动车(g)':<15} {'无人机(g)':<15} {'差异(%)':<10}")
+    print("-" * 50)
+    for i, d in enumerate(distances):
+        diff = (drone_emissions_l1[i] / ebike_emissions_l1[i] - 1) * 100
+        print(
+            f"{d:<10.1f} {ebike_emissions_l1[i]:<15.2f} "
+            f"{drone_emissions_l1[i]:<15.2f} {diff:<10.1f}"
+        )
+
+    save_path = None
+    if save_dir:
+        save_path = f"{save_dir}/lifecycle_distance{ext}"
+    plot_sensitivity_analysis(
+        list(distances),
+        ebike_emissions_l1,
+        drone_emissions_l1,
+        "Delivery Distance",
+        "km",
+        save_path=save_path,
+        experiment_settings={
+            "Payload": f"{payload_default:.2f} kg",
+            "Route Factor": f"{r_default:.2f}",
+            "E-bike Orders/Trip": f"{n_orders_ebike}",
+            "Drone Orders/Trip": f"{n_orders_drone}",
+        },
+        for_latex=for_latex,
+    )
+    if save_path:
+        print(f"\n图表已保存: {save_path}")
+
+    # ========================================================================
+    # L2: 路径系数敏感性分析 (1.0 - 2.0) - 生命周期排放
+    # ========================================================================
+    print("\n" + "-" * 60)
+    print("L2: 路径系数敏感性分析 (生命周期)")
+    print("-" * 60)
+
+    route_factors = np.linspace(1.0, 2.0, 11)
+    d_fixed = 3.0  # 固定配送距离 3 km
+    ebike_emissions_l2 = []
+    drone_emissions_l2 = []
+
+    for r in route_factors:
+        ebike_result = lca.calculate_lifecycle_emissions_per_order_simple(
+            d_fixed * r, n_orders_per_delivery=n_orders_ebike, vehicle_type="ebike"
+        )
+        drone_result = lca.calculate_lifecycle_emissions_per_order_simple(
+            d_fixed, n_orders_per_delivery=n_orders_drone, vehicle_type="drone"
+        )
+        ebike_emissions_l2.append(ebike_result["total_per_order_g"])
+        drone_emissions_l2.append(drone_result["total_per_order_g"])
+
+    print(f"{'路径系数':<10} {'电动车(g)':<15} {'无人机(g)':<15} {'差异(%)':<10}")
+    print("-" * 50)
+    for i, r in enumerate(route_factors):
+        diff = (drone_emissions_l2[i] / ebike_emissions_l2[i] - 1) * 100
+        print(
+            f"{r:<10.2f} {ebike_emissions_l2[i]:<15.2f} "
+            f"{drone_emissions_l2[i]:<15.2f} {diff:<10.1f}"
+        )
+
+    save_path = None
+    if save_dir:
+        save_path = f"{save_dir}/lifecycle_route_factor{ext}"
+    plot_sensitivity_analysis(
+        list(route_factors),
+        ebike_emissions_l2,
+        drone_emissions_l2,
+        "Route Factor",
+        "",
+        save_path=save_path,
+        experiment_settings={
+            "Distance": f"{d_fixed:.2f} km",
+            "Payload": f"{payload_default:.2f} kg",
+            "E-bike Orders/Trip": f"{n_orders_ebike}",
+            "Drone Orders/Trip": f"{n_orders_drone}",
+        },
+        for_latex=for_latex,
+    )
+    if save_path:
+        print(f"\n图表已保存: {save_path}")
+
+    # ========================================================================
+    # L3: 配送距离 × 路径系数 热力图 - 生命周期排放
+    # ========================================================================
+    print("\n" + "-" * 60)
+    print("L3: 配送距离 × 路径系数 二维热力图 (生命周期)")
+    print("-" * 60)
+
+    distances_hm = np.linspace(0.5, 4, 30)
+    route_factors_hm = np.linspace(1.0, 2.0, 20)
+
+    emission_diff_matrix = np.zeros((len(route_factors_hm), len(distances_hm)))
+
+    for i, r in enumerate(route_factors_hm):
+        for j, d in enumerate(distances_hm):
+            ebike_result = lca.calculate_lifecycle_emissions_per_order_simple(
+                d * r, n_orders_per_delivery=n_orders_ebike, vehicle_type="ebike"
+            )
+            drone_result = lca.calculate_lifecycle_emissions_per_order_simple(
+                d, n_orders_per_delivery=n_orders_drone, vehicle_type="drone"
+            )
+            diff = (
+                drone_result["total_per_order_g"] / ebike_result["total_per_order_g"]
+                - 1
+            ) * 100
+            emission_diff_matrix[i, j] = diff
+
+    print(f"矩阵尺寸: {emission_diff_matrix.shape}")
+    print(
+        f"排放差异范围: {emission_diff_matrix.min():.1f}% ~ {emission_diff_matrix.max():.1f}%"
+    )
+
+    save_path = None
+    if save_dir:
+        save_path = f"{save_dir}/lifecycle_distance_route_factor{ext}"
+    plot_distance_route_factor_heatmap(
+        list(distances_hm),
+        list(route_factors_hm),
+        emission_diff_matrix,
+        save_path=save_path,
+        experiment_settings={
+            "Payload": f"{payload_default:.2f} kg",
+            "E-bike Velocity": f"{default_ebike_params.velocity:.2f} km/h",
+            "Drone Velocity": f"{default_drone_params.v_level:.2f} km/h",
+            "E-bike Orders/Trip": f"{n_orders_ebike}",
+            "Drone Orders/Trip": f"{n_orders_drone}",
+        },
+        for_latex=for_latex,
+    )
+    if save_path:
+        print(f"\n图表已保存: {save_path}")
+
+    print("\n" + "=" * 80)
+    print("生命周期敏感性分析完成")
+    print("=" * 80)
+
+
 if __name__ == "__main__":
     import os
     import sys
@@ -1394,8 +1712,15 @@ if __name__ == "__main__":
     for_latex = exp_config.get("for_latex", False)
 
     lca = run_validation_tests()
-    run_sensitivity_analysis(
-        save_dir=os.path.join(figures_dir, "sensitivity"),
+    # run_sensitivity_analysis(
+    #     save_dir=os.path.join(figures_dir, "sensitivity"),
+    #     exp_config=exp_config,
+    #     for_latex=for_latex,
+    # )
+    run_lifecycle_sensitivity_analysis(
+        save_dir=os.path.join(figures_dir, "lifecycle"),
         exp_config=exp_config,
         for_latex=for_latex,
+        n_orders_ebike=1,
+        n_orders_drone=1,
     )

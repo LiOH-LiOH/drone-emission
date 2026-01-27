@@ -420,40 +420,27 @@ $\mathcal{D}$ & Set of destinations \\
 \end{columns}
 \end{frame}
 
-\begin{frame}{Emission Model - E-bike}
+\begin{frame}{Use-phase Emission Model - E-bike}
 
 The e-bike power model calculates the instantaneous mechanical power required to propel the vehicle at a given velocity \parencite{kirschstein_comparison_2020}.
-\[
-P_{\text{ebike}} =
+\begin{equation}
+P_{E} =
 P_{\text{rolling}} + P_{\text{air}} + P_{\text{grade}} + P_{\text{acc}}
-\]
+\end{equation}
 
-\begin{description}
-  \item[Rolling Resistance Power:]
-    \[
-    P_{\text{rolling}} = g \cdot C_{\text{roll}} \cdot v \cdot m
-    \]
-
-  \item[Aerodynamic Drag Power:]
-    \[
-    P_{\text{air}} = \frac{\rho \cdot v^3}{2 \cdot 10^3} \cdot A \cdot C_{\text{air}} 
-    \]
-
-  \item[Grade Climbing Power:]
-    \[
-    P_{\text{grade}} = g \cdot i \cdot v \cdot m
-    \]
-
-  \item[Acceleration Power:]
-    \[
-    P_{\text{acc}} =
-    \frac{0.504 \cdot n_{\text{acc}}}{2 \cdot 10^3 \cdot 3.6} \cdot m \cdot v_{\mathrm{km/h}}^3
-    \]
-\end{description}
+\small
+\textbf{Rolling Resistance:}
+\[ P_{\text{rolling}} = g \cdot C_{\text{roll}} \cdot v \cdot m \]
+\textbf{Aerodynamic Drag:}
+\[ P_{\text{air}} = \frac{\rho \cdot v^3}{2 \cdot 10^3} \cdot A \cdot C_{\text{air}} \]
+\textbf{Grade Climbing:}
+\[ P_{\text{grade}} = g \cdot i \cdot v \cdot m \]
+\textbf{Acceleration:}
+\[ P_{\text{acc}} = \frac{0.504 \cdot n_{\text{acc}}}{2 \cdot 10^3 \cdot 3.6} \cdot m \cdot v_{\mathrm{km/h}}^3 \]
 \end{frame}
 
 
-\begin{frame}{Emission Model - E-bike}
+\begin{frame}{Use-phase Emission Model - E-bike}
 
 % \footnotesize
 \centering
@@ -477,29 +464,29 @@ $C_{\text{air}}$ & Aerodynamic drag coefficient & -- & $0.65$ \\
 \end{frame}
 
 
-\begin{frame}{Emission Model - Drone}
+\begin{frame}{Use-phase Emission Model - Drone}
 
 The drone power model calculates the power required for multi-rotor flight at various flight angles \parencite{kirschstein_comparison_2020}.
-\[
-P_{\text{drone}} 
+\begin{equation}
+P_{U}
 = P_{\text{induced}} + P_{\text{profile}} + P_{\text{drag}} + P_{\text{climb}} + P_{\text{aux}}
-\]
-\begin{description}
-  \item[Induced Power:]
-  \[ P_{\text{induced}} = k_{\text{lift}} \cdot w \cdot T \]
-  \item[Profile Power:]
-  \[ P_{\text{profile}} = \rho \cdot R \cdot U^3 \cdot \left(1 + 3\left(\frac{v}{U}\right)^2\right) \cdot \frac{\sigma \cdot C_{\text{d,blade}}}{8} \]
-  \item[Fuselage Drag Power:]
-  \[ P_{\text{drag}} = \frac{1}{2} \rho \cdot C_{\text{air}} \cdot A \cdot v^3 \]
-  \item[Climb Power:]
-  \[ P_{\text{climb}} = m \cdot g \cdot v \cdot \sin\gamma \]
-  \item[Auxiliary Power:]
-  \[ P_{\text{aux}} = \text{constant} \]
-\end{description}
+\end{equation}
+
+\small
+\textbf{Induced:}
+\[ P_{\text{induced}} = k_{\text{lift}} \cdot w \cdot T \]
+\textbf{Profile:}
+\[ P_{\text{profile}} = \rho \cdot R \cdot U^3 \cdot \left(1 + 3\left(\frac{v}{U}\right)^2\right) \cdot \frac{\sigma \cdot C_{\text{d,blade}}}{8} \]
+\textbf{Fuselage Drag:}
+\[ P_{\text{drag}} = \frac{1}{2} \rho \cdot C_{\text{air}} \cdot A \cdot v^3 \]
+\textbf{Climb:}
+\[ P_{\text{climb}} = m \cdot g \cdot v \cdot \sin\gamma \]
+\textbf{Auxiliary:}
+\[ P_{\text{aux}} = \text{constant} \]
 \end{frame}
 
 
-\begin{frame}{Emission Model - Drone}
+\begin{frame}{Use-phase Emission Model - Drone}
 
 % \footnotesize
 
@@ -530,7 +517,7 @@ $P_{\text{aux}}$ & Auxiliary power & $\mathrm{kW}$ & $0.01$ \\
 \end{frame}
 
 
-\begin{frame}{Emission Model}
+\begin{frame}{Use-phase Emission Model}
 \begin{figure}
     \centering
     \includegraphics[width=0.9\linewidth]{../figures/sensitivity/sensitivity_velocity_power_stacked.pdf}
@@ -540,9 +527,98 @@ $P_{\text{aux}}$ & Auxiliary power & $\mathrm{kW}$ & $0.01$ \\
 \end{frame}
 
 
+\begin{frame}{Use-phase Emission Model}
+
+\textbf{E-bike Use-phase Emissions:}
+\begin{equation}
+CO_2e_{E_{use}} = e_{E_c} \times P_{E} \times \sum_{i=1}^{m_E} (d_{E_i} / v_E)_i
+\end{equation}
+\small
+where $e_{E_c}$ is grid emission factor ($\mathrm{kg CO_2e/kWh}$), $P_E$ is e-bike power ($\mathrm{kW}$), $\sum_{i=1}^{m_E} (d_{E_i} / v_E)_i$ is total travel time ($\mathrm{h}$) to complete $m_E$ orders.
+
+\vspace{0.3cm}
+\normalsize
+\textbf{Drone Use-phase Emissions:}
+\begin{equation}
+CO_2e_{U_{use}} = e_{U_c} \times \left[ P_{U_L} \times \sum_{i=1}^{m_U} (d_{L_i} / v_{U_L})_i + P_{U_T} \times \sum_{i=1}^{m_U} (h_{T_i} / v_{U_T})_i \right]
+\end{equation}
+\small
+where $P_{U_L}$ is level flight power ($\mathrm{kW}$), $P_{U_T}$ is climb power ($\mathrm{kW}$), $\sum (d_{L_i} / v_{U_L})_i$ is level flight time ($\mathrm{h}$), $\sum (h_{T_i} / v_{U_T})_i$ is climb time ($\mathrm{h}$).
+
+\end{frame}
+
+
+\begin{frame}{Lifecycle Emission Model - E-bike}
+\textbf{Production and Disposal Phase}
+
+E-bike lifecycle emissions include body production, battery production, end-of-life disposal:
+\begin{equation}
+CO_2e_{E_{pro+dis}} = e_{E_m} \times w_{E_m} + e_{E_b} \times V_{E_b} \times n_{E_b} + e_{E_{md}} \times w_{E_m} + e_{E_{bd}} \times V_{E_b} \times n_{E_b}
+\end{equation}
+
+\vspace{0.1cm}
+\small
+
+\begin{center}
+\captionof{table}{Model parameters for e-bike production and disposal}
+\begin{tabular}{c c c}
+\toprule
+Symbol & Description & Unit \\
+\midrule
+$e_{E_m}$ & GHG emission factor of e-bike components & $\mathrm{kg CO_2e/kg}$ \\
+$w_{E_m}$ & Weight of e-bike components & $\mathrm{kg}$ \\
+$e_{E_b}$ & GHG emission factor of batteries & $\mathrm{kg CO_2e/kWh}$ \\
+$V_{E_b}$ & Battery capacity & $\mathrm{kWh}$ \\
+$n_{E_b}$ & Number of batteries & $\mathrm{-}$ \\
+$e_{E_{md}}$ & Disposal emission factor for components & $\mathrm{kg CO_2e/kg}$ \\
+$e_{E_{bd}}$ & Disposal emission factor for batteries & $\mathrm{kg CO_2e/kWh}$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+% \vspace{0.3cm}
+% \normalsize
+% \textbf{Per-order allocation:} Production emissions are allocated based on lifetime deliveries, accounting for vehicle lifespan and battery replacement cycles.
+\end{frame}
+
+
+\begin{frame}{Lifecycle Emission Model - Drone}
+\textbf{Production and Disposal Phase}
+
+Drone lifecycle emissions include body production, battery production, end-of-life disposal:
+\begin{equation}
+CO_2e_{U_{pro+dis}} = e_{U_m} \times w_{U_m} + e_{U_b} \times V_{U_b} \times n_{U_b} + e_{U_{md}} \times w_{U_m} + e_{U_{bd}} \times V_{U_b} \times n_{U_b}
+\end{equation}
+
+\vspace{0.1cm}
+\small
+
+\begin{center}
+\captionof{table}{Model parameters for drone production and disposal}
+\begin{tabular}{c c c}
+\toprule
+Symbol & Description & Unit \\
+\midrule
+$e_{U_m}$ & GHG emission factor of drone components & $\mathrm{kg CO_2e/kg}$ \\
+$w_{U_m}$ & Weight of drone components & $\mathrm{kg}$ \\
+$e_{U_b}$ & GHG emission factor of batteries & $\mathrm{kg CO_2e/kWh}$ \\
+$V_{U_b}$ & Battery capacity & $\mathrm{kWh}$ \\
+$n_{U_b}$ & Number of batteries & $\mathrm{-}$ \\
+$e_{U_{md}}$ & Disposal emission factor for components & $\mathrm{kg CO_2e/kg}$ \\
+$e_{U_{bd}}$ & Disposal emission factor for batteries & $\mathrm{kg CO_2e/kWh}$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+% \vspace{0.3cm}
+% \normalsize
+% \textbf{Per-order allocation:} Production emissions are allocated based on lifetime deliveries, accounting for vehicle lifespan and battery replacement cycles.
+\end{frame}
+
+
 \section{Results}
 
-\begin{frame}{Sensitivity Analysis}
+\begin{frame}{Use-phase Emission Model Comparison}
 \begin{figure}
     \centering
     \includegraphics[width=0.7\linewidth]{../figures/sensitivity/sensitivity_distance_route_factor.pdf}
@@ -550,6 +626,16 @@ $P_{\text{aux}}$ & Auxiliary power & $\mathrm{kW}$ & $0.01$ \\
     \label{fig:sensitivity_heatmap}
 \end{figure}
 \end{frame}
+
+
+\begin{frame}{Lifecycle Emission Model Comparison}
+  \begin{figure}
+      \centering
+      \includegraphics[width=0.7\linewidth]{../figures/lifecycle/lifecycle_distance_route_factor.pdf}
+      \caption{\textbf{Two-dimensional sensitivity analysis of delivery distance and route factor on relative lifecycle emissions.} Lifecycle analysis shows greater drone emission reduction than use-phase only, as drones achieve higher lifetime deliveries (longer hours, faster speed), spreading production emissions across more orders.}
+      \label{fig:lifecycle_heatmap}
+  \end{figure}
+  \end{frame}
 
 
 
@@ -563,24 +649,24 @@ $P_{\text{aux}}$ & Auxiliary power & $\mathrm{kW}$ & $0.01$ \\
 
 \section{Appendix}
 
-\begin{frame}{Emission Model - Drone}
+\begin{frame}{Use-phase Emission Model - Drone}
 \begin{center}
 \captionof{table}{Model parameters and default values for drone (continued)}
 \begin{tabular}{cccc}
 \toprule
 Symbol & Description & Unit & Default Value \\
 \midrule
-$r$ & Rotor radius & m & 0.35 \\ 
-$\bar{c}$ & Mean blade chord & m & 0.1 \\ 
-$n_r$ & Number of rotors & - & 8 \\ 
-$n_b$ & Number of blades per rotor & - & 5 \\ 
-$R$ & Total rotor disc area & m² & - \\ 
-$v_{\text{level}}$ & Horizontal flight velocity & km/h & 60 \\ 
-$v_{\text{vertical}}$ & Vertical flight velocity & km/h & 20 \\ 
-$D_{\text{body}}$ & Fuselage drag force & N & - \\ 
-$h_{\text{takeoff}}$ & Takeoff/landing height & m & 100 \\ 
-$t_{\text{hover}}$ & Hover time per delivery & s & 15 \\
-$C_l$ & Blade lift coefficient & - & 0.4 \\ 
+$r$ & Rotor radius & $\mathrm{m}$ & $0.35$ \\ 
+$\bar{c}$ & Mean blade chord & $\mathrm{m}$ & $0.1$ \\ 
+$n_r$ & Number of rotors & - & $8$ \\ 
+$n_b$ & Number of blades per rotor & - & $5$ \\ 
+$R$ & Total rotor disc area & $\mathrm{m^2}$ & - \\ 
+$v_{\text{level}}$ & Horizontal flight velocity & $\mathrm{km/h}$ & $60$ \\ 
+$v_{\text{vertical}}$ & Vertical flight velocity & $\mathrm{km/h}$ & $20$ \\ 
+$D_{\text{body}}$ & Fuselage drag force & $\mathrm{N}$ & - \\ 
+$h_{\text{takeoff}}$ & Takeoff/landing height & $\mathrm{m}$ & $100$ \\ 
+$t_{\text{hover}}$ & Hover time per delivery & $\mathrm{s}$ & $15$ \\
+$C_l$ & Blade lift coefficient & - & $0.4$ \\ 
 \bottomrule
 \end{tabular}
 \end{center}
