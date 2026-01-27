@@ -85,22 +85,30 @@ def cal_emission(region_info, exp_config):
     has_emission_cols = (
         "drone_emission_kg" in od_df.columns and "ebike_emission_kg" in od_df.columns
     )
+    has_lifecycle_cols = (
+        "drone_lifecycle_g" in od_df.columns and "ebike_lifecycle_g" in od_df.columns
+    )
 
-    if has_emission_cols:
+    if has_emission_cols and has_lifecycle_cols:
         print("Emission columns already exist, loading from CSV...")
         drone_emissions = od_df["drone_emission_kg"].values
         ebike_emissions = od_df["ebike_emission_kg"].values
+        drone_lifecycle = od_df["drone_lifecycle_g"].values
+        ebike_lifecycle = od_df["ebike_lifecycle_g"].values
         road_distances = od_df["road_distance_m"].values / 1000.0
     else:
         print("Calculating emissions for each OD pair...")
         drone_emissions_list = []
         ebike_emissions_list = []
+        drone_lifecycle_list = []
+        ebike_lifecycle_list = []
         road_distances_list = []
 
         for row in od_df.itertuples():
             distance_km = row.distance_km  # 直线距离，用于无人机
             road_distance_km = row.road_distance_m / 1000.0  # 道路距离，用于电动自行车
 
+            # Use-phase emissions
             result_drone = lca.calculate_drone_use_phase_emissions(
                 distance_km, payload_kg
             )
@@ -110,24 +118,51 @@ def cal_emission(region_info, exp_config):
 
             drone_emissions_list.append(result_drone["emissions_kg_co2e"])
             ebike_emissions_list.append(result_ebike["emissions_kg_co2e"])
+
+            # Lifecycle emissions (per order, g CO2e)
+            lifecycle_drone = lca.calculate_lifecycle_emissions_per_order_simple(
+                distance_km, n_orders_per_delivery=1, vehicle_type="drone"
+            )
+            lifecycle_ebike = lca.calculate_lifecycle_emissions_per_order_simple(
+                road_distance_km, n_orders_per_delivery=1, vehicle_type="ebike"
+            )
+
+            drone_lifecycle_list.append(lifecycle_drone["total_per_order_g"])
+            ebike_lifecycle_list.append(lifecycle_ebike["total_per_order_g"])
             road_distances_list.append(road_distance_km)
 
         drone_emissions = np.array(drone_emissions_list)
         ebike_emissions = np.array(ebike_emissions_list)
+        drone_lifecycle = np.array(drone_lifecycle_list)
+        ebike_lifecycle = np.array(ebike_lifecycle_list)
         road_distances = np.array(road_distances_list)
 
         # 保存排放数据到 CSV
         od_df["drone_emission_kg"] = drone_emissions
         od_df["ebike_emission_kg"] = ebike_emissions
+        od_df["drone_lifecycle_g"] = drone_lifecycle
+        od_df["ebike_lifecycle_g"] = ebike_lifecycle
         od_df.to_csv(od_save_path, index=False)
         print(f"Emission data saved to {od_save_path}")
 
+    # ==================== Use-phase Emission Analysis ====================
     # 基准：全部电动自行车排放
     total_ebike_emissions = ebike_emissions.sum()
     total_drone_emissions = drone_emissions.sum()
 
-    print(f"\n全部使用无人机排放: {total_drone_emissions:.2f} kg CO2e")
+    print(f"\n===== Use-phase Emissions =====")
+    print(f"全部使用无人机排放: {total_drone_emissions:.2f} kg CO2e")
     print(f"全部使用电动自行车排放: {total_ebike_emissions:.2f} kg CO2e")
+
+    # ==================== Lifecycle Emission Analysis ====================
+    total_ebike_lifecycle = ebike_lifecycle.sum() / 1000  # g -> kg
+    total_drone_lifecycle = drone_lifecycle.sum() / 1000  # g -> kg
+
+    print(f"\n===== Lifecycle Emissions (Production + Use) =====")
+    print(f"全部使用无人机排放: {total_drone_lifecycle:.2f} kg CO2e")
+    print(f"全部使用电动自行车排放: {total_ebike_lifecycle:.2f} kg CO2e")
+    lifecycle_reduction = (total_ebike_lifecycle - total_drone_lifecycle) / total_ebike_lifecycle * 100
+    print(f"无人机相对电动自行车减排: {lifecycle_reduction:.1f}%")
 
     # 根据道路距离分布确定阈值范围
     min_dist = road_distances.min()
@@ -142,16 +177,16 @@ def cal_emission(region_info, exp_config):
     )
     thresholds = np.concatenate([[-0.01], middle_thresholds, [np.inf]])
 
-    # 计算每个阈值下的结果
+    # 计算每个阈值下的结果 (使用生命周期排放)
     results = []
     for threshold in thresholds:
         # road_distance >= threshold 用无人机，否则用电动自行车
         use_drone = road_distances >= threshold
 
-        mixed_emissions = np.where(use_drone, drone_emissions, ebike_emissions).sum()
+        mixed_lifecycle = np.where(use_drone, drone_lifecycle, ebike_lifecycle).sum()
         drone_ratio = use_drone.sum() / total_orders * 100
         reduction = (
-            (total_ebike_emissions - mixed_emissions) / total_ebike_emissions * 100
+            (ebike_lifecycle.sum() - mixed_lifecycle) / ebike_lifecycle.sum() * 100
         )
 
         results.append(
@@ -160,7 +195,7 @@ def cal_emission(region_info, exp_config):
                 "drone_count": use_drone.sum(),
                 "ebike_count": (~use_drone).sum(),
                 "drone_ratio": drone_ratio,
-                "emissions": mixed_emissions,
+                "emissions_g": mixed_lifecycle,
                 "reduction": reduction,
             }
         )
@@ -170,20 +205,21 @@ def cal_emission(region_info, exp_config):
     # Find max emission reduction and save stats
     max_idx = results_df["reduction"].idxmax()
     max_row = results_df.loc[max_idx]
-    region_info.set_stat("max_emission_reduction_pct", float(max_row["reduction"]))
+    region_info.set_stat("max_lifecycle_reduction_pct", float(max_row["reduction"]))
     region_info.set_stat("optimal_threshold_km", float(max_row["threshold"]))
     region_info.set_stat("optimal_drone_ratio_pct", float(max_row["drone_ratio"]))
+    region_info.set_stat("lifecycle_all_drone_reduction_pct", float(lifecycle_reduction))
 
     # 打印结果表格
     print("\n" + "=" * 80)
-    print("混合场景对比 (road_distance > 阈值 用无人机，否则用电动自行车)")
+    print("混合场景对比 - 生命周期排放 (road_distance > 阈值 用无人机，否则用电动自行车)")
     print("=" * 80)
-    print(f"{'阈值(km)':<10} {'无人机占比%':<12} {'排放(kg CO2e)':<18} {'减排%':<10}")
+    print(f"{'阈值(km)':<10} {'无人机占比%':<12} {'排放(g CO2e)':<18} {'减排%':<10}")
     print("-" * 80)
     for _, row in results_df.iterrows():
         print(
             f"{row['threshold']:<10.2f} {row['drone_ratio']:<12.1f} "
-            f"{row['emissions']:<18.2f} {row['reduction']:<10.2f}"
+            f"{row['emissions_g']:<18.2f} {row['reduction']:<10.2f}"
         )
     print("=" * 80)
 

@@ -48,6 +48,12 @@ def load_roadnet(region_info, exp_config):
     region_info.set_stat("roadnet_node_count", len(G.nodes))
     region_info.set_stat("roadnet_edge_count", len(G.edges))
 
+    # save total roadnet length
+    region_info.set_stat(
+        "roadnet_length_total",
+        sum(data.get("length", 0) for u, v, data in G.edges(data=True)),
+    )
+
     # Visualize road network
     fig_dir = os.path.join(
         exp_config["figures_dir"], region_level, region_name_en.lower()
@@ -137,12 +143,25 @@ def load_roadnet(region_info, exp_config):
 
         # Visualize distance comparison with 10 samples
         _visualize_sample_paths(
-            od_df, router, valid_mask, boundaries_dict, fig_dir, region_name_en, exp_config
+            od_df,
+            router,
+            valid_mask,
+            boundaries_dict,
+            fig_dir,
+            region_name_en,
+            exp_config,
         )
 
 
 def _visualize_sample_paths(
-    od_df, router, valid_mask, boundaries_dict, fig_dir, region_name_en, exp_config, n_samples=10
+    od_df,
+    router,
+    valid_mask,
+    boundaries_dict,
+    fig_dir,
+    region_name_en,
+    exp_config,
+    n_samples=10,
 ):
     """抽取样本并绘制直线距离与路网距离对比图"""
     # 筛选有效路径，并确保有一定的路网距离

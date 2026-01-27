@@ -121,6 +121,22 @@ def load_buildings(region_info, exp_config):
 
     print(f"Loaded {len(gdf)} buildings.")
 
+    region_info.set_stat("building_count", len(gdf))
+    region_info.set_stat("building_height_mean", gdf["height"].mean())
+    region_info.set_stat("building_height_max", gdf["height"].max())
+    region_info.set_stat("building_height_min", gdf["height"].min())
+
+    # Calculate and save total building volume and area if not present
+    if "area_m2" not in gdf.columns:
+        # Calculate area from geometry (need to project to a metric CRS first)
+        gdf_projected = gdf.to_crs(epsg=3857)  # Web Mercator for area calculation
+        gdf["area_m2"] = gdf_projected.geometry.area
+    if "volume_m3" not in gdf.columns:
+        gdf["volume_m3"] = gdf["area_m2"] * gdf["height"]
+
+    region_info.set_stat("building_volume_total", gdf["volume_m3"].sum())
+    region_info.set_stat("building_area_total", gdf["area_m2"].sum())
+
     # Visualization
     fig_dir = os.path.join(
         exp_config["figures_dir"], region_level, region_name_en.lower()

@@ -30,18 +30,18 @@ def run_region_analysis(region_key: str, config: dict):
     #     region_info=region,
     #     exp_config=config,
     # )
-    # load_buildings(
-    #     region_info=region,
-    #     exp_config=config,
-    # )
+    load_buildings(
+        region_info=region,
+        exp_config=config,
+    )
     # generate_od_pairs(
     #     region_info=region,
     #     exp_config=config,
     # )
-    # load_roadnet(
-    #     region_info=region,
-    #     exp_config=config,
-    # )
+    load_roadnet(
+        region_info=region,
+        exp_config=config,
+    )
     cal_emission(
         region_info=region,
         exp_config=config,
@@ -54,7 +54,7 @@ def run_region_analysis(region_key: str, config: dict):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--env", type=str, default="default", help="Environment name")
+    parser.add_argument("--env", type=str, default=None, help="Environment name")
     parser.add_argument(
         "--region", type=str, default="nanshan", help="Region to analyze"
     )
