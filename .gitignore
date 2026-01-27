@@ -9,3 +9,5 @@ archive/
 backup_*
 download_figures.sh
 regions.json
+build/
+*.pdf

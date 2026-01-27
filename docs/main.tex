@@ -1,0 +1,367 @@
+\documentclass[9pt]{beamer}
+\usepackage[utf8]{inputenc}
+% \usepackage{enumitem}  % Conflicts with beamer's enumerate
+\usepackage{booktabs}
+\usepackage{fontspec}
+% \usepackage{unicode-math}
+
+\setmainfont{Times New Roman}
+% \setmathfont{TeX Gyre Termes Math}  % Commented out - font not installed
+
+\usetheme{Madrid}
+\usecolortheme{default}
+
+\usepackage[
+  backend=biber,
+  style=apa,
+  citestyle=apa,
+  natbib=false,
+  doi=false,
+  isbn=false,
+  url=false
+]{biblatex}
+
+\addbibresource{delivery_emission.bib}
+
+\usepackage{caption}
+\setbeamertemplate{caption}[numbered]
+
+%------------------------------------------------------------
+%This block of code defines the information to appear in the
+%Title page
+\title[Drones for Food Delivery] %optional
+{Drones vs. E-bikes: Comparing Operational Emissions in Urban Food Delivery in China}
+
+% \subtitle{A short story}
+
+\author[Jingxian Lin] % (optional)
+{Jingxian Lin}
+
+\institute[HKU] % (optional)
+{
+  Department of Civil Engineering\\
+  The University of Hong Kong
+}
+
+\date[\today] % (optional)
+{Seminar for Confirmation of PhD Candidature}
+
+%End of title page configuration block
+%------------------------------------------------------------
+
+
+
+%------------------------------------------------------------
+%The next block of commands puts the table of contents at the 
+%beginning of each section and highlights the current section:
+
+\AtBeginSection[]
+{
+  \begin{frame}
+    \frametitle{Table of Contents}
+    \tableofcontents[currentsection]
+  \end{frame}
+}
+%------------------------------------------------------------
+
+
+\begin{document}
+
+%The next statement creates the title page.
+\frame{\titlepage}
+
+
+%---------------------------------------------------------
+%This block of code is for the table of contents after
+%the title page
+\begin{frame}
+\frametitle{Table of Contents}
+\tableofcontents
+\end{frame}
+%---------------------------------------------------------
+
+
+\section{Introduction}
+
+
+\begin{frame}{Food Delivery in China}
+\begin{figure}
+    \centering
+    \includegraphics[width=0.8\linewidth]{../figures/market/china_food_delivery_market_size.pdf}
+    \caption{\textbf{China's online food delivery market size (2017–2027)}, showing historical values and forecasts \parencite{statista2024chinafooddelivery}. The market has grown from approximately 300 billion Yuan in 2017 to over 1 trillion Yuan by 2023, with projections suggesting continued expansion.}
+    \label{fig:market_size}
+\end{figure}    
+\end{frame}
+
+
+\begin{frame}{Environmental Concerns of E-bike Delivery}
+\begin{columns}[T]
+    \begin{column}{0.48\textwidth}
+        \textbf{E-bike Delivery}
+        \begin{enumerate}
+            \item \textbf{Battery Life Cycle}
+            \begin{itemize}
+                \item 2--3 charging cycles/day
+                \item Battery lifespan: 1--1.5 years
+                \item Lead-acid batteries still common
+                \item Poor recycling infrastructure
+            \end{itemize}
+
+            \item \textbf{Vehicle Replacement}
+            \begin{itemize}
+                \item Replaced every 1--2 years
+                \item High manufacturing emissions
+            \end{itemize}
+
+            \item \textbf{Grid Carbon Intensity}
+            \begin{itemize}
+                \item China grid $\sim$60\% coal
+            \end{itemize}
+        \end{enumerate}
+    \end{column}
+
+    \begin{column}{0.48\textwidth}
+        \begin{enumerate}
+            \setcounter{enumi}{3}
+            \item \textbf{Operational Inefficiency}
+            \begin{itemize}
+                \item Road detour: 1.3--1.5$\times$ distance
+                \item Stop-and-go traffic
+            \end{itemize}
+
+            \item \textbf{Scale}
+            \begin{itemize}
+                \item 7--10 million riders in China
+                \item 40--50 million orders/day
+            \end{itemize}
+        \end{enumerate}
+    \end{column}
+\end{columns}
+\end{frame}
+
+
+\begin{frame}{Drone Delivery as Alternative}
+\begin{columns}[T]
+    \begin{column}{0.48\textwidth}
+        \textbf{E-bike Delivery}
+        \begin{enumerate}
+            \item Battery lifespan: 1--1.5 years
+            \item Replaced every 1--2 years
+            \item China grid $\sim$60\% coal
+            \item Road detour: 1.3--1.5$\times$
+            \item 40--50M orders/day
+        \end{enumerate}
+    \end{column}
+
+    \begin{column}{0.48\textwidth}
+        \textbf{Drone Delivery} \textcolor{green!60!black}{(Potential)}
+        \begin{enumerate}
+            \item Centralized maintenance
+            \item Modular component replacement
+            \item Same grid, less energy/trip
+            \item \textcolor{green!60!black}{Direct line flight (1.0$\times$)}
+            \item \textcolor{blue}{$\rightarrow$ Comparative study needed}
+        \end{enumerate}
+    \end{column}
+\end{columns}
+
+\vspace{1em}
+\centering
+\textbf{Research Question:} Under what conditions does drone delivery produce lower emissions than e-bike delivery?
+\end{frame}
+
+
+\begin{frame}{Review}
+    
+\end{frame}
+
+
+\begin{frame}{Contributions}
+\begin{itemize}
+    \item We develop a \textbf{gravity-based food delivery demand generation method} that produces \textbf{door-to-door order data}, enabling more precise analysis than conventional zone-based or aggregate approaches.
+
+    \item We present the \textbf{first comprehensive comparison} of carbon emissions between \textbf{e-bike and drone delivery systems} across multiple cities in China.
+
+    \item We identify \textbf{key urban features} (e.g., population density, terrain, delivery distance distribution) that determine when drone delivery achieves lower emissions, providing actionable insights for sustainable logistics planning.
+\end{itemize}
+\end{frame}
+
+
+\section{Method}
+
+
+\begin{frame}{OD Generation - Monthly Sales}
+
+
+
+\end{frame}
+
+
+\begin{frame}{Emission Model - E-bike}
+
+The e-bike power model calculates the instantaneous mechanical power required to propel the vehicle at a given velocity \parencite{kirschstein_comparison_2020}.
+\[
+P_{\text{ebike}} =
+P_{\text{rolling}} + P_{\text{air}} + P_{\text{grade}} + P_{\text{acc}}
+\]
+
+\begin{description}
+  \item[Rolling Resistance Power:]
+    \[
+    P_{\text{rolling}} = g \cdot C_{\text{roll}} \cdot v \cdot m
+    \]
+
+  \item[Aerodynamic Drag Power:]
+    \[
+    P_{\text{air}} = \tfrac{\rho \cdot v^3}{2 \cdot 10^3} \cdot A \cdot C_{\text{air}} 
+    \]
+
+  \item[Grade Climbing Power:]
+    \[
+    P_{\text{grade}} = g \cdot i \cdot v \cdot m
+    \]
+
+  \item[Acceleration Power:]
+    \[
+    P_{\text{acc}} =
+    \frac{0.504 \cdot n_{\text{acc}}}{2 \cdot 10^3 \cdot 3.6} \cdot m \cdot v_{\mathrm{km/h}}^3
+    \]
+\end{description}
+\end{frame}
+
+
+\begin{frame}{Emission Model - E-bike}
+
+% \footnotesize
+\centering
+\captionof{table}{Model parameters and default values for e-bike}
+\begin{tabular}{c c c c}
+\toprule
+\textbf{Symbol} & \textbf{Description} & \textbf{Unit} & \textbf{Value} \\
+\midrule
+$m$ & Total mass & $\mathrm{t}$ & $0.156$ \\
+$v$ & Velocity & $\mathrm{m/s}$ & $8.33$ \\
+$v_{\mathrm{km/h}}$ & Velocity & $\mathrm{km/h}$ & $30$ \\
+$\rho$ & Air density & $\mathrm{kg/m^3}$ & $1.225$ \\
+$g$ & Gravitational acceleration & $\mathrm{m/s^2}$ & $9.81$ \\
+$A$ & Frontal area & $\mathrm{m^2}$ & $1.0$ \\
+$\theta$ & Road grade (slope) & -- & $0.015$ \\
+$n_{\text{acc}}$ & Acceleration frequency & $\mathrm{km^{-1}}$ & $1$ \\
+$C_{\text{roll}}$ & Rolling resistance coefficient & -- & $0.008$ \\
+$C_{\text{air}}$ & Aerodynamic drag coefficient & -- & $0.65$ \\
+\bottomrule
+\end{tabular}
+\end{frame}
+
+
+\begin{frame}{Emission Model - Drone}
+
+The drone power model calculates the power required for multi-rotor flight at various flight angles \parencite{kirschstein_comparison_2020}.
+\[
+P_{\text{drone}} 
+= P_{\text{induced}} + P_{\text{profile}} + P_{\text{drag}} + P_{\text{climb}} + P_{\text{aux}}
+\]
+\begin{description}
+  \item[Induced Power:]
+  \[ P_{\text{induced}} = k_{\text{lift}} \cdot w \cdot T \]
+  \item[Profile Power:]
+  \[ P_{\text{profile}} = \rho \cdot R \cdot U^3 \cdot \left(1 + 3\left(\frac{v}{U}\right)^2\right) \cdot \frac{\sigma \cdot C_{\text{d,blade}}}{8} \]
+  \item[Fuselage Drag Power:]
+  \[ P_{\text{drag}} = \frac{1}{2} \rho \cdot C_{\text{air}} \cdot A \cdot v^3 \]
+  \item[Climb Power:]
+  \[ P_{\text{climb}} = m \cdot g \cdot v \cdot \sin\gamma \]
+  \item[Auxiliary Power:]
+  \[ P_{\text{aux}} = \text{constant} \]
+\end{description}
+\end{frame}
+
+
+\begin{frame}{Emission Model - Drone}
+
+% \footnotesize
+
+\begin{center}
+\captionof{table}{Model parameters and default values for drone}
+\begin{tabular}{cccc}
+\toprule
+Symbol & Description & Unit & Default Value \\
+\midrule
+$m$ & Total mass & $\mathrm{kg}$ & $14.1$ \\ 
+$v$ & Flight velocity & $\mathrm{m/s}$ & $16.67$ \\ 
+$T$ & Thrust force & $\mathrm{N}$ & $-$ \\ 
+$w$ & Induced velocity & $\mathrm{m/s}$ & $-$ \\ 
+$U$ & Blade tip speed & $\mathrm{m/s}$ & $-$ \\ 
+$\rho$ & Air density & $\mathrm{kg/m^3}$ & $1.225$ \\ 
+$g$ & Gravitational acceleration & $\mathrm{m/s^2}$ & $9.81$ \\
+$A$ & Fuselage frontal area & $\mathrm{m^2}$ & $0.15$ \\ 
+$\gamma$ & Flight path angle & $\mathrm{rad}$ & $-$ \\ 
+$k_{\text{lift}}$ & Lift margin factor & $-$ & $1.15$ \\
+$C_{\text{air}}$ & Fuselage drag coefficient & $-$ & $0.65$ \\ 
+$C_{\text{d,blade}}$ & Blade drag coefficient & $-$ & $0.075$ \\ 
+$\sigma$ & Rotor solidity & $-$ & $-$ \\ 
+$R$ & Total rotor disc area & $\mathrm{m^2}$ & $-$ \\
+$P_{\text{aux}}$ & Auxiliary power & $\mathrm{kW}$ & $0.01$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+\end{frame}
+
+
+\begin{frame}{Emission Model}
+\begin{figure}
+    \centering
+    \includegraphics[width=0.9\linewidth]{../figures/sensitivity/sensitivity_velocity_power_stacked.pdf}
+    \caption{\textbf{Power consumption breakdown by component for drone and e-bike at varying velocities.} (a) Drone power components: induced power, profile drag, parasitic drag, climb power, and auxiliary systems. (b) E-bike power components: rolling resistance, aerodynamic drag, grade resistance, and acceleration.}
+    \label{fig:sensitivity_power_breakdown}
+\end{figure}    
+\end{frame}
+
+
+\section{Results}
+
+\begin{frame}{Sensitivity Analysis}
+\begin{figure}
+    \centering
+    \includegraphics[width=0.7\linewidth]{../figures/sensitivity/sensitivity_distance_route_factor.pdf}
+    \caption{\textbf{Two-dimensional sensitivity analysis of delivery distance and route factor on relative emissions.} The heatmap shows the percentage difference in drone emissions relative to e-bike emissions. The black contour line indicates the breakeven point where both delivery modes produce equal emissions. Negative values (green) indicate scenarios where drone delivery is more environmentally favorable.}
+    \label{fig:sensitivity_heatmap}
+\end{figure}
+\end{frame}
+
+
+
+\section{References}
+
+
+\begin{frame}[allowframebreaks]{References}
+\printbibliography
+\end{frame}
+
+
+\section{Appendix}
+
+\begin{frame}{Emission Model - Drone}
+\begin{center}
+\captionof{table}{Model parameters and default values for drone (continued)}
+\begin{tabular}{cccc}
+\toprule
+Symbol & Description & Unit & Default Value \\
+\midrule
+$r$ & Rotor radius & m & 0.35 \\ 
+$\bar{c}$ & Mean blade chord & m & 0.1 \\ 
+$n_r$ & Number of rotors & - & 8 \\ 
+$n_b$ & Number of blades per rotor & - & 5 \\ 
+$R$ & Total rotor disc area & m² & - \\ 
+$v_{\text{level}}$ & Horizontal flight velocity & km/h & 60 \\ 
+$v_{\text{vertical}}$ & Vertical flight velocity & km/h & 20 \\ 
+$D_{\text{body}}$ & Fuselage drag force & N & - \\ 
+$h_{\text{takeoff}}$ & Takeoff/landing height & m & 100 \\ 
+$t_{\text{hover}}$ & Hover time per delivery & s & 15 \\
+$C_l$ & Blade lift coefficient & - & 0.4 \\ 
+\bottomrule
+\end{tabular}
+\end{center}
+\end{frame}
+
+
+\end{document}

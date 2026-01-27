@@ -36,6 +36,7 @@ python -m emission.cal_single_delivery
 3. **demand** - Generate OD pairs using gravity model (store → building matching)
 4. **roadnet** - Fetch OSM road network, compute road distances for OD pairs
 5. **emission** - Calculate and compare drone vs e-bike emissions
+6. **urban_factors** - Analyze urban features (population density, terrain, delivery distance) vs emission reduction potential
 
 Each stage is controlled by uncommenting the relevant function call in `main.py:run_region_analysis()`.
 
@@ -44,6 +45,7 @@ Each stage is controlled by uncommenting the relevant function call in `main.py:
 - **`emission/cal_single_delivery.py`**: Core emission models with `EbikeEnergyModel`, `DroneEnergyModel`, and `LifeCycleEmissions` classes. Contains detailed physics-based power calculations.
 - **`roadnet/router.py`**: `RoadNetRouter` class for efficient shortest path computation with KD-tree optimization and batch processing.
 - **`demand/api.py`**: Gravity model implementation for generating delivery demand between stores and buildings.
+- **`urban_factors/`**: Analysis of urban features (population density, terrain, delivery distance distribution) and their relationship to emission reduction potential.
 - **`utils/region_config.py`**: `RegionRegistry` singleton pattern for managing region configurations with stats/cache persistence.
 
 ### Data Flow
