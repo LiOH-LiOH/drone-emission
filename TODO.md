@@ -12,8 +12,10 @@
 - [x] add emission model
     - [x] update legend of figures
     - [x] get grid emission factor from file
-    - [ ] check LCA emission calculation
-- [ ] write a entrypoint for large scale OD generation
+    - [x] check LCA emission calculation
+- [x] write a entrypoint for large scale OD generation
 - [ ] add POI data for equity analysis
-    
-    
+- [ ] fix GlobalBuildingAtlas data source
+- [ ] add economic analysis
+- [ ] add coeff for bundled food delivery
+- [ ] consider weather impact
