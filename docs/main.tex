@@ -1,4 +1,4 @@
-\documentclass[9pt]{beamer}
+\documentclass[9pt, draft]{beamer}
 \usepackage[utf8]{inputenc}
 % \usepackage{enumitem}  % Conflicts with beamer's enumerate
 \usepackage{booktabs}
@@ -161,95 +161,78 @@
 \section{Introduction}
 
 
+\begin{frame}{Drone Delivery: An Emerging Industry}
+\begin{itemize}
+    \item Drones are a \textbf{transformative technology} for transportation and logistics
+    \item Key benefits:
+    \begin{itemize}
+        \item Fast and flexible delivery
+        \item Cost-efficient operations
+    \end{itemize}
+    \item \textbf{Low-altitude economy} development gaining momentum in China
+    \begin{itemize}
+        \item Included in \textbf{China’s Government Work Report} in both 2024 and 2025, signaling sustained national-level policy attention
+    \end{itemize}
+    \item Global drone delivery market growth:
+    \begin{itemize}
+        \item \$3.47 billion (2025) $\rightarrow$ \$20.98 billion (2034)
+        \item Compound Annual Growth Rate: \textbf{19.45\%}
+    \end{itemize}
+\end{itemize}
+\end{frame}
+
+
+\begin{frame}{Why Food Delivery?}
+\begin{itemize}
+    \item \textbf{Current constraints:} Battery capacity and cargo weight limitations
+    \item Drones best suited for:
+    \begin{itemize}
+        \item Short-distance delivery
+        \item Same-day delivery
+        \item Last-mile logistics
+    \end{itemize}
+    \item \textbf{Food delivery advantages} over parcel delivery:
+    \begin{itemize}
+        \item Lighter and smaller packages
+        \item Shorter delivery distances (typically $<$ 3 km)
+        \item Speed advantage: prevents food from getting cold/spoiled
+        \item High time sensitivity matches drone capabilities
+    \end{itemize}
+\end{itemize}
+\end{frame}
+
+
 \begin{frame}{Food Delivery in China}
 \begin{figure}
     \centering
     \includegraphics[width=0.8\linewidth]{../figures/misc/china_food_delivery_market_size.pdf}
-    \caption{\textbf{China's online food delivery market size (2017–2027)}, showing historical values and forecasts \parencite{statista2024chinafooddelivery}. The market has grown from approximately 300 billion Yuan in 2017 to over 1 trillion Yuan by 2023, with projections suggesting continued expansion.}
+    \caption{\textbf{China's online food delivery market size (2017–2027)}, showing historical values and forecasts \parencite{statista2024chinafooddelivery}. The market has grown from approximately 300 billion Yuan in 2017 to over 1 trillion Yuan by 2023.}
     \label{fig:market_size}
-\end{figure}    
+\end{figure}
+% \vspace{-0.5em}
+% \begin{itemize}
+%     \item \textbf{545 million} online food delivery users (49.9\% of internet users)
+%     \item Meituan and Eleme piloting drone delivery projects
+% \end{itemize}
 \end{frame}
 
 
-\begin{frame}{Environmental Concerns of E-bike Delivery}
-\begin{columns}[T]
-    \begin{column}{0.48\textwidth}
-        \textbf{E-bike Delivery}
-        \begin{enumerate}
-            \item \textbf{Battery Life Cycle}
-            \begin{itemize}
-                \item 2--3 charging cycles/day
-                \item Battery lifespan: 1--1.5 years
-                \item Lead-acid batteries still common
-                \item Poor recycling infrastructure
-            \end{itemize}
-
-            \item \textbf{Vehicle Replacement}
-            \begin{itemize}
-                \item Replaced every 1--2 years
-                \item High manufacturing emissions
-            \end{itemize}
-
-            \item \textbf{Grid Carbon Intensity}
-            \begin{itemize}
-                \item China grid $\sim$60\% coal
-            \end{itemize}
-        \end{enumerate}
-    \end{column}
-
-    \begin{column}{0.48\textwidth}
-        \begin{enumerate}
-            \setcounter{enumi}{3}
-            \item \textbf{Operational Inefficiency}
-            \begin{itemize}
-                \item Road detour: 1.3--1.5$\times$ distance
-                \item Stop-and-go traffic
-            \end{itemize}
-
-            \item \textbf{Scale}
-            \begin{itemize}
-                \item 7--10 million riders in China
-                \item 40--50 million orders/day
-            \end{itemize}
-        \end{enumerate}
-    \end{column}
-\end{columns}
-\end{frame}
-
-
-\begin{frame}{Drone Delivery as Alternative}
-\begin{columns}[T]
-    \begin{column}{0.48\textwidth}
-        \textbf{E-bike Delivery}
-        \begin{enumerate}
-            \item Battery lifespan: 1--1.5 years
-            \item Replaced every 1--2 years
-            \item China grid $\sim$60\% coal
-            \item Road detour: 1.3--1.5$\times$
-            \item 40--50M orders/day
-        \end{enumerate}
-    \end{column}
-
-    \begin{column}{0.48\textwidth}
-        \textbf{Drone Delivery} \textcolor{green!60!black}{(Potential)}
-        \begin{enumerate}
-            \item Centralized maintenance
-            \item Modular component replacement
-            \item Same grid, less energy/trip
-            \item \textcolor{green!60!black}{Direct line flight (1.0$\times$)}
-            \item \textcolor{blue}{$\rightarrow$ Comparative study needed}
-        \end{enumerate}
-    \end{column}
-\end{columns}
+\begin{frame}{Research Gap}
+\begin{itemize}
+    \item \textbf{High costs} of purchasing and maintaining drones
+    \item Significant investment in \textbf{UAS infrastructure} required
+    \item \textbf{Lack of predictive models} for environmental impact evaluation
+    \item Challenge: Determine if drones truly offer a \textbf{sustainable advantage}
+\end{itemize}
 
 \vspace{1em}
-\centering
-\textbf{Research Question:} Under what conditions does drone delivery produce lower emissions than e-bike delivery?
+\begin{block}{Research Question}
+Under what conditions does drone delivery produce \textbf{lower emissions} than e-bike delivery?
+\end{block}
 \end{frame}
 
 
-\begin{frame}{Review}
-    
+\begin{frame}{Review of Related Work}
 \end{frame}
 
 
@@ -629,14 +612,46 @@ $e_{U_{bd}}$ & Disposal emission factor for batteries & $\mathrm{kg CO_2e/kWh}$ 
 
 
 \begin{frame}{Lifecycle Emission Model Comparison}
-  \begin{figure}
-      \centering
-      \includegraphics[width=0.7\linewidth]{../figures/lifecycle/lifecycle_distance_route_factor.pdf}
-      \caption{\textbf{Two-dimensional sensitivity analysis of delivery distance and route factor on relative lifecycle emissions.} Lifecycle analysis shows greater drone emission reduction than use-phase only, as drones achieve higher lifetime deliveries (longer hours, faster speed), spreading production emissions across more orders.}
-      \label{fig:lifecycle_heatmap}
-  \end{figure}
-  \end{frame}
+\begin{figure}
+    \centering
+    \includegraphics[width=0.7\linewidth]{../figures/lifecycle/lifecycle_distance_route_factor.pdf}
+    \caption{\textbf{Two-dimensional sensitivity analysis of delivery distance and route factor on relative lifecycle emissions.} Lifecycle analysis shows greater drone emission reduction than use-phase only, as drones achieve higher lifetime deliveries (longer hours, faster speed), spreading production emissions across more orders.}
+    \label{fig:lifecycle_heatmap}
+\end{figure}
+\end{frame}
 
+
+\begin{frame}{Results in Luohu District}
+\begin{columns}
+\begin{column}{0.5\textwidth}
+\begin{figure}
+    \centering
+    \includegraphics[width=0.8\linewidth]{../figures/remote/luohu/luohu_road_distance_distribution.pdf}
+    \caption{\textbf{Road distance distribution in Luohu district.} }
+    \label{fig:luohu_road_distance_distribution}
+\end{figure}
+\end{column}
+
+\begin{column}{0.5\textwidth}
+\begin{figure}
+    \centering
+    \includegraphics[width=0.8\linewidth]{../figures/remote/luohu/luohu_distance_detour_scatter.pdf}
+    \caption{\textbf{Distance-detour scatter plot in Luohu district.} }
+    \label{fig:luohu_distance_detour_scatter}
+\end{figure}
+\end{column}
+\end{columns}
+\end{frame}
+
+
+\begin{frame}{Results in Luohu District}
+\begin{figure}
+    \centering
+    \includegraphics[width=0.6\linewidth]{../figures/remote/luohu/luohu_emission_reduction.pdf}
+    \caption{\textbf{Emission reduction in Luohu district.} }
+    \label{fig:luohu_emission_reduction}
+\end{figure}
+\end{frame}
 
 
 \section{References}

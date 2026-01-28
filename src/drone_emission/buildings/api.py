@@ -137,6 +137,8 @@ def load_buildings(region_info, exp_config):
     region_info.set_stat("building_volume_total", gdf["volume_m3"].sum())
     region_info.set_stat("building_area_total", gdf["area_m2"].sum())
 
+    print(f"Total building volume: {region_info.get_stat('building_volume_total')}")
+
     # Visualization
     fig_dir = os.path.join(
         exp_config["figures_dir"], region_level, region_name_en.lower()

@@ -161,8 +161,13 @@ def cal_emission(region_info, exp_config):
     print(f"\n===== Lifecycle Emissions (Production + Use) =====")
     print(f"全部使用无人机排放: {total_drone_lifecycle:.2f} kg CO2e")
     print(f"全部使用电动自行车排放: {total_ebike_lifecycle:.2f} kg CO2e")
-    lifecycle_reduction = (total_ebike_lifecycle - total_drone_lifecycle) / total_ebike_lifecycle * 100
+    lifecycle_reduction = (
+        (total_ebike_lifecycle - total_drone_lifecycle) / total_ebike_lifecycle * 100
+    )
     print(f"无人机相对电动自行车减排: {lifecycle_reduction:.1f}%")
+
+    region_info.set_stat("total_ebike_lifecycle", total_ebike_lifecycle)
+    region_info.set_stat("total_drone_lifecycle", total_drone_lifecycle)
 
     # 根据道路距离分布确定阈值范围
     min_dist = road_distances.min()
@@ -208,11 +213,15 @@ def cal_emission(region_info, exp_config):
     region_info.set_stat("max_lifecycle_reduction_pct", float(max_row["reduction"]))
     region_info.set_stat("optimal_threshold_km", float(max_row["threshold"]))
     region_info.set_stat("optimal_drone_ratio_pct", float(max_row["drone_ratio"]))
-    region_info.set_stat("lifecycle_all_drone_reduction_pct", float(lifecycle_reduction))
+    region_info.set_stat(
+        "lifecycle_all_drone_reduction_pct", float(lifecycle_reduction)
+    )
 
     # 打印结果表格
     print("\n" + "=" * 80)
-    print("混合场景对比 - 生命周期排放 (road_distance > 阈值 用无人机，否则用电动自行车)")
+    print(
+        "混合场景对比 - 生命周期排放 (road_distance > 阈值 用无人机，否则用电动自行车)"
+    )
     print("=" * 80)
     print(f"{'阈值(km)':<10} {'无人机占比%':<12} {'排放(g CO2e)':<18} {'减排%':<10}")
     print("-" * 80)
