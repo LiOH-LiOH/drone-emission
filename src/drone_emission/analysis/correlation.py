@@ -24,10 +24,10 @@ RESULT_VARIABLES = [
 FEATURE_VARIABLES = {
     "building": [
         "building_count",
-        "building_height_mean",
-        "building_height_max",
+        # "building_height_mean",
+        # "building_height_max",
         "building_volume_total",
-        "building_area_total",
+        # "building_area_total",
     ],
     "roadnet": [
         "detour_ratio",
@@ -35,16 +35,16 @@ FEATURE_VARIABLES = {
         "avg_straight_distance_m",
         "roadnet_length_total",
     ],
-    "demand": [
-        "odpair_count",
-        "valid_path_count",
-    ],
+    # "demand": [
+    # "odpair_count",
+    # "valid_path_count",
+    # ],
     "density": [
         "region_area_km2",
         "building_density",
         "road_density",
         "building_volume_density",
-        "building_area_ratio",
+        # "building_area_ratio",
     ],
 }
 
@@ -110,9 +110,7 @@ def calculate_region_area_km2(boundaries_dict: dict) -> float:
     return height_km * width_km
 
 
-def load_region_stats(
-    region_keys: list, regions_json_path: str = None
-) -> pd.DataFrame:
+def load_region_stats(region_keys: list, regions_json_path: str = None) -> pd.DataFrame:
     """Load statistics for specified regions into a DataFrame.
 
     Args:
@@ -138,7 +136,10 @@ def load_region_stats(
         stats = region_info.get("stats", {})
         boundaries = region_info.get("boundaries_dict", {})
 
-        row = {"region": region_key, "region_name": region_info.get("region_name_en", region_key)}
+        row = {
+            "region": region_key,
+            "region_name": region_info.get("region_name_en", region_key),
+        }
         row.update(stats)
 
         # Calculate region area
@@ -155,12 +156,16 @@ def load_region_stats(
                 row["road_density"] = (stats["roadnet_length_total"] / 1000) / area_km2
 
             if "building_volume_total" in stats and area_km2 > 0:
-                row["building_volume_density"] = stats["building_volume_total"] / area_km2
+                row["building_volume_density"] = (
+                    stats["building_volume_total"] / area_km2
+                )
 
             if "building_area_total" in stats and area_km2 > 0:
                 # Building area ratio as percentage
                 area_m2 = area_km2 * 1e6  # Convert km² to m²
-                row["building_area_ratio"] = (stats["building_area_total"] / area_m2) * 100
+                row["building_area_ratio"] = (
+                    stats["building_area_total"] / area_m2
+                ) * 100
 
         rows.append(row)
 
@@ -312,7 +317,9 @@ def plot_correlation_heatmap(
 
     # Add colorbar
     cbar = ax.figure.colorbar(im, ax=ax, shrink=0.8)
-    cbar.ax.set_ylabel("Correlation Coefficient", rotation=-90, va="bottom", fontsize=11)
+    cbar.ax.set_ylabel(
+        "Correlation Coefficient", rotation=-90, va="bottom", fontsize=11
+    )
 
     # Set ticks and labels
     ax.set_xticks(np.arange(len(col_labels)))
@@ -329,8 +336,15 @@ def plot_correlation_heatmap(
             val = corr_df.iloc[i, j]
             if not np.isnan(val):
                 text_color = "white" if abs(val) > 0.5 else "black"
-                ax.text(j, i, f"{val:.2f}", ha="center", va="center",
-                       color=text_color, fontsize=9)
+                ax.text(
+                    j,
+                    i,
+                    f"{val:.2f}",
+                    ha="center",
+                    va="center",
+                    color=text_color,
+                    fontsize=9,
+                )
 
     if not for_latex:
         ax.set_title(title, fontsize=14, fontweight="bold", pad=15)
@@ -398,7 +412,9 @@ def plot_feature_scatter(
         slope, intercept, r_value, p_value, std_err = stats.linregress(x, y)
         x_line = np.linspace(x.min(), x.max(), 100)
         y_line = slope * x_line + intercept
-        ax.plot(x_line, y_line, "r--", alpha=0.8, linewidth=2, label=f"r = {r_value:.3f}")
+        ax.plot(
+            x_line, y_line, "r--", alpha=0.8, linewidth=2, label=f"r = {r_value:.3f}"
+        )
 
         # Add correlation info
         ax.legend(loc="best", fontsize=10)
@@ -450,7 +466,9 @@ def plot_top_correlations_bar(
 
     # Get correlations for this result, sorted by absolute value
     correlations = corr_df[result_var].dropna()
-    sorted_corr = correlations.reindex(correlations.abs().sort_values(ascending=False).index)
+    sorted_corr = correlations.reindex(
+        correlations.abs().sort_values(ascending=False).index
+    )
     top_corr = sorted_corr.head(top_n)
 
     fig, ax = plt.subplots(figsize=figsize)
@@ -478,7 +496,9 @@ def plot_top_correlations_bar(
 
     if not for_latex:
         result_label = VARIABLE_LABELS.get(result_var, result_var)
-        ax.set_title(f"Top Correlations with {result_label}", fontsize=12, fontweight="bold")
+        ax.set_title(
+            f"Top Correlations with {result_label}", fontsize=12, fontweight="bold"
+        )
 
     ax.grid(True, alpha=0.3, linestyle="--", axis="x")
     plt.tight_layout()
@@ -515,7 +535,9 @@ def print_correlation_summary(
         print("-" * 40)
 
         correlations = corr_df[result_var].dropna()
-        sorted_corr = correlations.reindex(correlations.abs().sort_values(ascending=False).index)
+        sorted_corr = correlations.reindex(
+            correlations.abs().sort_values(ascending=False).index
+        )
 
         for feature_var, r in sorted_corr.items():
             feature_label = VARIABLE_LABELS.get(feature_var, feature_var)
@@ -538,8 +560,8 @@ def load_annual_emissions(
 ) -> pd.DataFrame:
     """Load annual emissions data for specified regions.
 
-    If OD pairs data is available, computes actual emissions.
-    Otherwise, uses reduction percentages to create normalized comparison.
+    Uses total_ebike_lifecycle and total_drone_lifecycle from regions.template.json
+    if available. Otherwise falls back to reduction percentages.
 
     Args:
         region_keys: List of region keys to load.
@@ -564,55 +586,51 @@ def load_annual_emissions(
 
         region_info = regions_data[region_key]
         region_name = region_info.get("region_name_en", region_key)
-        region_level = region_info.get("region_level", "district")
         stats = region_info.get("stats", {})
 
-        # Try to load OD pairs CSV for actual values
-        od_path = os.path.join(
-            data_dir, region_level, region_name.lower(),
-            f"{region_name.lower()}_od_pairs.csv"
-        )
+        # Use total_ebike_lifecycle and total_drone_lifecycle from stats if available
+        total_ebike = stats.get("total_ebike_lifecycle")
+        total_drone = stats.get("total_drone_lifecycle")
+        reduction_pct = stats.get("max_lifecycle_reduction_pct")
 
-        if os.path.exists(od_path):
-            od_df = pd.read_csv(od_path)
-            required_cols = ["annual_sales", "ebike_lifecycle_g", "drone_lifecycle_g", "road_distance_m"]
-            if all(col in od_df.columns for col in required_cols):
-                annual_sales = od_df["annual_sales"].values
-                ebike_lifecycle = od_df["ebike_lifecycle_g"].values
-                drone_lifecycle = od_df["drone_lifecycle_g"].values
-                road_distances = od_df["road_distance_m"].values / 1000.0
+        if total_ebike is not None and total_drone is not None:
+            # Convert from kg to tonnes (values are in kg)
+            all_ebike_tonnes = total_ebike / 1000.0
+            all_drone_tonnes = total_drone / 1000.0
 
-                all_ebike_annual = (ebike_lifecycle * annual_sales).sum() / 1e6
-                optimal_threshold = stats.get("optimal_threshold_km", 0)
-                use_drone = road_distances >= optimal_threshold
-                optimal_mix_emissions = np.where(use_drone, drone_lifecycle, ebike_lifecycle)
-                optimal_mix_annual = (optimal_mix_emissions * annual_sales).sum() / 1e6
+            # Calculate optimal mix: use reduction percentage to derive optimal mix
+            if reduction_pct is not None:
+                optimal_mix_tonnes = all_ebike_tonnes * (1 - reduction_pct / 100)
+            else:
+                optimal_mix_tonnes = all_drone_tonnes
 
-                rows.append({
+            rows.append(
+                {
                     "region": region_key,
                     "region_name": region_name,
-                    "all_ebike_tonnes": all_ebike_annual,
-                    "optimal_mix_tonnes": optimal_mix_annual,
-                    "reduction_pct": stats.get("max_lifecycle_reduction_pct", 0),
+                    "all_ebike_tonnes": all_ebike_tonnes,
+                    "all_drone_tonnes": all_drone_tonnes,
+                    "optimal_mix_tonnes": optimal_mix_tonnes,
+                    "reduction_pct": reduction_pct if reduction_pct else 0,
                     "has_actual_data": True,
-                })
-                continue
-
-        # Fall back to using reduction percentage with normalized values
-        reduction_pct = stats.get("max_lifecycle_reduction_pct")
-        if reduction_pct is not None:
-            # Use 100 as normalized baseline for e-bike
+                }
+            )
+        elif reduction_pct is not None:
+            # Fall back to using reduction percentage with normalized values
             all_ebike_normalized = 100.0
             optimal_mix_normalized = 100.0 * (1 - reduction_pct / 100)
 
-            rows.append({
-                "region": region_key,
-                "region_name": region_name,
-                "all_ebike_tonnes": all_ebike_normalized,
-                "optimal_mix_tonnes": optimal_mix_normalized,
-                "reduction_pct": reduction_pct,
-                "has_actual_data": False,
-            })
+            rows.append(
+                {
+                    "region": region_key,
+                    "region_name": region_name,
+                    "all_ebike_tonnes": all_ebike_normalized,
+                    "all_drone_tonnes": None,
+                    "optimal_mix_tonnes": optimal_mix_normalized,
+                    "reduction_pct": reduction_pct,
+                    "has_actual_data": False,
+                }
+            )
 
     return pd.DataFrame(rows)
 
@@ -625,6 +643,8 @@ def plot_annual_emissions_comparison(
     for_latex: bool = False,
 ):
     """Plot grouped bar chart comparing annual emissions across regions.
+
+    Shows three scenarios: All E-bike, All Drone, and Optimal Mix.
 
     Args:
         region_keys: List of region keys to analyze.
@@ -639,39 +659,121 @@ def plot_annual_emissions_comparison(
         print("No emission data available")
         return
 
-    # Check if using normalized or actual data
-    has_actual = df["has_actual_data"].any() if "has_actual_data" in df.columns else False
+    # Check if using actual data
+    has_actual = (
+        df["has_actual_data"].any() if "has_actual_data" in df.columns else False
+    )
+    has_drone_data = (
+        "all_drone_tonnes" in df.columns and df["all_drone_tonnes"].notna().any()
+    )
 
     fig, ax = plt.subplots(figsize=figsize)
 
     x = np.arange(len(df))
-    width = 0.35
 
-    # Bar colors
-    ebike_color = "#e74c3c"  # Red for e-bike
-    mix_color = "#2ecc71"    # Green for optimal mix
+    if has_drone_data and has_actual:
+        # Three bars: E-bike, Drone, Optimal Mix
+        width = 0.25
+        ebike_color = "#e74c3c"  # Red for e-bike
+        drone_color = "#3498db"  # Blue for drone
+        mix_color = "#2ecc71"  # Green for optimal mix
 
-    # Create bars
-    bars1 = ax.bar(x - width/2, df["all_ebike_tonnes"], width,
-                   label="All E-bike", color=ebike_color, alpha=0.8)
-    bars2 = ax.bar(x + width/2, df["optimal_mix_tonnes"], width,
-                   label="Optimal Drone-Ebike Mix", color=mix_color, alpha=0.8)
+        bars1 = ax.bar(
+            x - width,
+            df["all_ebike_tonnes"],
+            width,
+            label="All E-bike",
+            color=ebike_color,
+            alpha=0.8,
+        )
+        bars2 = ax.bar(
+            x,
+            df["all_drone_tonnes"],
+            width,
+            label="All Drone",
+            color=drone_color,
+            alpha=0.8,
+        )
+        bars3 = ax.bar(
+            x + width,
+            df["optimal_mix_tonnes"],
+            width,
+            label="Optimal Mix",
+            color=mix_color,
+            alpha=0.8,
+        )
 
-    # Add value labels on bars
-    if has_actual:
+        # Add value labels on bars
         for bar, val in zip(bars1, df["all_ebike_tonnes"]):
-            ax.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 0.5,
-                    f"{val:.1f}", ha="center", va="bottom", fontsize=9)
-        for bar, val, pct in zip(bars2, df["optimal_mix_tonnes"], df["reduction_pct"]):
-            ax.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 0.5,
-                    f"{val:.1f}\n(-{pct:.1f}%)", ha="center", va="bottom", fontsize=9)
-        ylabel = "Annual Emissions (tonnes CO₂e)"
+            ax.text(
+                bar.get_x() + bar.get_width() / 2,
+                bar.get_height() + 0.5,
+                f"{val:.1f}",
+                ha="center",
+                va="bottom",
+                fontsize=8,
+            )
+        for bar, val in zip(bars2, df["all_drone_tonnes"]):
+            if pd.notna(val):
+                ax.text(
+                    bar.get_x() + bar.get_width() / 2,
+                    bar.get_height() + 0.5,
+                    f"{val:.1f}",
+                    ha="center",
+                    va="bottom",
+                    fontsize=8,
+                )
+        for bar, val, pct in zip(bars3, df["optimal_mix_tonnes"], df["reduction_pct"]):
+            ax.text(
+                bar.get_x() + bar.get_width() / 2,
+                bar.get_height() + 0.5,
+                f"{val:.1f}\n(-{pct:.1f}%)",
+                ha="center",
+                va="bottom",
+                fontsize=8,
+            )
+
+        ylabel = "Annual Lifecycle Emissions (tonnes CO₂e)"
     else:
+        # Two bars: E-bike vs Optimal Mix (fallback)
+        width = 0.35
+        ebike_color = "#e74c3c"
+        mix_color = "#2ecc71"
+
+        bars1 = ax.bar(
+            x - width / 2,
+            df["all_ebike_tonnes"],
+            width,
+            label="All E-bike",
+            color=ebike_color,
+            alpha=0.8,
+        )
+        bars2 = ax.bar(
+            x + width / 2,
+            df["optimal_mix_tonnes"],
+            width,
+            label="Optimal Mix",
+            color=mix_color,
+            alpha=0.8,
+        )
+
         # For normalized data, show reduction percentage
         for bar, pct in zip(bars2, df["reduction_pct"]):
-            ax.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 1,
-                    f"-{pct:.1f}%", ha="center", va="bottom", fontsize=10, fontweight="bold")
-        ylabel = "Relative Emissions (%)"
+            ax.text(
+                bar.get_x() + bar.get_width() / 2,
+                bar.get_height() + 1,
+                f"-{pct:.1f}%",
+                ha="center",
+                va="bottom",
+                fontsize=10,
+                fontweight="bold",
+            )
+
+        ylabel = (
+            "Relative Emissions (%)"
+            if not has_actual
+            else "Annual Emissions (tonnes CO₂e)"
+        )
 
     ax.set_xlabel("Region", fontsize=12)
     ax.set_ylabel(ylabel, fontsize=12)
@@ -680,11 +782,14 @@ def plot_annual_emissions_comparison(
     ax.legend(loc="upper right", fontsize=10)
 
     if not for_latex:
-        ax.set_title("Annual Food Delivery Emissions: All E-bike vs Optimal Mix",
-                    fontsize=14, fontweight="bold")
+        ax.set_title(
+            "Annual Food Delivery Lifecycle Emissions by Scenario",
+            fontsize=14,
+            fontweight="bold",
+        )
 
     ax.grid(True, alpha=0.3, linestyle="--", axis="y")
-    ax.set_ylim(0, df["all_ebike_tonnes"].max() * 1.2)
+    ax.set_ylim(0, df["all_ebike_tonnes"].max() * 1.25)
 
     plt.tight_layout()
 
@@ -700,8 +805,16 @@ def plot_annual_emissions_comparison(
     plt.close(fig)
 
     # Print summary
-    print("\n=== Annual Emissions Summary ===")
-    print(df[["region_name", "all_ebike_tonnes", "optimal_mix_tonnes", "reduction_pct"]].to_string(index=False))
+    print("\n=== Annual Lifecycle Emissions Summary (tonnes CO₂e) ===")
+    cols = [
+        "region_name",
+        "all_ebike_tonnes",
+        "all_drone_tonnes",
+        "optimal_mix_tonnes",
+        "reduction_pct",
+    ]
+    available_cols = [c for c in cols if c in df.columns]
+    print(df[available_cols].to_string(index=False))
 
     return df
 

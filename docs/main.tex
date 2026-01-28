@@ -1,7 +1,8 @@
-\documentclass[9pt, draft]{beamer}
+\documentclass[9pt]{beamer}
 \usepackage[utf8]{inputenc}
 % \usepackage{enumitem}  % Conflicts with beamer's enumerate
 \usepackage{booktabs}
+\usepackage{pifont}  % For checkmark and cross symbols
 \usepackage{tikz}
 \usetikzlibrary{shapes.geometric, arrows.meta, positioning, calc, patterns}
 \usepackage{fontspec}
@@ -32,7 +33,7 @@
 %This block of code defines the information to appear in the
 %Title page
 \title[Drones for Food Delivery] %optional
-{Drones vs. E-bikes: Comparing Operational Emissions in Urban Food Delivery in China}
+{A Gravity-Based Framework for Scaling Emissions Assessment of Drone and E-Bike Food Delivery Systems}
 
 % \subtitle{A short story}
 
@@ -218,6 +219,42 @@
 
 
 \begin{frame}{Research Gap}
+  \begin{itemize}
+      \item \textbf{High costs} of purchasing and maintaining drones
+      \item Significant investment in \textbf{UAS infrastructure} required
+      \item \textbf{Lack of predictive models} for environmental impact evaluation
+      \item Challenge: Determine if drones truly offer a \textbf{sustainable advantage}
+  \end{itemize}
+  
+  \end{frame}
+
+
+\begin{frame}{Review of Related Work}
+
+\footnotesize
+\centering
+\captionof{table}{Comparison of drone delivery emission studies}
+\begin{tabular}{l l c c c c}
+\toprule
+\textbf{Study} & \textbf{Comparison} & \textbf{Greener?} & \textbf{OD Data} & \textbf{Scale} & \textbf{Method} \\
+\midrule
+\textcite{li_beyond_2025} & E-bike & Mixed & No & Single city & LCA \\
+\textcite{yowtak_comparative_2020} & ICEV/BEV van & Mixed & No & Generic & LCA \\
+\textcite{park_comparative_2018} & Motorcycle & Yes & No & Multi-city & LCA \\
+\textcite{figliozzi_lifecycle_2017} & Van/Tricycle & Mixed & Yes & Generic & LCA \\
+\textcite{baldisseri_truck-based_2022} & Truck & Yes & Yes & Generic & LCA \\
+\textcite{figliozzi_carbon_2020} & Van/Car & Mixed & No & Generic & Use-phase \\
+\textcite{stolaroff_energy_2018} & Truck & Mixed & No & Multi-city & LCA \\
+\textcite{rodrigues_drone_2022} & Car/Van/Bike & Mixed & No & Generic & Use-phase \\
+\textcite{kirschstein_comparison_2020} & Truck & Yes & No & Generic & Use-phase \\
+\midrule
+\textbf{Our work} & \textbf{E-bike} & \textbf{Yes} & \textbf{Yes} & \textbf{Country} & \textbf{LCA} \\
+\bottomrule
+\end{tabular}
+\end{frame}
+
+
+\begin{frame}{Research Gap}
 \begin{itemize}
     \item \textbf{High costs} of purchasing and maintaining drones
     \item Significant investment in \textbf{UAS infrastructure} required
@@ -226,13 +263,9 @@
 \end{itemize}
 
 \vspace{1em}
-\begin{block}{Research Question}
-Under what conditions does drone delivery produce \textbf{lower emissions} than e-bike delivery?
+\begin{block}{Key Gap}
+Most existing studies \textbf{lack real origin-destination (OD) data} and rely on \textbf{aggregate statistical metrics} that cannot capture route-level emission variations.
 \end{block}
-\end{frame}
-
-
-\begin{frame}{Review of Related Work}
 \end{frame}
 
 
@@ -320,6 +353,26 @@ Under what conditions does drone delivery produce \textbf{lower emissions} than 
 \begin{column}{0.6\textwidth}
   \begin{figure}
     \centering
+    \includegraphics[width=0.8\linewidth]{../figures/misc/global_building_atlas.png}
+    \caption{\textbf{Global Building Atlas}. The first open dataset providing global coverage of building polygons, heights, and LoD1 3D models, containing 2.75 billion buildings at 3m resolution \parencite{zhu_globalbuildingatlas_2025}.}
+    \label{fig:global_building_atlas}
+\end{figure}   
+\end{column}
+\end{columns}
+
+\end{frame}
+
+
+\begin{frame}{OD Generation - Building Footprint Data}
+
+\begin{columns}
+\begin{column}{0.35\textwidth}
+\centering
+\ODFlowchart
+\end{column}
+\begin{column}{0.6\textwidth}
+  \begin{figure}
+    \centering
     \includegraphics[width=0.8\linewidth]{../figures/remote/luohu/luohu_store_coverage.pdf}
     \caption{\textbf{Building footprint data and store coverage for the Luohu district.} Nearby buildings are matched with takeout merchants as potential customers. The fetch area is enlarged by 3km beyond the district boundary to account for rider work radius \parencite{zhang_exploration_2023}.}
     \label{fig:luohu_buildings}
@@ -368,6 +421,37 @@ $\mathcal{D}$ & Set of destinations \\
 \end{frame}
 
 
+\begin{frame}{OD Generation - Gravity Model}
+
+  \begin{columns}
+  \begin{column}{0.35\textwidth}
+  \centering
+  \ODFlowchart
+  \end{column}
+  \begin{column}{0.6\textwidth}
+  Larger buildings attract more orders due to higher population density, while greater distances reduce demand owing to increased delivery time and cost.
+  \[
+    D_{ij} = P_{i} \cdot \frac{f(d_{ij}, v_{j})}{\sum_{j \in \mathcal{D}} f(d_{ij}, v_{j})}, \quad \forall i \in \mathcal{O}, j \in \mathcal{D}
+  \]
+  
+  where
+  \[f(d_{ij}, v_{j}) = \frac{v_{j}^\alpha}{d_{ij}^{\beta}}.\]
+  
+\textbf{Calibration:}
+\begin{itemize}
+  \item $\alpha = 1.7$, $\beta = 0.5$
+  \item Descriptive statistical indicators:
+    \begin{itemize}
+      \item Mean delivery distance per express food order in First-class cities is 2.23 km.
+    \end{itemize}
+\end{itemize}
+  \end{column}
+  \end{columns}
+  
+  \end{frame}
+  
+
+
 \begin{frame}{Road Distance Calculation}
 \begin{columns}
 \begin{column}{0.35\textwidth}
@@ -395,7 +479,7 @@ $\mathcal{D}$ & Set of destinations \\
 \begin{column}{0.6\textwidth}
 \begin{figure}
     \centering
-    \includegraphics[width=0.8\linewidth]{../figures/remote/luohu/luohu_distance_comparison.pdf}
+    \includegraphics[width=0.7\linewidth]{../figures/remote/luohu/luohu_distance_comparison.pdf}
     \caption{\textbf{Air distance vs. road distance for OD pairs in the Luohu district.} Each OD pair now includes both the straight-line (air) distance and the road network distance computed via Dijkstra's algorithm.}
     \label{fig:luohu_distance_comparison}
 \end{figure}
@@ -423,30 +507,6 @@ P_{\text{rolling}} + P_{\text{air}} + P_{\text{grade}} + P_{\text{acc}}
 \end{frame}
 
 
-\begin{frame}{Use-phase Emission Model - E-bike}
-
-% \footnotesize
-\centering
-\captionof{table}{Model parameters and default values for e-bike}
-\begin{tabular}{c c c c}
-\toprule
-\textbf{Symbol} & \textbf{Description} & \textbf{Unit} & \textbf{Value} \\
-\midrule
-$m$ & Total mass & $\mathrm{t}$ & $0.156$ \\
-$v$ & Velocity & $\mathrm{m/s}$ & $8.33$ \\
-$v_{\mathrm{km/h}}$ & Velocity & $\mathrm{km/h}$ & $30$ \\
-$\rho$ & Air density & $\mathrm{kg/m^3}$ & $1.225$ \\
-$g$ & Gravitational acceleration & $\mathrm{m/s^2}$ & $9.81$ \\
-$A$ & Frontal area & $\mathrm{m^2}$ & $1.0$ \\
-$\theta$ & Road grade (slope) & -- & $0.015$ \\
-$n_{\text{acc}}$ & Acceleration frequency & $\mathrm{km^{-1}}$ & $1$ \\
-$C_{\text{roll}}$ & Rolling resistance coefficient & -- & $0.008$ \\
-$C_{\text{air}}$ & Aerodynamic drag coefficient & -- & $0.65$ \\
-\bottomrule
-\end{tabular}
-\end{frame}
-
-
 \begin{frame}{Use-phase Emission Model - Drone}
 
 The drone power model calculates the power required for multi-rotor flight at various flight angles \parencite{kirschstein_comparison_2020}.
@@ -466,37 +526,6 @@ P_{U}
 \[ P_{\text{climb}} = m \cdot g \cdot v \cdot \sin\gamma \]
 \textbf{Auxiliary:}
 \[ P_{\text{aux}} = \text{constant} \]
-\end{frame}
-
-
-\begin{frame}{Use-phase Emission Model - Drone}
-
-% \footnotesize
-
-\begin{center}
-\captionof{table}{Model parameters and default values for drone}
-\begin{tabular}{cccc}
-\toprule
-Symbol & Description & Unit & Default Value \\
-\midrule
-$m$ & Total mass & $\mathrm{kg}$ & $14.1$ \\ 
-$v$ & Flight velocity & $\mathrm{m/s}$ & $16.67$ \\ 
-$T$ & Thrust force & $\mathrm{N}$ & $-$ \\ 
-$w$ & Induced velocity & $\mathrm{m/s}$ & $-$ \\ 
-$U$ & Blade tip speed & $\mathrm{m/s}$ & $-$ \\ 
-$\rho$ & Air density & $\mathrm{kg/m^3}$ & $1.225$ \\ 
-$g$ & Gravitational acceleration & $\mathrm{m/s^2}$ & $9.81$ \\
-$A$ & Fuselage frontal area & $\mathrm{m^2}$ & $0.15$ \\ 
-$\gamma$ & Flight path angle & $\mathrm{rad}$ & $-$ \\ 
-$k_{\text{lift}}$ & Lift margin factor & $-$ & $1.15$ \\
-$C_{\text{air}}$ & Fuselage drag coefficient & $-$ & $0.65$ \\ 
-$C_{\text{d,blade}}$ & Blade drag coefficient & $-$ & $0.075$ \\ 
-$\sigma$ & Rotor solidity & $-$ & $-$ \\ 
-$R$ & Total rotor disc area & $\mathrm{m^2}$ & $-$ \\
-$P_{\text{aux}}$ & Auxiliary power & $\mathrm{kW}$ & $0.01$ \\
-\bottomrule
-\end{tabular}
-\end{center}
 \end{frame}
 
 
@@ -621,13 +650,13 @@ $e_{U_{bd}}$ & Disposal emission factor for batteries & $\mathrm{kg CO_2e/kWh}$ 
 \end{frame}
 
 
-\begin{frame}{Results in Luohu District}
+\begin{frame}{Delivery Distance Characteristics}
 \begin{columns}
 \begin{column}{0.5\textwidth}
 \begin{figure}
     \centering
     \includegraphics[width=0.8\linewidth]{../figures/remote/luohu/luohu_road_distance_distribution.pdf}
-    \caption{\textbf{Road distance distribution in Luohu district.} }
+    \caption{\textbf{Road distance distribution in Luohu district.} Most deliveries occur within 1--3 km, with a long tail extending to longer distances.}
     \label{fig:luohu_road_distance_distribution}
 \end{figure}
 \end{column}
@@ -636,7 +665,7 @@ $e_{U_{bd}}$ & Disposal emission factor for batteries & $\mathrm{kg CO_2e/kWh}$ 
 \begin{figure}
     \centering
     \includegraphics[width=0.8\linewidth]{../figures/remote/luohu/luohu_distance_detour_scatter.pdf}
-    \caption{\textbf{Distance-detour scatter plot in Luohu district.} }
+    \caption{\textbf{Air vs. road distance relationship.} The detour ratio decreases and stabilizes as delivery distance increases.}
     \label{fig:luohu_distance_detour_scatter}
 \end{figure}
 \end{column}
@@ -644,13 +673,85 @@ $e_{U_{bd}}$ & Disposal emission factor for batteries & $\mathrm{kg CO_2e/kWh}$ 
 \end{frame}
 
 
-\begin{frame}{Results in Luohu District}
-\begin{figure}
+\begin{frame}{Emission Reduction Potential}
+
+\begin{columns}
+\begin{column}{0.48\textwidth}
+\textbf{Threshold-based Assignment:}
+\begin{itemize}
+    \item Select distance thresholds from suitable range
+    \item For each threshold $d^*$:
+    \begin{itemize}
+        \item Distance $\geq d^*$ $\rightarrow$ Drone
+        \item Distance $< d^*$ $\rightarrow$ E-bike
+    \end{itemize}
+    \item Calculate total lifecycle emissions
+    \item Find optimal $d^*$ minimizing emissions
+    \item Derive optimal drone ratio
+\end{itemize}
+\end{column}
+\begin{column}{0.48\textwidth}
+  \begin{figure}
     \centering
-    \includegraphics[width=0.6\linewidth]{../figures/remote/luohu/luohu_emission_reduction.pdf}
-    \caption{\textbf{Emission reduction in Luohu district.} }
+    \includegraphics[width=0.8\linewidth]{../figures/remote/luohu/luohu_emission_reduction.pdf}
+    \caption{\textbf{Lifecycle emission reduction by distance threshold.} Optimal threshold maximizes emission savings by assigning drones to longer-distance deliveries.}
     \label{fig:luohu_emission_reduction}
 \end{figure}
+\end{column}
+\end{columns}
+\end{frame}
+
+
+\begin{frame}{Cross-Region Comparison}
+  \begin{figure}
+    \centering
+    \includegraphics[width=0.8\linewidth]{../figures/analysis/annual_emissions_comparison.pdf}
+    \caption{\textbf{Annual lifecycle emissions across six regions.} Comparing all e-bike, all drone, and optimal mixed scenarios shows consistent emission reduction potential of 23--48\% with optimal deployment.}
+    \label{fig:annual_emissions_comparison}
+  \end{figure}
+\end{frame}
+
+
+\begin{frame}{Correlation Analysis}
+  \begin{figure}
+    \centering
+    \includegraphics[width=0.7\linewidth]{../figures/analysis/correlation_heatmap.pdf}
+    \caption{\textbf{Pearson correlation heatmap between emission reduction and region features.} The heatmap shows the Pearson correlation coefficients between emission reduction and region features.}
+    \label{fig:correlation_heatmap}
+  \end{figure}
+\end{frame}
+
+
+\section{Discussion}
+
+
+\begin{frame}{Discussion and Future Work}
+\begin{columns}
+\begin{column}{0.48\textwidth}
+\textbf{Key Findings:}
+\begin{itemize}
+  \item All-drone delivery reduces emissions by \textbf{27\%} compared to all e-bike
+  \item Optimal drone-e-bike mix achieves \textbf{30\%} reduction
+  \item Mixed system provides \textbf{3 percentage points} additional savings
+\end{itemize}
+
+\vspace{0.5em}
+\textbf{Correlation Insights:}
+\begin{itemize}
+  \item Optimal drone ratio correlates with \textbf{total road length} (r=0.79)
+  \item Max reduction correlates with \textbf{detour ratio} (r=0.66) and \textbf{avg road distance} (r=0.73)
+\end{itemize}
+\end{column}
+\begin{column}{0.48\textwidth}
+\textbf{Future Work:}
+\begin{itemize}
+  \item Consider different \textbf{bundle sizes} for both drone and e-bike deliveries
+  \item Incorporate \textbf{economic and equity} analysis
+  \item Account for \textbf{weather impact} on drone operations
+  \item Extend to \textbf{other delivery modes} (e.g., autonomous vehicles, robots)
+\end{itemize}
+\end{column}
+\end{columns}
 \end{frame}
 
 
@@ -663,6 +764,62 @@ $e_{U_{bd}}$ & Disposal emission factor for batteries & $\mathrm{kg CO_2e/kWh}$ 
 
 
 \section{Appendix}
+
+
+\begin{frame}{Use-phase Emission Model - E-bike}
+
+  % \footnotesize
+  \centering
+  \captionof{table}{Model parameters and default values for e-bike}
+  \begin{tabular}{c c c c}
+  \toprule
+  \textbf{Symbol} & \textbf{Description} & \textbf{Unit} & \textbf{Value} \\
+  \midrule
+  $m$ & Total mass & $\mathrm{t}$ & $0.156$ \\
+  $v$ & Velocity & $\mathrm{m/s}$ & $8.33$ \\
+  $v_{\mathrm{km/h}}$ & Velocity & $\mathrm{km/h}$ & $30$ \\
+  $\rho$ & Air density & $\mathrm{kg/m^3}$ & $1.225$ \\
+  $g$ & Gravitational acceleration & $\mathrm{m/s^2}$ & $9.81$ \\
+  $A$ & Frontal area & $\mathrm{m^2}$ & $1.0$ \\
+  $\theta$ & Road grade (slope) & -- & $0.015$ \\
+  $n_{\text{acc}}$ & Acceleration frequency & $\mathrm{km^{-1}}$ & $1$ \\
+  $C_{\text{roll}}$ & Rolling resistance coefficient & -- & $0.008$ \\
+  $C_{\text{air}}$ & Aerodynamic drag coefficient & -- & $0.65$ \\
+  \bottomrule
+  \end{tabular}
+  \end{frame}
+
+
+  \begin{frame}{Use-phase Emission Model - Drone}
+
+    % \footnotesize
+    
+    \begin{center}
+    \captionof{table}{Model parameters and default values for drone}
+    \begin{tabular}{cccc}
+    \toprule
+    Symbol & Description & Unit & Default Value \\
+    \midrule
+    $m$ & Total mass & $\mathrm{kg}$ & $14.1$ \\ 
+    $v$ & Flight velocity & $\mathrm{m/s}$ & $16.67$ \\ 
+    $T$ & Thrust force & $\mathrm{N}$ & $-$ \\ 
+    $w$ & Induced velocity & $\mathrm{m/s}$ & $-$ \\ 
+    $U$ & Blade tip speed & $\mathrm{m/s}$ & $-$ \\ 
+    $\rho$ & Air density & $\mathrm{kg/m^3}$ & $1.225$ \\ 
+    $g$ & Gravitational acceleration & $\mathrm{m/s^2}$ & $9.81$ \\
+    $A$ & Fuselage frontal area & $\mathrm{m^2}$ & $0.15$ \\ 
+    $\gamma$ & Flight path angle & $\mathrm{rad}$ & $-$ \\ 
+    $k_{\text{lift}}$ & Lift margin factor & $-$ & $1.15$ \\
+    $C_{\text{air}}$ & Fuselage drag coefficient & $-$ & $0.65$ \\ 
+    $C_{\text{d,blade}}$ & Blade drag coefficient & $-$ & $0.075$ \\ 
+    $\sigma$ & Rotor solidity & $-$ & $-$ \\ 
+    $R$ & Total rotor disc area & $\mathrm{m^2}$ & $-$ \\
+    $P_{\text{aux}}$ & Auxiliary power & $\mathrm{kW}$ & $0.01$ \\
+    \bottomrule
+    \end{tabular}
+    \end{center}
+    \end{frame}
+
 
 \begin{frame}{Use-phase Emission Model - Drone}
 \begin{center}
