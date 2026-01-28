@@ -88,7 +88,9 @@
       "valid_path_count": 339078,
       "invalid_path_count": 10897,
       "max_lifecycle_reduction_pct": 64.7496914676654,
-      "lifecycle_all_drone_reduction_pct": 63.494527102033246
+      "lifecycle_all_drone_reduction_pct": 63.494527102033246,
+      "total_ebike_lifecycle": 71012.18427597167,
+      "total_drone_lifecycle": 25923.333685119047
     },
     "cache": {}
   },
@@ -129,7 +131,9 @@
       "valid_path_count": 1646255,
       "invalid_path_count": 49324,
       "max_lifecycle_reduction_pct": 28.972085703234885,
-      "lifecycle_all_drone_reduction_pct": 26.545257556169936
+      "lifecycle_all_drone_reduction_pct": 26.545257556169936,
+      "total_ebike_lifecycle": 166328.74910372912,
+      "total_drone_lifecycle": 122176.35426418853
     },
     "cache": {}
   },
@@ -173,7 +177,9 @@
       "building_area_total": 51350873.538232654,
       "roadnet_length_total": 6170071.844468212,
       "max_lifecycle_reduction_pct": 34.28324101839737,
-      "lifecycle_all_drone_reduction_pct": 31.869061928999585
+      "lifecycle_all_drone_reduction_pct": 31.869061928999585,
+      "total_ebike_lifecycle": 87639.8722463901,
+      "total_drone_lifecycle": 59709.86708569192
     },
     "cache": {}
   },
@@ -214,7 +220,9 @@
       "valid_path_count": 226662,
       "invalid_path_count": 4526,
       "max_lifecycle_reduction_pct": 25.555227411829705,
-      "lifecycle_all_drone_reduction_pct": 23.601757120077785
+      "lifecycle_all_drone_reduction_pct": 23.601757120077785,
+      "total_ebike_lifecycle": 19382.231415194845,
+      "total_drone_lifecycle": 14807.684232129142
     },
     "cache": {}
   },
@@ -258,7 +266,9 @@
       "building_area_total": 48920892.29652662,
       "roadnet_length_total": 4627261.874864715,
       "max_lifecycle_reduction_pct": 48.33934040948992,
-      "lifecycle_all_drone_reduction_pct": 43.37365298332586
+      "lifecycle_all_drone_reduction_pct": 43.37365298332586,
+      "total_ebike_lifecycle": 2593.8896958261657,
+      "total_drone_lifecycle": 1468.824980388278
     },
     "cache": {}
   },
@@ -323,7 +333,9 @@
       "building_area_total": 26653504.839682247,
       "roadnet_length_total": 2824024.4780261945,
       "max_lifecycle_reduction_pct": 23.33099128909851,
-      "lifecycle_all_drone_reduction_pct": 16.40291545948456
+      "lifecycle_all_drone_reduction_pct": 16.40291545948456,
+      "total_ebike_lifecycle": 24863.327958919897,
+      "total_drone_lifecycle": 20785.01729340388
     },
     "cache": {}
   },
@@ -392,7 +404,9 @@
       "valid_path_count": 552635,
       "invalid_path_count": 32637,
       "max_lifecycle_reduction_pct": 29.76069522419725,
-      "lifecycle_all_drone_reduction_pct": 25.540821351814163
+      "lifecycle_all_drone_reduction_pct": 25.540821351814163,
+      "total_ebike_lifecycle": 41381.834160746694,
+      "total_drone_lifecycle": 30812.573825646374
     },
     "cache": {}
   },
