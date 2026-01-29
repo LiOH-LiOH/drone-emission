@@ -1,0 +1,237 @@
+\documentclass[11pt]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[margin=1in]{geometry}
+\usepackage{booktabs}
+\usepackage{graphicx}
+\usepackage{amsmath}
+\usepackage{hyperref}
+\usepackage{setspace}
+
+\usepackage[
+  backend=biber,
+  style=apa,
+  citestyle=apa,
+  natbib=false,
+  doi=false,
+  isbn=false,
+  url=false
+]{biblatex}
+
+\addbibresource{delivery_emission.bib}
+
+\title{A Gravity-Based Framework for Scaling Emissions Assessment of Drone and E-Bike Food Delivery Systems}
+\author{Jingxian Lin\\Department of Civil Engineering\\The University of Hong Kong}
+\date{\today}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+China's booming digital economy has driven explosive growth in the food delivery sector, making its environmental impact an increasingly critical concern. As a potentially sustainable alternative, drone delivery offers speed and flexibility and has attracted considerable research interest. However, most existing studies estimating emissions from e-bike or drone delivery lack real origin-destination (OD) data and rely predominantly on aggregate statistical metrics, which fail to capture route-level emission variations.
+
+This study addresses these gaps by developing a gravity-based OD generation framework that synthesizes door-to-door delivery demand from merchant monthly sales data and building footprint data, enabling spatially explicit, trip-level emission calculations at an unprecedented scale. Applying this framework nationwide, we present the comprehensive comparison of carbon emissions between e-bike and drone delivery systems across multiple Chinese cities with diverse urban features. Our results reveal that while e-bikes generally produce lower emissions under typical urban conditions, drones can achieve emission reductions in specific scenarios characterized by long delivery distances and high detour ratios, suggesting the feasibility of hybrid drone-e-bike delivery systems that reduce overall emissions. These findings demonstrate that the environmental advantage of drone delivery is highly context-dependent and establish a replicable, scalable methodology for designing environmentally sustainable food delivery systems and assessing emerging delivery technologies at the national scale.
+\end{abstract}
+
+\newpage
+\tableofcontents
+\newpage
+
+\section{Introduction}
+
+\subsection{Background}
+
+Drones represent a transformative technology for transportation and logistics, offering fast and flexible delivery with cost-efficient operations. The development of the low-altitude economy has been gaining significant momentum in China, with drone delivery included in China's Government Work Report in both 2024 and 2025, signaling sustained national-level policy attention. The global drone delivery market is projected to grow from \$3.47 billion in 2025 to \$20.98 billion by 2034, representing a compound annual growth rate of 19.45\%.
+
+Current constraints on drone operations, including battery capacity and cargo weight limitations, make drones best suited for short-distance delivery, same-day delivery, and last-mile logistics. Food delivery presents particular advantages over parcel delivery for drone applications: packages are typically lighter and smaller, delivery distances are shorter (typically less than 3 km), speed advantages prevent food from getting cold or spoiled, and high time sensitivity matches drone capabilities.
+
+China's online food delivery market has experienced remarkable growth, expanding from approximately 300 billion Yuan in 2017 to over 1 trillion Yuan by 2023. This rapid expansion makes understanding the environmental implications of different delivery modes increasingly important.
+
+\subsection{Problem Statement}
+
+Despite the growing interest in drone delivery, several challenges remain:
+\begin{itemize}
+    \item High costs of purchasing and maintaining drones
+    \item Significant investment in UAS infrastructure required
+    \item Lack of predictive models for environmental impact evaluation
+    \item Difficulty in determining whether drones truly offer a sustainable advantage
+\end{itemize}
+
+Most existing studies lack real origin-destination (OD) data and rely on aggregate statistical metrics that cannot capture route-level emission variations. This limitation prevents accurate assessment of the environmental benefits of drone delivery across different urban contexts.
+
+\subsection{Research Objectives}
+
+This research aims to:
+\begin{enumerate}
+    \item Develop a gravity-based food delivery demand generation method that produces door-to-door order data, enabling more precise analysis than conventional zone-based or aggregate approaches.
+    \item Present the first comprehensive comparison of carbon emissions between e-bike and drone delivery systems across multiple cities in China.
+    \item Identify key urban features (e.g., population density, terrain, delivery distance distribution) that determine when drone delivery achieves lower emissions, providing actionable insights for sustainable logistics planning.
+\end{enumerate}
+
+\section{Literature Review}
+
+% TODO: Complete literature review section
+% Include reviews of:
+% - Drone delivery emission studies
+% - E-bike delivery systems
+% - Life cycle assessment methodologies
+% - Gravity models in transportation
+% - Urban logistics optimization
+
+\begin{table}[h]
+\centering
+\caption{Comparison of drone delivery emission studies}
+\begin{tabular}{l l c c c c}
+\toprule
+\textbf{Study} & \textbf{Comparison} & \textbf{Greener?} & \textbf{OD Data} & \textbf{Scale} & \textbf{Method} \\
+\midrule
+\textcite{li_beyond_2025} & E-bike & Mixed & No & Single city & LCA \\
+\textcite{yowtak_comparative_2020} & ICEV/BEV van & Mixed & No & Generic & LCA \\
+\textcite{park_comparative_2018} & Motorcycle & Yes & No & Multi-city & LCA \\
+\textcite{figliozzi_lifecycle_2017} & Van/Tricycle & Mixed & Yes & Generic & LCA \\
+\textcite{baldisseri_truck-based_2022} & Truck & Yes & Yes & Generic & LCA \\
+\textcite{figliozzi_carbon_2020} & Van/Car & Mixed & No & Generic & Use-phase \\
+\textcite{stolaroff_energy_2018} & Truck & Mixed & No & Multi-city & LCA \\
+\textcite{rodrigues_drone_2022} & Car/Van/Bike & Mixed & No & Generic & Use-phase \\
+\textcite{kirschstein_comparison_2020} & Truck & Yes & No & Generic & Use-phase \\
+\midrule
+\textbf{This work} & \textbf{E-bike} & \textbf{Yes} & \textbf{Yes} & \textbf{Country} & \textbf{LCA} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{Methodology}
+
+\subsection{OD Generation Framework}
+
+The proposed framework generates origin-destination pairs through the following pipeline:
+\begin{enumerate}
+    \item Process sales data to extract merchants
+    \item Identify nearby buildings from footprint data
+    \item Apply gravity model to generate OD pairs
+\end{enumerate}
+
+\subsubsection{Data Sources}
+
+\textbf{Monthly Sales Data:} The dataset includes latitude, longitude, and monthly sales data for 1,075,362 valid takeout merchants across China, collected in August 2021 from the Meituan Takeaway platform.
+
+\textbf{Building Footprint Data:} Building polygons, heights, and LoD1 3D models are obtained from the Global Building Atlas, which provides global coverage containing 2.75 billion buildings at 3m resolution.
+
+\subsubsection{Gravity Model}
+
+Larger buildings attract more orders due to higher population density, while greater distances reduce demand owing to increased delivery time and cost. The gravity model is formulated as:
+\begin{equation}
+D_{ij} = P_{i} \cdot \frac{f(d_{ij}, v_{j})}{\sum_{j \in \mathcal{D}} f(d_{ij}, v_{j})}, \quad \forall i \in \mathcal{O}, j \in \mathcal{D}
+\end{equation}
+where
+\begin{equation}
+f(d_{ij}, v_{j}) = \frac{v_{j}^\alpha}{d_{ij}^{\beta}}
+\end{equation}
+
+The model parameters are calibrated as $\alpha = 1.7$ and $\beta = 0.5$, validated against descriptive statistical indicators showing that the mean delivery distance per express food order in first-tier cities is 2.23 km.
+
+\subsection{Road Distance Calculation}
+
+Road network data is acquired from OpenStreetMap via the OSMnx library, including all road types except motorways. For each OD pair, both straight-line (air) distance and road network distance are computed via Dijkstra's algorithm.
+
+\subsection{Emission Models}
+
+\subsubsection{E-bike Use-phase Emission Model}
+
+The e-bike power model calculates the instantaneous mechanical power required to propel the vehicle at a given velocity:
+\begin{equation}
+P_{E} = P_{\text{rolling}} + P_{\text{air}} + P_{\text{grade}} + P_{\text{acc}}
+\end{equation}
+
+where:
+\begin{itemize}
+    \item Rolling Resistance: $P_{\text{rolling}} = g \cdot C_{\text{roll}} \cdot v \cdot m$
+    \item Aerodynamic Drag: $P_{\text{air}} = \frac{\rho \cdot v^3}{2 \cdot 10^3} \cdot A \cdot C_{\text{air}}$
+    \item Grade Climbing: $P_{\text{grade}} = g \cdot i \cdot v \cdot m$
+    \item Acceleration: $P_{\text{acc}} = \frac{0.504 \cdot n_{\text{acc}}}{2 \cdot 10^3 \cdot 3.6} \cdot m \cdot v_{\mathrm{km/h}}^3$
+\end{itemize}
+
+\subsubsection{Drone Use-phase Emission Model}
+
+The drone power model calculates the power required for multi-rotor flight at various flight angles:
+\begin{equation}
+P_{U} = P_{\text{induced}} + P_{\text{profile}} + P_{\text{drag}} + P_{\text{climb}} + P_{\text{aux}}
+\end{equation}
+
+\subsubsection{Lifecycle Emission Model}
+
+Lifecycle emissions include body production, battery production, and end-of-life disposal for both e-bikes and drones:
+\begin{equation}
+CO_2e_{pro+dis} = e_m \times w_m + e_b \times V_b \times n_b + e_{md} \times w_m + e_{bd} \times V_b \times n_b
+\end{equation}
+
+\subsection{Emission Reduction Analysis}
+
+A threshold-based assignment approach is used to identify optimal deployment strategies:
+\begin{itemize}
+    \item Select distance thresholds from a suitable range
+    \item For each threshold $d^*$:
+    \begin{itemize}
+        \item Distance $\geq d^*$ $\rightarrow$ Drone
+        \item Distance $< d^*$ $\rightarrow$ E-bike
+    \end{itemize}
+    \item Calculate total lifecycle emissions
+    \item Find optimal $d^*$ minimizing emissions
+    \item Derive optimal drone ratio
+\end{itemize}
+
+\section{Expected Results}
+
+Based on preliminary analysis, we expect to demonstrate:
+
+\begin{enumerate}
+    \item \textbf{Emission Reduction Potential:} All-drone delivery is expected to reduce emissions by approximately 27\% compared to all e-bike delivery, while optimal drone-e-bike mixed systems may achieve up to 30\% reduction.
+
+    \item \textbf{Context-Dependent Advantages:} Drone delivery is expected to show greater environmental benefits in scenarios characterized by:
+    \begin{itemize}
+        \item Long delivery distances
+        \item High detour ratios (road distance / air distance)
+        \item Complex road network topology
+    \end{itemize}
+
+    \item \textbf{Urban Feature Correlations:} We anticipate identifying correlations between emission reduction potential and urban features such as total road length, average detour ratio, and average road distance.
+\end{enumerate}
+
+\section{Contributions}
+
+This research makes the following contributions:
+
+\begin{enumerate}
+    \item \textbf{Methodological:} A gravity-based OD generation framework that produces door-to-door delivery demand data, enabling spatially explicit emission analysis at unprecedented scale.
+
+    \item \textbf{Empirical:} The first comprehensive, country-scale comparison of carbon emissions between e-bike and drone food delivery systems across multiple Chinese cities with diverse urban characteristics.
+
+    \item \textbf{Practical:} Identification of key urban features that determine when drone delivery achieves lower emissions, providing actionable insights for sustainable urban logistics planning and policy-making.
+\end{enumerate}
+
+\section{Research Timeline}
+
+\begin{table}[h]
+\centering
+\caption{Proposed research timeline}
+\begin{tabular}{l l}
+\toprule
+\textbf{Phase} & \textbf{Activities} \\
+\midrule
+Phase 1 & Data collection and preprocessing \\
+Phase 2 & OD generation framework development \\
+Phase 3 & Emission model implementation and validation \\
+Phase 4 & Multi-city analysis and comparison \\
+Phase 5 & Urban feature correlation analysis \\
+Phase 6 & Thesis writing and publication \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{Conclusion}
+
+This research proposes a comprehensive framework for assessing the environmental implications of drone versus e-bike food delivery systems. By developing a gravity-based OD generation method and applying lifecycle emission models across multiple Chinese cities, this study will provide evidence-based insights into the conditions under which drone delivery offers environmental advantages. The findings will contribute to sustainable urban logistics planning and inform policy decisions regarding emerging delivery technologies.
+
+\printbibliography
+
+\end{document}

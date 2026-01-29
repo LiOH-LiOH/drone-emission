@@ -76,3 +76,20 @@ Install with:
 ```bash
 pip install -r src/drone_emission/requirements.txt
 ```
+
+## LaTeX Documents
+
+LaTeX source files are in `docs/`. Compilation is configured via VS Code LaTeX Workshop.
+
+### Build Output
+- **Auxiliary files** (.aux, .log, .bbl, etc.) → `docs/build/`
+- **PDF files** → `docs/pdf/`
+
+### Recipes
+- **"xelatex -> biber -> xelatex*2 -> copy"**: For documents with bibliography (main.tex, proposal.tex)
+- **"xelatex -> copy"**: For simple documents without bibliography (abstract.tex)
+
+### Files
+- `main.tex`: Beamer presentation for PhD confirmation seminar
+- `proposal.tex`: Research proposal document
+- `abstract.tex`: Standalone abstract

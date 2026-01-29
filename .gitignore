@@ -10,4 +10,4 @@ backup_*
 scripts/
 regions.json
 build/
-*.pdf
+pdf/
