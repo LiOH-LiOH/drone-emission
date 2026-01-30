@@ -1,5 +1,5 @@
 from typing import Any, Dict, List, Optional, Tuple
-
+import os
 import contextily as ctx
 import matplotlib.pyplot as plt
 import networkx as nx
@@ -279,11 +279,14 @@ def visualize_distance_comparison(
     plt.tight_layout()
 
     if save_path:
-        import os
-
         os.makedirs(os.path.dirname(save_path), exist_ok=True)
-        if for_latex and not save_path.endswith('.pdf'):
-            save_path = save_path.rsplit('.', 1)[0] + '.pdf'
+        if for_latex and not save_path.endswith(".pdf"):
+            save_path = save_path.rsplit(".", 1)[0] + ".pdf"
+        # Rasterize heavy elements (basemap, roads) in PDF output
+        # Elements with zorder < 12 are rasterized, others remain vector
+        if save_path.endswith(".pdf"):
+            for ax in axes[:n_samples]:
+                ax.set_rasterization_zorder(12)
         plt.savefig(save_path, dpi=200, bbox_inches="tight")
         print(f"Comparison plot saved to {save_path}")
     else:

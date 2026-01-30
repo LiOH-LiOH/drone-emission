@@ -251,6 +251,10 @@ def finalize_plot(fig, ax, save_path, title, stats_text, boundaries_dict=None, f
         # Use PDF for LaTeX, PNG otherwise
         if for_latex and not save_path.endswith('.pdf'):
             save_path = save_path.rsplit('.', 1)[0] + '.pdf'
+        # Rasterize heavy elements (basemap, buildings, roads) in PDF output
+        # Elements with zorder < 12 are rasterized, others remain vector
+        if save_path.endswith('.pdf'):
+            ax.set_rasterization_zorder(12)
         plt.savefig(save_path, dpi=300, bbox_inches="tight")
         print(f"\nPlot saved as {save_path}")
     else:
