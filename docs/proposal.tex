@@ -47,43 +47,47 @@ Despite the growing interest in drone delivery, several challenges hinder its wi
 
 From an environmental research standpoint, the lack of predictive models for evaluating the environmental impact of drone delivery creates uncertainty for policymakers and urban planners. This knowledge gap makes it difficult to determine whether drones truly offer a sustainable advantage over conventional delivery methods, or whether their benefits are limited to specific operational contexts. Compounding these challenges, most existing studies rely on aggregate statistical metrics and hypothetical delivery scenarios rather than real origin-destination (OD) data, which prevents them from capturing route-level emission variations. This methodological limitation undermines accurate assessment of the environmental benefits of drone delivery across different urban contexts.
 
+\section{Literature Review}
+
+A growing body of research has examined the environmental impacts of drone delivery systems, with findings varying substantially depending on comparison vehicles, geographic context, and methodological approach (Table~\ref{tab:lit_review}).
+
+\subsection{Drone vs. Ground Vehicle Comparisons}
+
+Early studies primarily compared drones against trucks and vans. \textcite{figliozzi_lifecycle_2017} developed an analytical lifecycle framework showing that while drones are highly energy-efficient per distance, electric tricycles outperform them when just two customers can be grouped in a single route. \textcite{stolaroff_energy_2018} conducted the first empirically calibrated study using 1,073 flight segments, finding that small drones (0.5~kg payload) achieve 23--54\% lower greenhouse gas emissions than diesel trucks, though warehouse energy requirements can dominate total emissions. \textcite{kirschstein_comparison_2020} employed well-to-wheel energy modeling to demonstrate that drones are competitive only in rural, low-density settings with calm wind conditions. Similarly, \textcite{baldisseri_truck-based_2022} found that truck-drone hybrid systems achieve the lowest emissions across all scenarios tested, but economic viability requires automation to reduce labor costs. \textcite{yowtak_comparative_2020} compared drones against battery electric vehicles for grocery delivery, concluding that BEVs outperform drones even for short distances due to payload weight sensitivity.
+
+Beyond trucks and vans, \textcite{park_comparative_2018} compared drones with gasoline and electric motorcycles in South Korea, finding drone emissions to be one-sixth of motorcycle emissions, with rural areas benefiting 13 times more than urban areas from drone adoption. \textcite{rodrigues_drone_2022} provided the only study including e-cargo bicycles, demonstrating through 188 empirical flights that only e-cargo bicycles achieve lower emissions per package than drones.
+
+\subsection{Research Gaps}
+
+Despite this progress, several critical gaps remain. First, most studies compare drones against trucks, vans, or personal vehicles, which are not representative of Asian food delivery where e-bikes dominate. Only \textcite{li_beyond_2025} directly compares drones to e-bikes, finding drones greener for 1--2 orders per flight but e-bikes superior for 3--4 orders. Second, existing studies typically rely on hypothetical delivery scenarios or aggregate statistics rather than real origin-destination data, preventing route-level emission analysis. Third, no study has conducted multi-city comparisons across diverse urban contexts to identify the conditions under which drone delivery achieves environmental advantages.
+
 \subsection{Research Objectives}
 
-This research aims to:
+To address these gaps, this research aims to:
 \begin{enumerate}
   \item Develop a gravity-based food delivery demand generation method that produces door-to-door order data, enabling more precise analysis than conventional zone-based or aggregate approaches.
   \item Present the first comprehensive comparison of carbon emissions between e-bike and drone delivery systems across multiple cities in China.
   \item Identify key urban features (e.g., population density, terrain, delivery distance distribution) that determine when drone delivery achieves lower emissions, providing actionable insights for sustainable logistics planning.
 \end{enumerate}
 
-\section{Literature Review}
-
-% TODO: Complete literature review section
-% Include reviews of:
-% - Drone delivery emission studies
-% - E-bike delivery systems
-% - Life cycle assessment methodologies
-% - Gravity models in transportation
-% - Urban logistics optimization
-
 \begin{table}[h]
   \centering
   \caption{Comparison of drone delivery emission studies}
+  \label{tab:lit_review}
   \begin{tabular}{l l c c c c}
     \toprule
     \textbf{Study} & \textbf{Comparison} & \textbf{Greener?} & \textbf{OD Data} & \textbf{Scale} & \textbf{Method} \\
     \midrule
-    \textcite{figliozzi_lifecycle_2017} & Van/Tricycle & Mixed & Yes & Generic & LCA \\
-    \textcite{park_comparative_2018} & Motorcycle & Yes & No & Multi-city & LCA \\
-    \textcite{stolaroff_energy_2018} & Truck & Mixed & No & Multi-city & LCA \\
-    \textcite{figliozzi_carbon_2020} & Van/Car & Mixed & No & Generic & Use-phase \\
-    \textcite{kirschstein_comparison_2020} & Truck & Yes & No & Generic & Use-phase \\
-    \textcite{yowtak_comparative_2020} & ICEV/BEV van & Mixed & No & Generic & LCA \\
-    \textcite{baldisseri_truck-based_2022} & Truck & Yes & Yes & Generic & LCA \\
-    \textcite{rodrigues_drone_2022} & Car/Van/Bike & Mixed & No & Generic & Use-phase \\
-    \textcite{li_beyond_2025} & E-bike & Mixed & No & Single city & LCA \\
+    \textcite{figliozzi_lifecycle_2017} & Van/Tricycle & Mixed & No & Analytical & LCA \\
+    \textcite{park_comparative_2018} & Motorcycle & Yes & No & Two regions (Korea) & LCA \\
+    \textcite{stolaroff_energy_2018} & Truck & Mixed & No & National (USA) & LCA \\
+    \textcite{kirschstein_comparison_2020} & Truck & Yes & No & Single city (Germany) & Use-phase \\
+    \textcite{yowtak_comparative_2020} & ICEV/BEV & Mixed & No & Single city (USA) & LCA \\
+    \textcite{baldisseri_truck-based_2022} & Truck & Yes & No & Suburban (Italy) & LCA \\
+    \textcite{rodrigues_drone_2022} & Car/Van/Bike & Mixed & No & National (USA) & Use-phase \\
+    \textcite{li_beyond_2025} & E-bike & Mixed & No & Single city (China) & LCA \\
     \midrule
-    \textbf{This work} & \textbf{E-bike} & \textbf{Yes} & \textbf{Yes} & \textbf{Country} & \textbf{LCA} \\
+    \textbf{This work} & \textbf{E-bike} & \textbf{Yes} & \textbf{Yes} & \textbf{National (China)} & \textbf{LCA} \\
     \bottomrule
   \end{tabular}
 \end{table}
@@ -171,22 +175,11 @@ To identify optimal deployment strategies for hybrid drone-e-bike delivery syste
 
 The analysis proceeds by defining a distance threshold $d^*$ that determines mode assignment: deliveries with road distance greater than or equal to $d^*$ are assigned to drones, while those below the threshold are handled by e-bikes. A range of candidate thresholds is generated based on the observed road distance distribution, spanning from the 5th to the 95th percentile. For each threshold value, the total lifecycle emissions of the resulting mixed fleet are computed by summing the per-order emissions across all deliveries. The optimal threshold is identified as the value that minimizes total emissions, or equivalently, maximizes emission reduction relative to an all-e-bike baseline. From this optimal threshold, the corresponding drone ratio—the proportion of deliveries assigned to drones—is derived, providing actionable guidance for fleet composition decisions.
 
-\section{Expected Results}
+\section{Preliminary Results and Expected Outcomes}
 
-Based on preliminary analysis, we expect to demonstrate:
+Preliminary analysis across six Chinese regions demonstrates substantial emission reduction potential from drone delivery adoption. Under the all-drone scenario, lifecycle emissions decrease by approximately 27\% compared to the all-e-bike baseline, while optimal threshold-based assignment of deliveries to drones and e-bikes achieves up to 30\% reduction. The magnitude of emission savings varies considerably across regions, ranging from 23\% to 48\% depending on local delivery patterns and road network characteristics. Sensitivity analysis reveals that drone delivery becomes increasingly favorable as delivery distance increases and detour ratio (road distance divided by air distance) rises, with the breakeven point shifting toward shorter distances when road networks are more circuitous.
 
-\begin{enumerate}
-  \item \textbf{Emission Reduction Potential:} All-drone delivery is expected to reduce emissions by approximately 27\% compared to all e-bike delivery, while optimal drone-e-bike mixed systems may achieve up to 30\% reduction.
-
-  \item \textbf{Context-Dependent Advantages:} Drone delivery is expected to show greater environmental benefits in scenarios characterized by:
-    \begin{itemize}
-      \item Long delivery distances
-      \item High detour ratios (road distance / air distance)
-      \item Complex road network topology
-    \end{itemize}
-
-  \item \textbf{Urban Feature Correlations:} We anticipate identifying correlations between emission reduction potential and urban features such as total road length, average detour ratio, and average road distance.
-\end{enumerate}
+Further analysis will focus on identifying systematic relationships between urban features and emission reduction potential. Initial correlation analysis suggests that optimal drone deployment ratio is positively associated with total road network length (r=0.79), while maximum emission reduction correlates with average detour ratio (r=0.66) and average road distance (r=0.73). These preliminary findings will be extended to a larger sample of cities to develop robust predictive models that can guide sustainable logistics planning decisions based on readily observable urban characteristics.
 
 % \section{Contributions}
 
@@ -200,24 +193,24 @@ Based on preliminary analysis, we expect to demonstrate:
 %   \item \textbf{Practical:} Identification of key urban features that determine when drone delivery achieves lower emissions, providing actionable insights for sustainable urban logistics planning and policy-making.
 % \end{enumerate}
 
-\section{Research Timeline}
+% \section{Research Timeline}
 
-\begin{table}[h]
-  \centering
-  \caption{Proposed research timeline}
-  \begin{tabular}{l l}
-    \toprule
-    \textbf{Phase} & \textbf{Activities} \\
-    \midrule
-    Phase 1 & Data collection and preprocessing \\
-    Phase 2 & OD generation framework development \\
-    Phase 3 & Emission model implementation and validation \\
-    Phase 4 & Multi-city analysis and comparison \\
-    Phase 5 & Urban feature correlation analysis \\
-    Phase 6 & Thesis writing and publication \\
-    \bottomrule
-  \end{tabular}
-\end{table}
+% \begin{table}[h]
+%   \centering
+%   \caption{Proposed research timeline}
+%   \begin{tabular}{l l}
+%     \toprule
+%     \textbf{Phase} & \textbf{Activities} \\
+%     \midrule
+%     Phase 1 & Data collection and preprocessing \\
+%     Phase 2 & OD generation framework development \\
+%     Phase 3 & Emission model implementation and validation \\
+%     Phase 4 & Multi-city analysis and comparison \\
+%     Phase 5 & Urban feature correlation analysis \\
+%     Phase 6 & Thesis writing and publication \\
+%     \bottomrule
+%   \end{tabular}
+% \end{table}
 
 \section{Conclusion}
 
