@@ -317,9 +317,9 @@
     \begin{column}{0.6\textwidth}
       \begin{figure}
         \centering
-        \includegraphics[width=0.8\linewidth]{../figures/remote/luohu/luohu_heatmap.pdf}
-        \caption{\textbf{Heatmap of the monthly sales data for the Luohu district.} The heatmap is generated using the latitude and longitude of the merchants and the monthly sales data.}
-        \label{fig:luohu_heatmap}
+        \includegraphics[width=0.8\linewidth]{../figures/district/nanshan/nanshan_heatmap.pdf}
+        \caption{\textbf{Heatmap of the monthly sales data for the Nanshan district.} The heatmap is generated using the latitude and longitude of the merchants and the monthly sales data.}
+        \label{fig:nanshan_heatmap}
       \end{figure}
     \end{column}
   \end{columns}
@@ -355,9 +355,9 @@
     \begin{column}{0.6\textwidth}
       \begin{figure}
         \centering
-        \includegraphics[width=0.8\linewidth]{../figures/remote/luohu/luohu_store_coverage.pdf}
-        \caption{\textbf{Building footprint data and store coverage for the Luohu district.} Nearby buildings are matched with takeout merchants as potential customers. The fetch area is enlarged by 3km beyond the district boundary to account for rider work radius \parencite{zhang_exploration_2023}.}
-        \label{fig:luohu_buildings}
+        \includegraphics[width=0.8\linewidth]{../figures/district/nanshan/nanshan_store_coverage.pdf}
+        \caption{\textbf{Building footprint data and store coverage for the Nanshan district.} Nearby buildings are matched with takeout merchants as potential customers. The fetch area is enlarged by 3km beyond the district boundary to account for rider work radius \parencite{zhang_exploration_2023}.}
+        \label{fig:nanshan_buildings}
       \end{figure}
     \end{column}
   \end{columns}
@@ -439,9 +439,9 @@
     \begin{column}{0.6\textwidth}
       \begin{figure}
         \centering
-        \includegraphics[width=0.7\linewidth]{../figures/remote/luohu/luohu_roadnet.pdf}
-        \caption{\textbf{Road network for the Luohu district.} All road types except motorways are acquired from OpenStreetMap via the OSMnx library.}
-        \label{fig:luohu_roadnet}
+        \includegraphics[width=0.7\linewidth]{../figures/district/nanshan/nanshan_roadnet.pdf}
+        \caption{\textbf{Road network for the Nanshan district.} All road types except motorways are acquired from OpenStreetMap via the OSMnx library.}
+        \label{fig:nanshan_roadnet}
       \end{figure}
     \end{column}
   \end{columns}
@@ -456,9 +456,9 @@
     \begin{column}{0.6\textwidth}
       \begin{figure}
         \centering
-        \includegraphics[width=0.7\linewidth]{../figures/remote/luohu/luohu_distance_comparison.pdf}
-        \caption{\textbf{Air distance vs. road distance for OD pairs in the Luohu district.} Each OD pair now includes both the straight-line (air) distance and the road network distance computed via Dijkstra's algorithm.}
-        \label{fig:luohu_distance_comparison}
+        \includegraphics[width=0.7\linewidth]{../figures/district/nanshan/nanshan_distance_comparison.pdf}
+        \caption{\textbf{Air distance vs. road distance for OD pairs in the Nanshan district.} Each OD pair now includes both the straight-line (air) distance and the road network distance computed via Dijkstra's algorithm.}
+        \label{fig:nanshan_distance_comparison}
       \end{figure}
     \end{column}
   \end{columns}
@@ -667,6 +667,57 @@
       \end{figure}
     \end{column}
   \end{columns}
+\end{frame}
+
+\begin{frame}{Equity Analysis: Zone-Level Heatmaps}
+  \begin{columns}[T]
+    \begin{column}{0.48\textwidth}
+      \begin{figure}
+        \centering
+        \includegraphics[width=\linewidth]{../figures/district/nanshan/nanshan_zone_emission_reduction.pdf}
+        \caption{\textbf{Emission reduction by zone.} Spatial distribution of drone emission benefits across traffic zones.}
+        \label{fig:zone_emission_reduction}
+      \end{figure}
+    \end{column}
+    \begin{column}{0.48\textwidth}
+      \begin{figure}
+        \centering
+        \includegraphics[width=\linewidth]{../figures/district/nanshan/nanshan_zone_building_count.pdf}
+        \caption{\textbf{Building count by zone.} Urban density varies significantly across zones, affecting delivery patterns.}
+        \label{fig:zone_building_count}
+      \end{figure}
+    \end{column}
+  \end{columns}
+\end{frame}
+
+\begin{frame}{Equity Analysis: Time Saving vs Urban Features}
+  \begin{columns}[T]
+    \begin{column}{0.48\textwidth}
+      \begin{figure}
+        \centering
+        \includegraphics[width=\linewidth]{../figures/district/nanshan/nanshan_time_vs_buildings.pdf}
+        \caption{\textbf{Time saving vs building count.} Zones with more buildings show greater drone time savings due to complex last-mile navigation.}
+        \label{fig:time_vs_buildings}
+      \end{figure}
+    \end{column}
+    \begin{column}{0.48\textwidth}
+      \begin{figure}
+        \centering
+        \includegraphics[width=\linewidth]{../figures/district/nanshan/nanshan_time_vs_intersections.pdf}
+        \caption{\textbf{Time saving vs intersection count.} Higher road network complexity correlates with greater drone delivery advantages.}
+        \label{fig:time_vs_intersections}
+      \end{figure}
+    \end{column}
+  \end{columns}
+\end{frame}
+
+\begin{frame}{Equity Analysis: Zone Correlations}
+  \begin{figure}
+    \centering
+    \includegraphics[width=0.7\linewidth]{../figures/district/nanshan/nanshan_zone_correlations.pdf}
+    \caption{\textbf{Correlation matrix of zone-level features.} Shows relationships between urban characteristics (building count, intersection count) and drone delivery benefits (emission reduction, time saving).}
+    \label{fig:zone_correlations}
+  \end{figure}
 \end{frame}
 
 \begin{frame}{Study Regions}

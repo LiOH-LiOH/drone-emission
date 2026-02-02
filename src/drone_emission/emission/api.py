@@ -88,21 +88,35 @@ def cal_emission(region_info, exp_config):
     has_lifecycle_cols = (
         "drone_lifecycle_g" in od_df.columns and "ebike_lifecycle_g" in od_df.columns
     )
+    has_time_cols = (
+        "drone_time_min" in od_df.columns and "ebike_time_min" in od_df.columns
+    )
 
-    if has_emission_cols and has_lifecycle_cols:
-        print("Emission columns already exist, loading from CSV...")
+    if has_emission_cols and has_lifecycle_cols and has_time_cols:
+        print("Emission and time columns already exist, loading from CSV...")
         drone_emissions = od_df["drone_emission_kg"].values
         ebike_emissions = od_df["ebike_emission_kg"].values
         drone_lifecycle = od_df["drone_lifecycle_g"].values
         ebike_lifecycle = od_df["ebike_lifecycle_g"].values
+        drone_time = od_df["drone_time_min"].values
+        ebike_time = od_df["ebike_time_min"].values
         road_distances = od_df["road_distance_m"].values / 1000.0
     else:
-        print("Calculating emissions for each OD pair...")
+        print("Calculating emissions and delivery times for each OD pair...")
         drone_emissions_list = []
         ebike_emissions_list = []
         drone_lifecycle_list = []
         ebike_lifecycle_list = []
+        drone_time_list = []
+        ebike_time_list = []
         road_distances_list = []
+
+        # Get velocity parameters for one-way time calculation
+        ebike_velocity = ebike_params.velocity  # km/h
+        drone_v_level = drone_params.v_level  # km/h
+        drone_v_vertical = drone_params.v_vertical  # km/h
+        drone_h_takeoff = drone_params.h_takeoff  # m
+        drone_hover_time = drone_params.hover_time  # seconds
 
         for row in od_df.itertuples():
             distance_km = row.distance_km  # 直线距离，用于无人机
@@ -118,6 +132,19 @@ def cal_emission(region_info, exp_config):
 
             drone_emissions_list.append(result_drone["emissions_kg_co2e"])
             ebike_emissions_list.append(result_ebike["emissions_kg_co2e"])
+
+            # One-way delivery times (in minutes)
+            # Ebike: road_distance / velocity
+            ebike_oneway_min = (road_distance_km / ebike_velocity) * 60
+            ebike_time_list.append(ebike_oneway_min)
+
+            # Drone: takeoff + level_flight + landing + hover
+            t_takeoff_h = (drone_h_takeoff / 1000) / drone_v_vertical  # hours
+            t_level_h = distance_km / drone_v_level  # hours
+            t_landing_h = (drone_h_takeoff / 1000) / drone_v_vertical  # hours
+            t_hover_h = drone_hover_time / 3600  # hours
+            drone_oneway_min = (t_takeoff_h + t_level_h + t_landing_h + t_hover_h) * 60
+            drone_time_list.append(drone_oneway_min)
 
             # Lifecycle emissions (per order, g CO2e)
             lifecycle_drone = lca.calculate_lifecycle_emissions_per_order_simple(
@@ -135,15 +162,19 @@ def cal_emission(region_info, exp_config):
         ebike_emissions = np.array(ebike_emissions_list)
         drone_lifecycle = np.array(drone_lifecycle_list)
         ebike_lifecycle = np.array(ebike_lifecycle_list)
+        drone_time = np.array(drone_time_list)
+        ebike_time = np.array(ebike_time_list)
         road_distances = np.array(road_distances_list)
 
-        # 保存排放数据到 CSV
+        # 保存排放和时间数据到 CSV
         od_df["drone_emission_kg"] = drone_emissions
         od_df["ebike_emission_kg"] = ebike_emissions
         od_df["drone_lifecycle_g"] = drone_lifecycle
         od_df["ebike_lifecycle_g"] = ebike_lifecycle
+        od_df["drone_time_min"] = drone_time
+        od_df["ebike_time_min"] = ebike_time
         od_df.to_csv(od_save_path, index=False)
-        print(f"Emission data saved to {od_save_path}")
+        print(f"Emission and time data saved to {od_save_path}")
 
     # ==================== Use-phase Emission Analysis ====================
     # 基准：全部电动自行车排放

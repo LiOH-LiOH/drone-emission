@@ -12,6 +12,13 @@ g_param = [1, 1.7, 0.5]       # Gravity model parameters: [alpha, beta, gamma]
 min_distance_km = 0.05    # Minimum distance to avoid division issues
 min_sales = 5             # Minimum annual sales threshold per building
 
+# Equity analysis parameters
+[equity_params]
+unit_lat = 0.01          # ~1.1 km grid cell height
+unit_lng = 0.01          # ~0.9 km grid cell width
+min_deliveries_per_zone = 10
+exclude_outliers = true  # Remove outliers using IQR method
+
 # Emission model parameters
 [emission_params]
 payload_kg = 1.0          # Default payload weight (kg)
