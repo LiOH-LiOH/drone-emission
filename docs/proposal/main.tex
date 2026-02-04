@@ -6,6 +6,9 @@
 \usepackage{amsmath}
 \usepackage{hyperref}
 \usepackage{setspace}
+\usepackage[english]{babel}
+\usepackage{tikz}
+\usetikzlibrary{positioning, arrows.meta, shapes.geometric}
 
 \usepackage[
   backend=biber,
@@ -18,6 +21,55 @@
 ]{biblatex}
 
 \addbibresource{../shared/delivery_emission.bib}
+
+% OD flowchart command
+\newcommand{\ODFlowchart}{%
+  \begin{tikzpicture}[
+      node distance=0.6cm and 1.2cm,
+      data/.style={rectangle, draw=blue!60, fill=blue!10, minimum width=1.6cm, minimum height=0.6cm, align=center, font=\scriptsize},
+      processed/.style={rectangle, draw=orange!70, fill=orange!15, rounded corners=3pt, minimum width=1.6cm, minimum height=0.6cm, align=center, font=\scriptsize},
+      output/.style={rectangle, draw=gray!70, fill=gray!10, rounded corners=3pt, minimum width=1.6cm, minimum height=0.6cm, align=center, font=\scriptsize},
+      model/.style={diamond, draw=teal!70, fill=teal!15, minimum width=1cm, minimum height=0.8cm, align=center, font=\scriptsize, inner sep=1pt},
+      arrow/.style={-{Stealth[scale=0.6]}, thick, draw=gray!70}
+    ]
+    \node[data] (sales) {Monthly Sales};
+    \node[data, right=1.2cm of sales] (building) {Building\\Footprint};
+    \node[processed, below=0.8cm of sales] (merchant) {Merchant};
+    \node[processed, below=0.8cm of building] (buildings) {Nearby\\Buildings};
+    \path (merchant) -- (buildings) coordinate[midway] (mid);
+    \node[model, below=0.8cm of mid] (gravity) {Gravity\\Model};
+    \node[output, below=0.8cm of gravity] (od) {OD Matrix};
+    \draw[arrow] (sales) -- (merchant);
+    \draw[arrow] (building) -- (buildings);
+    \draw[arrow] (gravity) -- (od);
+    \draw[arrow] (merchant.south) -- (gravity.north west);
+    \draw[arrow] (buildings.south) -- (gravity.north east);
+  \end{tikzpicture}%
+}
+
+% Road Distance flowchart command
+\newcommand{\RoadDistFlowchart}{%
+  \begin{tikzpicture}[
+      node distance=0.6cm and 1.2cm,
+      data/.style={rectangle, draw=blue!60, fill=blue!10, minimum width=1.6cm, minimum height=0.6cm, align=center, font=\scriptsize},
+      processed/.style={rectangle, draw=orange!70, fill=orange!15, rounded corners=3pt, minimum width=1.6cm, minimum height=0.6cm, align=center, font=\scriptsize},
+      output/.style={rectangle, draw=gray!70, fill=gray!10, rounded corners=3pt, minimum width=1.6cm, minimum height=0.6cm, align=center, font=\scriptsize},
+      smallbox/.style={rectangle, draw=gray!90, fill=gray!90, text=white, minimum width=1.6cm, minimum height=0.4cm, align=center, font=\tiny, rounded corners=3pt},
+      model/.style={diamond, draw=teal!70, fill=teal!15, minimum width=1cm, minimum height=0.8cm, align=center, font=\scriptsize, inner sep=1pt},
+      arrow/.style={-{Stealth[scale=0.6]}, thick, draw=gray!70}
+    ]
+    \node[output] (od) {OD Matrix};
+    \node[data, right=1.2cm of od] (roadnet) {Road\\Network};
+    \path (od) -- (roadnet) coordinate[midway] (mid);
+    \node[model, below=0.8cm of mid] (shortest) {Shortest\\Path};
+    \node[output, below=0.8cm of shortest] (result) {OD Matrix};
+    \node[smallbox, below=0cm of result.south, anchor=north] (airdist) {Air Distance};
+    \node[smallbox, below=0cm of airdist.south, anchor=north] (roaddist) {Road Distance};
+    \draw[arrow] (shortest) -- (result);
+    \draw[arrow] (od.south) -- (shortest.north west);
+    \draw[arrow] (roadnet.south) -- (shortest.north east);
+  \end{tikzpicture}%
+}
 
 \title{A Gravity-Based Framework for Scaling Emissions Assessment of Drone and E-Bike Food Delivery Systems}
 \author{Jingxian Lin\\Department of Civil Engineering\\The University of Hong Kong}
@@ -35,15 +87,15 @@
 
 \subsection{Background}
 
-The rapid expansion of the internet economy has fueled remarkable growth in food delivery services worldwide. In China, the online food delivery market has grown from approximately 300 billion Yuan in 2017 to over 1 trillion Yuan by 2023 \parencite{statista2024chinafooddelivery}, with registered users reaching 545 million by December 2023. This surge in demand has intensified interest in alternative delivery technologies that can improve efficiency while addressing environmental concerns.
+Unmanned aerial vehicles (UAVs) are emerging as a transformative technology for transportation and logistics, offering fast and flexible delivery with cost-efficient operations. This potential has attracted significant policy attention, with China's Government Work Report highlighting drone delivery in both 2024 and 2025, signaling the strategic importance of the low-altitude economy. Globally, the drone delivery market is forecast to expand from \$3.47 billion in 2025 to \$20.98 billion by 2034, at a compound annual growth rate of 19.45\% \parencite{fortunebi2026drone}.
 
-Among these alternatives, unmanned aerial vehicles (UAVs) have gained considerable attention as a promising solution for last-mile logistics. Their key attributes—rapid transit, route flexibility, and reduced labor requirements—make them particularly attractive for time-sensitive deliveries. Beyond operational benefits, UAVs also present opportunities to lower energy consumption and carbon emissions compared to conventional ground-based vehicles. Policy momentum has further accelerated development: China's Government Work Report highlighted drone delivery in both 2024 and 2025, reflecting the strategic importance of the low-altitude economy. Globally, the drone delivery market is forecast to expand from \$3.47 billion in 2025 to \$20.98 billion by 2034, at a compound annual growth rate of 19.45\%.
+Current drone technology faces constraints in battery capacity and cargo weight, making them best suited for short-distance, last-mile logistics. Food delivery aligns particularly well with these capabilities because orders are typically lighter and smaller than parcels, distances usually remain under 3 km, and the high time sensitivity of food matches the speed advantage that drones provide. Several studies suggest that drones may achieve lower energy consumption and carbon emissions than ground vehicles under certain conditions \parencite{park_comparative_2018, kirschstein_comparison_2020, baldisseri_truck-based_2022}.
 
-Food delivery represents a particularly promising application for UAVs: orders are generally lightweight, distances typically remain under 3 km, and rapid service preserves food quality. Leading Chinese platforms such as Meituan and Eleme have recognized this fit and initiated pilot drone delivery programs in multiple cities, offering early demonstrations of commercial viability.
+The food delivery market in China presents a substantial opportunity for drone adoption. The online food delivery market has grown from approximately 300 billion Yuan in 2017 to over 1 trillion Yuan by 2023 \parencite{statista2024chinafooddelivery}. Leading platforms such as Meituan and Eleme have initiated pilot drone delivery programs in multiple cities, demonstrating early commercial viability.
 
 \subsection{Problem Statement}
 
-Despite the growing interest in drone delivery, the lack of predictive models for evaluating its environmental impact creates uncertainty for policymakers and urban planners. This knowledge gap makes it difficult to determine whether drones truly offer a sustainable advantage over conventional delivery methods, or whether their benefits are limited to specific operational contexts. Most existing studies rely on aggregate statistical metrics and hypothetical delivery scenarios rather than real origin-destination (OD) data, which prevents accurate assessment of route-level emission variations across different urban contexts.
+Despite this growing momentum, the environmental impact of drone delivery systems remains uncertain. The lack of predictive models for evaluating emissions across different urban contexts creates challenges for policymakers and urban planners seeking to determine whether drones truly offer a sustainable advantage over conventional delivery methods, or whether their benefits are limited to specific operational conditions. Most existing studies rely on aggregate statistical metrics and hypothetical delivery scenarios rather than real origin-destination (OD) order data, which prevents accurate assessment of route-level emission variations across diverse urban environments.
 
 \section{Literature Review}
 
@@ -51,13 +103,13 @@ A growing body of research has examined the environmental impacts of drone deliv
 
 \subsection{Drone vs. Ground Vehicle Comparisons}
 
-Early studies primarily compared drones against trucks and vans. \textcite{figliozzi_lifecycle_2017} developed an analytical lifecycle framework showing that while drones are highly energy-efficient per distance, electric tricycles outperform them when just two customers can be grouped in a single route. \textcite{stolaroff_energy_2018} conducted the first empirically calibrated study using 1,073 flight segments, finding that small drones (0.5~kg payload) achieve 23--54\% lower greenhouse gas emissions than diesel trucks, though warehouse energy requirements can dominate total emissions. \textcite{kirschstein_comparison_2020} employed well-to-wheel energy modeling to demonstrate that drones are competitive only in rural, low-density settings with calm wind conditions. Similarly, \textcite{baldisseri_truck-based_2022} found that truck-drone hybrid systems achieve the lowest emissions across all scenarios tested, but economic viability requires automation to reduce labor costs. \textcite{yowtak_comparative_2020} compared drones against battery electric vehicles for grocery delivery, concluding that BEVs outperform drones even for short distances due to payload weight sensitivity.
+Several studies have found drones environmentally favorable compared to heavy vehicles. \textcite{stolaroff_energy_2018} conducted the first empirically calibrated study, finding that small drones achieve significantly lower greenhouse gas emissions than diesel trucks, though warehouse energy requirements can dominate total emissions. Similarly, \textcite{park_comparative_2018} compared drones with motorcycles in South Korea, finding substantially lower drone emissions, with rural areas benefiting significantly more than urban areas from drone adoption. For hybrid configurations, \textcite{baldisseri_truck-based_2022} found that truck-drone systems achieve the lowest emissions across all scenarios tested, but economic viability requires automation to reduce labor costs. Among lighter vehicles, \textcite{rodrigues_drone_2022} demonstrated through empirical flights that only e-cargo bicycles achieve lower emissions per package than drones.
 
-Beyond trucks and vans, \textcite{park_comparative_2018} compared drones with gasoline and electric motorcycles in South Korea, finding drone emissions to be one-sixth of motorcycle emissions, with rural areas benefiting 13 times more than urban areas from drone adoption. \textcite{rodrigues_drone_2022} provided the only study including e-cargo bicycles, demonstrating through 188 empirical flights that only e-cargo bicycles achieve lower emissions per package than drones.
+However, these advantages are often conditional on specific operational contexts. \textcite{kirschstein_comparison_2020} employed well-to-wheel energy modeling to demonstrate that drones are competitive only in rural, low-density settings with calm wind conditions. When considering multi-drop routing, \textcite{figliozzi_lifecycle_2017} developed an analytical lifecycle framework showing that while drones are highly energy-efficient per distance, electric tricycles outperform them when multiple customers can be grouped in a single route. Additionally, \textcite{yowtak_comparative_2020} compared drones against battery electric vehicles for grocery delivery, concluding that BEVs outperform drones even for short distances due to payload weight sensitivity.
 
 \subsection{Research Gaps}
 
-Despite this progress, several critical gaps remain. First, most studies compare drones against trucks, vans, or personal vehicles, which are not representative of Asian food delivery where e-bikes dominate. Only \textcite{li_beyond_2025} directly compares drones to e-bikes, finding drones greener for 1--2 orders per flight but e-bikes superior for 3--4 orders. Second, as noted above, existing studies typically rely on hypothetical scenarios rather than real OD data. Third, no study has conducted multi-city comparisons across diverse urban contexts to identify the conditions under which drone delivery achieves environmental advantages.
+Despite this progress, several critical gaps remain. First, most studies compare drones against trucks, vans, or personal vehicles, which are not representative of Asian food delivery where e-bikes dominate. Only \textcite{li_beyond_2025} directly compares drones to e-bikes, finding that the relative advantage depends on the number of orders per trip. Second, as noted above, existing studies typically rely on hypothetical scenarios rather than real OD data. Third, few studies have conducted multi-city comparisons across diverse urban contexts to identify the conditions under which drone delivery achieves environmental advantages.
 
 \subsection{Research Objectives}
 
@@ -79,7 +131,7 @@ To address these gaps, this research aims to:
     \textcite{figliozzi_lifecycle_2017} & Van/Tricycle & Mixed & No & Analytical & LCA \\
     \textcite{park_comparative_2018} & Motorcycle & Yes & No & Two regions (Korea) & LCA \\
     \textcite{stolaroff_energy_2018} & Truck & Mixed & No & National (USA) & LCA \\
-    \textcite{kirschstein_comparison_2020} & Truck & Yes & No & Single city (Germany) & Use-phase \\
+    \textcite{kirschstein_comparison_2020} & Truck & Mixed & No & Single city (Germany) & Use-phase \\
     \textcite{yowtak_comparative_2020} & ICEV/BEV & Mixed & No & Single city (USA) & LCA \\
     \textcite{baldisseri_truck-based_2022} & Truck & Yes & No & Suburban (Italy) & LCA \\
     \textcite{rodrigues_drone_2022} & Car/Van/Bike & Mixed & No & National (USA) & Use-phase \\
@@ -98,11 +150,18 @@ To address these gaps, this research aims to:
 
 \textbf{Building Footprint Data:} Building polygons, heights, and LoD1 3D models are obtained from the Global Building Atlas, which provides global coverage containing 2.75 billion buildings at 3m resolution \parencite{zhu_globalbuildingatlas_2025}.
 
-\textbf{Road Network Data:} Street network data is retrieved from OpenStreetMap (OSM) via the OSMnx library, including all road types except motorways. This network is used to compute e-bike delivery distances along routes accessible to non-motorized vehicles.
+\textbf{Road Network Data:} Street network data is retrieved from OpenStreetMap \parencite{openstreetmap} via the OSMnx library, including all road types except motorways. This network is used to compute e-bike delivery distances along routes accessible to non-motorized vehicles.
 
 \subsection{OD Generation}
 
-The proposed framework generates origin-destination pairs by first processing sales data to extract merchants, then identifying nearby buildings from footprint data, and finally applying a gravity model to distribute demand.
+The proposed framework generates origin-destination pairs by first processing sales data to extract merchants, then identifying nearby buildings from footprint data, and finally applying a gravity model to distribute demand (Figure~\ref{fig:od_flowchart}).
+
+\begin{figure}[h]
+  \centering
+  \ODFlowchart
+  \caption{OD generation flowchart}
+  \label{fig:od_flowchart}
+\end{figure}
 
 Under the assumption that larger buildings attract more orders due to higher population density while greater distances reduce demand owing to increased delivery time and cost, the gravity model is formulated as follows. The estimated number of deliveries $D_{ij}$ from origin $i$ to destination $j$ is the total demand $P_i$ at origin $i$ multiplied by the proportion of attraction that destination $j$ exerts relative to all destinations:
 \begin{equation}
@@ -116,13 +175,20 @@ The attraction function $f$ is defined such that $v_j^\alpha$ represents the att
 
 Here, $\mathcal{O}$ is the set of origins, $\mathcal{D}$ is the set of destinations, and $\alpha$ and $\beta$ are elasticity coefficients.
 
-The model parameters are calibrated as $\alpha = 1.7$ and $\beta = 0.5$, validated against descriptive statistical indicators showing that the mean delivery distance per express food order in first-tier cities is 2.23 km.
+The model parameters are calibrated as $\alpha = 1.7$ and $\beta = 0.5$, validated against descriptive statistical indicators showing that the mean delivery distance per express food order in first-tier cities is 2.23 km \parencite{xie_environmental_2021}.
 
 \subsection{Road Distance Calculation}
 
-For each OD pair, both straight-line (Euclidean) distance and road network distance are computed. Since the road network is represented as a graph where nodes correspond to intersections and edges correspond to road segments, the coordinates of merchants and customers must first be mapped to their nearest network nodes. This spatial mapping is accelerated using a KD-tree data structure, which reduces query time complexity from $O(n)$ to $O(\log n)$.
+For each OD pair, both straight-line (Euclidean) distance and road network distance are computed (Figure~\ref{fig:road_dist_flowchart}). Since the road network is represented as a graph where nodes correspond to intersections and edges correspond to road segments, the coordinates of merchants and customers must first be mapped to their nearest network nodes. This spatial mapping is accelerated using a KD-tree data structure, which reduces query time complexity from $O(n)$ to $O(\log n)$.
 
 Once both endpoints are assigned to network nodes, the shortest path distance is computed using Dijkstra's algorithm. To further improve computational efficiency, unique origin-destination node pairs are identified first, ensuring that the shortest path calculation is performed only once for each distinct pair of intersections. This deduplication typically reduces computation time by approximately 50\%.
+
+\begin{figure}[h]
+  \centering
+  \RoadDistFlowchart
+  \caption{Road distance calculation flowchart}
+  \label{fig:road_dist_flowchart}
+\end{figure}
 
 \subsection{Emission Models}
 
@@ -175,7 +241,7 @@ The analysis proceeds by defining a distance threshold $d^*$ that determines mod
 
 \section{Preliminary Results and Expected Outcomes}
 
-To illustrate the proposed methodology, we present preliminary results from Luohu District, Shenzhen. The gravity model generates 552,635 valid OD pairs with an average road distance of 2.29~km and an average detour ratio of 1.53. Under the all-e-bike scenario, total annual lifecycle emissions are estimated at 41.4 tonnes CO$_2$e, while the all-drone scenario reduces this to 30.8 tonnes CO$_2$e---a 25.5\% reduction. Applying threshold-based assignment with an optimal distance threshold of 0.72~km (assigning 87.8\% of deliveries to drones) achieves a maximum reduction of 29.8\%, representing an additional 4.3 percentage points improvement over all-drone deployment.ΩΩ
+To illustrate the proposed methodology, we present preliminary results from Luohu District, Shenzhen. The gravity model generates 552,635 valid OD pairs with an average road distance of 2.29~km and an average detour ratio of 1.53. Under the all-e-bike scenario, total annual lifecycle emissions are estimated at 41.4 tonnes CO$_2$e, while the all-drone scenario reduces this to 30.8 tonnes CO$_2$e---a 25.5\% reduction. Applying threshold-based assignment with an optimal distance threshold of 0.72~km (assigning 87.8\% of deliveries to drones) achieves a maximum reduction of 29.8\%, representing an additional 4.3 percentage points improvement over all-drone deployment.
 
 Analysis across seven Chinese districts demonstrates that emission reduction potential varies substantially with local conditions, ranging from 23\% (Gulou, Nanjing) to 65\% (Pudong, Shanghai). Sensitivity analysis reveals that drone delivery becomes increasingly favorable as delivery distance increases and detour ratio rises, with the breakeven point shifting toward shorter distances when road networks are more circuitous. Initial correlation analysis suggests that optimal drone deployment ratio is positively associated with total road network length (r=0.79), while maximum emission reduction correlates with average detour ratio (r=0.66) and average road distance (r=0.73). Further analysis will extend these findings to additional cities to develop robust predictive models for sustainable logistics planning.
 
