@@ -24,7 +24,7 @@
   url=false
 ]{biblatex}
 
-\addbibresource{delivery_emission.bib}
+\addbibresource{../shared/delivery_emission.bib}
 
 \usepackage{caption}
 \setbeamertemplate{caption}[numbered]
@@ -47,7 +47,7 @@
 }
 
 \date[\today] % (optional)
-{Seminar for Confirmation of PhD Candidature}
+% {Seminar for Confirmation of PhD Candidature}
 
 %End of title page configuration block
 %------------------------------------------------------------
@@ -198,7 +198,7 @@
 \begin{frame}{Food Delivery in China}
   \begin{figure}
     \centering
-    \includegraphics[width=0.8\linewidth]{../figures/misc/china_food_delivery_market_size.pdf}
+    \includegraphics[width=0.8\linewidth]{../../figures/misc/china_food_delivery_market_size.pdf}
     \caption{\textbf{China's online food delivery market size (2017–2027)}, showing historical values and forecasts \parencite{statista2024chinafooddelivery}. The market has grown from approximately 300 billion Yuan in 2017 to over 1 trillion Yuan by 2023.}
     \label{fig:market_size}
   \end{figure}
@@ -298,7 +298,7 @@
     \begin{column}{0.6\textwidth}
       \begin{figure}
         \centering
-        \includegraphics[width=0.6\linewidth]{../figures/misc/screenshot.pdf}
+        \includegraphics[width=0.6\linewidth]{../../figures/misc/screenshot.pdf}
         \caption{\textbf{Screenshot of the Meituan Takeaway app showing merchant information.} The dataset includes latitude, longitude, and monthly sales data for 1,075,362 valid takeout merchants across China, collected in August 2021.}
         \label{fig:meituan_app}
       \end{figure}
@@ -317,7 +317,7 @@
     \begin{column}{0.6\textwidth}
       \begin{figure}
         \centering
-        \includegraphics[width=0.8\linewidth]{../figures/district/nanshan/nanshan_heatmap.pdf}
+        \includegraphics[width=0.8\linewidth]{../../figures/district/nanshan/nanshan_heatmap.pdf}
         \caption{\textbf{Heatmap of the monthly sales data for the Nanshan district.} The heatmap is generated using the latitude and longitude of the merchants and the monthly sales data.}
         \label{fig:nanshan_heatmap}
       \end{figure}
@@ -336,7 +336,7 @@
     \begin{column}{0.6\textwidth}
       \begin{figure}
         \centering
-        \includegraphics[width=0.8\linewidth]{../figures/misc/global_building_atlas.png}
+        \includegraphics[width=0.8\linewidth]{../../figures/misc/global_building_atlas.png}
         \caption{\textbf{Global Building Atlas}. The first open dataset providing global coverage of building polygons, heights, and LoD1 3D models, containing 2.75 billion buildings at 3m resolution \parencite{zhu_globalbuildingatlas_2025}.}
         \label{fig:global_building_atlas}
       \end{figure}
@@ -355,7 +355,7 @@
     \begin{column}{0.6\textwidth}
       \begin{figure}
         \centering
-        \includegraphics[width=0.8\linewidth]{../figures/district/nanshan/nanshan_store_coverage.pdf}
+        \includegraphics[width=0.8\linewidth]{../../figures/district/nanshan/nanshan_store_coverage.pdf}
         \caption{\textbf{Building footprint data and store coverage for the Nanshan district.} Nearby buildings are matched with takeout merchants as potential customers. The fetch area is enlarged by 3km beyond the district boundary to account for rider work radius \parencite{zhang_exploration_2023}.}
         \label{fig:nanshan_buildings}
       \end{figure}
@@ -439,7 +439,7 @@
     \begin{column}{0.6\textwidth}
       \begin{figure}
         \centering
-        \includegraphics[width=0.7\linewidth]{../figures/district/nanshan/nanshan_roadnet.pdf}
+        \includegraphics[width=0.7\linewidth]{../../figures/district/nanshan/nanshan_roadnet.pdf}
         \caption{\textbf{Road network for the Nanshan district.} All road types except motorways are acquired from OpenStreetMap via the OSMnx library.}
         \label{fig:nanshan_roadnet}
       \end{figure}
@@ -456,7 +456,7 @@
     \begin{column}{0.6\textwidth}
       \begin{figure}
         \centering
-        \includegraphics[width=0.7\linewidth]{../figures/district/nanshan/nanshan_distance_comparison.pdf}
+        \includegraphics[width=0.7\linewidth]{../../figures/district/nanshan/nanshan_distance_comparison.pdf}
         \caption{\textbf{Air distance vs. road distance for OD pairs in the Nanshan district.} Each OD pair now includes both the straight-line (air) distance and the road network distance computed via Dijkstra's algorithm.}
         \label{fig:nanshan_distance_comparison}
       \end{figure}
@@ -507,7 +507,7 @@
 \begin{frame}{Use-phase Emission Model}
   \begin{figure}
     \centering
-    \includegraphics[width=0.9\linewidth]{../figures/sensitivity/sensitivity_velocity_power_stacked.pdf}
+    \includegraphics[width=0.9\linewidth]{../../figures/sensitivity/sensitivity_velocity_power_stacked.pdf}
     \caption{\textbf{Power consumption breakdown by component for drone and e-bike at varying velocities.} (a) Drone power components: induced power, profile drag, parasitic drag, climb power, and auxiliary systems. (b) E-bike power components: rolling resistance, aerodynamic drag, grade resistance, and acceleration.}
     \label{fig:sensitivity_power_breakdown}
   \end{figure}
@@ -604,7 +604,7 @@
 \begin{frame}{Use-phase Emission Model Comparison}
   \begin{figure}
     \centering
-    \includegraphics[width=0.7\linewidth]{../figures/sensitivity/sensitivity_distance_route_factor.pdf}
+    \includegraphics[width=0.7\linewidth]{../../figures/sensitivity/sensitivity_distance_route_factor.pdf}
     \caption{\textbf{Two-dimensional sensitivity analysis of delivery distance and route factor on relative emissions.} The heatmap shows the percentage difference in drone emissions relative to e-bike emissions. The black contour line indicates the breakeven point where both delivery modes produce equal emissions. Negative values (green) indicate scenarios where drone delivery is more environmentally favorable.}
     \label{fig:sensitivity_heatmap}
   \end{figure}
@@ -613,7 +613,7 @@
 \begin{frame}{Lifecycle Emission Model Comparison}
   \begin{figure}
     \centering
-    \includegraphics[width=0.7\linewidth]{../figures/lifecycle/lifecycle_distance_route_factor.pdf}
+    \includegraphics[width=0.7\linewidth]{../../figures/lifecycle/lifecycle_distance_route_factor.pdf}
     \caption{\textbf{Two-dimensional sensitivity analysis of delivery distance and route factor on relative lifecycle emissions.} Lifecycle analysis shows greater drone emission reduction than use-phase only, as drones achieve higher lifetime deliveries (longer hours, faster speed), spreading production emissions across more orders.}
     \label{fig:lifecycle_heatmap}
   \end{figure}
@@ -624,7 +624,7 @@
     \begin{column}{0.5\textwidth}
       \begin{figure}
         \centering
-        \includegraphics[width=0.8\linewidth]{../figures/remote/luohu/luohu_road_distance_distribution.pdf}
+        \includegraphics[width=0.8\linewidth]{../../figures/remote/luohu/luohu_road_distance_distribution.pdf}
         \caption{\textbf{Road distance distribution in Luohu district.} Most deliveries occur within 1--3 km, with a long tail extending to longer distances.}
         \label{fig:luohu_road_distance_distribution}
       \end{figure}
@@ -633,7 +633,7 @@
     \begin{column}{0.5\textwidth}
       \begin{figure}
         \centering
-        \includegraphics[width=0.8\linewidth]{../figures/remote/luohu/luohu_distance_detour_scatter.pdf}
+        \includegraphics[width=0.8\linewidth]{../../figures/remote/luohu/luohu_distance_detour_scatter.pdf}
         \caption{\textbf{Air vs. road distance relationship.} The detour ratio decreases and stabilizes as delivery distance increases.}
         \label{fig:luohu_distance_detour_scatter}
       \end{figure}
@@ -647,22 +647,28 @@
     \begin{column}{0.48\textwidth}
       \textbf{Threshold-based Assignment:}
       \begin{itemize}
-        \item Select distance thresholds from suitable range
         \item For each threshold $d^*$:
           \begin{itemize}
             \item Distance $\geq d^*$ $\rightarrow$ Drone
             \item Distance $< d^*$ $\rightarrow$ E-bike
           \end{itemize}
-        \item Calculate total lifecycle emissions
         \item Find optimal $d^*$ minimizing emissions
-        \item Derive optimal drone ratio
+      \end{itemize}
+
+      \vspace{0.3em}
+      \textbf{Bundle Delivery Scenarios:}
+      \begin{itemize}
+        \item E-bike riders can bundle multiple orders
+        \item Coefficient $\kappa$ = effective distance ratio
+        \item $\kappa \in \{0.9, 0.8, 0.7, 0.6\}$: bundled e-bike travels $\kappa \times$ original distance per order
+        \item Lower $\kappa$ $\rightarrow$ more efficient bundling
       \end{itemize}
     \end{column}
     \begin{column}{0.48\textwidth}
       \begin{figure}
         \centering
-        \includegraphics[width=0.8\linewidth]{../figures/remote/luohu/luohu_emission_reduction.pdf}
-        \caption{\textbf{Lifecycle emission reduction by distance threshold.} Optimal threshold maximizes emission savings by assigning drones to longer-distance deliveries.}
+        \includegraphics[width=0.8\linewidth]{../../figures/district/nanshan/nanshan_emission_reduction.pdf}
+        \caption{\textbf{Emission reduction under bundle scenarios.} Higher bundling efficiency reduces drone's emission advantage.}
         \label{fig:luohu_emission_reduction}
       \end{figure}
     \end{column}
@@ -674,7 +680,7 @@
     \begin{column}{0.48\textwidth}
       \begin{figure}
         \centering
-        \includegraphics[width=\linewidth]{../figures/district/nanshan/nanshan_zone_emission_reduction.pdf}
+        \includegraphics[width=\linewidth]{../../figures/district/nanshan/nanshan_zone_emission_reduction.pdf}
         \caption{\textbf{Emission reduction by zone.} Spatial distribution of drone emission benefits across traffic zones.}
         \label{fig:zone_emission_reduction}
       \end{figure}
@@ -682,7 +688,7 @@
     \begin{column}{0.48\textwidth}
       \begin{figure}
         \centering
-        \includegraphics[width=\linewidth]{../figures/district/nanshan/nanshan_zone_building_count.pdf}
+        \includegraphics[width=\linewidth]{../../figures/district/nanshan/nanshan_zone_building_count.pdf}
         \caption{\textbf{Building count by zone.} Urban density varies significantly across zones, affecting delivery patterns.}
         \label{fig:zone_building_count}
       \end{figure}
@@ -695,7 +701,7 @@
     \begin{column}{0.48\textwidth}
       \begin{figure}
         \centering
-        \includegraphics[width=\linewidth]{../figures/district/nanshan/nanshan_time_vs_buildings.pdf}
+        \includegraphics[width=\linewidth]{../../figures/district/nanshan/nanshan_time_vs_buildings.pdf}
         \caption{\textbf{Time saving vs building count.} Zones with more buildings show greater drone time savings due to complex last-mile navigation.}
         \label{fig:time_vs_buildings}
       \end{figure}
@@ -703,7 +709,7 @@
     \begin{column}{0.48\textwidth}
       \begin{figure}
         \centering
-        \includegraphics[width=\linewidth]{../figures/district/nanshan/nanshan_time_vs_intersections.pdf}
+        \includegraphics[width=\linewidth]{../../figures/district/nanshan/nanshan_time_vs_intersections.pdf}
         \caption{\textbf{Time saving vs intersection count.} Higher road network complexity correlates with greater drone delivery advantages.}
         \label{fig:time_vs_intersections}
       \end{figure}
@@ -714,7 +720,7 @@
 \begin{frame}{Equity Analysis: Zone Correlations}
   \begin{figure}
     \centering
-    \includegraphics[width=0.7\linewidth]{../figures/district/nanshan/nanshan_zone_correlations.pdf}
+    \includegraphics[width=0.7\linewidth]{../../figures/district/nanshan/nanshan_zone_correlations.pdf}
     \caption{\textbf{Correlation matrix of zone-level features.} Shows relationships between urban characteristics (building count, intersection count) and drone delivery benefits (emission reduction, time saving).}
     \label{fig:zone_correlations}
   \end{figure}
@@ -723,7 +729,7 @@
 \begin{frame}{Study Regions}
   \begin{figure}
     \centering
-    \includegraphics[width=0.8\linewidth]{../figures/analysis/regions_map.pdf}
+    \includegraphics[width=0.8\linewidth]{../../figures/analysis/regions_map.pdf}
     \caption{\textbf{Study regions on China map.} The six study regions are located in different parts of China.}
     \label{fig:regions_map}
   \end{figure}
@@ -732,7 +738,7 @@
 \begin{frame}{Cross-Region Comparison}
   \begin{figure}
     \centering
-    \includegraphics[width=0.8\linewidth]{../figures/analysis/annual_emissions_comparison.pdf}
+    \includegraphics[width=0.8\linewidth]{../../figures/analysis/annual_emissions_comparison.pdf}
     \caption{\textbf{Annual lifecycle emissions across six regions.} Comparing all e-bike, all drone, and optimal mixed scenarios shows consistent emission reduction potential of 23--48\% with optimal deployment.}
     \label{fig:annual_emissions_comparison}
   \end{figure}
@@ -741,7 +747,7 @@
 \begin{frame}{Correlation Analysis}
   \begin{figure}
     \centering
-    \includegraphics[width=0.7\linewidth]{../figures/analysis/correlation_heatmap.pdf}
+    \includegraphics[width=0.7\linewidth]{../../figures/analysis/correlation_heatmap.pdf}
     \caption{\textbf{Pearson correlation heatmap between emission reduction and region features.} The heatmap shows the Pearson correlation coefficients between emission reduction and region features.}
     \label{fig:correlation_heatmap}
   \end{figure}
@@ -770,7 +776,7 @@
       \textbf{Future Work:}
       \begin{itemize}
         \item Consider different \textbf{bundle sizes} for both drone and e-bike deliveries
-        \item Incorporate \textbf{economic and equity} analysis
+        \item Incorporate \textbf{economic} analysis
         \item Account for \textbf{weather impact} on drone operations
         \item Extend to \textbf{other delivery modes} (e.g., autonomous vehicles, robots)
       \end{itemize}

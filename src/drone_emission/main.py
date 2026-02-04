@@ -43,14 +43,14 @@ def run_region_analysis(region_key: str, config: dict):
     #     region_info=region,
     #     exp_config=config,
     # )
-    # cal_emission(
-    #     region_info=region,
-    #     exp_config=config,
-    # )
-    analyze_equity(
+    cal_emission(
         region_info=region,
         exp_config=config,
     )
+    # analyze_equity(
+    #     region_info=region,
+    #     exp_config=config,
+    # )
 
     # Example: Add statistics and save
     # region.set_stat("building_count", 12345)

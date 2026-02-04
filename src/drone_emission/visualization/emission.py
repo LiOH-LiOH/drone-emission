@@ -58,6 +58,7 @@ def add_experiment_info_box(
 
 def plot_emission_reduction_analysis(
     results_df: pd.DataFrame,
+    bundle_results: dict = None,
     save_path: str = None,
     dpi: int = 150,
     for_latex: bool = False,
@@ -67,6 +68,7 @@ def plot_emission_reduction_analysis(
 
     参数:
         results_df: 包含 threshold, drone_ratio, reduction 列的 DataFrame
+        bundle_results: 束配送场景结果字典 {coef: DataFrame}
         save_path: 保存路径，如果为 None 则显示图形
         dpi: 图像分辨率
 
@@ -74,6 +76,14 @@ def plot_emission_reduction_analysis(
         保存的图像路径
     """
     fig, axes = plt.subplots(2, 1, figsize=(8, 10))
+
+    # Color scheme for bundle scenarios
+    bundle_colors = {
+        0.9: "#2ca02c",  # green
+        0.8: "#ff7f0e",  # orange
+        0.7: "#9467bd",  # purple
+        0.6: "#8c564b",  # brown
+    }
 
     # 图1: 阈值 vs 减排百分比
     ax1 = axes[0]
@@ -83,29 +93,63 @@ def plot_emission_reduction_analysis(
         "b-o",
         linewidth=2,
         markersize=8,
+        label="No bundling",
     )
+
+    # Plot bundle scenarios
+    if bundle_results:
+        for coef, df in bundle_results.items():
+            color = bundle_colors.get(coef, "gray")
+            ax1.plot(
+                df["threshold"],
+                df["reduction"],
+                "-s",
+                color=color,
+                linewidth=1.5,
+                markersize=6,
+                label=f"Bundle {coef}",
+            )
+
     ax1.set_xlabel("Distance Threshold (km)", fontsize=12)
     ax1.set_ylabel("Emission Reduction (%)", fontsize=12)
     if not for_latex:
         ax1.set_title("Emission Reduction vs Distance Threshold", fontsize=14)
     ax1.grid(True, alpha=0.3)
     ax1.axhline(y=0, color="gray", linestyle="--", alpha=0.5)
+    ax1.legend(loc="best", fontsize=9)
 
     # 图2: 无人机占比 vs 减排百分比
     ax2 = axes[1]
     ax2.plot(
         results_df["drone_ratio"],
         results_df["reduction"],
-        "r-s",
+        "b-s",
         linewidth=2,
         markersize=8,
+        label="No bundling",
     )
+
+    # Plot bundle scenarios
+    if bundle_results:
+        for coef, df in bundle_results.items():
+            color = bundle_colors.get(coef, "gray")
+            ax2.plot(
+                df["drone_ratio"],
+                df["reduction"],
+                "-s",
+                color=color,
+                linewidth=1.5,
+                markersize=6,
+                label=f"Bundle {coef}",
+            )
+
     ax2.set_xlabel("Drone Delivery Ratio (%)", fontsize=12)
     ax2.set_ylabel("Emission Reduction (%)", fontsize=12)
     if not for_latex:
         ax2.set_title("Emission Reduction vs Drone Ratio", fontsize=14)
     ax2.grid(True, alpha=0.3)
     ax2.axhline(y=0, color="gray", linestyle="--", alpha=0.5)
+    ax2.legend(loc="best", fontsize=9)
 
     plt.tight_layout()
 

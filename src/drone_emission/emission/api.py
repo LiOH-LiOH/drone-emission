@@ -238,6 +238,46 @@ def cal_emission(region_info, exp_config):
 
     results_df = pd.DataFrame(results)
 
+    # Bundle delivery scenarios
+    bundle_coeffs = [0.9, 0.8, 0.7, 0.6]
+    bundle_results = {}
+
+    for coef in bundle_coeffs:
+        # Recalculate e-bike emissions with bundled distances
+        bundled_ebike_lifecycle = []
+        for row in od_df.itertuples():
+            road_distance_km = row.road_distance_m / 1000.0
+            bundled_distance = road_distance_km * coef
+            lifecycle_ebike = lca.calculate_lifecycle_emissions_per_order_simple(
+                bundled_distance, n_orders_per_delivery=1, vehicle_type="ebike"
+            )
+            bundled_ebike_lifecycle.append(lifecycle_ebike["total_per_order_g"])
+
+        bundled_ebike_lifecycle = np.array(bundled_ebike_lifecycle)
+
+        # Calculate mixed scenario results with bundled e-bike
+        coef_results = []
+        for threshold in thresholds:
+            use_drone = road_distances >= threshold
+            mixed_lifecycle = np.where(
+                use_drone, drone_lifecycle, bundled_ebike_lifecycle
+            ).sum()
+            drone_ratio = use_drone.sum() / total_orders * 100
+            reduction = (
+                (bundled_ebike_lifecycle.sum() - mixed_lifecycle)
+                / bundled_ebike_lifecycle.sum()
+                * 100
+            )
+            coef_results.append(
+                {
+                    "threshold": threshold,
+                    "drone_ratio": drone_ratio,
+                    "reduction": reduction,
+                }
+            )
+
+        bundle_results[coef] = pd.DataFrame(coef_results)
+
     # Find max emission reduction and save stats
     max_idx = results_df["reduction"].idxmax()
     max_row = results_df.loc[max_idx]
@@ -274,7 +314,10 @@ def cal_emission(region_info, exp_config):
     )
     for_latex = exp_config.get("for_latex", False)
     fig_path = plot_emission_reduction_analysis(
-        results_df, save_path=save_path, for_latex=for_latex
+        results_df,
+        bundle_results=bundle_results,
+        save_path=save_path,
+        for_latex=for_latex,
     )
     print(f"\n图表已保存: {fig_path}")
 
