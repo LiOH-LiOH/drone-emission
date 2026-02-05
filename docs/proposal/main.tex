@@ -71,13 +71,37 @@
   \end{tikzpicture}%
 }
 
-\title{A Gravity-Based Framework for Scaling Emissions Assessment of Drone and E-Bike Food Delivery Systems}
-\author{Jingxian Lin\\Department of Civil Engineering\\The University of Hong Kong}
-\date{\today}
-
 \begin{document}
 
-\maketitle
+\begin{titlepage}
+  \centering
+  \vspace*{1cm}
+
+  {\LARGE\textbf{Research Proposal}}
+
+  \vspace{2cm}
+
+  {\Large\textbf{A Gravity-Based Framework for Scaling Emissions Assessment of Drone and E-Bike Food Delivery Systems}}
+
+  \vspace{2cm}
+
+  {\large Jingxian Lin}\\[0.3cm]
+  Department of Civil Engineering\\
+  The University of Hong Kong
+
+  \vspace{1.5cm}
+
+  \today
+
+  \vfill
+
+  \begin{tabular}{@{}ll}
+    \textbf{Supervisor:} & Dr. Jintao Ke \\[0.5cm]
+    \textbf{Signature:} & \includegraphics[height=0.9cm]{signature.png} \\[0.5cm]
+  \end{tabular}
+
+  \vspace{1cm}
+\end{titlepage}
 
 \newpage
 \tableofcontents
@@ -85,31 +109,29 @@
 
 \section{Introduction}
 
-\subsection{Background}
-
 Unmanned aerial vehicles (UAVs) are emerging as a transformative technology for transportation and logistics, offering fast and flexible delivery with cost-efficient operations. This potential has attracted significant policy attention, with China's Government Work Report highlighting drone delivery in both 2024 and 2025, signaling the strategic importance of the low-altitude economy. Globally, the drone delivery market is forecast to expand from \$3.47 billion in 2025 to \$20.98 billion by 2034, at a compound annual growth rate of 19.45\% \parencite{fortunebi2026drone}.
 
-Current drone technology faces constraints in battery capacity and cargo weight, making them best suited for short-distance, last-mile logistics. Food delivery aligns particularly well with these capabilities because orders are typically lighter and smaller than parcels, distances usually remain under 3 km, and the high time sensitivity of food matches the speed advantage that drones provide. Several studies suggest that drones may achieve lower energy consumption and carbon emissions than ground vehicles under certain conditions \parencite{park_comparative_2018, kirschstein_comparison_2020, baldisseri_truck-based_2022}.
+Food delivery emerges as an ideal application for drone technology. Current drones face constraints in battery capacity and cargo weight, making them best suited for short-distance, last-mile logistics. Food delivery aligns well with these capabilities: orders are typically lighter and smaller than parcels, distances usually remain under 3 km, and the high time sensitivity matches the speed advantage that drones provide.
+
+% Several studies suggest that drones may achieve lower energy consumption and carbon emissions than ground vehicles under certain conditions \parencite{park_comparative_2018, kirschstein_comparison_2020, baldisseri_truck-based_2022}.
 
 The food delivery market in China presents a substantial opportunity for drone adoption. The online food delivery market has grown from approximately 300 billion Yuan in 2017 to over 1 trillion Yuan by 2023 \parencite{statista2024chinafooddelivery}. Leading platforms such as Meituan and Eleme have initiated pilot drone delivery programs in multiple cities, demonstrating early commercial viability.
 
-\subsection{Problem Statement}
-
-Despite this growing momentum, the environmental impact of drone delivery systems remains uncertain. The lack of predictive models for evaluating emissions across different urban contexts creates challenges for policymakers and urban planners seeking to determine whether drones truly offer a sustainable advantage over conventional delivery methods, or whether their benefits are limited to specific operational conditions. Most existing studies rely on aggregate statistical metrics and hypothetical delivery scenarios rather than real origin-destination (OD) order data, which prevents accurate assessment of route-level emission variations across diverse urban environments.
+Despite this growing momentum, the environmental impact of drone delivery systems remains uncertain. The lack of predictive models for evaluating emissions across different urban contexts creates challenges for policymakers and urban planners seeking to determine whether drones truly offer a sustainable advantage over conventional delivery methods, or under which operational conditions drones can offer an environmentally friendly alternative for food delivery.
 
 \section{Literature Review}
 
 A growing body of research has examined the environmental impacts of drone delivery systems, with findings varying substantially depending on comparison vehicles, geographic context, and methodological approach (Table~\ref{tab:lit_review}).
 
-\subsection{Drone vs. Ground Vehicle Comparisons}
+\subsection{Drone vs. Ground Vehicle in Delivery}
 
-Several studies have found drones environmentally favorable compared to heavy vehicles. \textcite{stolaroff_energy_2018} conducted the first empirically calibrated study, finding that small drones achieve significantly lower greenhouse gas emissions than diesel trucks, though warehouse energy requirements can dominate total emissions. Similarly, \textcite{park_comparative_2018} compared drones with motorcycles in South Korea, finding substantially lower drone emissions, with rural areas benefiting significantly more than urban areas from drone adoption. For hybrid configurations, \textcite{baldisseri_truck-based_2022} found that truck-drone systems achieve the lowest emissions across all scenarios tested, but economic viability requires automation to reduce labor costs. Among lighter vehicles, \textcite{rodrigues_drone_2022} demonstrated through empirical flights that only e-cargo bicycles achieve lower emissions per package than drones.
+Several studies have found drones environmentally favorable compared to traditional diesel delivery vehicles. \textcite{stolaroff_energy_2018} conducted the first empirically calibrated study, finding that small drones achieve significantly lower greenhouse gas emissions than diesel trucks, though warehouse energy requirements can dominate total emissions. Similarly, \textcite{park_comparative_2018} compared drones with motorcycles in South Korea, finding substantially lower drone emissions, with rural areas benefiting significantly more than urban areas from drone adoption. For hybrid configurations, \textcite{baldisseri_truck-based_2022} found that truck-drone systems achieve the lowest emissions across all scenarios tested, but economic viability requires automation to reduce labor costs. Among lighter vehicles, \textcite{rodrigues_drone_2022} demonstrated through empirical flights that only e-cargo bicycles achieve lower emissions per package than drones.
 
 However, these advantages are often conditional on specific operational contexts. \textcite{kirschstein_comparison_2020} employed well-to-wheel energy modeling to demonstrate that drones are competitive only in rural, low-density settings with calm wind conditions. When considering multi-drop routing, \textcite{figliozzi_lifecycle_2017} developed an analytical lifecycle framework showing that while drones are highly energy-efficient per distance, electric tricycles outperform them when multiple customers can be grouped in a single route. Additionally, \textcite{yowtak_comparative_2020} compared drones against battery electric vehicles for grocery delivery, concluding that BEVs outperform drones even for short distances due to payload weight sensitivity.
 
 \subsection{Research Gaps}
 
-Despite this progress, several critical gaps remain. First, most studies compare drones against trucks, vans, or personal vehicles, which are not representative of Asian food delivery where e-bikes dominate. Only \textcite{li_beyond_2025} directly compares drones to e-bikes, finding that the relative advantage depends on the number of orders per trip. Second, as noted above, existing studies typically rely on hypothetical scenarios rather than real OD data. Third, few studies have conducted multi-city comparisons across diverse urban contexts to identify the conditions under which drone delivery achieves environmental advantages.
+Despite this progress, several critical gaps remain. First, most studies compare drones against trucks, vans, or personal vehicles, which are not representative of Asian food delivery where e-bikes dominate. Only \textcite{li_beyond_2025} directly compares drones to e-bikes, finding that the relative advantage depends on the number of orders per trip. Second, existing studies typically rely on aggregate statistical metrics and hypothetical delivery scenarios rather than real origin-destination (OD) order data, which prevents accurate assessment of route-level emission variations across diverse urban environments. Third, few studies have conducted multi-city comparisons across diverse urban contexts to identify the conditions under which drone delivery achieves environmental advantages.
 
 \subsection{Research Objectives}
 
