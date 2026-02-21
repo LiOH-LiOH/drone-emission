@@ -100,6 +100,84 @@ class DroneParams:
     hover_time: float = 30  # 每次飞行悬停时间 (秒)
 
 
+@dataclass
+class EcarParams:
+    """电动汽车参数 (小型电动配送车)"""
+
+    # 生产阶段排放
+    e_body: float = 7.0  # 车身排放因子 (kg CO2e/kg)
+    e_battery: float = 107  # 电池排放因子 (kg CO2e/kWh)
+    e_body_dispose: float = 3.0  # 车身处置排放因子 (kg CO2e/kg)
+    e_battery_dispose: float = 20.35  # 电池处置排放因子 (kg CO2e/kWh)
+
+    # 物理参数
+    w_body: float = 1200  # 车身重量 (kg), 小型电动配送车
+    w_battery: float = 200  # 电池重量 (kg)
+    n_battery: int = 1  # 电池包数量
+    v_battery: float = 30.0  # 电池容量 (kWh)
+
+    # 运行参数
+    velocity: float = 30  # 速度 (km/h), 城市配送
+    e_use: float = 0.6  # 电网排放因子 (kg CO2e/kWh)
+
+    # 寿命
+    lifespan: int = 8  # 使用寿命 (年)
+    battery_lifespan: int = 6  # 电池寿命 (年)
+
+    # 运营参数
+    working_hours_per_day: float = 8.0  # 每日工作时间 (小时)
+    working_days_per_year: int = 300  # 每年工作天数
+    loading_time_min: float = 5.0  # 装卸时间 (分钟), 含停车、步行
+
+    # 能耗模型参数 (同e-bike功率模型, 不同车辆参数)
+    g: float = 9.81
+    C_d: float = 0.35  # 空气阻力系数
+    C_rr: float = 0.012  # 滚动阻力系数
+    rho: float = 1.225  # 空气密度 (kg/m³)
+    A: float = 2.2  # 迎风面积 (m²)
+    grade: float = 0.015  # 道路坡度
+    n_acc: int = 1  # 加速频率
+    P_aux: float = 0.3  # 辅助设备功率 (kW), 空调/灯光等
+
+
+@dataclass
+class GasolineCarParams:
+    """燃油汽车参数 (小型燃油配送车)"""
+
+    # 生产阶段排放 (无显著电池)
+    e_body: float = 6.0  # 车身排放因子 (kg CO2e/kg)
+    e_body_dispose: float = 3.0  # 车身处置排放因子 (kg CO2e/kg)
+
+    # 物理参数
+    w_body: float = 1300  # 车身重量 (kg), 含发动机
+
+    # 运行参数
+    velocity: float = 30  # 速度 (km/h), 城市配送
+
+    # 燃油参数
+    engine_efficiency: float = 0.25  # 发动机热效率
+    gasoline_energy_density: float = 9.0  # 汽油能量密度 (kWh/升)
+    gasoline_co2_per_liter: float = 2.31  # 汽油燃烧CO2排放 (kg CO2/升)
+
+    # 寿命
+    lifespan: int = 10  # 使用寿命 (年)
+
+    # 运营参数
+    working_hours_per_day: float = 8.0
+    working_days_per_year: int = 300
+    loading_time_min: float = 5.0
+
+    # 能耗模型参数 (同e-bike功率模型)
+    g: float = 9.81
+    C_d: float = 0.35
+    C_rr: float = 0.012
+    rho: float = 1.225
+    A: float = 2.2
+    grade: float = 0.015
+    n_acc: int = 1
+    P_aux: float = 0.3
+
+
 # @dataclass
 # class CabinetParams:
 #     """取餐柜参数"""
@@ -157,6 +235,34 @@ def create_drone_params(exp_config: Dict = None) -> DroneParams:
         h_takeoff=drone_config.get("h_takeoff", 100),
         hover_time=drone_config.get("hover_time", 30),
         e_use=emission_params.get("e_use", 0.6),
+    )
+
+
+def create_ecar_params(exp_config: Dict = None) -> EcarParams:
+    """Create EcarParams with config overrides from experiment.toml."""
+    if exp_config is None:
+        return EcarParams()
+
+    emission_params = exp_config.get("emission_params", {})
+    ecar_config = emission_params.get("ecar", {})
+
+    return EcarParams(
+        velocity=ecar_config.get("velocity", 30),
+        e_use=emission_params.get("e_use", 0.6),
+    )
+
+
+def create_gasoline_car_params(exp_config: Dict = None) -> GasolineCarParams:
+    """Create GasolineCarParams with config overrides from experiment.toml."""
+    if exp_config is None:
+        return GasolineCarParams()
+
+    emission_params = exp_config.get("emission_params", {})
+    gas_config = emission_params.get("gasoline_car", {})
+
+    return GasolineCarParams(
+        velocity=gas_config.get("velocity", 30),
+        engine_efficiency=gas_config.get("engine_efficiency", 0.25),
     )
 
 
@@ -597,6 +703,147 @@ class DroneEnergyModel:
         }
 
 
+class EcarEnergyModel:
+    """电动汽车能耗模型 (同e-bike功率模型, 不同车辆参数)"""
+
+    def __init__(self, params: EcarParams = None):
+        self.p = params or EcarParams()
+        self._power_cache: Dict[tuple, Tuple[float, Dict]] = {}
+
+    def calculate_power(
+        self, total_weight_kg: float, velocity_ms: float
+    ) -> Tuple[float, Dict]:
+        """
+        计算电动汽车功率 (kW) — 同e-bike功率模型
+        P = m*g*C_rr*v + 0.5*rho*C_d*A*v³ + m*g*grade*v + acc_term
+        """
+        cache_key = (round(total_weight_kg, 2), round(velocity_ms, 4))
+        if cache_key in self._power_cache:
+            return self._power_cache[cache_key]
+
+        m_t = total_weight_kg / 1000
+        v_ms = velocity_ms
+        v_kmh = v_ms * 3.6
+        g = self.p.g
+
+        P_rolling = m_t * g * self.p.C_rr * v_ms
+        P_air = self.p.rho * self.p.C_d * self.p.A * (v_ms**3) / 2000
+        P_grade = m_t * g * self.p.grade * v_ms
+        P_acc = (self.p.n_acc * 0.504 * v_kmh**3 * m_t) / (2 * 1000 * 3.6)
+
+        P_total = P_rolling + P_air + P_grade + P_acc
+        result = (
+            P_total,
+            {
+                "P_rolling": P_rolling,
+                "P_air": P_air,
+                "P_grade": P_grade,
+                "P_acc": P_acc,
+            },
+        )
+        self._power_cache[cache_key] = result
+        return result
+
+    def calculate_energy_consumption(
+        self, distance_km: float, payload_kg: float = 1.0, driver_weight: float = 70
+    ) -> Dict:
+        """计算单次配送能耗 (电动汽车)"""
+        total_weight_go = self.p.w_body + self.p.w_battery + driver_weight + payload_kg
+        total_weight_return = self.p.w_body + self.p.w_battery + driver_weight
+
+        velocity_ms = self.p.velocity / 3.6
+
+        P_total_go, _ = self.calculate_power(total_weight_go, velocity_ms)
+        P_total_return, _ = self.calculate_power(total_weight_return, velocity_ms)
+
+        time_hours = distance_km / self.p.velocity
+        energy_kwh = P_total_go * time_hours + P_total_return * time_hours
+
+        return {
+            "distance_km": distance_km,
+            "payload_kg": payload_kg,
+            "velocity_kmh": self.p.velocity,
+            "power_kw_go": P_total_go,
+            "power_kw_return": P_total_return,
+            "time_hours": time_hours,
+            "time_minutes": time_hours * 60,
+            "energy_kwh": energy_kwh,
+        }
+
+
+class GasolineCarEnergyModel:
+    """燃油汽车能耗模型 (同e-bike功率模型, 加发动机效率转换)"""
+
+    def __init__(self, params: GasolineCarParams = None):
+        self.p = params or GasolineCarParams()
+        self._power_cache: Dict[tuple, Tuple[float, Dict]] = {}
+
+    def calculate_power(
+        self, total_weight_kg: float, velocity_ms: float
+    ) -> Tuple[float, Dict]:
+        """
+        计算燃油汽车机械功率 (kW) — 同e-bike功率模型
+        """
+        cache_key = (round(total_weight_kg, 2), round(velocity_ms, 4))
+        if cache_key in self._power_cache:
+            return self._power_cache[cache_key]
+
+        m_t = total_weight_kg / 1000
+        v_ms = velocity_ms
+        v_kmh = v_ms * 3.6
+        g = self.p.g
+
+        P_rolling = m_t * g * self.p.C_rr * v_ms
+        P_air = self.p.rho * self.p.C_d * self.p.A * (v_ms**3) / 2000
+        P_grade = m_t * g * self.p.grade * v_ms
+        P_acc = (self.p.n_acc * 0.504 * v_kmh**3 * m_t) / (2 * 1000 * 3.6)
+
+        P_total = P_rolling + P_air + P_grade + P_acc
+        result = (
+            P_total,
+            {
+                "P_rolling": P_rolling,
+                "P_air": P_air,
+                "P_grade": P_grade,
+                "P_acc": P_acc,
+            },
+        )
+        self._power_cache[cache_key] = result
+        return result
+
+    def calculate_energy_consumption(
+        self, distance_km: float, payload_kg: float = 1.0, driver_weight: float = 70
+    ) -> Dict:
+        """计算单次配送能耗 (燃油汽车), 含发动机效率转换"""
+        total_weight_go = self.p.w_body + driver_weight + payload_kg
+        total_weight_return = self.p.w_body + driver_weight
+
+        velocity_ms = self.p.velocity / 3.6
+
+        P_total_go, _ = self.calculate_power(total_weight_go, velocity_ms)
+        P_total_return, _ = self.calculate_power(total_weight_return, velocity_ms)
+
+        time_hours = distance_km / self.p.velocity
+        mechanical_energy_kwh = P_total_go * time_hours + P_total_return * time_hours
+
+        # 发动机效率转换: 机械能 -> 燃油能量
+        fuel_energy_kwh = mechanical_energy_kwh / self.p.engine_efficiency
+        fuel_liters = fuel_energy_kwh / self.p.gasoline_energy_density
+
+        return {
+            "distance_km": distance_km,
+            "payload_kg": payload_kg,
+            "velocity_kmh": self.p.velocity,
+            "power_kw_go": P_total_go,
+            "power_kw_return": P_total_return,
+            "time_hours": time_hours,
+            "time_minutes": time_hours * 60,
+            "mechanical_energy_kwh": mechanical_energy_kwh,
+            "fuel_energy_kwh": fuel_energy_kwh,
+            "fuel_liters": fuel_liters,
+        }
+
+
 class LifeCycleEmissions:
     """生命周期碳排放计算"""
 
@@ -604,14 +851,18 @@ class LifeCycleEmissions:
         self,
         ebike_params: EbikeParams = None,
         drone_params: DroneParams = None,
-        # cabinet_params: CabinetParams = None,
+        ecar_params: EcarParams = None,
+        gasoline_car_params: GasolineCarParams = None,
     ):
         self.ebike_p = ebike_params or EbikeParams()
         self.drone_p = drone_params or DroneParams()
-        # self.cabinet_p = cabinet_params or CabinetParams()
+        self.ecar_p = ecar_params or EcarParams()
+        self.gasoline_car_p = gasoline_car_params or GasolineCarParams()
 
         self.ebike_energy = EbikeEnergyModel(self.ebike_p)
         self.drone_energy = DroneEnergyModel(self.drone_p)
+        self.ecar_energy = EcarEnergyModel(self.ecar_p)
+        self.gasoline_car_energy = GasolineCarEnergyModel(self.gasoline_car_p)
 
     def calculate_ebike_production_emissions(self) -> Dict:
         """
@@ -734,6 +985,79 @@ class LifeCycleEmissions:
                 "level_return": energy_result["energy_level_return_kwh"],
                 "landing_return": energy_result["energy_landing_return_kwh"],
             },
+        }
+
+    def calculate_ecar_production_emissions(self) -> Dict:
+        """计算电动汽车生产阶段排放"""
+        p = self.ecar_p
+
+        body_production = p.e_body * p.w_body
+        total_battery_capacity = p.v_battery * p.n_battery
+        battery_production = p.e_battery * total_battery_capacity
+        body_disposal = p.e_body_dispose * p.w_body
+        battery_disposal = p.e_battery_dispose * total_battery_capacity
+        total = body_production + battery_production + body_disposal + battery_disposal
+
+        return {
+            "body_production_kg": body_production,
+            "battery_production_kg": battery_production,
+            "body_disposal_kg": body_disposal,
+            "battery_disposal_kg": battery_disposal,
+            "total_kg": total,
+            "total_battery_capacity_kwh": total_battery_capacity,
+        }
+
+    def calculate_gasoline_car_production_emissions(self) -> Dict:
+        """计算燃油汽车生产阶段排放 (无显著电池)"""
+        p = self.gasoline_car_p
+
+        body_production = p.e_body * p.w_body
+        body_disposal = p.e_body_dispose * p.w_body
+        total = body_production + body_disposal
+
+        return {
+            "body_production_kg": body_production,
+            "body_disposal_kg": body_disposal,
+            "total_kg": total,
+        }
+
+    def calculate_ecar_use_phase_emissions(
+        self, distance_km: float, payload_kg: float = 1.0, driver_weight: float = 70
+    ) -> Dict:
+        """计算电动汽车使用阶段排放"""
+        energy_result = self.ecar_energy.calculate_energy_consumption(
+            distance_km, payload_kg, driver_weight
+        )
+
+        total_distance = distance_km * 2
+        emissions_kg = energy_result["energy_kwh"] * self.ecar_p.e_use
+
+        return {
+            "total_energy_kwh": energy_result["energy_kwh"],
+            "round_trip_distance_km": total_distance,
+            "emissions_kg_co2e": emissions_kg,
+            "emissions_g_co2e": emissions_kg * 1000,
+            "time_total_min": energy_result["time_minutes"] * 2,
+        }
+
+    def calculate_gasoline_car_use_phase_emissions(
+        self, distance_km: float, payload_kg: float = 1.0, driver_weight: float = 70
+    ) -> Dict:
+        """计算燃油汽车使用阶段排放 (燃油燃烧排放)"""
+        energy_result = self.gasoline_car_energy.calculate_energy_consumption(
+            distance_km, payload_kg, driver_weight
+        )
+
+        fuel_liters = energy_result["fuel_liters"]
+        emissions_kg = fuel_liters * self.gasoline_car_p.gasoline_co2_per_liter
+
+        return {
+            "fuel_liters": fuel_liters,
+            "mechanical_energy_kwh": energy_result["mechanical_energy_kwh"],
+            "round_trip_distance_km": distance_km * 2,
+            "emissions_kg_co2e": emissions_kg,
+            "emissions_g_co2e": emissions_kg * 1000,
+            "time_total_min": energy_result["time_minutes"] * 2,
         }
 
     # def calculate_cabinet_emissions_per_day(
@@ -876,7 +1200,7 @@ class LifeCycleEmissions:
         Args:
             distance_km: One-way delivery distance (km)
             n_orders_per_delivery: Orders per delivery trip (1 for drone, can be >1 for ebike)
-            vehicle_type: 'ebike' or 'drone'
+            vehicle_type: 'ebike', 'drone', 'ecar', or 'gasoline_car'
 
         Returns:
             Dict with production and use emissions per order (g CO2e)
@@ -907,7 +1231,7 @@ class LifeCycleEmissions:
             )
             use_per_delivery_kg = use["emissions_kg_co2e"]
 
-        else:  # drone
+        elif vehicle_type == "drone":
             p = self.drone_p
             delivery_time_min = (2 * distance_km / p.v_level) * 60 + p.loading_time_min
             deliveries_per_day = p.working_hours_per_day * 60 / delivery_time_min
@@ -928,6 +1252,49 @@ class LifeCycleEmissions:
             # Use emissions (drone carries 1 order)
             use = self.calculate_drone_use_phase_emissions(distance_km, 1.0)
             use_per_delivery_kg = use["emissions_kg_co2e"]
+
+        elif vehicle_type == "ecar":
+            p = self.ecar_p
+            delivery_time_min = (2 * distance_km / p.velocity) * 60 + p.loading_time_min
+            deliveries_per_day = p.working_hours_per_day * 60 / delivery_time_min
+            lifetime_deliveries = (
+                deliveries_per_day * p.working_days_per_year * p.lifespan
+            )
+
+            prod = self.calculate_ecar_production_emissions()
+            body_lifetime_kg = (
+                prod["body_production_kg"] + prod["body_disposal_kg"]
+            ) / p.lifespan
+            battery_lifetime_kg = (
+                prod["battery_production_kg"] + prod["battery_disposal_kg"]
+            ) / p.battery_lifespan
+            annual_prod_kg = body_lifetime_kg + battery_lifetime_kg
+            prod_per_delivery_kg = annual_prod_kg * p.lifespan / lifetime_deliveries
+
+            use = self.calculate_ecar_use_phase_emissions(
+                distance_km, n_orders_per_delivery
+            )
+            use_per_delivery_kg = use["emissions_kg_co2e"]
+
+        elif vehicle_type == "gasoline_car":
+            p = self.gasoline_car_p
+            delivery_time_min = (2 * distance_km / p.velocity) * 60 + p.loading_time_min
+            deliveries_per_day = p.working_hours_per_day * 60 / delivery_time_min
+            lifetime_deliveries = (
+                deliveries_per_day * p.working_days_per_year * p.lifespan
+            )
+
+            prod = self.calculate_gasoline_car_production_emissions()
+            annual_prod_kg = prod["total_kg"] / p.lifespan
+            prod_per_delivery_kg = annual_prod_kg * p.lifespan / lifetime_deliveries
+
+            use = self.calculate_gasoline_car_use_phase_emissions(
+                distance_km, n_orders_per_delivery
+            )
+            use_per_delivery_kg = use["emissions_kg_co2e"]
+
+        else:
+            raise ValueError(f"Unknown vehicle_type: {vehicle_type}")
 
         # Per order
         prod_per_order_g = prod_per_delivery_kg * 1000 / n_orders_per_delivery
@@ -956,7 +1323,7 @@ class LifeCycleEmissions:
         Args:
             distances_km: Array of one-way delivery distances (km)
             n_orders_per_delivery: Orders per delivery trip
-            vehicle_type: 'ebike' or 'drone'
+            vehicle_type: 'ebike', 'drone', 'ecar', or 'gasoline_car'
 
         Returns:
             Array of per-order emissions (g CO2e)
@@ -988,6 +1355,8 @@ def run_validation_tests():
 
     ebike_prod = lca.calculate_ebike_production_emissions()
     drone_prod = lca.calculate_drone_production_emissions()
+    ecar_prod = lca.calculate_ecar_production_emissions()
+    gasoline_prod = lca.calculate_gasoline_car_production_emissions()
 
     print("\n电动自行车生产排放:")
     print(f"  - 车身生产: {ebike_prod['body_production_kg']:.2f} kg CO2e")
@@ -1004,6 +1373,18 @@ def run_validation_tests():
     print(f"  - 电池处置: {drone_prod['battery_disposal_kg']:.2f} kg CO2e")
     print(f"  - 总排放: {drone_prod['total_kg']:.2f} kg CO2e")
     print(f"  - 电池总容量: {drone_prod['total_battery_capacity_kwh']:.2f} kWh")
+
+    print("\n电动汽车生产排放:")
+    print(f"  - 车身生产: {ecar_prod['body_production_kg']:.2f} kg CO2e")
+    print(f"  - 电池生产: {ecar_prod['battery_production_kg']:.2f} kg CO2e")
+    print(f"  - 车身处置: {ecar_prod['body_disposal_kg']:.2f} kg CO2e")
+    print(f"  - 电池处置: {ecar_prod['battery_disposal_kg']:.2f} kg CO2e")
+    print(f"  - 总排放: {ecar_prod['total_kg']:.2f} kg CO2e")
+
+    print("\n燃油汽车生产排放:")
+    print(f"  - 车身生产: {gasoline_prod['body_production_kg']:.2f} kg CO2e")
+    print(f"  - 车身处置: {gasoline_prod['body_disposal_kg']:.2f} kg CO2e")
+    print(f"  - 总排放: {gasoline_prod['total_kg']:.2f} kg CO2e")
 
     # ========================================================================
     # 测试2: 使用阶段能耗与排放
@@ -1034,6 +1415,26 @@ def run_validation_tests():
             f"{d:<10.2f} {result['total_energy_kwh']:<12.4f} {result['emissions_g_co2e']:<15.2f} {result['time_total_min']:<12.1f}"
         )
 
+    print(f"\n电动汽车 (单订单配送, r={r}):")
+    print(f"{'距离(km)':<10} {'能耗(kWh)':<12} {'排放(g CO2e)':<15} {'时间(min)':<12}")
+    print("-" * 50)
+    for d in distances:
+        d_route = d * r
+        result = lca.calculate_ecar_use_phase_emissions(d_route, 1.0)
+        print(
+            f"{d_route:<10.2f} {result['total_energy_kwh']:<12.4f} {result['emissions_g_co2e']:<15.2f} {result['time_total_min']:<12.1f}"
+        )
+
+    print(f"\n燃油汽车 (单订单配送, r={r}):")
+    print(f"{'距离(km)':<10} {'燃油(L)':<12} {'排放(g CO2e)':<15} {'时间(min)':<12}")
+    print("-" * 50)
+    for d in distances:
+        d_route = d * r
+        result = lca.calculate_gasoline_car_use_phase_emissions(d_route, 1.0)
+        print(
+            f"{d_route:<10.2f} {result['fuel_liters']:<12.4f} {result['emissions_g_co2e']:<15.2f} {result['time_total_min']:<12.1f}"
+        )
+
     # ========================================================================
     # 测试3: 论文核心结论验证
     # ========================================================================
@@ -1052,6 +1453,23 @@ def run_validation_tests():
     print(f"  - 电动自行车排放: {ebike_use['emissions_g_co2e']:.2f} g CO2e")
     print(f"  - 无人机排放: {drone_use['emissions_g_co2e']:.2f} g CO2e")
     print(f"  - 无人机相对增加: {ratio:.1f}%")
+
+    # 4车型对比
+    print("\n" + "=" * 60)
+    print("测试4: 四种配送方式使用阶段排放对比")
+    print("=" * 60)
+
+    print(f"\n{'距离(km)':<10} {'E-bike(g)':<14} {'Drone(g)':<14} {'E-car(g)':<14} {'GasCar(g)':<14}")
+    print("-" * 66)
+    for d in distances:
+        eb = lca.calculate_ebike_use_phase_emissions(d * r, 1.0)
+        dr = lca.calculate_drone_use_phase_emissions(d, 1.0)
+        ec = lca.calculate_ecar_use_phase_emissions(d * r, 1.0)
+        gc = lca.calculate_gasoline_car_use_phase_emissions(d * r, 1.0)
+        print(
+            f"{d:<10.1f} {eb['emissions_g_co2e']:<14.2f} {dr['emissions_g_co2e']:<14.2f} "
+            f"{ec['emissions_g_co2e']:<14.2f} {gc['emissions_g_co2e']:<14.2f}"
+        )
 
     return lca
 

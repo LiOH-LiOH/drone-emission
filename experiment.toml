@@ -34,6 +34,13 @@ v_vertical = 20           # Vertical takeoff/landing speed (km/h)
 h_takeoff = 100           # Takeoff height (m)
 hover_time = 10           # Hover time per delivery (s)
 
+[emission_params.ecar]
+velocity = 30             # Urban delivery speed (km/h)
+
+[emission_params.gasoline_car]
+velocity = 30             # Urban delivery speed (km/h)
+engine_efficiency = 0.25  # Gasoline engine thermal efficiency
+
 # ============ Local Environment ============
 [local]
 data_dir = "/Users/linjingxian/Code/drone-emission/data"
@@ -52,3 +59,26 @@ gef_path = "/home/jingxian/code/drone-emission/data/gef_china.csv"
 buildings_data_dir = "/home/jingxian/data/province"  # CMAB building data directory
 fetch_buildings = false
 fetch_roadnet = false
+
+# Profit analysis parameters (CNY)
+[profit_params]
+electricity_price = 0.6
+
+[profit_params.revenue]
+base_fee = 3.0
+per_km_fee = 1.0
+
+[profit_params.ebike]
+vehicle_cost = 3000
+battery_cost = 500
+rider_hourly_wage = 25.0
+maintenance_per_year = 600
+insurance_per_year = 500
+
+[profit_params.drone]
+vehicle_cost = 100000
+battery_cost = 3000
+utm_annual_fee = 50000
+n_drones_fleet = 100
+maintenance_per_year = 5000
+insurance_per_year = 3000

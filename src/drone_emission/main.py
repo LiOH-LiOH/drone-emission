@@ -6,6 +6,7 @@ from demand import generate_od_pairs
 from emission import cal_emission
 from equity import analyze_equity
 from preprocessing import prepare_sales
+from profit import cal_profit
 from roadnet import load_roadnet
 from utils import load_config
 from utils.region_config import get_registry, init_registry
@@ -43,7 +44,11 @@ def run_region_analysis(region_key: str, config: dict):
     #     region_info=region,
     #     exp_config=config,
     # )
-    cal_emission(
+    # cal_emission(
+    #     region_info=region,
+    #     exp_config=config,
+    # )
+    cal_profit(
         region_info=region,
         exp_config=config,
     )
