@@ -1,0 +1,31 @@
+#!/bin/bash
+# setup.sh - Create venv and install dependencies
+#
+# Usage:
+#   bash setup.sh          # uses python3
+#   bash setup.sh python3.11  # specify python version
+
+set -euo pipefail
+
+PYTHON="${1:-python3}"
+VENV_DIR=".venv"
+REQ_FILE="src/drone_emission/requirements.txt"
+
+cd "$(dirname "$0")"
+
+echo "Python: $(${PYTHON} --version)"
+
+if [ -d "${VENV_DIR}" ]; then
+    echo "venv already exists at ${VENV_DIR}, skipping creation"
+else
+    echo "Creating venv..."
+    ${PYTHON} -m venv "${VENV_DIR}"
+fi
+
+echo "Installing dependencies..."
+"${VENV_DIR}/bin/pip" install --upgrade pip
+"${VENV_DIR}/bin/pip" install -r "${REQ_FILE}"
+
+echo ""
+echo "Done. Activate with:"
+echo "  source ${VENV_DIR}/bin/activate"
