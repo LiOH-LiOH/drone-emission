@@ -13,6 +13,14 @@ REQ_FILE="src/drone_emission/requirements.txt"
 
 cd "$(dirname "$0")"
 
+# Copy regions config template if regions.json doesn't exist
+if [ ! -f "regions.json" ]; then
+    echo "Creating regions.json from template..."
+    cp regions.template.json regions.json
+else
+    echo "regions.json already exists, skipping"
+fi
+
 echo "Python: $(${PYTHON} --version)"
 
 if [ -d "${VENV_DIR}" ]; then
