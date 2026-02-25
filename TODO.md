@@ -15,7 +15,9 @@
     - [x] check LCA emission calculation
 - [x] write a entrypoint for large scale OD generation
 - [x] add equity analysis
-- [ ] fix GlobalBuildingAtlas data source
-- [ ] add economic analysis
+- [x] fix GlobalBuildingAtlas data source
+- [x] add economic analysis
 - [x] add coeff for bundled food delivery
 - [ ] consider weather impact
+- [ ] add clear shenzhen boundary
+- [ ] update shortest path algorithm
