@@ -2,7 +2,7 @@ import os
 
 import numpy as np
 import pandas as pd
-from buildings.fetch_buildings import get_province_from_district
+from utils.province import get_province_from_district
 from utils.grid_emission_factor import fetch_factor, normalize_province_name
 from visualization.emission import (
     plot_distance_detour_scatter,

@@ -3,6 +3,7 @@
 __pycache__/
 cache/
 data/
+gba_data/
 figures/
 archive/
 .DS_Store

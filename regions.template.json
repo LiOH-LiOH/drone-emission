@@ -479,5 +479,19 @@
     },
     "stats": {},
     "cache": {}
+  },
+  "shenzhen": {
+    "region_name_cn": "深圳市",
+    "region_name_en": "Shenzhen",
+    "region_level": "city",
+    "parent_city": "shenzhen",
+    "boundaries_dict": {
+      "min_lat": 22.45,
+      "max_lat": 22.85,
+      "min_lng": 113.75,
+      "max_lng": 114.65
+    },
+    "stats": {},
+    "cache": {}
   }
 }
