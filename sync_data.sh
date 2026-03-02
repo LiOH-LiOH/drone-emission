@@ -8,7 +8,7 @@
 set -euo pipefail
 
 REMOTE_HOST="${1:-hku-cpu}"
-REMOTE_DIR="/home/jingxian/code/drone-emission"
+REMOTE_DIR="/home/ljx/code/drone-emission"
 LOCAL_DIR="$(dirname "$0")"
 
 FILES=(

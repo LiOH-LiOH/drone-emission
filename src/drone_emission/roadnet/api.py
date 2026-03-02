@@ -1,12 +1,16 @@
 import os
 
 import numpy as np
-import osmnx as ox
 import pandas as pd
 from visualization.roadnet import visualize_distance_comparison, visualize_roadnet
 
-from .osm_raodnet import fetch_bikeable_roadnet
-from .router import RoadNetRouter
+from ._compat import load_networkx_graph, load_subgraph_for_visualization
+from .osm_roadnet import fetch_bikeable_roadnet
+from .sparse_graph import SparseGraph
+from .tile_router import TileRouter
+
+# Threshold for "large" graphs where we skip full-graph NetworkX visualization
+_LARGE_GRAPH_THRESHOLD = 500_000
 
 
 def load_roadnet(region_info, exp_config):
@@ -36,23 +40,16 @@ def load_roadnet(region_info, exp_config):
             save_path=roadnet_data_path,
         )
 
-    # Load road network from file
-    print(f"Reading {roadnet_data_path}...")
+    # Build sparse graph (NetworkX loaded temporarily then freed)
     try:
-        G = ox.load_graphml(roadnet_data_path)
+        graph = SparseGraph.from_graphml(roadnet_data_path)
     except Exception as e:
-        print(f"Error reading file: {e}")
+        print(f"Error loading road network: {e}")
         return
 
-    print(f"Loaded road network: {len(G.nodes)} nodes, {len(G.edges)} edges.")
-    region_info.set_stat("roadnet_node_count", len(G.nodes))
-    region_info.set_stat("roadnet_edge_count", len(G.edges))
-
-    # save total roadnet length
-    region_info.set_stat(
-        "roadnet_length_total",
-        sum(data.get("length", 0) for u, v, data in G.edges(data=True)),
-    )
+    region_info.set_stat("roadnet_node_count", graph.num_nodes)
+    region_info.set_stat("roadnet_edge_count", graph.num_edges)
+    region_info.set_stat("roadnet_length_total", graph.total_length)
 
     # Visualize road network
     fig_dir = os.path.join(
@@ -62,17 +59,30 @@ def load_roadnet(region_info, exp_config):
         os.makedirs(fig_dir)
 
     roadnet_fig_path = os.path.join(fig_dir, f"{region_name_en.lower()}_roadnet.png")
-
     for_latex = exp_config.get("for_latex", False)
-    visualize_roadnet(
-        G,
-        city_name_cn=region_name_cn,
-        boundaries_dict=large_bounds_dict,
-        original_boundaries_dict=boundaries_dict,
-        save_path=roadnet_fig_path,
-        for_latex=for_latex,
-    )
 
+    if graph.num_nodes < _LARGE_GRAPH_THRESHOLD:
+        # Small enough to load full NetworkX graph for visualization
+        G_vis = load_networkx_graph(roadnet_data_path)
+        visualize_roadnet(
+            G_vis,
+            city_name_cn=region_name_cn,
+            boundaries_dict=large_bounds_dict,
+            original_boundaries_dict=boundaries_dict,
+            save_path=roadnet_fig_path,
+            for_latex=for_latex,
+        )
+        del G_vis
+    else:
+        print(
+            f"Graph too large for full visualization ({graph.num_nodes:,} nodes), "
+            f"generating scatter plot instead..."
+        )
+        _visualize_roadnet_scatter(
+            graph, large_bounds_dict, boundaries_dict, roadnet_fig_path, for_latex
+        )
+
+    # Load OD pairs
     od_save_path = os.path.join(
         exp_config["data_dir"],
         region_level,
@@ -82,7 +92,8 @@ def load_roadnet(region_info, exp_config):
     od_df = pd.read_csv(od_save_path)
     print(f"Loaded {len(od_df)} OD pairs")
 
-    router = RoadNetRouter(G)
+    # Build tile router
+    router = TileRouter(graph)
 
     # Only compute road distances for rows with NaN values
     if "road_distance_m" not in od_df.columns:
@@ -94,17 +105,14 @@ def load_roadnet(region_info, exp_config):
     if nan_count > 0:
         print(f"Computing road distances for {nan_count} rows with NaN values...")
 
-        # Get only the rows that need computation
         nan_df = od_df[nan_mask]
         origins = nan_df[["from_lat", "from_lng"]].values
         destinations = nan_df[["to_lat", "to_lng"]].values
 
         road_distances = router.compute_od_distances_batch(origins, destinations)
 
-        # Update only the NaN rows
         od_df.loc[nan_mask, "road_distance_m"] = road_distances
 
-        # Save updated OD pairs
         od_df.to_csv(od_save_path, index=False)
         print(f"Updated OD pairs with road distances saved to {od_save_path}")
     else:
@@ -115,7 +123,6 @@ def load_roadnet(region_info, exp_config):
     # Statistics
     valid_mask = road_distances >= 0
     if valid_mask.sum() > 0:
-        # use weighted mean of road_distance_m and annual_sales
         avg_road_dist = (
             road_distances[valid_mask] * od_df.loc[valid_mask, "annual_sales"]
         ).sum() / od_df.loc[valid_mask, "annual_sales"].sum()
@@ -141,15 +148,14 @@ def load_roadnet(region_info, exp_config):
         print(f"Avg road network distance: {avg_road_dist:.1f} m")
         print(f"Detour ratio: {detour_ratio:.2f}")
 
-        # Visualize distance comparison with 10 samples
         _visualize_sample_paths(
             od_df,
             router,
             valid_mask,
-            boundaries_dict,
             fig_dir,
             region_name_en,
             exp_config,
+            roadnet_data_path,
         )
 
 
@@ -157,14 +163,12 @@ def _visualize_sample_paths(
     od_df,
     router,
     valid_mask,
-    boundaries_dict,
     fig_dir,
     region_name_en,
     exp_config,
+    roadnet_data_path,
     n_samples=10,
 ):
-    """抽取样本并绘制直线距离与路网距离对比图"""
-    # 筛选有效路径，并确保有一定的路网距离
     valid_df = od_df[valid_mask & (od_df["road_distance_m"] > 100)].copy()
 
     if len(valid_df) < n_samples:
@@ -175,26 +179,21 @@ def _visualize_sample_paths(
         print("No valid samples for distance comparison visualization")
         return
 
-    # 按绕行比分层抽样，获取不同绕行程度的样本
     valid_df["detour_ratio"] = valid_df["road_distance_m"] / (
         valid_df["distance_km"] * 1000
     )
 
-    # 分4个分位数区间，每个区间抽1个样本
     samples = []
     for q in [0.2, 0.4, 0.6, 0.8]:
         quantile_val = valid_df["detour_ratio"].quantile(q)
-        # 找到最接近该分位数的样本
         closest_idx = (valid_df["detour_ratio"] - quantile_val).abs().nsmallest(1).index
         samples.extend(closest_idx.tolist())
 
-    # 去重并取前n_samples个
     samples = list(dict.fromkeys(samples))[:n_samples]
     sample_df = valid_df.loc[samples]
 
     print(f"\n=== Visualizing {len(sample_df)} sample paths ===")
 
-    # 计算每个样本的完整路径
     sample_paths = []
     for _, row in sample_df.iterrows():
         origin = (row["from_lat"], row["from_lng"])
@@ -218,7 +217,6 @@ def _visualize_sample_paths(
             f"detour={row['detour_ratio']:.2f}"
         )
 
-    # 计算样本的边界范围
     all_lats = []
     all_lngs = []
     for sp in sample_paths:
@@ -233,16 +231,55 @@ def _visualize_sample_paths(
         "max_lng": max(all_lngs) + padding,
     }
 
-    # 绘制对比图
+    # Load a local subgraph for visualization (covers just the sample area)
+    G_vis = load_subgraph_for_visualization(roadnet_data_path, sample_bounds)
+
     comparison_fig_path = os.path.join(
         fig_dir, f"{region_name_en.lower()}_distance_comparison.png"
     )
 
     for_latex = exp_config.get("for_latex", False)
     visualize_distance_comparison(
-        router.G,
+        G_vis,
         sample_paths,
         boundaries_dict=sample_bounds,
         save_path=comparison_fig_path,
         for_latex=for_latex,
     )
+    del G_vis
+
+
+def _visualize_roadnet_scatter(
+    graph, large_bounds_dict, boundaries_dict, save_path, for_latex
+):
+    """Fallback scatter-plot visualization for large road networks."""
+    import matplotlib.pyplot as plt
+
+    fig, ax = plt.subplots(1, 1, figsize=(10, 10))
+
+    coords = graph._node_coords
+    # Subsample if too many nodes
+    if len(coords) > 200_000:
+        rng = np.random.default_rng(42)
+        idx = rng.choice(len(coords), 200_000, replace=False)
+        coords = coords[idx]
+
+    ax.scatter(coords[:, 1], coords[:, 0], s=0.1, c="#888", alpha=0.3)
+
+    if boundaries_dict:
+        ax.set_xlim(large_bounds_dict["min_lng"], large_bounds_dict["max_lng"])
+        ax.set_ylim(large_bounds_dict["min_lat"], large_bounds_dict["max_lat"])
+
+    ax.set_xlabel("Longitude")
+    ax.set_ylabel("Latitude")
+    ax.set_title(f"Road Network ({graph.num_nodes:,} nodes, {graph.num_edges:,} edges)")
+    ax.set_aspect("equal")
+
+    if save_path:
+        os.makedirs(os.path.dirname(save_path), exist_ok=True)
+        if for_latex and not save_path.endswith(".pdf"):
+            save_path = save_path.rsplit(".", 1)[0] + ".pdf"
+        plt.savefig(save_path, dpi=150, bbox_inches="tight")
+        print(f"Road network scatter plot saved to {save_path}")
+
+    plt.close(fig)
