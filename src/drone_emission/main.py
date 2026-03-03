@@ -28,34 +28,34 @@ def run_region_analysis(region_key: str, config: dict):
     print(f"Running analysis for {region_key}...")
     region = registry[region_key]
 
-    prepare_sales(
-        region_info=region,
-        exp_config=config,
-    )
-    load_buildings(
-        region_info=region,
-        exp_config=config,
-    )
-    generate_od_pairs(
-        region_info=region,
-        exp_config=config,
-    )
-    # load_roadnet(
+    # prepare_sales(
     #     region_info=region,
     #     exp_config=config,
     # )
-    # cal_emission(
+    # load_buildings(
     #     region_info=region,
     #     exp_config=config,
     # )
+    # generate_od_pairs(
+    #     region_info=region,
+    #     exp_config=config,
+    # )
+    load_roadnet(
+        region_info=region,
+        exp_config=config,
+    )
+    cal_emission(
+        region_info=region,
+        exp_config=config,
+    )
     # cal_profit(
     #     region_info=region,
     #     exp_config=config,
     # )
-    # analyze_equity(
-    #     region_info=region,
-    #     exp_config=config,
-    # )
+    analyze_equity(
+        region_info=region,
+        exp_config=config,
+    )
 
     # Example: Add statistics and save
     # region.set_stat("building_count", 12345)
