@@ -4,8 +4,6 @@ Zone Feature Calculation Module
 Calculates urban features for each traffic zone.
 """
 
-from typing import Dict
-
 import geopandas as gpd
 import networkx as nx
 import numpy as np
@@ -40,8 +38,9 @@ def calculate_zone_building_features(
         centroids_projected = buildings_projected.geometry.centroid
         centroids = gpd.GeoSeries(centroids_projected, crs="EPSG:3857").to_crs(epsg=4326)
 
-    building_lats = np.array([c.y for c in centroids])
-    building_lngs = np.array([c.x for c in centroids])
+    centroids_gs = gpd.GeoSeries(centroids)
+    building_lats = centroids_gs.y.values
+    building_lngs = centroids_gs.x.values
 
     # Assign buildings to zones
     zone_ids = assign_points_to_zones(grid, building_lats, building_lngs)
@@ -49,20 +48,25 @@ def calculate_zone_building_features(
     # Get building volumes
     volumes = buildings_gdf["volume_m3"].values if "volume_m3" in buildings_gdf.columns else np.zeros(len(buildings_gdf))
 
-    # Aggregate by zone
-    zone_data = []
-    for zone_id in range(grid.total_zones()):
-        mask = zone_ids == zone_id
-        building_count = mask.sum()
-        building_volume = volumes[mask].sum() if building_count > 0 else 0.0
+    # Aggregate by zone using groupby
+    tmp = pd.DataFrame({
+        "zone_id": zone_ids,
+        "volume_m3": volumes,
+    })
+    tmp = tmp[tmp["zone_id"] >= 0]
 
-        zone_data.append({
-            "zone_id": zone_id,
-            "building_count": building_count,
-            "building_volume_m3": building_volume,
-        })
+    grouped = tmp.groupby("zone_id").agg(
+        building_count=("volume_m3", "size"),
+        building_volume_m3=("volume_m3", "sum"),
+    )
 
-    return pd.DataFrame(zone_data)
+    all_zone_ids = np.arange(grid.total_zones())
+    result = grouped.reindex(all_zone_ids, fill_value=0)
+    result.index.name = "zone_id"
+    result = result.reset_index()
+    result["building_count"] = result["building_count"].astype(int)
+
+    return result
 
 
 def calculate_zone_intersection_features(
@@ -78,29 +82,23 @@ def calculate_zone_intersection_features(
     Returns:
         DataFrame with zone_id, intersection_count
     """
-    # Extract node coordinates
-    node_lats = []
-    node_lngs = []
-    for node in roadnet_graph.nodes():
-        node_data = roadnet_graph.nodes[node]
-        node_lats.append(node_data["y"])  # y is latitude
-        node_lngs.append(node_data["x"])  # x is longitude
-
-    node_lats = np.array(node_lats)
-    node_lngs = np.array(node_lngs)
+    # Extract node coordinates using nx.get_node_attributes (handles str→float from GraphML)
+    y_attrs = nx.get_node_attributes(roadnet_graph, "y")
+    x_attrs = nx.get_node_attributes(roadnet_graph, "x")
+    node_lats = np.array([float(v) for v in y_attrs.values()])
+    node_lngs = np.array([float(v) for v in x_attrs.values()])
 
     # Assign nodes to zones
     zone_ids = assign_points_to_zones(grid, node_lats, node_lngs)
 
-    # Aggregate by zone
-    zone_data = []
-    for zone_id in range(grid.total_zones()):
-        mask = zone_ids == zone_id
-        intersection_count = mask.sum()
+    # Aggregate by zone using np.bincount (fastest for simple counting with integer keys)
+    valid_mask = zone_ids >= 0
+    total_zones = grid.total_zones()
+    counts = np.bincount(zone_ids[valid_mask], minlength=total_zones)[:total_zones]
 
-        zone_data.append({
-            "zone_id": zone_id,
-            "intersection_count": intersection_count,
-        })
+    result = pd.DataFrame({
+        "zone_id": np.arange(total_zones),
+        "intersection_count": counts,
+    })
 
-    return pd.DataFrame(zone_data)
+    return result

@@ -15,8 +15,8 @@ min_sales = 5             # Minimum annual sales threshold per building
 
 # Equity analysis parameters
 [equity_params]
-unit_lat = 0.01          # ~1.1 km grid cell height
-unit_lng = 0.01          # ~0.9 km grid cell width
+unit_lat = 0.02          # ~2.2 km grid cell height
+unit_lng = 0.02          # ~1.8 km grid cell width
 min_deliveries_per_zone = 10
 exclude_outliers = true  # Remove outliers using IQR method
 

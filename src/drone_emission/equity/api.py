@@ -132,10 +132,6 @@ def analyze_equity(region_info, exp_config) -> pd.DataFrame:
     roadnet_path = os.path.join(data_dir, f"{region_name_en.lower()}_roadnet.graphml")
     if os.path.exists(roadnet_path):
         roadnet_graph = nx.read_graphml(roadnet_path)
-        # Convert node attributes to float (they may be strings after loading)
-        for node in roadnet_graph.nodes():
-            roadnet_graph.nodes[node]["x"] = float(roadnet_graph.nodes[node]["x"])
-            roadnet_graph.nodes[node]["y"] = float(roadnet_graph.nodes[node]["y"])
         print(f"Loaded road network: {roadnet_graph.number_of_nodes()} nodes")
     else:
         roadnet_graph = None
@@ -163,24 +159,15 @@ def analyze_equity(region_info, exp_config) -> pd.DataFrame:
     else:
         zone_stats["intersection_count"] = 0
 
-    # Add zone center coordinates
+    # Add zone center coordinates (vectorized)
     print("Adding zone center coordinates...")
-    center_lats = []
-    center_lngs = []
-    rows = []
-    cols = []
-    for zone_id in zone_stats["zone_id"]:
-        row, col = grid.get_row_col(zone_id)
-        center_lat, center_lng = grid.get_zone_center(row, col)
-        rows.append(row)
-        cols.append(col)
-        center_lats.append(center_lat)
-        center_lngs.append(center_lng)
-
+    zone_id_arr = zone_stats["zone_id"].values
+    rows = zone_id_arr // grid.n_cols
+    cols = zone_id_arr % grid.n_cols
     zone_stats["row"] = rows
     zone_stats["col"] = cols
-    zone_stats["center_lat"] = center_lats
-    zone_stats["center_lng"] = center_lngs
+    zone_stats["center_lat"] = grid.min_lat + (rows + 0.5) * grid.unit_lat
+    zone_stats["center_lng"] = grid.min_lng + (cols + 0.5) * grid.unit_lng
 
     # Print summary statistics
     active_zones = zone_stats[zone_stats["delivery_count"] >= min_deliveries].copy()
