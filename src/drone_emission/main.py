@@ -36,14 +36,14 @@ def run_region_analysis(region_key: str, config: dict):
     #     region_info=region,
     #     exp_config=config,
     # )
-    # generate_od_pairs(
-    #     region_info=region,
-    #     exp_config=config,
-    # )
-    # load_roadnet(
-    #     region_info=region,
-    #     exp_config=config,
-    # )
+    generate_od_pairs(
+        region_info=region,
+        exp_config=config,
+    )
+    load_roadnet(
+        region_info=region,
+        exp_config=config,
+    )
     cal_emission(
         region_info=region,
         exp_config=config,

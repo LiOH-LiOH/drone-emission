@@ -66,8 +66,8 @@ sales_path = "/home/ljx/code/drone-emission/data/combined_data.csv"
 gef_path = "/home/ljx/code/drone-emission/data/gef_china.csv"
 gba_data_path = "/home/ljx/code/drone-emission/gba_data/LoD1_GeoJSON/asiaeast/e110_n25_e115_n20.geojson"
 buildings_data_dir = "/home/ljx/data/province"  # CMAB building data directory
-fetch_buildings = true
-fetch_roadnet = true
+fetch_buildings = false
+fetch_roadnet = false
 
 # Profit analysis parameters (CNY)
 [profit_params]
