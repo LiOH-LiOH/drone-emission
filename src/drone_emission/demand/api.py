@@ -214,8 +214,7 @@ def generate_one_store_od_pairs(
         store_coord_wgs84: Store coordinates in WGS84 (lat, lng)
         od_params: Dict with g_param, min_distance_km, min_sales
     """
-    g_param = od_params.get("g_param", [1, 1, 2])
-    min_distance_km = od_params.get("min_distance_km", 0.05)
+    impedance_type = od_params.get("impedance_type", "power_law")
     min_sales = od_params.get("min_sales", 5)
 
     total_demand = month_sales * 12  # Annual demand
@@ -231,11 +230,20 @@ def generate_one_store_od_pairs(
         )
         distances[idx] = distance_km
         volume = building.get("volume_m3")
-        tmp_ratio = (
-            g_param[0]
-            * volume ** g_param[1]
-            / (distance_km + min_distance_km) ** g_param[2]
-        )
+
+        if impedance_type == "tanner":
+            alpha = od_params.get("alpha", 1.7)
+            tanner_a = od_params.get("tanner_a", 1.2)
+            tanner_b = od_params.get("tanner_b", 0.8)
+            tmp_ratio = (volume ** alpha) * (distance_km ** tanner_a) * np.exp(-tanner_b * distance_km)
+        else:  # power_law (default, backward compatible)
+            g_param = od_params.get("g_param", [1, 1, 2])
+            min_distance_km = od_params.get("min_distance_km", 0.05)
+            tmp_ratio = (
+                g_param[0]
+                * volume ** g_param[1]
+                / (distance_km + min_distance_km) ** g_param[2]
+            )
         ratios[idx] = tmp_ratio
 
     sales_dict = {}
@@ -274,8 +282,7 @@ def generate_one_store_od_pairs_vectorized(
         store_coord_wgs84: Store coordinates in WGS84 (lat, lng)
         od_params: Dict with g_param, min_distance_km, min_sales
     """
-    g_param = od_params.get("g_param", [1, 1, 2])
-    min_distance_km = od_params.get("min_distance_km", 0.05)
+    impedance_type = od_params.get("impedance_type", "power_law")
     min_sales = od_params.get("min_sales", 5)
 
     total_demand = month_sales * 12  # Annual demand
@@ -302,11 +309,19 @@ def generate_one_store_od_pairs_vectorized(
     volumes = nearby_buildings["volume_m3"].values
 
     # Vectorized ratio calculation
-    ratios = (
-        g_param[0]
-        * (volumes ** g_param[1])
-        / ((distances_km + min_distance_km) ** g_param[2])
-    )
+    if impedance_type == "tanner":
+        alpha = od_params.get("alpha", 1.7)
+        tanner_a = od_params.get("tanner_a", 1.2)
+        tanner_b = od_params.get("tanner_b", 0.8)
+        ratios = (volumes ** alpha) * (distances_km ** tanner_a) * np.exp(-tanner_b * distances_km)
+    else:  # power_law (default, backward compatible)
+        g_param = od_params.get("g_param", [1, 1, 2])
+        min_distance_km = od_params.get("min_distance_km", 0.05)
+        ratios = (
+            g_param[0]
+            * (volumes ** g_param[1])
+            / ((distances_km + min_distance_km) ** g_param[2])
+        )
 
     # Normalize and calculate sales
     total_ratio = ratios.sum()

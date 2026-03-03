@@ -3,12 +3,18 @@
 active_env = "local"
 
 # ============ Default Settings (shared) ============
-delivery_radius_km = 3
+delivery_radius_km = 5
 for_latex = true  # Set to true for LaTeX export (PDF, no titles/info boxes)
 roadnet_visualization = false  # Set to false to skip road network visualization (slow at city scale)
 
 # OD pair generation parameters
 [od_params]
+impedance_type = "tanner"   # "power_law" or "tanner"
+alpha = 1.7                 # Building volume exponent (shared)
+# Tanner: f(d) = d^tanner_a * exp(-tanner_b * d), peak at tanner_a/tanner_b
+tanner_a = 1.1131            # Calibrated from 278K Eleme orders (29 days)
+tanner_b = 1.4115            # Peak distance = a/b = 0.79 km, R² = 0.986
+# Legacy power-law (when impedance_type = "power_law")
 g_param = [1, 1.7, 0.5]       # Gravity model parameters: [alpha, beta, gamma]
 min_distance_km = 0.05    # Minimum distance to avoid division issues
 min_sales = 5             # Minimum annual sales threshold per building

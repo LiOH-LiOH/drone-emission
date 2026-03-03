@@ -372,13 +372,13 @@
       \ODFlowchart
     \end{column}
     \begin{column}{0.6\textwidth}
-      Larger buildings attract more orders due to higher population density, while greater distances reduce demand owing to increased delivery time and cost.
+      Larger buildings attract more orders due to higher population density. The Tanner impedance function \parencite{tanner1961factors} captures the observed hump-shaped distance decay: few orders at very short distances, a peak, then decline.
       \[
         D_{ij} = P_{i} \cdot \frac{f(d_{ij}, v_{j})}{\sum_{j \in \mathcal{D}} f(d_{ij}, v_{j})}, \quad \forall i \in \mathcal{O}, j \in \mathcal{D}
       \]
 
       where
-      \[f(d_{ij}, v_{j}) = \frac{v_{j}^\alpha}{d_{ij}^{\beta}}.\]
+      \[f(d_{ij}, v_{j}) = v_{j}^\alpha \cdot d_{ij}^{\beta} \cdot e^{-\gamma \cdot d_{ij}}.\]
 
       \footnotesize
       \centering
@@ -391,7 +391,8 @@
         $P_i$ & Total delivery demand at origin $i$ \\
         $d_{ij}$ & Distance from $i$ to $j$ \\
         $v_j$ & Building volume at destination $j$ \\
-        $\alpha, \beta$ & Elasticity coefficients \\
+        $\alpha$ & Building volume elasticity \\
+        $\beta, \gamma$ & Tanner impedance parameters \\
         $\mathcal{O}$ & Set of origins \\
         $\mathcal{D}$ & Set of destinations \\
         \bottomrule
@@ -409,25 +410,40 @@
       \ODFlowchart
     \end{column}
     \begin{column}{0.6\textwidth}
-      Larger buildings attract more orders due to higher population density, while greater distances reduce demand owing to increased delivery time and cost.
+      Larger buildings attract more orders due to higher population density. The Tanner impedance function \parencite{tanner1961factors} captures the observed hump-shaped distance decay: few orders at very short distances, a peak, then decline.
       \[
         D_{ij} = P_{i} \cdot \frac{f(d_{ij}, v_{j})}{\sum_{j \in \mathcal{D}} f(d_{ij}, v_{j})}, \quad \forall i \in \mathcal{O}, j \in \mathcal{D}
       \]
 
       where
-      \[f(d_{ij}, v_{j}) = \frac{v_{j}^\alpha}{d_{ij}^{\beta}}.\]
+      \[f(d_{ij}, v_{j}) = v_{j}^\alpha \cdot d_{ij}^{\beta} \cdot e^{-\gamma \cdot d_{ij}}.\]
 
-      \textbf{Calibration:}
-      \begin{itemize}
-        \item $\alpha = 1.7$, $\beta = 0.5$
-        \item Descriptive statistical indicators:
-          \begin{itemize}
-            \item Mean delivery distance per express food order in first-tier cities is 2.23 km.
-          \end{itemize}
-      \end{itemize}
+      \textbf{Two-stage Calibration:}
+      \begin{enumerate}
+        \item \textbf{Distance impedance} ($\beta$, $\gamma$): fitted from $\sim$278K Eleme orders (Beijing, 29 days)
+        \item \textbf{Volume exponent} ($\alpha$): calibrated by matching weighted mean OD distance to industry-reported 2.23\,km
+      \end{enumerate}
     \end{column}
   \end{columns}
 
+\end{frame}
+
+\begin{frame}{OD Generation - Tanner Impedance Fit}
+  \begin{figure}
+    \centering
+    \includegraphics[width=0.95\linewidth]{../../figures/calibration/tanner_impedance_fit.png}
+    \caption{\textbf{Tanner impedance function fitted to Eleme delivery distance data.} Left: observed distance histogram with fitted curve $f(d) = C \cdot d^{1.113} \cdot e^{-1.412 \cdot d}$ ($R^2 = 0.985$). Right: CDF comparison. The function captures the hump-shaped decay with peak at $d_{\mathrm{peak}} = \beta/\gamma \approx 0.79$\,km.}
+    \label{fig:tanner_fit}
+  \end{figure}
+\end{frame}
+
+\begin{frame}{OD Generation - Volume Exponent Calibration}
+  \begin{figure}
+    \centering
+    \includegraphics[width=0.75\linewidth]{../../figures/calibration/alpha_calibration_5km.png}
+    \caption{\textbf{Calibration of $\alpha$ (building volume exponent).} Sweeping $\alpha$ with fixed $\beta = 1.113$, $\gamma = 1.412$ over Nanshan district (2{,}484 stores, 81{,}850 buildings, 5\,km radius). Best fit $\alpha = 1.7$ yields weighted mean OD distance of 2.21\,km, matching the industry-reported 2.23\,km for first-tier city food delivery.}
+    \label{fig:alpha_calibration}
+  \end{figure}
 \end{frame}
 
 \begin{frame}{Road Distance Calculation}
