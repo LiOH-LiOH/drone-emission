@@ -40,8 +40,7 @@ fi
 
 cd src/drone_emission
 
-REGIONS=(pudong gulou chaoyang wuhou tianhe luohu xihu)
-# REGIONS=(gulou chaoyang luohu)
+REGIONS=(shenzhen)
 
 PARALLEL=${1:-1}  # Default to 1 (sequential), pass number for parallel jobs
 ENV=${2:-remote}  # Default to remote (entrypoint.sh is typically run on server)
