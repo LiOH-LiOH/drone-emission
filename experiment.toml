@@ -5,6 +5,7 @@ active_env = "local"
 # ============ Default Settings (shared) ============
 delivery_radius_km = 3
 for_latex = true  # Set to true for LaTeX export (PDF, no titles/info boxes)
+roadnet_visualization = false  # Set to false to skip road network visualization (slow at city scale)
 
 # OD pair generation parameters
 [od_params]

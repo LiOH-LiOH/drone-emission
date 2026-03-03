@@ -2,9 +2,9 @@ import os
 
 import numpy as np
 import pandas as pd
-from visualization.roadnet import visualize_distance_comparison, visualize_roadnet
+from visualization.roadnet import visualize_roadnet
 
-from ._compat import load_networkx_graph, load_subgraph_for_visualization
+from ._compat import load_networkx_graph
 from .osm_roadnet import fetch_bikeable_roadnet
 from .sparse_graph import SparseGraph
 from .tile_router import TileRouter
@@ -51,7 +51,7 @@ def load_roadnet(region_info, exp_config):
     region_info.set_stat("roadnet_edge_count", graph.num_edges)
     region_info.set_stat("roadnet_length_total", graph.total_length)
 
-    # Visualize road network
+    # Visualize road network (expensive at city scale — can be disabled)
     fig_dir = os.path.join(
         exp_config["figures_dir"], region_level, region_name_en.lower()
     )
@@ -60,27 +60,30 @@ def load_roadnet(region_info, exp_config):
 
     roadnet_fig_path = os.path.join(fig_dir, f"{region_name_en.lower()}_roadnet.png")
     for_latex = exp_config.get("for_latex", False)
+    roadnet_vis = exp_config.get("roadnet_visualization", True)
 
-    if graph.num_nodes < _LARGE_GRAPH_THRESHOLD:
-        # Small enough to load full NetworkX graph for visualization
-        G_vis = load_networkx_graph(roadnet_data_path)
-        visualize_roadnet(
-            G_vis,
-            city_name_cn=region_name_cn,
-            boundaries_dict=large_bounds_dict,
-            original_boundaries_dict=boundaries_dict,
-            save_path=roadnet_fig_path,
-            for_latex=for_latex,
-        )
-        del G_vis
+    if roadnet_vis:
+        if graph.num_nodes < _LARGE_GRAPH_THRESHOLD:
+            G_vis = load_networkx_graph(roadnet_data_path)
+            visualize_roadnet(
+                G_vis,
+                city_name_cn=region_name_cn,
+                boundaries_dict=large_bounds_dict,
+                original_boundaries_dict=boundaries_dict,
+                save_path=roadnet_fig_path,
+                for_latex=for_latex,
+            )
+            del G_vis
+        else:
+            print(
+                f"Graph too large for full visualization ({graph.num_nodes:,} nodes), "
+                f"generating scatter plot instead..."
+            )
+            _visualize_roadnet_scatter(
+                graph, large_bounds_dict, roadnet_fig_path, for_latex
+            )
     else:
-        print(
-            f"Graph too large for full visualization ({graph.num_nodes:,} nodes), "
-            f"generating scatter plot instead..."
-        )
-        _visualize_roadnet_scatter(
-            graph, large_bounds_dict, boundaries_dict, roadnet_fig_path, for_latex
-        )
+        print("Road network visualization disabled (roadnet_visualization = false)")
 
     # Load OD pairs
     od_save_path = os.path.join(
@@ -148,27 +151,35 @@ def load_roadnet(region_info, exp_config):
         print(f"Avg road network distance: {avg_road_dist:.1f} m")
         print(f"Detour ratio: {detour_ratio:.2f}")
 
+        # Sample path visualization (always runs — uses local data only, no full graph load)
         _visualize_sample_paths(
             od_df,
+            graph,
             router,
             valid_mask,
             fig_dir,
             region_name_en,
             exp_config,
-            roadnet_data_path,
         )
 
 
 def _visualize_sample_paths(
     od_df,
+    graph,
     router,
     valid_mask,
     fig_dir,
     region_name_en,
     exp_config,
-    roadnet_data_path,
     n_samples=10,
 ):
+    """Sample paths visualization using SparseGraph local edges (no NetworkX needed)."""
+    import contextily as ctx
+    import matplotlib.pyplot as plt
+    from matplotlib.collections import LineCollection
+
+    from visualization._utils import configure_contextily_cache
+
     valid_df = od_df[valid_mask & (od_df["road_distance_m"] > 100)].copy()
 
     if len(valid_df) < n_samples:
@@ -217,40 +228,123 @@ def _visualize_sample_paths(
             f"detour={row['detour_ratio']:.2f}"
         )
 
-    all_lats = []
-    all_lngs = []
-    for sp in sample_paths:
-        all_lats.extend([sp["origin"][0], sp["destination"][0]])
-        all_lngs.extend([sp["origin"][1], sp["destination"][1]])
+    # Plot
+    n_cols = min(2, len(sample_paths))
+    n_rows = (len(sample_paths) + n_cols - 1) // n_cols
+    fig, axes = plt.subplots(n_rows, n_cols, figsize=(4 * n_cols, 4 * n_rows))
+    if len(sample_paths) == 1:
+        axes = np.array([axes])
+    axes = axes.flatten()
 
-    padding = 0.005
-    sample_bounds = {
-        "min_lat": min(all_lats) - padding,
-        "max_lat": max(all_lats) + padding,
-        "min_lng": min(all_lngs) - padding,
-        "max_lng": max(all_lngs) + padding,
-    }
+    for idx, sample in enumerate(sample_paths):
+        ax = axes[idx]
+        path_result = sample["path_result"]
+        origin = sample["origin"]
+        destination = sample["destination"]
+        straight_dist = sample["straight_distance"]
+        road_dist = sample["road_distance"]
+        detour = road_dist / straight_dist if straight_dist > 0 else 0
 
-    # Load a local subgraph for visualization (covers just the sample area)
-    G_vis = load_subgraph_for_visualization(roadnet_data_path, sample_bounds)
+        # Local bounds for this panel
+        padding = 0.003
+        local_bounds = {
+            "min_lat": min(origin[0], destination[0]) - padding,
+            "max_lat": max(origin[0], destination[0]) + padding,
+            "min_lng": min(origin[1], destination[1]) - padding,
+            "max_lng": max(origin[1], destination[1]) + padding,
+        }
+
+        # Draw local road edges from SparseGraph (light gray background)
+        edge_coords = graph.get_local_edges(local_bounds)
+        if len(edge_coords) > 0:
+            segments = [
+                [(ec[1], ec[0]), (ec[3], ec[2])] for ec in edge_coords
+            ]
+            lc = LineCollection(
+                segments, colors="#ddd", linewidths=0.3, zorder=1
+            )
+            ax.add_collection(lc)
+
+        # Draw road path
+        if path_result["success"] and len(path_result["path_coordinates"]) > 1:
+            path_coords = path_result["path_coordinates"]
+            path_lngs = [c[1] for c in path_coords]
+            path_lats = [c[0] for c in path_coords]
+            ax.plot(
+                path_lngs, path_lats,
+                color="blue", linewidth=2, alpha=0.8, zorder=10,
+            )
+
+        # Draw straight line
+        ax.plot(
+            [origin[1], destination[1]], [origin[0], destination[0]],
+            color="red", linewidth=2, linestyle="--",
+            alpha=0.8, zorder=20, label="Straight line",
+        )
+
+        # Draw origin and destination
+        ax.scatter(
+            origin[1], origin[0], c="green", s=80, marker="o",
+            zorder=25, edgecolors="white", linewidth=1.5, label="Origin",
+        )
+        ax.scatter(
+            destination[1], destination[0], c="red", s=80, marker="s",
+            zorder=25, edgecolors="white", linewidth=1.5, label="Destination",
+        )
+
+        ax.set_xlim(local_bounds["min_lng"], local_bounds["max_lng"])
+        ax.set_ylim(local_bounds["min_lat"], local_bounds["max_lat"])
+
+        # Add basemap
+        try:
+            configure_contextily_cache()
+            ctx.add_basemap(
+                ax, crs="EPSG:4326",
+                source=ctx.providers.OpenStreetMap.Mapnik,
+                zoom=16, alpha=0.5, zorder=0,
+            )
+        except Exception as e:
+            print(f"Could not add basemap for sample {idx}: {e}")
+
+        ax.set_title(
+            f"Sample {idx + 1}\n"
+            f"Straight: {straight_dist:.0f}m | Road: {road_dist:.0f}m\n"
+            f"Detour ratio: {detour:.2f}",
+            fontsize=9,
+        )
+        ax.set_xlabel("Longitude", fontsize=8)
+        ax.set_ylabel("Latitude", fontsize=8)
+        ax.tick_params(labelsize=7)
+        if idx == 0:
+            ax.legend(loc="upper right", fontsize=7)
+
+    for idx in range(len(sample_paths), len(axes)):
+        axes[idx].set_visible(False)
+
+    for_latex = exp_config.get("for_latex", False)
+    if not for_latex:
+        plt.suptitle(
+            "Straight-line vs Road Network Distance Comparison",
+            fontsize=14, fontweight="bold", y=1.02,
+        )
+    plt.tight_layout()
 
     comparison_fig_path = os.path.join(
         fig_dir, f"{region_name_en.lower()}_distance_comparison.png"
     )
-
-    for_latex = exp_config.get("for_latex", False)
-    visualize_distance_comparison(
-        G_vis,
-        sample_paths,
-        boundaries_dict=sample_bounds,
-        save_path=comparison_fig_path,
-        for_latex=for_latex,
-    )
-    del G_vis
+    os.makedirs(os.path.dirname(comparison_fig_path), exist_ok=True)
+    if for_latex and not comparison_fig_path.endswith(".pdf"):
+        comparison_fig_path = comparison_fig_path.rsplit(".", 1)[0] + ".pdf"
+    if comparison_fig_path.endswith(".pdf"):
+        for ax in axes[:len(sample_paths)]:
+            ax.set_rasterization_zorder(12)
+    plt.savefig(comparison_fig_path, dpi=200, bbox_inches="tight")
+    print(f"Comparison plot saved to {comparison_fig_path}")
+    plt.close(fig)
 
 
 def _visualize_roadnet_scatter(
-    graph, large_bounds_dict, boundaries_dict, save_path, for_latex
+    graph, large_bounds_dict, save_path, for_latex
 ):
     """Fallback scatter-plot visualization for large road networks."""
     import matplotlib.pyplot as plt
@@ -266,7 +360,7 @@ def _visualize_roadnet_scatter(
 
     ax.scatter(coords[:, 1], coords[:, 0], s=0.1, c="#888", alpha=0.3)
 
-    if boundaries_dict:
+    if large_bounds_dict:
         ax.set_xlim(large_bounds_dict["min_lng"], large_bounds_dict["max_lng"])
         ax.set_ylim(large_bounds_dict["min_lat"], large_bounds_dict["max_lat"])
 

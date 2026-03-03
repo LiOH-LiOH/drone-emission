@@ -139,6 +139,62 @@ class SparseGraph:
     def num_edges(self) -> int:
         return self._dist_matrix.nnz
 
+    def get_local_edges(self, bounds: dict, margin_deg: float = 0.002):
+        """Return edge endpoint coordinates within a geographic bounding box.
+
+        Parameters
+        ----------
+        bounds : dict
+            Keys: min_lat, max_lat, min_lng, max_lng.
+        margin_deg : float
+            Extra margin in degrees around the bounds.
+
+        Returns
+        -------
+        edge_coords : ndarray, shape (M, 4)
+            Each row is (from_lat, from_lng, to_lat, to_lng).
+        """
+        min_lat = bounds["min_lat"] - margin_deg
+        max_lat = bounds["max_lat"] + margin_deg
+        min_lng = bounds["min_lng"] - margin_deg
+        max_lng = bounds["max_lng"] + margin_deg
+
+        # Find nodes within bounds
+        in_bounds = (
+            (self._node_coords[:, 0] >= min_lat)
+            & (self._node_coords[:, 0] <= max_lat)
+            & (self._node_coords[:, 1] >= min_lng)
+            & (self._node_coords[:, 1] <= max_lng)
+        )
+        local_indices = np.where(in_bounds)[0]
+        if len(local_indices) == 0:
+            return np.empty((0, 4), dtype=np.float64)
+
+        # Extract edges where source is in local area
+        mat = self._dist_matrix
+        rows_list, cols_list = [], []
+        for idx in local_indices:
+            start, end = mat.indptr[idx], mat.indptr[idx + 1]
+            cols = mat.indices[start:end]
+            # Keep only edges where dest is also in bounds
+            dest_in = in_bounds[cols]
+            rows_list.append(np.full(dest_in.sum(), idx, dtype=np.intp))
+            cols_list.append(cols[dest_in])
+
+        if not rows_list:
+            return np.empty((0, 4), dtype=np.float64)
+
+        all_rows = np.concatenate(rows_list)
+        all_cols = np.concatenate(cols_list)
+
+        edge_coords = np.column_stack([
+            self._node_coords[all_rows, 0],
+            self._node_coords[all_rows, 1],
+            self._node_coords[all_cols, 0],
+            self._node_coords[all_cols, 1],
+        ])
+        return edge_coords
+
     @property
     def total_length(self) -> float:
         """Total road length in meters."""
