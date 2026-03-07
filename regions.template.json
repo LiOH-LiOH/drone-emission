@@ -524,5 +524,187 @@
       "invalid_path_count": 251462
     },
     "cache": {}
+  },
+  "beijing": {
+    "region_name_cn": "北京市",
+    "region_name_en": "Beijing",
+    "region_level": "city",
+    "parent_city": "beijing",
+    "boundaries_dict": {
+      "min_lat": 39.75,
+      "max_lat": 40.05,
+      "min_lng": 116.2,
+      "max_lng": 116.6
+    },
+    "stats": {},
+    "cache": {}
+  },
+  "shanghai": {
+    "region_name_cn": "上海市",
+    "region_name_en": "Shanghai",
+    "region_level": "city",
+    "parent_city": "shanghai",
+    "boundaries_dict": {
+      "min_lat": 31.1,
+      "max_lat": 31.4,
+      "min_lng": 121.35,
+      "max_lng": 121.65
+    },
+    "stats": {},
+    "cache": {}
+  },
+  "guangzhou": {
+    "region_name_cn": "广州市",
+    "region_name_en": "Guangzhou",
+    "region_level": "city",
+    "parent_city": "guangzhou",
+    "boundaries_dict": {
+      "min_lat": 22.95,
+      "max_lat": 23.25,
+      "min_lng": 113.15,
+      "max_lng": 113.5
+    },
+    "stats": {},
+    "cache": {}
+  },
+  "hangzhou": {
+    "region_name_cn": "杭州市",
+    "region_name_en": "Hangzhou",
+    "region_level": "city",
+    "parent_city": "hangzhou",
+    "boundaries_dict": {
+      "min_lat": 30.15,
+      "max_lat": 30.35,
+      "min_lng": 120.0,
+      "max_lng": 120.25
+    },
+    "stats": {},
+    "cache": {}
+  },
+  "chengdu": {
+    "region_name_cn": "成都市",
+    "region_name_en": "Chengdu",
+    "region_level": "city",
+    "parent_city": "chengdu",
+    "boundaries_dict": {
+      "min_lat": 30.55,
+      "max_lat": 30.75,
+      "min_lng": 103.9,
+      "max_lng": 104.15
+    },
+    "stats": {},
+    "cache": {}
+  },
+  "wuhan": {
+    "region_name_cn": "武汉市",
+    "region_name_en": "Wuhan",
+    "region_level": "city",
+    "parent_city": "wuhan",
+    "boundaries_dict": {
+      "min_lat": 30.45,
+      "max_lat": 30.75,
+      "min_lng": 114.15,
+      "max_lng": 114.45
+    },
+    "stats": {},
+    "cache": {}
+  },
+  "nanjing": {
+    "region_name_cn": "南京市",
+    "region_name_en": "Nanjing",
+    "region_level": "city",
+    "parent_city": "nanjing",
+    "boundaries_dict": {
+      "min_lat": 31.9,
+      "max_lat": 32.15,
+      "min_lng": 118.65,
+      "max_lng": 118.9
+    },
+    "stats": {},
+    "cache": {}
+  },
+  "chongqing": {
+    "region_name_cn": "重庆市",
+    "region_name_en": "Chongqing",
+    "region_level": "city",
+    "parent_city": "chongqing",
+    "boundaries_dict": {
+      "min_lat": 29.45,
+      "max_lat": 29.7,
+      "min_lng": 106.4,
+      "max_lng": 106.7
+    },
+    "stats": {},
+    "cache": {}
+  },
+  "xian": {
+    "region_name_cn": "西安市",
+    "region_name_en": "Xian",
+    "region_level": "city",
+    "parent_city": "xian",
+    "boundaries_dict": {
+      "min_lat": 34.15,
+      "max_lat": 34.35,
+      "min_lng": 108.8,
+      "max_lng": 109.1
+    },
+    "stats": {},
+    "cache": {}
+  },
+  "tianjin": {
+    "region_name_cn": "天津市",
+    "region_name_en": "Tianjin",
+    "region_level": "city",
+    "parent_city": "tianjin",
+    "boundaries_dict": {
+      "min_lat": 39.0,
+      "max_lat": 39.2,
+      "min_lng": 117.05,
+      "max_lng": 117.35
+    },
+    "stats": {},
+    "cache": {}
+  },
+  "changsha": {
+    "region_name_cn": "长沙市",
+    "region_name_en": "Changsha",
+    "region_level": "city",
+    "parent_city": "changsha",
+    "boundaries_dict": {
+      "min_lat": 28.1,
+      "max_lat": 28.3,
+      "min_lng": 112.85,
+      "max_lng": 113.05
+    },
+    "stats": {},
+    "cache": {}
+  },
+  "qingdao": {
+    "region_name_cn": "青岛市",
+    "region_name_en": "Qingdao",
+    "region_level": "city",
+    "parent_city": "qingdao",
+    "boundaries_dict": {
+      "min_lat": 35.95,
+      "max_lat": 36.15,
+      "min_lng": 120.3,
+      "max_lng": 120.5
+    },
+    "stats": {},
+    "cache": {}
+  },
+  "xiamen": {
+    "region_name_cn": "厦门市",
+    "region_name_en": "Xiamen",
+    "region_level": "city",
+    "parent_city": "xiamen",
+    "boundaries_dict": {
+      "min_lat": 24.4,
+      "max_lat": 24.55,
+      "min_lng": 118.0,
+      "max_lng": 118.2
+    },
+    "stats": {},
+    "cache": {}
   }
 }

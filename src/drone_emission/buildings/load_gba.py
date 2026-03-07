@@ -1,9 +1,37 @@
+import math
 import os
 
 import geopandas as gpd
 from shapely.geometry import box
 
 from utils.coordinates import wgs84_to_3857
+
+
+def get_gba_tile_info(boundaries_dict: dict) -> tuple[str, str]:
+    """Compute (tile_name, gba_region) from a region's bounding box.
+
+    Uses center of bounding box to determine the 5x5 degree GBA tile.
+    Region is 'asiawest' for lng < 110E, 'asiaeast' for lng >= 110E.
+
+    Args:
+        boundaries_dict: Dict with min_lat, max_lat, min_lng, max_lng.
+
+    Returns:
+        Tuple of (tile_name, gba_region), e.g. ("e110_n25_e115_n20", "asiaeast").
+    """
+    center_lng = (boundaries_dict["min_lng"] + boundaries_dict["max_lng"]) / 2
+    center_lat = (boundaries_dict["min_lat"] + boundaries_dict["max_lat"]) / 2
+
+    # Snap to 5-degree grid
+    min_lng = int(math.floor(center_lng / 5) * 5)
+    max_lng = min_lng + 5
+    min_lat = int(math.floor(center_lat / 5) * 5)
+    max_lat = min_lat + 5
+
+    tile_name = f"e{min_lng:03d}_n{max_lat:02d}_e{max_lng:03d}_n{min_lat:02d}"
+    gba_region = "asiawest" if center_lng < 110 else "asiaeast"
+
+    return tile_name, gba_region
 
 
 def load_buildings_from_gba(

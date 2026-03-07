@@ -5,16 +5,17 @@
 # complete LoD1 GeoJSON with building polygons + heights.
 #
 # Usage:
-#   bash download_gba.sh [DATA_DIR]
+#   bash download_gba.sh TILE REGION [DATA_DIR]
 #
-# Default DATA_DIR: ./gba_data
+# Example:
+#   bash download_gba.sh e110_n25_e115_n20 asiaeast ./gba_data
 
 set -euo pipefail
 
 # ---- Configuration ----
-TILE="e110_n25_e115_n20"       # 5°x5° tile covering Shenzhen (110-115°E, 20-25°N)
-REGION="asiaeast"
-DATA_DIR="${1:-./gba_data}"
+TILE="${1:?Usage: download_gba.sh TILE REGION [DATA_DIR]}"
+REGION="${2:?Usage: download_gba.sh TILE REGION [DATA_DIR]}"
+DATA_DIR="${3:-./gba_data}"
 
 # HuggingFace base URLs
 HF_ODBL="https://huggingface.co/datasets/zhu-xlab/GBA.ODbLPolygon/resolve/main"
@@ -133,7 +134,6 @@ echo "  Complete!"
 echo "============================================================"
 echo "Output: ${OUTPUT_DIR}/${REGION}/${TILE}.geojson"
 echo ""
-echo "This GeoJSON contains all buildings in the tile (110-115°E, 20-25°N)"
+echo "This GeoJSON contains all buildings in the tile ${TILE}"
 echo "with height and variance fields."
 echo ""
-echo "Next step: filter to Shenzhen bbox (113.75-114.65°E, 22.45-22.85°N)"

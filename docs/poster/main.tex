@@ -95,7 +95,7 @@
     \textbf{Why food delivery?}
     \begin{itemize}[leftmargin=1.5em, itemsep=0.1em, topsep=0.1em]
       \item \textbf{Current constraints:} battery capacity and cargo weight limit drones to short-distance, last-mile logistics
-      \item Drone offers \textbf{food delivery advantages}: lighter packages, shorter distances ($<$ 3\,km), high time sensitivity
+      \item Drone offers \textbf{food delivery advantages}: lighter packages, shorter distances ($<$ 5\,km), high time sensitivity
       \item China: \textbf{545 million} users, market growing from $\sim$300B to over \textbf{1 trillion Yuan} (2017--2027) \parencite{statista2024chinafooddelivery}
     \end{itemize}
 
@@ -136,12 +136,12 @@
       \begin{itemize}[leftmargin=1.5em, itemsep=0.1em]
         \item All-drone delivery reduces emissions by \textbf{33\%} on average vs.\ all e-bike; optimal drone--e-bike mix achieves \textbf{36\%} mean reduction.
         \item \textbf{Route factor} (detour ratio) is the strongest predictor of drone emission advantage, with benefits increasing alongside road network complexity and delivery distance.
-        \item Results are robust across \textbf{seven} diverse urban districts in China.
+        \item Results are robust across city-level analysis of \textbf{Shenzhen} and cross-region comparison.
       \end{itemize}
     \end{minipage}\hfill
     \begin{minipage}[c]{0.48\linewidth}
       \begin{center}
-        \includegraphics[width=\linewidth]{../../figures/district/nanshan/nanshan_emission_reduction.pdf}
+        \includegraphics[width=\linewidth]{../../figures/remote/shenzhen/shenzhen_emission_reduction.pdf}
       \end{center}
     \end{minipage}
   }
@@ -203,16 +203,16 @@
     \textit{Input data.}\enspace Monthly sales records of \textbf{1.07 million merchants} provide store locations and order volumes. Building footprints from mapping APIs give potential customer locations.
 
     \vspace{0.2em}
-    \textit{Gravity model.}\enspace We assume that larger buildings attract more orders due to higher population density, while greater distances reduce demand owing to increased delivery time and cost. Each merchant $i$ with demand $P_i$ distributes orders to nearby buildings $j$ in proportion to building volume $v_j$ and inversely with distance $d_{ij}$:
+    \textit{Gravity model.}\enspace We adopt a \textbf{Tanner impedance function} \parencite{tanner1961factors} that captures a hump-shaped distance decay: demand first rises with distance (reflecting a larger catchment area) then falls as delivery cost increases. Each merchant $i$ with demand $P_i$ distributes orders to nearby buildings $j$:
     \[
-      D_{ij} = P_{i} \cdot \frac{v_{j}^\alpha \,/\, d_{ij}^{\beta}}{\sum_{k \in \mathcal{D}} v_{k}^\alpha \,/\, d_{ik}^{\beta}}
+      D_{ij} = P_{i} \cdot \frac{v_{j}^\alpha \cdot d_{ij}^{\beta} \cdot e^{-\gamma \cdot d_{ij}}}{\sum_{k \in \mathcal{D}} v_{k}^\alpha \cdot d_{ik}^{\beta} \cdot e^{-\gamma \cdot d_{ik}}}
     \]
-    where $\alpha{=}1.7$ and $\beta{=}0.5$ are calibrated so the mean delivery distance matches the observed 2.23\,km \parencite{zhang_exploration_2023}.
+    where $\beta{=}1.113$ and $\gamma{=}1.412$ are calibrated from Eleme platform data, and $\alpha{=}1.7$ is set so the mean delivery distance matches the observed 2.23\,km \parencite{zhang_exploration_2023}.
 
     \vspace{0.2em}
     \begin{center}
-      \raisebox{-0.5\height}{\includegraphics[width=0.46\linewidth]{../../figures/district/nanshan/nanshan_store_coverage.png}}\hfill
-      \raisebox{-0.5\height}{\includegraphics[width=0.46\linewidth]{../../figures/remote/luohu/luohu_road_distance_distribution.pdf}}
+      \raisebox{-0.5\height}{\includegraphics[width=0.46\linewidth]{../../figures/remote/shenzhen/shenzhen_store_coverage.pdf}}\hfill
+      \raisebox{-0.5\height}{\includegraphics[width=0.46\linewidth]{../../figures/remote/shenzhen/shenzhen_road_distance_distribution.pdf}}
     \end{center}
 
     \vspace{0.2em}
@@ -221,8 +221,8 @@
 
     \vspace{0.2em}
     \begin{center}
-      \raisebox{-0.5\height}{\includegraphics[width=0.36\linewidth]{../../figures/district/nanshan/nanshan_distance_comparison.png}}\hfill
-      \raisebox{-0.5\height}{\includegraphics[width=0.56\linewidth]{../../figures/district/nanshan/nanshan_distance_detour_scatter.pdf}}
+      \raisebox{-0.5\height}{\includegraphics[width=0.36\linewidth]{../../figures/remote/shenzhen/shenzhen_distance_comparison.pdf}}\hfill
+      \raisebox{-0.5\height}{\includegraphics[width=0.56\linewidth]{../../figures/remote/shenzhen/shenzhen_distance_detour_scatter.pdf}}
     \end{center}
 
     \vspace{0.2em}

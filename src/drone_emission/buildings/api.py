@@ -1,10 +1,11 @@
 import os
+import subprocess
 
 import geopandas as gpd
 import numpy as np
 from visualization.buildings import visualize_building_heights, visualize_buildings
 
-from .load_gba import load_buildings_from_gba
+from .load_gba import get_gba_tile_info, load_buildings_from_gba
 
 # Earth radius in kilometers
 EARTH_RADIUS_KM = 6371.0
@@ -26,6 +27,45 @@ def enlarge_boundaries(boundaries_dict, enlarge_km):
     }
 
     return large_bounds_dict
+
+
+def _resolve_gba_data_path(boundaries_dict: dict, exp_config: dict) -> str:
+    """Resolve the GBA GeoJSON path for a region, downloading if needed.
+
+    Prefers gba_data_dir (dynamic tile resolution) over gba_data_path (legacy).
+    """
+    gba_data_dir = exp_config.get("gba_data_dir")
+
+    if gba_data_dir:
+        tile_name, gba_region = get_gba_tile_info(boundaries_dict)
+        gba_data_path = os.path.join(
+            gba_data_dir, "LoD1_GeoJSON", gba_region, f"{tile_name}.geojson"
+        )
+        print(f"GBA tile: {tile_name} (region: {gba_region})")
+
+        if not os.path.exists(gba_data_path):
+            print(f"GBA tile not found locally, downloading...")
+            script_path = os.path.join(
+                os.path.dirname(__file__), "download_gba.sh"
+            )
+            result = subprocess.run(
+                ["bash", script_path, tile_name, gba_region, gba_data_dir],
+                check=True,
+            )
+            if not os.path.exists(gba_data_path):
+                raise FileNotFoundError(
+                    f"Download completed but GBA tile not found at {gba_data_path}"
+                )
+
+        return gba_data_path
+
+    # Fallback to legacy gba_data_path
+    gba_data_path = exp_config.get("gba_data_path")
+    if not gba_data_path:
+        raise ValueError(
+            "Neither gba_data_dir nor gba_data_path set in experiment.toml"
+        )
+    return gba_data_path
 
 
 def load_buildings(region_info, exp_config):
@@ -68,9 +108,7 @@ def load_buildings(region_info, exp_config):
 
     # Fetch buildings if requested or file doesn't exist
     if exp_config.get("fetch_buildings", False) or not os.path.exists(geojson_file):
-        gba_data_path = exp_config.get("gba_data_path")
-        if not gba_data_path:
-            raise ValueError("gba_data_path not set in experiment.toml")
+        gba_data_path = _resolve_gba_data_path(boundaries_dict, exp_config)
 
         load_buildings_from_gba(
             gba_data_path=gba_data_path,
