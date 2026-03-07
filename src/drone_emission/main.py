@@ -28,14 +28,14 @@ def run_region_analysis(region_key: str, config: dict):
     print(f"Running analysis for {region_key}...")
     region = registry[region_key]
 
-    # prepare_sales(
-    #     region_info=region,
-    #     exp_config=config,
-    # )
-    # load_buildings(
-    #     region_info=region,
-    #     exp_config=config,
-    # )
+    prepare_sales(
+        region_info=region,
+        exp_config=config,
+    )
+    load_buildings(
+        region_info=region,
+        exp_config=config,
+    )
     generate_od_pairs(
         region_info=region,
         exp_config=config,
