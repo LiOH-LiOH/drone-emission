@@ -14,11 +14,11 @@ from scipy.sparse.csgraph import dijkstra
 from .sparse_graph import SparseGraph
 
 # Maximum air distance (meters) for OD pairs in this project
-_MAX_AIR_DISTANCE_M = 3000
+_MAX_AIR_DISTANCE_M = 5000
 # Typical detour ratio upper bound
 _MAX_DETOUR_RATIO = 1.8
 # Dijkstra distance limit (meters): air distance * detour ratio, with margin
-_DIJKSTRA_LIMIT = _MAX_AIR_DISTANCE_M * _MAX_DETOUR_RATIO + 2000  # ~7400m
+_DIJKSTRA_LIMIT = _MAX_AIR_DISTANCE_M * _MAX_DETOUR_RATIO + 2000  # ~11000m
 # Max sources per Dijkstra batch to bound memory (~200MB per batch)
 _MAX_SOURCES_PER_BATCH = 500
 

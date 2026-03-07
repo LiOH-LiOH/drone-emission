@@ -529,7 +529,7 @@ def plot_distance_route_factor_heatmap(
     """
     import numpy as np
 
-    fig, ax = plt.subplots(figsize=(14, 5))
+    fig, ax = plt.subplots(figsize=(10, 6))
 
     # 创建热力图
     im = ax.imshow(

@@ -2130,11 +2130,11 @@ if __name__ == "__main__":
     for_latex = exp_config.get("for_latex", False)
 
     lca = run_validation_tests()
-    # run_sensitivity_analysis(
-    #     save_dir=os.path.join(figures_dir, "sensitivity"),
-    #     exp_config=exp_config,
-    #     for_latex=for_latex,
-    # )
+    run_sensitivity_analysis(
+        save_dir=os.path.join(figures_dir, "sensitivity"),
+        exp_config=exp_config,
+        for_latex=for_latex,
+    )
     run_lifecycle_sensitivity_analysis(
         save_dir=os.path.join(figures_dir, "lifecycle"),
         exp_config=exp_config,

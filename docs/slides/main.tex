@@ -65,6 +65,16 @@
 }
 %------------------------------------------------------------
 
+% Flowchart left column (centered via [c] on columns environment)
+\newcommand{\FlowchartColumn}[1]{%
+  \begin{column}{0.35\textwidth}
+    \begin{minipage}[c][.78\textheight][c]{\linewidth}
+      \centering
+      #1
+    \end{minipage}
+  \end{column}
+}
+
 % Reusable OD flowchart command
 \newcommand{\ODFlowchart}{%
   \begin{tikzpicture}[
@@ -156,7 +166,7 @@
 
 \section{Introduction}
 
-\begin{frame}{Drone Delivery: An Emerging Industry}
+\begin{frame}{Drone Delivery - An Emerging Industry}
   \begin{itemize}
     \item Drones are a \textbf{transformative technology} for transportation and logistics
     \item Key benefits:
@@ -188,7 +198,7 @@
     \item \textbf{Food delivery advantages} over parcel delivery:
       \begin{itemize}
         \item Lighter and smaller packages
-        \item Shorter delivery distances (typically $<$ 3 km)
+        \item Shorter delivery distances (typically $<$ 5 km)
         \item Speed advantage: prevents food from getting cold/spoiled
         \item High time sensitivity matches drone capabilities
       \end{itemize}
@@ -243,7 +253,7 @@
   \end{tabular}
 \end{frame}
 
-\begin{frame}{Research Gap}
+\begin{frame}{Research Gap - Lack of OD Data}
   \begin{itemize}
     \item \textbf{High costs} of purchasing and maintaining drones
     \item Significant investment in \textbf{UAS infrastructure} required
@@ -269,13 +279,10 @@
 
 \section{Method}
 
-\begin{frame}{OD Generation}
+\begin{frame}{OD Generation - Overview}
 
-  \begin{columns}
-    \begin{column}{0.35\textwidth}
-      \centering
-      \ODFlowchart
-    \end{column}
+  \begin{columns}[c]
+    \FlowchartColumn{\ODFlowchart}
     \begin{column}{0.6\textwidth}
       \textbf{Pipeline Overview}
       \begin{itemize}
@@ -290,11 +297,8 @@
 
 \begin{frame}{OD Generation - Monthly Sales Data}
 
-  \begin{columns}
-    \begin{column}{0.35\textwidth}
-      \centering
-      \ODFlowchart
-    \end{column}
+  \begin{columns}[c]
+    \FlowchartColumn{\ODFlowchart}
     \begin{column}{0.6\textwidth}
       \begin{figure}
         \centering
@@ -307,19 +311,16 @@
 
 \end{frame}
 
-\begin{frame}{OD Generation - Monthly Sales Data}
+\begin{frame}{OD Generation - Sales Heatmap}
 
-  \begin{columns}
-    \begin{column}{0.35\textwidth}
-      \centering
-      \ODFlowchart
-    \end{column}
+  \begin{columns}[c]
+    \FlowchartColumn{\ODFlowchart}
     \begin{column}{0.6\textwidth}
       \begin{figure}
         \centering
-        \includegraphics[width=0.8\linewidth]{../../figures/district/nanshan/nanshan_heatmap.pdf}
-        \caption{\textbf{Heatmap of the monthly sales data for the Nanshan district.} The heatmap is generated using the latitude and longitude of the merchants and the monthly sales data.}
-        \label{fig:nanshan_heatmap}
+        \includegraphics[width=0.95\linewidth]{../../figures/remote/shenzhen/shenzhen_heatmap.pdf}
+        \caption{\textbf{Heatmap of the monthly sales data for Shenzhen.} The heatmap is generated using the latitude and longitude of the merchants and the monthly sales data.}
+        \label{fig:shenzhen_heatmap}
       \end{figure}
     \end{column}
   \end{columns}
@@ -328,11 +329,8 @@
 
 \begin{frame}{OD Generation - Building Footprint Data}
 
-  \begin{columns}
-    \begin{column}{0.35\textwidth}
-      \centering
-      \ODFlowchart
-    \end{column}
+  \begin{columns}[c]
+    \FlowchartColumn{\ODFlowchart}
     \begin{column}{0.6\textwidth}
       \begin{figure}
         \centering
@@ -345,19 +343,16 @@
 
 \end{frame}
 
-\begin{frame}{OD Generation - Building Footprint Data}
+\begin{frame}{OD Generation - Store Coverage}
 
-  \begin{columns}
-    \begin{column}{0.35\textwidth}
-      \centering
-      \ODFlowchart
-    \end{column}
+  \begin{columns}[c]
+    \FlowchartColumn{\ODFlowchart}
     \begin{column}{0.6\textwidth}
       \begin{figure}
         \centering
-        \includegraphics[width=0.8\linewidth]{../../figures/district/nanshan/nanshan_store_coverage.pdf}
-        \caption{\textbf{Building footprint data and store coverage for the Nanshan district.} Nearby buildings are matched with takeout merchants as potential customers. The fetch area is enlarged by 3km beyond the district boundary to account for rider work radius \parencite{zhang_exploration_2023}.}
-        \label{fig:nanshan_buildings}
+        \includegraphics[width=0.95\linewidth]{../../figures/remote/shenzhen/shenzhen_store_coverage.pdf}
+        \caption{\textbf{Building footprint data and store coverage for Shenzhen.} Nearby buildings are matched with takeout merchants as potential customers. The fetch area is enlarged by 5\,km beyond the city boundary to account for rider work radius \parencite{zhang_exploration_2023}.}
+        \label{fig:shenzhen_buildings}
       \end{figure}
     \end{column}
   \end{columns}
@@ -366,11 +361,8 @@
 
 \begin{frame}{OD Generation - Gravity Model}
 
-  \begin{columns}
-    \begin{column}{0.35\textwidth}
-      \centering
-      \ODFlowchart
-    \end{column}
+  \begin{columns}[c]
+    \FlowchartColumn{\ODFlowchart}
     \begin{column}{0.6\textwidth}
       Larger buildings attract more orders due to higher population density. The Tanner impedance function \parencite{tanner1961factors} captures the observed hump-shaped distance decay: few orders at very short distances, a peak, then decline.
       \[
@@ -402,13 +394,10 @@
 
 \end{frame}
 
-\begin{frame}{OD Generation - Gravity Model}
+\begin{frame}{OD Generation - Model Calibration}
 
-  \begin{columns}
-    \begin{column}{0.35\textwidth}
-      \centering
-      \ODFlowchart
-    \end{column}
+  \begin{columns}[c]
+    \FlowchartColumn{\ODFlowchart}
     \begin{column}{0.6\textwidth}
       Larger buildings attract more orders due to higher population density. The Tanner impedance function \parencite{tanner1961factors} captures the observed hump-shaped distance decay: few orders at very short distances, a peak, then decline.
       \[
@@ -421,7 +410,7 @@
       \textbf{Two-stage Calibration:}
       \begin{enumerate}
         \item \textbf{Distance impedance} ($\beta$, $\gamma$): fitted from $\sim$278K Eleme orders (Beijing, 29 days)
-        \item \textbf{Volume exponent} ($\alpha$): calibrated by matching weighted mean OD distance to industry-reported 2.23\,km
+        \item \textbf{Volume exponent} ($\alpha$): calibrated by matching weighted mean OD distance to industry-reported 2.23\,km \parencite{xie_environmental_2021}
       \end{enumerate}
     \end{column}
   \end{columns}
@@ -441,17 +430,14 @@
   \begin{figure}
     \centering
     \includegraphics[width=0.75\linewidth]{../../figures/calibration/alpha_calibration_5km.png}
-    \caption{\textbf{Calibration of $\alpha$ (building volume exponent).} Sweeping $\alpha$ with fixed $\beta = 1.113$, $\gamma = 1.412$ over Nanshan district (2{,}484 stores, 81{,}850 buildings, 5\,km radius). Best fit $\alpha = 1.7$ yields weighted mean OD distance of 2.21\,km, matching the industry-reported 2.23\,km for first-tier city food delivery.}
+    \caption{\textbf{Calibration of $\alpha$ (building volume exponent).} Sweeping $\alpha$ with fixed $\beta = 1.113$, $\gamma = 1.412$ over Nanshan district (2{,}484 stores, 81{,}850 buildings, 5\,km radius). Best fit $\alpha = 1.7$ yields weighted mean OD distance of 2.21\,km, matching the industry-reported 2.23\,km for first-tier city food delivery \parencite{xie_environmental_2021}.}
     \label{fig:alpha_calibration}
   \end{figure}
 \end{frame}
 
-\begin{frame}{Road Distance Calculation}
-  \begin{columns}
-    \begin{column}{0.35\textwidth}
-      \centering
-      \RoadDistFlowchart
-    \end{column}
+\begin{frame}{Road Distance Calculation - Road Network}
+  \begin{columns}[c]
+    \FlowchartColumn{\RoadDistFlowchart}
     \begin{column}{0.6\textwidth}
       \begin{figure}
         \centering
@@ -463,21 +449,110 @@
   \end{columns}
 \end{frame}
 
-\begin{frame}{Road Distance Calculation}
-  \begin{columns}
-    \begin{column}{0.35\textwidth}
-      \centering
-      \RoadDistFlowchart
-    \end{column}
+\begin{frame}{Road Distance Calculation - Distance Comparison}
+  \begin{columns}[c]
+    \FlowchartColumn{\RoadDistFlowchart}
     \begin{column}{0.6\textwidth}
       \begin{figure}
         \centering
-        \includegraphics[width=0.7\linewidth]{../../figures/district/nanshan/nanshan_distance_comparison.pdf}
-        \caption{\textbf{Air distance vs. road distance for OD pairs in the Nanshan district.} Each OD pair now includes both the straight-line (air) distance and the road network distance computed via Dijkstra's algorithm.}
-        \label{fig:nanshan_distance_comparison}
+        \includegraphics[width=0.7\linewidth]{../../figures/remote/shenzhen/shenzhen_distance_comparison.pdf}
+        \caption{\textbf{Air distance vs. road distance for OD pairs in Shenzhen.} Each OD pair now includes both the straight-line (air) distance and the road network distance computed via Dijkstra's algorithm.}
+        \label{fig:shenzhen_distance_comparison}
       \end{figure}
     \end{column}
   \end{columns}
+\end{frame}
+
+\begin{frame}{Road Distance Calculation - Scaling Challenge}
+  \textbf{Challenge:} Extending from district to city level
+
+  \vspace{0.5em}
+  \small
+  \begin{center}
+    \begin{tabular}{l r r}
+      \toprule
+      & \textbf{District (Nanshan)} & \textbf{City (Shenzhen)} \\
+      \midrule
+      Nodes & 185K & 1.01M \\
+      Edges & 350K & 1.90M \\
+      OD pairs & 817K & 4.16M \\
+      \bottomrule
+    \end{tabular}
+  \end{center}
+
+  \vspace{0.5em}
+  \normalsize
+  \textbf{Old approach:} NetworkX graph + Python Dijkstra
+  \begin{itemize}
+    \item Full graph in memory ($\sim$3--5\,GB at city scale)
+    \item Pure-Python shortest path per OD pair --- too slow
+  \end{itemize}
+
+  \vspace{0.3em}
+  \textbf{Key insight:} All OD pairs have air distance $< 5$\,km $\Rightarrow$ only \textbf{local routing} needed
+\end{frame}
+
+\begin{frame}{Road Distance Calculation - Tile-Based Sparse Routing}
+  \textbf{New approach:} scipy CSR sparse matrix + tile-based C-compiled Dijkstra
+
+  \begin{columns}
+    \begin{column}{0.48\textwidth}
+      \begin{enumerate}
+        \item Convert GraphML $\rightarrow$ \textbf{CSR sparse matrix} (float32 edge weights)
+        \item Divide network into \textbf{2\,km $\times$ 2\,km tiles}
+        \item For each OD pair, route within \textbf{3$\times$3 tile block} ($\sim$6\,km $\times$ 6\,km)
+        \item \textbf{Multi-source Dijkstra} per tile: batch all origins sharing a tile
+      \end{enumerate}
+    \end{column}
+    \begin{column}{0.48\textwidth}
+      \small
+      \begin{center}
+        \captionof{table}{Performance comparison}
+        \begin{tabular}{l c c}
+          \toprule
+          & \textbf{Old} & \textbf{New} \\
+          \midrule
+          Storage & NetworkX & CSR sparse \\
+          Algorithm & Python & C (scipy) \\
+          Scope & Full graph & Local tile \\
+          \midrule
+          Memory & $\sim$3\,GB & $\sim$500\,MB \\
+          817K pairs & hours & \textbf{36\,s} \\
+          4.39M pairs & -- & \textbf{511\,s} \\
+          \bottomrule
+        \end{tabular}
+      \end{center}
+    \end{column}
+  \end{columns}
+\end{frame}
+
+\begin{frame}{Road Distance Calculation - Validation}
+  \textbf{Comparison:} old NetworkX distances vs.\ new tile-based distances
+
+  \vspace{0.5em}
+  \small
+  \begin{center}
+    \begin{tabular}{l r}
+      \toprule
+      \textbf{Metric} & \textbf{Value} \\
+      \midrule
+      Both valid & 801{,}952 / 816{,}774 (98.2\%) \\
+      Old valid, new invalid & 435 (0.05\%) \\
+      Mean absolute error & 0.30\,m \\
+      Median absolute error & 0.00\,m \\
+      Pairs within 1\,m tolerance & 801{,}239 (99.9\%) \\
+      Pearson correlation & 0.99987 \\
+      \bottomrule
+    \end{tabular}
+  \end{center}
+
+  \vspace{0.5em}
+  \normalsize
+  \begin{itemize}
+    \item \textbf{99.9\%} of pairs match within 1\,m --- differences from float32 precision
+    \item 435 pairs (0.05\%) lost due to tile boundary coverage --- negligible impact on statistics
+    \item Enables scaling to \textbf{city-level analysis}: Shenzhen 4{,}139{,}421 / 4{,}390{,}883 valid paths (94.3\%) in 511\,s
+  \end{itemize}
 \end{frame}
 
 \begin{frame}{Use-phase Emission Model - E-bike}
@@ -520,7 +595,7 @@
   \[ P_{\text{aux}} = \text{constant} \]
 \end{frame}
 
-\begin{frame}{Use-phase Emission Model}
+\begin{frame}{Use-phase Emission Model - Power Breakdown}
   \begin{figure}
     \centering
     \includegraphics[width=0.9\linewidth]{../../figures/sensitivity/sensitivity_velocity_power_stacked.pdf}
@@ -529,7 +604,7 @@
   \end{figure}
 \end{frame}
 
-\begin{frame}{Use-phase Emission Model}
+\begin{frame}{Use-phase Emission Model - Emission Equations}
 
   \textbf{E-bike Use-phase Emissions:}
   \begin{equation}
@@ -640,18 +715,18 @@
     \begin{column}{0.5\textwidth}
       \begin{figure}
         \centering
-        \includegraphics[width=0.8\linewidth]{../../figures/remote/luohu/luohu_road_distance_distribution.pdf}
-        \caption{\textbf{Road distance distribution in Luohu district.} Most deliveries occur within 1--3 km, with a long tail extending to longer distances.}
-        \label{fig:luohu_road_distance_distribution}
+        \includegraphics[width=0.8\linewidth]{../../figures/remote/shenzhen/shenzhen_road_distance_distribution.pdf}
+        \caption{\textbf{Road distance distribution in Shenzhen.} Most deliveries occur within 1--3 km, with a long tail extending to longer distances.}
+        \label{fig:shenzhen_road_distance_distribution}
       \end{figure}
     \end{column}
 
     \begin{column}{0.5\textwidth}
       \begin{figure}
         \centering
-        \includegraphics[width=0.8\linewidth]{../../figures/remote/luohu/luohu_distance_detour_scatter.pdf}
+        \includegraphics[width=0.8\linewidth]{../../figures/remote/shenzhen/shenzhen_distance_detour_scatter.pdf}
         \caption{\textbf{Air vs. road distance relationship.} The detour ratio decreases and stabilizes as delivery distance increases.}
-        \label{fig:luohu_distance_detour_scatter}
+        \label{fig:shenzhen_distance_detour_scatter}
       \end{figure}
     \end{column}
   \end{columns}
@@ -683,20 +758,20 @@
     \begin{column}{0.48\textwidth}
       \begin{figure}
         \centering
-        \includegraphics[width=0.8\linewidth]{../../figures/district/nanshan/nanshan_emission_reduction.pdf}
+        \includegraphics[width=0.8\linewidth]{../../figures/remote/shenzhen/shenzhen_emission_reduction.pdf}
         \caption{\textbf{Emission reduction under bundle scenarios.} Higher bundling efficiency reduces drone's emission advantage.}
-        \label{fig:luohu_emission_reduction}
+        \label{fig:shenzhen_emission_reduction}
       \end{figure}
     \end{column}
   \end{columns}
 \end{frame}
 
-\begin{frame}{Equity Analysis: Zone-Level Heatmaps}
+\begin{frame}{Equity Analysis - Zone-Level Heatmaps}
   \begin{columns}[T]
     \begin{column}{0.48\textwidth}
       \begin{figure}
         \centering
-        \includegraphics[width=\linewidth]{../../figures/district/nanshan/nanshan_zone_emission_reduction.pdf}
+        \includegraphics[width=\linewidth]{../../figures/remote/shenzhen/shenzhen_zone_emission_reduction.pdf}
         \caption{\textbf{Emission reduction by zone.} Spatial distribution of drone emission benefits across traffic zones.}
         \label{fig:zone_emission_reduction}
       \end{figure}
@@ -704,7 +779,7 @@
     \begin{column}{0.48\textwidth}
       \begin{figure}
         \centering
-        \includegraphics[width=\linewidth]{../../figures/district/nanshan/nanshan_zone_building_count.pdf}
+        \includegraphics[width=\linewidth]{../../figures/remote/shenzhen/shenzhen_zone_building_count.pdf}
         \caption{\textbf{Building count by zone.} Urban density varies significantly across zones, affecting delivery patterns.}
         \label{fig:zone_building_count}
       \end{figure}
@@ -712,12 +787,12 @@
   \end{columns}
 \end{frame}
 
-\begin{frame}{Equity Analysis: Time Saving vs Urban Features}
+\begin{frame}{Equity Analysis - Time Saving vs Urban Features}
   \begin{columns}[T]
     \begin{column}{0.48\textwidth}
       \begin{figure}
         \centering
-        \includegraphics[width=\linewidth]{../../figures/district/nanshan/nanshan_time_vs_buildings.pdf}
+        \includegraphics[width=\linewidth]{../../figures/remote/shenzhen/shenzhen_time_vs_buildings.pdf}
         \caption{\textbf{Time saving vs building count.} Zones with more buildings show greater drone time savings due to complex last-mile navigation.}
         \label{fig:time_vs_buildings}
       \end{figure}
@@ -725,7 +800,7 @@
     \begin{column}{0.48\textwidth}
       \begin{figure}
         \centering
-        \includegraphics[width=\linewidth]{../../figures/district/nanshan/nanshan_time_vs_intersections.pdf}
+        \includegraphics[width=\linewidth]{../../figures/remote/shenzhen/shenzhen_time_vs_intersections.pdf}
         \caption{\textbf{Time saving vs intersection count.} Higher road network complexity correlates with greater drone delivery advantages.}
         \label{fig:time_vs_intersections}
       \end{figure}
@@ -733,10 +808,10 @@
   \end{columns}
 \end{frame}
 
-\begin{frame}{Equity Analysis: Zone Correlations}
+\begin{frame}{Equity Analysis - Zone Correlations}
   \begin{figure}
     \centering
-    \includegraphics[width=0.7\linewidth]{../../figures/district/nanshan/nanshan_zone_correlations.pdf}
+    \includegraphics[width=0.7\linewidth]{../../figures/remote/shenzhen/shenzhen_zone_correlations.pdf}
     \caption{\textbf{Correlation matrix of zone-level features.} Shows relationships between urban characteristics (building count, intersection count) and drone delivery benefits (emission reduction, time saving).}
     \label{fig:zone_correlations}
   \end{figure}
@@ -808,7 +883,7 @@
 
 \section{Appendix}
 
-\begin{frame}{Use-phase Emission Model - E-bike}
+\begin{frame}{Use-phase Emission Model - E-bike Parameters}
 
   % \footnotesize
   \centering
@@ -831,7 +906,7 @@
   \end{tabular}
 \end{frame}
 
-\begin{frame}{Use-phase Emission Model - Drone}
+\begin{frame}{Use-phase Emission Model - Drone Parameters}
 
   % \footnotesize
 
@@ -861,7 +936,7 @@
   \end{center}
 \end{frame}
 
-\begin{frame}{Use-phase Emission Model - Drone}
+\begin{frame}{Use-phase Emission Model - Drone Parameters (cont.)}
   \begin{center}
     \captionof{table}{Model parameters and default values for drone (continued)}
     \begin{tabular}{cccc}
