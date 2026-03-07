@@ -30,6 +30,13 @@ fi
 # ---- Actual analysis (runs inside tmux) ----
 cd "$(dirname "$0")"
 
+# Setup logging — logs go to ./logs/ with timestamp
+LOG_DIR="./logs"
+mkdir -p "${LOG_DIR}"
+LOG_FILE="${LOG_DIR}/run_$(date +%Y%m%d_%H%M%S).log"
+exec > >(tee -a "${LOG_FILE}") 2>&1
+echo "Logging to: ${LOG_FILE}"
+
 # Activate virtual environment if it exists
 if [ -d ".venv" ]; then
     echo "Activating .venv..."
