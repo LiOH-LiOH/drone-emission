@@ -536,7 +536,38 @@
       "min_lng": 116.2,
       "max_lng": 116.6
     },
-    "stats": {},
+    "stats": {
+      "enlarged_boundaries": {
+        "min_lat": 39.705033919704064,
+        "max_lat": 40.09496608029593,
+        "min_lng": 116.1413867011692,
+        "max_lng": 116.6586132988308
+      },
+      "building_count": 528236,
+      "building_height_mean": 6.709659955557431,
+      "building_height_max": 158.36451721191406,
+      "building_height_min": 0.008650047704577446,
+      "building_volume_total": 4179508999.805761,
+      "building_area_total": 370137187.0309683,
+      "total_store_annual_sales": 261411744.0,
+      "total_odpair_annual_sales": 216663428,
+      "odpair_count": 5119697,
+      "roadnet_node_count": 459994,
+      "roadnet_edge_count": 912396,
+      "roadnet_length_total": 36747032.0,
+      "avg_road_distance_m": 3109.6009252757863,
+      "avg_straight_distance_m": 2119.39327491084,
+      "detour_ratio": 1.4672127924944007,
+      "valid_path_count": 4899022,
+      "invalid_path_count": 220675,
+      "province": "北京",
+      "total_ebike_lifecycle": 577057.7863400443,
+      "total_drone_lifecycle": 424840.1016521099,
+      "max_lifecycle_reduction_pct": 29.587888206518603,
+      "optimal_threshold_km": 1.0422953420215193,
+      "optimal_drone_ratio_pct": 90.02450730970993,
+      "lifecycle_all_drone_reduction_pct": 26.378239457328238
+    },
     "cache": {}
   },
   "shanghai": {
@@ -550,7 +581,38 @@
       "min_lng": 121.35,
       "max_lng": 121.65
     },
-    "stats": {},
+    "stats": {
+      "enlarged_boundaries": {
+        "min_lat": 31.055033919704066,
+        "max_lat": 31.444966080295934,
+        "min_lng": 121.29740267173908,
+        "max_lng": 121.70259732826092
+      },
+      "building_count": 663835,
+      "building_height_mean": 8.227791771585416,
+      "building_height_max": 126.58120727539062,
+      "building_height_min": 0.0071822283789515495,
+      "building_volume_total": 4178117695.580434,
+      "building_area_total": 341169733.9742,
+      "total_store_annual_sales": 193318380.0,
+      "total_odpair_annual_sales": 153094346,
+      "odpair_count": 3450009,
+      "roadnet_node_count": 335941,
+      "roadnet_edge_count": 656166,
+      "roadnet_length_total": 26737134.0,
+      "avg_road_distance_m": 2846.948028431904,
+      "avg_straight_distance_m": 1993.8273897865515,
+      "detour_ratio": 1.427880890299477,
+      "valid_path_count": 3063018,
+      "invalid_path_count": 386991,
+      "province": "上海",
+      "total_ebike_lifecycle": 357560.3393444722,
+      "total_drone_lifecycle": 301539.8409728137,
+      "max_lifecycle_reduction_pct": 26.608889218203736,
+      "optimal_threshold_km": 0.8853643678241303,
+      "optimal_drone_ratio_pct": 84.78847446484922,
+      "lifecycle_all_drone_reduction_pct": 15.667425104910354
+    },
     "cache": {}
   },
   "guangzhou": {
@@ -564,7 +626,38 @@
       "min_lng": 113.15,
       "max_lng": 113.5
     },
-    "stats": {},
+    "stats": {
+      "enlarged_boundaries": {
+        "min_lat": 22.905033919704064,
+        "max_lat": 23.294966080295936,
+        "min_lng": 113.10111434074236,
+        "max_lng": 113.54888565925765
+      },
+      "building_count": 342299,
+      "building_height_mean": 10.1144728860523,
+      "building_height_max": 150.88650512695312,
+      "building_height_min": 0.009825605899095535,
+      "building_volume_total": 5678970489.061606,
+      "building_area_total": 366029688.44379973,
+      "total_store_annual_sales": 218250984.0,
+      "total_odpair_annual_sales": 187975854,
+      "odpair_count": 4154789,
+      "roadnet_node_count": 472775,
+      "roadnet_edge_count": 848262,
+      "roadnet_length_total": 30013316.0,
+      "avg_road_distance_m": 2983.3568696888537,
+      "avg_straight_distance_m": 1845.5867010475279,
+      "detour_ratio": 1.6164815600348357,
+      "valid_path_count": 3940151,
+      "invalid_path_count": 214638,
+      "province": "广东",
+      "total_ebike_lifecycle": 398189.1508572834,
+      "total_drone_lifecycle": 270641.6798469633,
+      "max_lifecycle_reduction_pct": 36.0888664311419,
+      "optimal_threshold_km": 0.9637351703590813,
+      "optimal_drone_ratio_pct": 90.2798192639867,
+      "lifecycle_all_drone_reduction_pct": 32.031880008713465
+    },
     "cache": {}
   },
   "hangzhou": {
