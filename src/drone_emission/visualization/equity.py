@@ -15,6 +15,8 @@ import pandas as pd
 from matplotlib.colors import Normalize
 from matplotlib.patches import Rectangle
 
+from ._utils import _add_title_suffix
+
 if TYPE_CHECKING:
     from equity.grid import TrafficZoneGrid
 
@@ -27,6 +29,7 @@ def plot_zone_heatmap(
     cmap: str = "YlOrRd",
     save_path: Optional[str] = None,
     for_latex: bool = False,
+    plot_title: bool = False,
     min_deliveries: int = 0,
 ) -> Optional[str]:
     """
@@ -104,7 +107,7 @@ def plot_zone_heatmap(
 
     ax.set_xlabel("Longitude", fontsize=12)
     ax.set_ylabel("Latitude", fontsize=12)
-    if not for_latex:
+    if plot_title:
         ax.set_title(title, fontsize=14, fontweight="bold")
     ax.set_aspect("equal")
     ax.grid(True, alpha=0.3, linestyle="--")
@@ -115,6 +118,8 @@ def plot_zone_heatmap(
         os.makedirs(os.path.dirname(save_path), exist_ok=True)
         if for_latex and not save_path.endswith(".pdf"):
             save_path = save_path.rsplit(".", 1)[0] + ".pdf"
+        if plot_title:
+            save_path = _add_title_suffix(save_path)
         plt.savefig(save_path, dpi=300, bbox_inches="tight")
         plt.close()
         return save_path
@@ -130,6 +135,7 @@ def plot_emission_vs_features_scatter(
     title: str = "Emission Reduction vs Urban Feature",
     save_path: Optional[str] = None,
     for_latex: bool = False,
+    plot_title: bool = False,
     min_deliveries: int = 10,
 ) -> Optional[str]:
     """
@@ -185,13 +191,13 @@ def plot_emission_vs_features_scatter(
 
     ax.set_xlabel(feature_column.replace("_", " ").title(), fontsize=12)
     ax.set_ylabel(emission_column.replace("_", " ").title(), fontsize=12)
-    if not for_latex:
+    if plot_title:
         ax.set_title(title, fontsize=14, fontweight="bold")
     ax.legend(loc="best", fontsize=11)
     ax.grid(True, alpha=0.3)
 
     # Add correlation text (non-LaTeX mode only)
-    if not for_latex:
+    if plot_title:
         ax.text(
             0.02, 0.98,
             f"n = {len(x)}\nCorrelation: {corr:.3f}\n$R^2$: {r_squared:.3f}",
@@ -207,6 +213,8 @@ def plot_emission_vs_features_scatter(
         os.makedirs(os.path.dirname(save_path), exist_ok=True)
         if for_latex and not save_path.endswith(".pdf"):
             save_path = save_path.rsplit(".", 1)[0] + ".pdf"
+        if plot_title:
+            save_path = _add_title_suffix(save_path)
         plt.savefig(save_path, dpi=300, bbox_inches="tight")
         plt.close()
         return save_path
@@ -220,6 +228,7 @@ def plot_zone_correlation_matrix(
     columns: list,
     save_path: Optional[str] = None,
     for_latex: bool = False,
+    plot_title: bool = False,
     min_deliveries: int = 10,
 ) -> Optional[str]:
     """
@@ -269,7 +278,7 @@ def plot_zone_correlation_matrix(
             color = "white" if abs(value) > 0.5 else "black"
             ax.text(j, i, f"{value:.2f}", ha="center", va="center", color=color, fontsize=9)
 
-    if not for_latex:
+    if plot_title:
         ax.set_title("Zone Statistics Correlation Matrix", fontsize=14, fontweight="bold")
 
     plt.tight_layout()
@@ -278,6 +287,8 @@ def plot_zone_correlation_matrix(
         os.makedirs(os.path.dirname(save_path), exist_ok=True)
         if for_latex and not save_path.endswith(".pdf"):
             save_path = save_path.rsplit(".", 1)[0] + ".pdf"
+        if plot_title:
+            save_path = _add_title_suffix(save_path)
         plt.savefig(save_path, dpi=300, bbox_inches="tight")
         plt.close()
         return save_path

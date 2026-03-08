@@ -7,12 +7,15 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
+from ._utils import _add_title_suffix
+
 
 def plot_profit_comparison(
     od_df: pd.DataFrame,
     save_path: str = None,
     dpi: int = 150,
     for_latex: bool = False,
+    plot_title: bool = False,
 ) -> str:
     """Plot profit distribution histograms and drone profit advantage vs distance.
 
@@ -53,7 +56,7 @@ def plot_profit_comparison(
     ax1.axvline(x=0, color="gray", linestyle="--", linewidth=1.5, alpha=0.7)
     ax1.set_xlabel("Profit per Order (CNY)", fontsize=12)
     ax1.set_ylabel("Count", fontsize=12)
-    if not for_latex:
+    if plot_title:
         ax1.set_title("Profit Distribution by Delivery Mode", fontsize=14)
     ax1.legend(loc="upper left", fontsize=10)
     ax1.grid(True, alpha=0.3, axis="y")
@@ -73,7 +76,7 @@ def plot_profit_comparison(
     ax2.axhline(y=0, color="gray", linestyle="--", linewidth=1.5, alpha=0.7)
     ax2.set_xlabel("Straight-line Distance (km)", fontsize=12)
     ax2.set_ylabel("Drone Profit Advantage (CNY)", fontsize=12)
-    if not for_latex:
+    if plot_title:
         ax2.set_title("Drone Profit Advantage vs Distance", fontsize=14)
     ax2.grid(True, alpha=0.3)
     plt.colorbar(sc, ax=ax2, label="Profit Diff (CNY)")
@@ -84,6 +87,8 @@ def plot_profit_comparison(
         os.makedirs(os.path.dirname(save_path), exist_ok=True)
         if for_latex and not save_path.endswith(".pdf"):
             save_path = save_path.rsplit(".", 1)[0] + ".pdf"
+        if plot_title:
+            save_path = _add_title_suffix(save_path)
         plt.savefig(save_path, dpi=dpi, bbox_inches="tight")
         plt.close()
         return save_path
@@ -98,6 +103,7 @@ def plot_cost_breakdown_by_distance(
     save_path: str = None,
     dpi: int = 150,
     for_latex: bool = False,
+    plot_title: bool = False,
 ) -> str:
     """Plot stacked bar cost breakdown at representative distances with revenue overlay.
 
@@ -147,7 +153,7 @@ def plot_cost_breakdown_by_distance(
     ax1.plot(x, revenues, "r--o", linewidth=2, markersize=6, label="Revenue", zorder=10)
     ax1.set_xlabel("Distance (km)", fontsize=12)
     ax1.set_ylabel("Cost / Revenue (CNY)", fontsize=12)
-    if not for_latex:
+    if plot_title:
         ax1.set_title("E-bike Cost Breakdown by Distance", fontsize=14)
     ax1.set_xticks(x)
     ax1.set_xticklabels([f"{d}" for d in rep_distances])
@@ -175,7 +181,7 @@ def plot_cost_breakdown_by_distance(
     ax2.plot(x, revenues, "r--o", linewidth=2, markersize=6, label="Revenue", zorder=10)
     ax2.set_xlabel("Distance (km)", fontsize=12)
     ax2.set_ylabel("Cost / Revenue (CNY)", fontsize=12)
-    if not for_latex:
+    if plot_title:
         ax2.set_title("Drone Cost Breakdown by Distance", fontsize=14)
     ax2.set_xticks(x)
     ax2.set_xticklabels([f"{d}" for d in rep_distances])
@@ -188,6 +194,8 @@ def plot_cost_breakdown_by_distance(
         os.makedirs(os.path.dirname(save_path), exist_ok=True)
         if for_latex and not save_path.endswith(".pdf"):
             save_path = save_path.rsplit(".", 1)[0] + ".pdf"
+        if plot_title:
+            save_path = _add_title_suffix(save_path)
         plt.savefig(save_path, dpi=dpi, bbox_inches="tight")
         plt.close()
         return save_path
@@ -201,6 +209,7 @@ def plot_profit_vs_distance(
     save_path: str = None,
     dpi: int = 150,
     for_latex: bool = False,
+    plot_title: bool = False,
 ) -> str:
     """Plot binned median profit curves with percentile bands, highlighting crossover.
 
@@ -292,7 +301,7 @@ def plot_profit_vs_distance(
 
     ax.set_xlabel("Distance (km)", fontsize=12)
     ax.set_ylabel("Profit per Order (CNY)", fontsize=12)
-    if not for_latex:
+    if plot_title:
         ax.set_title("Profit vs Distance (Median with 25-75% Band)", fontsize=14)
     ax.legend(loc="best", fontsize=11)
     ax.grid(True, alpha=0.3)
@@ -303,6 +312,8 @@ def plot_profit_vs_distance(
         os.makedirs(os.path.dirname(save_path), exist_ok=True)
         if for_latex and not save_path.endswith(".pdf"):
             save_path = save_path.rsplit(".", 1)[0] + ".pdf"
+        if plot_title:
+            save_path = _add_title_suffix(save_path)
         plt.savefig(save_path, dpi=dpi, bbox_inches="tight")
         plt.close()
         return save_path

@@ -84,28 +84,20 @@
   \column{0.5}
 
   \block{Background}{
-    \textbf{Drone delivery: an emerging industry}
-    \begin{itemize}[leftmargin=1.5em, itemsep=0.1em, topsep=0.1em]
-      \item Drones are a \textbf{transformative technology} for transportation and logistics
-      \item \textbf{Low-altitude economy} gaining momentum in China, included in \textbf{China's Government Work Report} in 2024 and 2025
-      \item Global drone delivery market: \$3.47B (2025) $\rightarrow$ \$20.98B (2034), CAGR \textbf{19.45\%} \parencite{fortunebi2026drone}
-    \end{itemize}
-
-    \vspace{0.5em}
-    \textbf{Why food delivery?}
-    \begin{itemize}[leftmargin=1.5em, itemsep=0.1em, topsep=0.1em]
-      \item \textbf{Current constraints:} battery capacity and cargo weight limit drones to short-distance, last-mile logistics
-      \item Drone offers \textbf{food delivery advantages}: lighter packages, shorter distances ($<$ 5\,km), high time sensitivity
-      \item China: \textbf{545 million} users, market growing from $\sim$300B to over \textbf{1 trillion Yuan} (2017--2027) \parencite{statista2024chinafooddelivery}
-    \end{itemize}
-
-    \vspace{0.5em}
-    \textbf{Challenges for drone deployment}
-    \begin{itemize}[leftmargin=1.5em, itemsep=0.1em, topsep=0.1em]
-      \item \textbf{High costs} of purchasing and maintaining drones; significant \textbf{UAS infrastructure} investment required
-      \item \textbf{Lack of predictive models} for environmental impact; unclear if drones offer a \textbf{sustainable advantage}
-    \end{itemize}
-    \vspace{0.5em}
+    \begin{minipage}[c]{0.7\linewidth}
+      \begin{itemize}[leftmargin=1.2em, itemsep=0.15em, topsep=0em]
+        \item \textbf{Low-altitude economy} in China's Government Work Report; drone delivery market: \$3.5B (2025) $\rightarrow$ \$21B (2034) \parencite{fortunebi2026drone}
+        \item Drones are suited to \textbf{short-distance, last-mile} delivery---food orders ($<$5\,km, light, time-sensitive) are ideal candidates for adoption
+        \item China's food delivery: over \textbf{540M} users, market exceeding \textbf{1 trillion Yuan} by 2027 \parencite{statista2024chinafooddelivery}
+        \item High drone costs and UAS infrastructure demand \textbf{predictive models} to assess \textbf{sustainable advantage}
+      \end{itemize}
+    \end{minipage}\hfill
+    \begin{minipage}[c]{0.27\linewidth}
+      \begin{center}
+        \includegraphics[width=\linewidth]{../../figures/screenshot/__image_1.png}
+      \end{center}
+    \end{minipage}
+    \vspace{0.3em}
     \begin{center}
       \begin{tikzpicture}
         \node[draw=colorThree, fill=colorTwo, rounded corners=10pt, inner sep=14pt, text width=0.96\linewidth, align=left, line width=3pt] {
@@ -117,29 +109,42 @@
   }
 
   \block{Research Objectives}{
-    \begin{enumerate}[leftmargin=1.5em, itemsep=0.1em, topsep=0.1em]
-      \item Develop a \textbf{gravity-based demand generation method} producing door-to-door order data for precise emission analysis.
-      \item Conduct the \textbf{first comprehensive comparison} of carbon emissions between e-bike and drone delivery across multiple Chinese cities.
-      \item Identify \textbf{key urban features} that determine when drone delivery achieves lower emissions.
+    \begin{enumerate}[leftmargin=1.2em, itemsep=0.15em, topsep=0.1em]
+      \item Develop a \textbf{gravity-based food delivery demand generation method} producing door-to-door order data for precise emission analysis.
+      \item Conduct the \textbf{first comprehensive comparison} of carbon emissions between e-bike and drone delivery systems across multiple Chinese cities.
+      \item Identify \textbf{key urban features} that determine when drones achieve lower emissions, providing actionable insights for sustainable logistics planning.
     \end{enumerate}
   }
 
   \block{Interim Results}{
-    \begin{minipage}[c]{0.48\linewidth}
+    \vspace{0.3em}
+    \begin{minipage}[c]{0.54\linewidth}
+      \begin{center}
+        \includegraphics[width=\linewidth]{../../figures/remote/shenzhen/shenzhen_heatmap.pdf}
+      \end{center}
+    \end{minipage}\hfill
+    \begin{minipage}[c]{0.46\linewidth}
+      \begin{center}
+        \includegraphics[width=\linewidth]{../../figures/analysis/annual_emissions_comparison.pdf}
+      \end{center}
+    \end{minipage}
+
+    \vspace{0.8em}
+    \begin{minipage}[c]{0.52\linewidth}
       \textbf{Emission Reduction Potential}
-      \begin{itemize}[leftmargin=1.5em, itemsep=0.1em]
+      \begin{itemize}[leftmargin=1.2em, itemsep=0.15em]
         \item Threshold-based assignment: orders above distance $d^*$ go to drones, below to e-bikes. Even with e-bike bundling ($\kappa{=}0.7$--$0.9$), optimal drone deployment achieves significant emission savings.
       \end{itemize}
 
       \vspace{0.5em}
       \textbf{Key Findings}
-      \begin{itemize}[leftmargin=1.5em, itemsep=0.1em]
+      \begin{itemize}[leftmargin=1.2em, itemsep=0.15em]
         \item All-drone delivery reduces emissions by \textbf{33\%} on average vs.\ all e-bike; optimal drone--e-bike mix achieves \textbf{36\%} mean reduction.
+        \item Results are robust across both city-level (Shenzhen) and cross-region analyses.
         \item \textbf{Route factor} (detour ratio) is the strongest predictor of drone emission advantage, with benefits increasing alongside road network complexity and delivery distance.
-        \item Results are robust across city-level analysis of \textbf{Shenzhen} and cross-region comparison.
       \end{itemize}
     \end{minipage}\hfill
-    \begin{minipage}[c]{0.48\linewidth}
+    \begin{minipage}[c]{0.45\linewidth}
       \begin{center}
         \includegraphics[width=\linewidth]{../../figures/remote/shenzhen/shenzhen_emission_reduction.pdf}
       \end{center}
@@ -147,10 +152,12 @@
   }
 
   \block{Future Work}{
-    \begin{itemize}[leftmargin=1.5em, itemsep=0.1em]
-      \item Incorporate \textbf{weather impacts} (wind, rain) on drone energy consumption.
-      \item Extend to other delivery modes (e.g., gasoline cars, electric cars, autonomous vehicles, etc.).
-      \item Develop a \textbf{predictive model} for optimal drone deployment ratios across urban typologies.
+    \begin{itemize}[leftmargin=1.2em, itemsep=0.15em]
+      \item Scale to \textbf{all major Chinese cities} and, ultimately, nationwide coverage.
+      \item Incorporate \textbf{economic analysis} combining emission and cost models.
+      \item Account for \textbf{weather impacts} (wind, rain) on drone energy consumption.
+      \item Extend to \textbf{other delivery modes} (e.g., gasoline cars, electric cars, autonomous vehicles) and compare emissions across last-mile scenarios.
+      \item Develop a \textbf{predictive model} for optimal drone deployment ratios across urban typologies, enabling emission savings estimation without full simulation.
     \end{itemize}
   }
 
@@ -195,29 +202,49 @@
     \end{center}
 
     \vspace{0.5em}
+    \begin{center}
+      \small
+      \renewcommand{\arraystretch}{1.2}
+      \begin{tabular}{l l l l}
+        \toprule
+        \textbf{Data} & \textbf{Source} & \textbf{Description} & \textbf{Size (Shenzhen)} \\
+        \midrule
+        Monthly Sales & Meituan platform & Merchant location \& sales volume & 28,797 stores \\
+        Building Footprint & Global Building Atlas & Floor area as proxy for customer density & 364,994 buildings \\
+        Road Network & OpenStreetMap & Street graph for shortest-path routing & 1M nodes, 47,820 km \\
+        \bottomrule
+      \end{tabular}
+    \end{center}
+
+    \vspace{0.5em}
     % --- Step 1: Data & OD Generation ---
     \textbf{Step 1: Generating realistic delivery orders.}\enspace
-    Real food-delivery platforms do not publish individual order origins and destinations. We reconstruct them using a \textbf{gravity model}---a well-established spatial interaction model that distributes trips between locations based on their ``attractiveness'' and mutual distance.
-
-    \vspace{0.2em}
-    \textit{Input data.}\enspace Monthly sales records of \textbf{1.07 million merchants} provide store locations and order volumes. Building footprints from mapping APIs give potential customer locations.
-
-    \vspace{0.2em}
-    \textit{Gravity model.}\enspace We adopt a \textbf{Tanner impedance function} \parencite{tanner1961factors} that captures a hump-shaped distance decay: demand first rises with distance (reflecting a larger catchment area) then falls as delivery cost increases. Each merchant $i$ with demand $P_i$ distributes orders to nearby buildings $j$:
+    We reconstruct OD pairs using a \textbf{gravity model} with Tanner impedance \parencite{tanner1961factors}. Monthly sales of \textbf{1.07 million merchants} provide store locations; building footprints give customer locations. Each merchant $i$ with demand $P_i$ distributes orders to buildings $j$:
     \[
-      D_{ij} = P_{i} \cdot \frac{v_{j}^\alpha \cdot d_{ij}^{\beta} \cdot e^{-\gamma \cdot d_{ij}}}{\sum_{k \in \mathcal{D}} v_{k}^\alpha \cdot d_{ik}^{\beta} \cdot e^{-\gamma \cdot d_{ik}}}
+      D_{ij} = P_{i} \cdot \frac{v_{j}^\alpha \cdot f(d_{ij})}{\sum_{k \in \mathcal{D}} v_{k}^\alpha \cdot f(d_{ik})}
+      \qquad\qquad
+      f(d) = d^{\beta} \cdot e^{-\gamma \cdot d}
     \]
-    where $\beta{=}1.113$ and $\gamma{=}1.412$ are calibrated from Eleme platform data, and $\alpha{=}1.7$ is set so the mean delivery distance matches the observed 2.23\,km \parencite{zhang_exploration_2023}.
+
+    \vspace{0.2em}
+    \textit{Two-stage calibration.}\enspace
+    \textbf{Stage 1:} We fit the Tanner impedance $f(d)$ to \textbf{278k Eleme orders} (29 days, Beijing), obtaining $\beta{=}1.113$, $\gamma{=}1.412$ ($R^2{=}0.985$).
+    \textbf{Stage 2:} With $\beta, \gamma$ fixed, we sweep the volume exponent $\alpha$ until the model's mean delivery distance matches the observed 2.23\,km \parencite{xie_environmental_2021}, yielding $\alpha{=}1.7$.
 
     \vspace{0.2em}
     \begin{center}
-      \raisebox{-0.5\height}{\includegraphics[width=0.46\linewidth]{../../figures/remote/shenzhen/shenzhen_store_coverage.pdf}}\hfill
-      \raisebox{-0.5\height}{\includegraphics[width=0.46\linewidth]{../../figures/remote/shenzhen/shenzhen_road_distance_distribution.pdf}}
+      \includegraphics[width=0.92\linewidth]{../../figures/calibration/tanner_impedance_fit.png}
     \end{center}
+
+    % \vspace{0.2em}
+    % \begin{center}
+    %   \raisebox{-0.5\height}{\includegraphics[width=0.46\linewidth]{../../figures/calibration/alpha_calibration_5km.png}}\hfill
+    %   \raisebox{-0.5\height}{\includegraphics[width=0.46\linewidth]{../../figures/remote/shenzhen/shenzhen_store_coverage.pdf}}
+    % \end{center}
 
     \vspace{0.2em}
     \textbf{Step 2: Computing delivery distances.}\enspace
-    For each OD pair we compute the \textbf{straight-line (air) distance} for drones and the \textbf{road-network distance} for e-bikes via shortest-path routing on OpenStreetMap. Their ratio is the \textbf{route factor}.
+    For each OD pair we compute: \textbf{air distance} (drone) and \textbf{road-network shortest path} (e-bike, via OSM). Their ratio is the \textbf{route factor}.
 
     \vspace{0.2em}
     \begin{center}
@@ -229,14 +256,18 @@
     % --- Step 3: Emission Models ---
     \textbf{Step 3: Lifecycle emission modelling} \parencite{kirschstein_comparison_2020, figliozzi_lifecycle_2017}\textbf{.}
     \begin{itemize}[leftmargin=1.5em, itemsep=0.1em]
-      \item \textbf{Use phase:} physics-based power models compute energy per trip for each vehicle---e-bike (rolling resistance, aerodynamic drag, grade, acceleration) and drone (induced lift, blade drag, fuselage drag, climb). Energy $\times$ grid emission factor gives use-phase CO$_2$e.
-      \item \textbf{Production \& disposal:} embodied emissions from manufacturing and end-of-life processing of vehicle body and batteries, amortised over the vehicle's \textbf{lifetime delivery count}.
-      \item \textbf{Comparison:} Lifecycle emission comparison vs.\ delivery distance and route factor (road/air distance ratio). Green = drone produces fewer emissions. Drones gain advantage at longer distances and higher route factors.
+      \item \textbf{Use phase:} physics-based power models for e-bike (rolling resistance, drag, grade) and drone (induced lift, blade drag, climb). Energy multiplied by grid emission factor yields CO$_2$e.
+        \begin{itemize}[leftmargin=1.2em, itemsep=0em, topsep=0em]
+          \item \textit{E-bike:} rolling + aero drag + grade + acceleration
+          \item \textit{Drone:} induced lift + profile drag + parasitic + climb + auxiliary
+        \end{itemize}
+      \item \textbf{Production \& disposal:} body frame manufacturing, battery pack production, and end-of-life recycling and landfill; embodied emissions amortised over \textbf{lifetime delivery count}.
+      \item \textbf{Comparison:} drones gain an advantage at longer distances and higher route factors due to lower per-km energy and direct flight paths.
     \end{itemize}
 
     \vspace{0.2em}
     \begin{center}
-      \includegraphics[width=0.92\linewidth]{../../figures/lifecycle/lifecycle_distance_route_factor.pdf}
+      \includegraphics[width=0.75\linewidth]{../../figures/lifecycle/lifecycle_distance_route_factor.pdf}
     \end{center}
     \vspace{-0.5em}
 

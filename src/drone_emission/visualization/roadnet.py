@@ -12,6 +12,7 @@ from ._utils import (
     finalize_plot,
     plot_boundary_box,
     setup_figure,
+    _add_title_suffix,
 )
 
 
@@ -22,6 +23,7 @@ def visualize_roadnet(
     original_boundaries_dict: Optional[Dict[str, float]] = None,
     save_path: Optional[str] = None,
     for_latex: bool = False,
+    plot_title: bool = False,
 ) -> None:
     """Visualize the road network.
 
@@ -55,7 +57,7 @@ def visualize_roadnet(
 
     title = "Road Network Visualization"
     stats_text = f"Nodes: {len(G.nodes)}, Edges: {len(G.edges)}"
-    finalize_plot(fig, ax, save_path, title, stats_text, boundaries_dict, for_latex)
+    finalize_plot(fig, ax, save_path, title, stats_text, boundaries_dict, for_latex, plot_title)
     plt.close(fig)
 
 
@@ -67,6 +69,7 @@ def visualize_path(
     original_boundaries_dict: Optional[Dict[str, float]] = None,
     save_path: Optional[str] = None,
     for_latex: bool = False,
+    plot_title: bool = False,
 ) -> None:
     """Visualize the shortest path on the road network.
 
@@ -119,7 +122,7 @@ def visualize_path(
     stats_text = (
         f"Nodes: {len(G.nodes)}, Edges: {len(G.edges)}\nPath Length: {len(route_nodes)}"
     )
-    finalize_plot(fig, ax, save_path, title, stats_text, boundaries_dict, for_latex)
+    finalize_plot(fig, ax, save_path, title, stats_text, boundaries_dict, for_latex, plot_title)
     plt.close(fig)
 
 
@@ -130,6 +133,7 @@ def visualize_distance_comparison(
     boundaries_dict: Optional[Dict[str, float]] = None,
     save_path: Optional[str] = None,
     for_latex: bool = False,
+    plot_title: bool = False,
 ) -> None:
     """Visualize comparison between straight-line and road network distances.
 
@@ -269,7 +273,7 @@ def visualize_distance_comparison(
     for idx in range(n_samples, len(axes)):
         axes[idx].set_visible(False)
 
-    if not for_latex:
+    if plot_title:
         plt.suptitle(
             "Straight-line vs Road Network Distance Comparison",
             fontsize=14,
@@ -282,6 +286,8 @@ def visualize_distance_comparison(
         os.makedirs(os.path.dirname(save_path), exist_ok=True)
         if for_latex and not save_path.endswith(".pdf"):
             save_path = save_path.rsplit(".", 1)[0] + ".pdf"
+        if plot_title:
+            save_path = _add_title_suffix(save_path)
         # Rasterize heavy elements (basemap, roads) in PDF output
         # Elements with zorder < 12 are rasterized, others remain vector
         if save_path.endswith(".pdf"):

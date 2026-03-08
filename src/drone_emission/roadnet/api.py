@@ -60,6 +60,7 @@ def load_roadnet(region_info, exp_config):
 
     roadnet_fig_path = os.path.join(fig_dir, f"{region_name_en.lower()}_roadnet.png")
     for_latex = exp_config.get("for_latex", False)
+    plot_title = exp_config.get("plot_title", False)
     roadnet_vis = exp_config.get("roadnet_visualization", True)
 
     if roadnet_vis:
@@ -72,6 +73,7 @@ def load_roadnet(region_info, exp_config):
                 original_boundaries_dict=boundaries_dict,
                 save_path=roadnet_fig_path,
                 for_latex=for_latex,
+                plot_title=plot_title,
             )
             del G_vis
         else:
@@ -80,7 +82,7 @@ def load_roadnet(region_info, exp_config):
                 f"generating scatter plot instead..."
             )
             _visualize_roadnet_scatter(
-                graph, large_bounds_dict, roadnet_fig_path, for_latex
+                graph, large_bounds_dict, roadnet_fig_path, for_latex, plot_title
             )
     else:
         print("Road network visualization disabled (roadnet_visualization = false)")
@@ -322,7 +324,8 @@ def _visualize_sample_paths(
         axes[idx].set_visible(False)
 
     for_latex = exp_config.get("for_latex", False)
-    if not for_latex:
+    plot_title = exp_config.get("plot_title", False)
+    if plot_title:
         plt.suptitle(
             "Straight-line vs Road Network Distance Comparison",
             fontsize=14, fontweight="bold", y=1.02,
@@ -335,6 +338,9 @@ def _visualize_sample_paths(
     os.makedirs(os.path.dirname(comparison_fig_path), exist_ok=True)
     if for_latex and not comparison_fig_path.endswith(".pdf"):
         comparison_fig_path = comparison_fig_path.rsplit(".", 1)[0] + ".pdf"
+    if plot_title:
+        from visualization._utils import _add_title_suffix
+        comparison_fig_path = _add_title_suffix(comparison_fig_path)
     if comparison_fig_path.endswith(".pdf"):
         for ax in axes[:len(sample_paths)]:
             ax.set_rasterization_zorder(12)
@@ -344,7 +350,7 @@ def _visualize_sample_paths(
 
 
 def _visualize_roadnet_scatter(
-    graph, large_bounds_dict, save_path, for_latex
+    graph, large_bounds_dict, save_path, for_latex, plot_title=False
 ):
     """Fallback scatter-plot visualization for large road networks."""
     import matplotlib.pyplot as plt
@@ -373,6 +379,9 @@ def _visualize_roadnet_scatter(
         os.makedirs(os.path.dirname(save_path), exist_ok=True)
         if for_latex and not save_path.endswith(".pdf"):
             save_path = save_path.rsplit(".", 1)[0] + ".pdf"
+        if plot_title:
+            from visualization._utils import _add_title_suffix
+            save_path = _add_title_suffix(save_path)
         plt.savefig(save_path, dpi=150, bbox_inches="tight")
         print(f"Road network scatter plot saved to {save_path}")
 

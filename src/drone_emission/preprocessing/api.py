@@ -43,6 +43,7 @@ def prepare_sales(region_info, exp_config):
         os.makedirs(fig_dir)
 
     for_latex = exp_config.get("for_latex", False)
+    plot_title = exp_config.get("plot_title", False)
 
     plot_sales_distribution(
         region_data,
@@ -52,6 +53,7 @@ def prepare_sales(region_info, exp_config):
             fig_dir, f"{region_name_en.lower()}_month_sales_distribution.png"
         ),
         for_latex=for_latex,
+        plot_title=plot_title,
     )
     plot_sales_distribution(
         region_data,
@@ -61,6 +63,7 @@ def prepare_sales(region_info, exp_config):
             fig_dir, f"{region_name_en.lower()}_month_sales_distribution_log.png"
         ),
         for_latex=for_latex,
+        plot_title=plot_title,
     )
     plot_sales_heatmap(
         region_data,
@@ -69,6 +72,7 @@ def prepare_sales(region_info, exp_config):
         boundaries_dict=boundaries_dict,
         save_path=os.path.join(fig_dir, f"{region_name_en.lower()}_heatmap.png"),
         for_latex=for_latex,
+        plot_title=plot_title,
     )
     plot_store_scatter(
         region_data,
@@ -77,5 +81,6 @@ def prepare_sales(region_info, exp_config):
         boundaries_dict=boundaries_dict,
         save_path=os.path.join(fig_dir, f"{region_name_en.lower()}_scatter.png"),
         for_latex=for_latex,
+        plot_title=plot_title,
     )
     print(f"Visualization for {region_name_en} completed.\n")

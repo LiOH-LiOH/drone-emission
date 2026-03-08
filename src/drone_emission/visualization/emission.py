@@ -9,6 +9,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
+from ._utils import _add_title_suffix
+
 
 def add_experiment_info_box(
     ax,
@@ -62,6 +64,7 @@ def plot_emission_reduction_analysis(
     save_path: str = None,
     dpi: int = 150,
     for_latex: bool = False,
+    plot_title: bool = False,
 ) -> str:
     """
     绘制排放减少分析图
@@ -112,7 +115,7 @@ def plot_emission_reduction_analysis(
 
     ax1.set_xlabel("Distance Threshold (km)", fontsize=12)
     ax1.set_ylabel("Emission Reduction (%)", fontsize=12)
-    if not for_latex:
+    if plot_title:
         ax1.set_title("Emission Reduction vs Distance Threshold", fontsize=14)
     ax1.grid(True, alpha=0.3)
     ax1.axhline(y=0, color="gray", linestyle="--", alpha=0.5)
@@ -145,7 +148,7 @@ def plot_emission_reduction_analysis(
 
     ax2.set_xlabel("Drone Delivery Ratio (%)", fontsize=12)
     ax2.set_ylabel("Emission Reduction (%)", fontsize=12)
-    if not for_latex:
+    if plot_title:
         ax2.set_title("Emission Reduction vs Drone Ratio", fontsize=14)
     ax2.grid(True, alpha=0.3)
     ax2.axhline(y=0, color="gray", linestyle="--", alpha=0.5)
@@ -157,6 +160,8 @@ def plot_emission_reduction_analysis(
         os.makedirs(os.path.dirname(save_path), exist_ok=True)
         if for_latex and not save_path.endswith(".pdf"):
             save_path = save_path.rsplit(".", 1)[0] + ".pdf"
+        if plot_title:
+            save_path = _add_title_suffix(save_path)
         plt.savefig(save_path, dpi=dpi, bbox_inches="tight")
         plt.close()
         return save_path
@@ -172,6 +177,7 @@ def plot_road_distance_distribution(
     dpi: int = 150,
     n_bins: int = 50,
     for_latex: bool = False,
+    plot_title: bool = False,
 ) -> str:
     """
     绘制道路距离分布图（按年销量加权）
@@ -204,7 +210,7 @@ def plot_road_distance_distribution(
     )
     ax1.set_xlabel("Road Distance (km)", fontsize=12)
     ax1.set_ylabel("Count", fontsize=12)
-    if not for_latex:
+    if plot_title:
         ax1.set_title("Road Distance Distribution (Unweighted)", fontsize=14)
     ax1.grid(True, alpha=0.3, axis="y")
 
@@ -225,7 +231,7 @@ def plot_road_distance_distribution(
         linewidth=2,
         label=f"Median: {median_dist:.2f} km",
     )
-    if not for_latex:
+    if plot_title:
         ax1.legend(loc="upper right")
 
     # 图2: 按年销量加权的距离分布
@@ -240,7 +246,7 @@ def plot_road_distance_distribution(
     )
     ax2.set_xlabel("Road Distance (km)", fontsize=12)
     ax2.set_ylabel("Weighted Count (by Annual Sales)", fontsize=12)
-    if not for_latex:
+    if plot_title:
         ax2.set_title(
             "Road Distance Distribution (Weighted by Annual Sales)", fontsize=14
         )
@@ -269,7 +275,7 @@ def plot_road_distance_distribution(
         linewidth=2,
         label=f"Weighted Median: {weighted_median:.2f} km",
     )
-    if not for_latex:
+    if plot_title:
         ax2.legend(loc="upper right")
 
     plt.tight_layout()
@@ -278,6 +284,8 @@ def plot_road_distance_distribution(
         os.makedirs(os.path.dirname(save_path), exist_ok=True)
         if for_latex and not save_path.endswith(".pdf"):
             save_path = save_path.rsplit(".", 1)[0] + ".pdf"
+        if plot_title:
+            save_path = _add_title_suffix(save_path)
         plt.savefig(save_path, dpi=dpi, bbox_inches="tight")
         plt.close()
         return save_path
@@ -293,6 +301,7 @@ def plot_emission_comparison_bar(
     save_path: str = None,
     dpi: int = 150,
     for_latex: bool = False,
+    plot_title: bool = False,
 ) -> str:
     """
     绘制不同配送方式排放对比柱状图
@@ -332,7 +341,7 @@ def plot_emission_comparison_bar(
         )
 
     ax.set_ylabel("Total Emissions (kg CO2e)", fontsize=12)
-    if not for_latex:
+    if plot_title:
         ax.set_title("Emission Comparison by Delivery Mode", fontsize=14)
     ax.grid(axis="y", alpha=0.3)
 
@@ -342,6 +351,8 @@ def plot_emission_comparison_bar(
         os.makedirs(os.path.dirname(save_path), exist_ok=True)
         if for_latex and not save_path.endswith(".pdf"):
             save_path = save_path.rsplit(".", 1)[0] + ".pdf"
+        if plot_title:
+            save_path = _add_title_suffix(save_path)
         plt.savefig(save_path, dpi=dpi, bbox_inches="tight")
         plt.close()
         return save_path
@@ -356,6 +367,7 @@ def plot_distance_distribution(
     save_path: str = None,
     dpi: int = 150,
     for_latex: bool = False,
+    plot_title: bool = False,
 ) -> str:
     """
     绘制配送距离分布直方图
@@ -387,7 +399,7 @@ def plot_distance_distribution(
 
     ax.set_xlabel("Road Distance (km)", fontsize=12)
     ax.set_ylabel("Frequency", fontsize=12)
-    if not for_latex:
+    if plot_title:
         ax.set_title("Distribution of Delivery Distances", fontsize=14)
     ax.grid(axis="y", alpha=0.3)
 
@@ -397,6 +409,8 @@ def plot_distance_distribution(
         os.makedirs(os.path.dirname(save_path), exist_ok=True)
         if for_latex and not save_path.endswith(".pdf"):
             save_path = save_path.rsplit(".", 1)[0] + ".pdf"
+        if plot_title:
+            save_path = _add_title_suffix(save_path)
         plt.savefig(save_path, dpi=dpi, bbox_inches="tight")
         plt.close()
         return save_path
@@ -415,6 +429,7 @@ def plot_sensitivity_analysis(
     save_path: str = None,
     dpi: int = 150,
     for_latex: bool = False,
+    plot_title: bool = False,
 ) -> str:
     """
     绘制单参数敏感性分析图
@@ -448,13 +463,13 @@ def plot_sensitivity_analysis(
         f"{param_name} ({param_unit})" if param_unit else param_name, fontsize=12
     )
     ax1.set_ylabel("Emissions (g CO2e)", fontsize=12)
-    if not for_latex:
+    if plot_title:
         ax1.set_title(f"Emissions vs {param_name}", fontsize=14)
     ax1.legend(loc="upper left")
     ax1.grid(True, alpha=0.3)
 
     # 添加实验设定信息
-    if experiment_settings and not for_latex:
+    if experiment_settings and plot_title:
         add_experiment_info_box(ax1, experiment_settings, loc="lower right")
 
     # 图2: 无人机相对电动车的排放变化百分比
@@ -468,7 +483,7 @@ def plot_sensitivity_analysis(
         f"{param_name} ({param_unit})" if param_unit else param_name, fontsize=12
     )
     ax2.set_ylabel("Drone Emissions Relative to E-bike (%)", fontsize=12)
-    if not for_latex:
+    if plot_title:
         ax2.set_title(f"Relative Emission Difference vs {param_name}", fontsize=14)
     ax2.grid(True, alpha=0.3)
 
@@ -495,6 +510,8 @@ def plot_sensitivity_analysis(
         os.makedirs(os.path.dirname(save_path), exist_ok=True)
         if for_latex and not save_path.endswith(".pdf"):
             save_path = save_path.rsplit(".", 1)[0] + ".pdf"
+        if plot_title:
+            save_path = _add_title_suffix(save_path)
         plt.savefig(save_path, dpi=dpi, bbox_inches="tight")
         plt.close()
         return save_path
@@ -511,6 +528,7 @@ def plot_distance_route_factor_heatmap(
     dpi: int = 150,
     experiment_settings: Dict[str, str] = None,
     for_latex: bool = False,
+    plot_title: bool = False,
 ) -> str:
     """
     绘制配送距离 × 路径系数的二维热力图
@@ -568,14 +586,14 @@ def plot_distance_route_factor_heatmap(
 
     ax.set_xlabel("Delivery Distance (km)", fontsize=12)
     ax.set_ylabel("Route Factor (road/straight-line)", fontsize=12)
-    if not for_latex:
+    if plot_title:
         ax.set_title(
             "Emission Comparison: Drone vs E-bike\n(Negative = Drone Better)",
             fontsize=14,
         )
 
     # 添加实验设置信息框
-    if not for_latex:
+    if plot_title:
         add_experiment_info_box(ax, experiment_settings, loc="upper left")
 
     plt.tight_layout()
@@ -584,6 +602,8 @@ def plot_distance_route_factor_heatmap(
         os.makedirs(os.path.dirname(save_path), exist_ok=True)
         if for_latex and not save_path.endswith(".pdf"):
             save_path = save_path.rsplit(".", 1)[0] + ".pdf"
+        if plot_title:
+            save_path = _add_title_suffix(save_path)
         plt.savefig(save_path, dpi=dpi, bbox_inches="tight")
         plt.close()
         return save_path
@@ -602,6 +622,7 @@ def plot_velocity_power_emission(
     dpi: int = 150,
     experiment_settings: Dict[str, str] = None,
     for_latex: bool = False,
+    plot_title: bool = False,
 ) -> str:
     """
     绘制速度-功率-排放敏感性分析图
@@ -636,7 +657,7 @@ def plot_velocity_power_emission(
     ax1.plot(velocities, powers, color_power, linewidth=2, markersize=6)
     ax1.set_xlabel(xlabel, fontsize=12)
     ax1.set_ylabel("Power (kW)", fontsize=12)
-    if not for_latex:
+    if plot_title:
         ax1.set_title(f"{vehicle_type} Power vs Velocity", fontsize=14)
     ax1.grid(True, alpha=0.3)
 
@@ -645,7 +666,7 @@ def plot_velocity_power_emission(
     ax2.plot(velocities, emissions, color_emission, linewidth=2, markersize=6)
     ax2.set_xlabel(xlabel, fontsize=12)
     ax2.set_ylabel("Emissions (g CO2e)", fontsize=12)
-    if not for_latex:
+    if plot_title:
         title = f"{vehicle_type} Emissions vs Velocity"
         if distance_info:
             title += f" ({distance_info})"
@@ -653,7 +674,7 @@ def plot_velocity_power_emission(
     ax2.grid(True, alpha=0.3)
 
     # 添加实验设置信息框
-    if not for_latex:
+    if plot_title:
         add_experiment_info_box(ax1, experiment_settings, loc="lower right")
 
     plt.tight_layout()
@@ -662,6 +683,8 @@ def plot_velocity_power_emission(
         os.makedirs(os.path.dirname(save_path), exist_ok=True)
         if for_latex and not save_path.endswith(".pdf"):
             save_path = save_path.rsplit(".", 1)[0] + ".pdf"
+        if plot_title:
+            save_path = _add_title_suffix(save_path)
         plt.savefig(save_path, dpi=dpi, bbox_inches="tight")
         plt.close()
         return save_path
@@ -679,6 +702,7 @@ def plot_energy_consumption_vs_speed(
     dpi: int = 150,
     experiment_settings: Dict[str, str] = None,
     for_latex: bool = False,
+    plot_title: bool = False,
 ) -> str:
     """
     绘制能耗(Wh/km)与速度的关系图
@@ -738,13 +762,13 @@ def plot_energy_consumption_vs_speed(
 
     ax.set_xlabel(xlabel, fontsize=12)
     ax.set_ylabel("Energy Consumption (Wh/km)", fontsize=12)
-    if not for_latex:
+    if plot_title:
         ax.set_title(f"{vehicle_type} Energy Consumption vs Velocity", fontsize=14)
     ax.legend(loc="upper left")
     ax.grid(True, alpha=0.3)
 
     # 添加实验设置信息框
-    if not for_latex:
+    if plot_title:
         add_experiment_info_box(ax, experiment_settings, loc="lower right")
 
     plt.tight_layout()
@@ -753,6 +777,8 @@ def plot_energy_consumption_vs_speed(
         os.makedirs(os.path.dirname(save_path), exist_ok=True)
         if for_latex and not save_path.endswith(".pdf"):
             save_path = save_path.rsplit(".", 1)[0] + ".pdf"
+        if plot_title:
+            save_path = _add_title_suffix(save_path)
         plt.savefig(save_path, dpi=dpi, bbox_inches="tight")
         plt.close()
         return save_path
@@ -770,6 +796,7 @@ def plot_combined_velocity_power(
     dpi: int = 150,
     experiment_settings: Dict[str, str] = None,
     for_latex: bool = False,
+    plot_title: bool = False,
 ) -> str:
     """
     将无人机和电动车的速度-功率曲线绘制在同一张图上（双X轴）
@@ -824,11 +851,11 @@ def plot_combined_velocity_power(
     labels = [l.get_label() for l in lines]
     ax1.legend(lines, labels, loc="upper left", fontsize=11)
 
-    if not for_latex:
+    if plot_title:
         ax1.set_title("Power vs Velocity Comparison", fontsize=14)
 
     # 添加实验设置信息框
-    if not for_latex:
+    if plot_title:
         add_experiment_info_box(ax1, experiment_settings, loc="lower right")
 
     plt.tight_layout()
@@ -837,6 +864,8 @@ def plot_combined_velocity_power(
         os.makedirs(os.path.dirname(save_path), exist_ok=True)
         if for_latex and not save_path.endswith(".pdf"):
             save_path = save_path.rsplit(".", 1)[0] + ".pdf"
+        if plot_title:
+            save_path = _add_title_suffix(save_path)
         plt.savefig(save_path, dpi=dpi, bbox_inches="tight")
         plt.close()
         return save_path
@@ -854,6 +883,7 @@ def plot_velocity_power_stacked(
     dpi: int = 150,
     experiment_settings: Dict[str, str] = None,
     for_latex: bool = False,
+    plot_title: bool = False,
 ) -> str:
     """
     绘制速度-功率对比的堆叠柱状图，显示各功率分量
@@ -908,7 +938,7 @@ def plot_velocity_power_stacked(
 
     ax1.set_xlabel("Drone Horizontal Velocity (km/h)", fontsize=12)
     ax1.set_ylabel("Power (W)", fontsize=12)
-    if not for_latex:
+    if plot_title:
         ax1.set_title("Drone Power Breakdown vs Velocity", fontsize=14)
     ax1.set_xticks(x_drone)
     ax1.set_xticklabels([f"{v:.0f}" for v in drone_velocities])
@@ -948,7 +978,7 @@ def plot_velocity_power_stacked(
 
     ax2.set_xlabel("E-bike Velocity (km/h)", fontsize=12)
     ax2.set_ylabel("Power (W)", fontsize=12)
-    if not for_latex:
+    if plot_title:
         ax2.set_title("E-bike Power Breakdown vs Velocity", fontsize=14)
     ax2.set_xticks(x_ebike)
     ax2.set_xticklabels([f"{v:.0f}" for v in ebike_velocities])
@@ -956,7 +986,7 @@ def plot_velocity_power_stacked(
     ax2.grid(True, alpha=0.3, axis="y")
 
     # 添加实验设置信息框
-    if not for_latex:
+    if plot_title:
         add_experiment_info_box(ax2, experiment_settings, loc="lower right")
 
     plt.tight_layout()
@@ -965,6 +995,8 @@ def plot_velocity_power_stacked(
         os.makedirs(os.path.dirname(save_path), exist_ok=True)
         if for_latex and not save_path.endswith(".pdf"):
             save_path = save_path.rsplit(".", 1)[0] + ".pdf"
+        if plot_title:
+            save_path = _add_title_suffix(save_path)
         plt.savefig(save_path, dpi=dpi, bbox_inches="tight")
         plt.close()
         return save_path
@@ -980,6 +1012,7 @@ def plot_distance_detour_scatter(
     save_path: str = None,
     dpi: int = 150,
     for_latex: bool = False,
+    plot_title: bool = False,
 ) -> str:
     """
     绘制直线距离与绕行比的关系图（中位数线 + 10-90%区间）
@@ -1035,7 +1068,7 @@ def plot_distance_detour_scatter(
 
     ax.set_xlabel("Straight-line Distance (km)", fontsize=12)
     ax.set_ylabel("Detour Ratio (road / straight-line)", fontsize=12)
-    if not for_latex:
+    if plot_title:
         ax.set_title("Distance vs Detour Ratio", fontsize=14)
     ax.legend(loc="upper right", fontsize=10)
     ax.grid(True, alpha=0.3)
@@ -1045,7 +1078,7 @@ def plot_distance_detour_scatter(
     ax.set_ylim(0.9, np.nanmax(bin_p90) * 1.05)
 
     # 添加统计信息
-    if not for_latex:
+    if plot_title:
         stats_text = (
             f"n = {len(distances):,}\n"
             f"Mean: {detour_ratios.mean():.2f}\n"
@@ -1064,6 +1097,8 @@ def plot_distance_detour_scatter(
         os.makedirs(os.path.dirname(save_path), exist_ok=True)
         if for_latex and not save_path.endswith(".pdf"):
             save_path = save_path.rsplit(".", 1)[0] + ".pdf"
+        if plot_title:
+            save_path = _add_title_suffix(save_path)
         plt.savefig(save_path, dpi=dpi, bbox_inches="tight")
         plt.close()
         return save_path

@@ -188,7 +188,15 @@ def add_basemap_and_boundaries(
         print(f"No adcode found for {city_name_cn}, skipping boundaries.")
 
 
-def finalize_plot(fig, ax, save_path, title, stats_text, boundaries_dict=None, for_latex=False):
+def _add_title_suffix(save_path):
+    """Insert '_t' before the file extension in save_path."""
+    if not save_path:
+        return save_path
+    base, ext = save_path.rsplit('.', 1)
+    return f"{base}_t.{ext}"
+
+
+def finalize_plot(fig, ax, save_path, title, stats_text, boundaries_dict=None, for_latex=False, plot_title=False):
     """Finalize plot with title, labels, and axis limits.
 
     Args:
@@ -199,13 +207,14 @@ def finalize_plot(fig, ax, save_path, title, stats_text, boundaries_dict=None, f
         stats_text: Statistics text to display
         boundaries_dict: Optional dict with min_lng, max_lng, min_lat, max_lat
                         If provided, uses fixed boundaries for axis limits
-        for_latex: If True, skip title and stats text for LaTeX export
+        for_latex: If True, save as PDF format
+        plot_title: If True, show title and stats text
     """
     # Set labels
     ax.set_xlabel("Longitude", fontsize=12)
     ax.set_ylabel("Latitude", fontsize=12)
 
-    if not for_latex:
+    if plot_title:
         ax.set_title(
             title,
             fontsize=16,
@@ -220,7 +229,7 @@ def finalize_plot(fig, ax, save_path, title, stats_text, boundaries_dict=None, f
     ax.ticklabel_format(useOffset=False, style="plain")
 
     # Add statistics
-    if not for_latex:
+    if plot_title:
         ax.text(
             0.02,
             0.98,
@@ -251,6 +260,9 @@ def finalize_plot(fig, ax, save_path, title, stats_text, boundaries_dict=None, f
         # Use PDF for LaTeX, PNG otherwise
         if for_latex and not save_path.endswith('.pdf'):
             save_path = save_path.rsplit('.', 1)[0] + '.pdf'
+        # Add _t suffix for titled figures
+        if plot_title:
+            save_path = _add_title_suffix(save_path)
         # Rasterize heavy elements (basemap, buildings, roads) in PDF output
         # Elements with zorder < 12 are rasterized, others remain vector
         if save_path.endswith('.pdf'):

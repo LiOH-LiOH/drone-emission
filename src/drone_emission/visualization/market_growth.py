@@ -19,6 +19,7 @@ def plot_market_size_bar(
     data_path: str = None,
     save_path: str = None,
     for_latex: bool = False,
+    plot_title: bool = False,
 ):
     """Plot bar chart of China online food delivery market size.
 
@@ -117,7 +118,7 @@ def plot_market_size_bar(
     ax.set_xlabel("Year", fontsize=13)
     ax.set_ylabel("Market Size (Billion Yuan)", fontsize=13)
 
-    if not for_latex:
+    if plot_title:
         ax.set_title(
             "China Online Food Delivery Market Size (2017-2027)",
             fontsize=16,
@@ -136,7 +137,7 @@ def plot_market_size_bar(
     ax.set_ylim(0, max(market_size) * 1.15)
 
     # Add source annotation
-    if not for_latex:
+    if plot_title:
         ax.annotate(
             "Source: iiMedia Research via Statista",
             xy=(0.99, 0.01),
@@ -154,13 +155,14 @@ def plot_market_size_bar(
     os.makedirs(os.path.dirname(save_path), exist_ok=True)
 
     if for_latex:
-        pdf_path = save_path + ".pdf"
-        plt.savefig(pdf_path, dpi=300, bbox_inches="tight")
-        print(f"Figure saved to {pdf_path}")
+        final_path = save_path + ".pdf"
     else:
-        png_path = save_path + ".png"
-        plt.savefig(png_path, dpi=300, bbox_inches="tight")
-        print(f"Figure saved to {png_path}")
+        final_path = save_path + ".png"
+    if plot_title:
+        from ._utils import _add_title_suffix
+        final_path = _add_title_suffix(final_path)
+    plt.savefig(final_path, dpi=300, bbox_inches="tight")
+    print(f"Figure saved to {final_path}")
 
     plt.close()
 

@@ -228,6 +228,7 @@ def analyze_equity(region_info, exp_config) -> pd.DataFrame:
 
     # Generate visualizations
     for_latex = exp_config.get("for_latex", False)
+    plot_title = exp_config.get("plot_title", False)
     print("\nGenerating visualizations...")
 
     # Emission reduction heatmap
@@ -239,6 +240,7 @@ def analyze_equity(region_info, exp_config) -> pd.DataFrame:
         cmap="RdYlGn",
         save_path=os.path.join(fig_dir, f"{region_name_en.lower()}_zone_emission_reduction.pdf"),
         for_latex=for_latex,
+        plot_title=plot_title,
         min_deliveries=min_deliveries,
     )
 
@@ -252,6 +254,7 @@ def analyze_equity(region_info, exp_config) -> pd.DataFrame:
             cmap="RdYlGn",
             save_path=os.path.join(fig_dir, f"{region_name_en.lower()}_zone_time_saving.pdf"),
             for_latex=for_latex,
+            plot_title=plot_title,
             min_deliveries=min_deliveries,
         )
 
@@ -265,6 +268,7 @@ def analyze_equity(region_info, exp_config) -> pd.DataFrame:
             cmap="YlOrRd",
             save_path=os.path.join(fig_dir, f"{region_name_en.lower()}_zone_building_count.pdf"),
             for_latex=for_latex,
+            plot_title=plot_title,
             min_deliveries=0,
         )
 
@@ -278,6 +282,7 @@ def analyze_equity(region_info, exp_config) -> pd.DataFrame:
             cmap="Blues",
             save_path=os.path.join(fig_dir, f"{region_name_en.lower()}_zone_intersections.pdf"),
             for_latex=for_latex,
+            plot_title=plot_title,
             min_deliveries=0,
         )
 
@@ -290,6 +295,7 @@ def analyze_equity(region_info, exp_config) -> pd.DataFrame:
             f"{region_name_en} - Emission Reduction vs Building Count",
             save_path=os.path.join(fig_dir, f"{region_name_en.lower()}_emission_vs_buildings.pdf"),
             for_latex=for_latex,
+            plot_title=plot_title,
             min_deliveries=0,  # Already filtered
         )
 
@@ -301,6 +307,7 @@ def analyze_equity(region_info, exp_config) -> pd.DataFrame:
             f"{region_name_en} - Emission Reduction vs Intersection Count",
             save_path=os.path.join(fig_dir, f"{region_name_en.lower()}_emission_vs_intersections.pdf"),
             for_latex=for_latex,
+            plot_title=plot_title,
             min_deliveries=0,  # Already filtered
         )
 
@@ -314,6 +321,7 @@ def analyze_equity(region_info, exp_config) -> pd.DataFrame:
                 f"{region_name_en} - Time Saving vs Building Count",
                 save_path=os.path.join(fig_dir, f"{region_name_en.lower()}_time_vs_buildings.pdf"),
                 for_latex=for_latex,
+                plot_title=plot_title,
                 min_deliveries=0,  # Already filtered
             )
 
@@ -325,6 +333,7 @@ def analyze_equity(region_info, exp_config) -> pd.DataFrame:
                 f"{region_name_en} - Time Saving vs Intersection Count",
                 save_path=os.path.join(fig_dir, f"{region_name_en.lower()}_time_vs_intersections.pdf"),
                 for_latex=for_latex,
+                plot_title=plot_title,
                 min_deliveries=0,  # Already filtered
             )
 
@@ -345,6 +354,7 @@ def analyze_equity(region_info, exp_config) -> pd.DataFrame:
         corr_columns,
         save_path=os.path.join(fig_dir, f"{region_name_en.lower()}_zone_correlations.pdf"),
         for_latex=for_latex,
+        plot_title=plot_title,
         min_deliveries=0,  # Already filtered
     )
 

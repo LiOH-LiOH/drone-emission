@@ -80,6 +80,7 @@ def plot_regions_on_china_map(
     save_path: str = None,
     figsize: tuple = (12, 10),
     for_latex: bool = False,
+    plot_title: bool = False,
 ):
     """Plot study regions as scatter points on a China map.
 
@@ -169,7 +170,7 @@ def plot_regions_on_china_map(
     ax.set_xlabel("Longitude", fontsize=12)
     ax.set_ylabel("Latitude", fontsize=12)
 
-    if not for_latex:
+    if plot_title:
         ax.set_title("Study Regions in China", fontsize=14, fontweight="bold")
 
     # Add grid
@@ -185,6 +186,9 @@ def plot_regions_on_china_map(
     if save_path:
         if for_latex and not save_path.endswith(".pdf"):
             save_path = save_path.rsplit(".", 1)[0] + ".pdf"
+        if plot_title:
+            from ._utils import _add_title_suffix
+            save_path = _add_title_suffix(save_path)
         os.makedirs(os.path.dirname(save_path), exist_ok=True)
         plt.savefig(save_path, dpi=300, bbox_inches="tight")
         print(f"Plot saved to {save_path}")

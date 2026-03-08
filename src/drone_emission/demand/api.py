@@ -132,9 +132,18 @@ def generate_od_pairs(region_info, exp_config):
     )
 
     # === Plot store coverage example ===
-    # Find a store with many nearby buildings for visualization
+    # Pick a store near the center of the region for visualization
+    bounds = region_config.get("boundaries_dict", {})
+    center_lat = (bounds.get("min_lat", 0) + bounds.get("max_lat", 0)) / 2
+    center_lng = (bounds.get("min_lng", 0) + bounds.get("max_lng", 0)) / 2
+    dists_to_center = [
+        (sc[0] - center_lat) ** 2 + (sc[1] - center_lng) ** 2
+        for sc in store_coords
+    ]
+    # Among stores with nearby buildings, pick the one closest to the center
     nearby_counts = [len(idx) for idx in indices_list]
-    example_idx = np.argmax(nearby_counts)  # Store with most nearby buildings
+    candidates = [i for i, c in enumerate(nearby_counts) if c > 0]
+    example_idx = min(candidates, key=lambda i: dists_to_center[i])
 
     fig_dir = os.path.join(
         exp_config["figures_dir"], region_level, region_name_en.lower()
@@ -150,6 +159,7 @@ def generate_od_pairs(region_info, exp_config):
     large_bounds_dict = region_info.get_stat("enlarged_boundaries")
 
     for_latex = exp_config.get("for_latex", False)
+    plot_title = exp_config.get("plot_title", False)
     visualize_store_coverage(
         buildings_gdf=buildings_gdf,
         store_coord=example_store_coord,
@@ -161,6 +171,7 @@ def generate_od_pairs(region_info, exp_config):
         radius_km=delivery_radius_km,
         save_path=os.path.join(fig_dir, f"{region_name_en.lower()}_store_coverage.png"),
         for_latex=for_latex,
+        plot_title=plot_title,
     )
 
     # === Process each store and its nearby buildings ===

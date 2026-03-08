@@ -125,12 +125,13 @@ def cal_profit(region_info, exp_config) -> pd.DataFrame:
         region_name_en.lower(),
     )
     for_latex = exp_config.get("for_latex", False)
+    plot_title = exp_config.get("plot_title", False)
 
     # Plot 1: Profit comparison
     save_path = os.path.join(
         fig_save_dir, f"{region_name_en.lower()}_profit_comparison.png"
     )
-    fig_path = plot_profit_comparison(od_df, save_path=save_path, for_latex=for_latex)
+    fig_path = plot_profit_comparison(od_df, save_path=save_path, for_latex=for_latex, plot_title=plot_title)
     if fig_path:
         print(f"Saved: {fig_path}")
 
@@ -139,7 +140,7 @@ def cal_profit(region_info, exp_config) -> pd.DataFrame:
         fig_save_dir, f"{region_name_en.lower()}_cost_breakdown.png"
     )
     fig_path = plot_cost_breakdown_by_distance(
-        pa, exp_config, save_path=save_path, for_latex=for_latex
+        pa, exp_config, save_path=save_path, for_latex=for_latex, plot_title=plot_title
     )
     if fig_path:
         print(f"Saved: {fig_path}")
@@ -148,7 +149,7 @@ def cal_profit(region_info, exp_config) -> pd.DataFrame:
     save_path = os.path.join(
         fig_save_dir, f"{region_name_en.lower()}_profit_vs_distance.png"
     )
-    fig_path = plot_profit_vs_distance(od_df, save_path=save_path, for_latex=for_latex)
+    fig_path = plot_profit_vs_distance(od_df, save_path=save_path, for_latex=for_latex, plot_title=plot_title)
     if fig_path:
         print(f"Saved: {fig_path}")
 

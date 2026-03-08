@@ -4,7 +4,8 @@ active_env = "local"
 
 # ============ Default Settings (shared) ============
 delivery_radius_km = 5
-for_latex = true  # Set to true for LaTeX export (PDF, no titles/info boxes)
+for_latex = true  # Set to true for LaTeX export (PDF format)
+plot_title = true  # Set to true to show titles/info boxes (e.g. for posters); adds _t suffix to filenames
 roadnet_visualization = false  # Set to false to skip road network visualization (slow at city scale)
 
 # OD pair generation parameters

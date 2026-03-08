@@ -313,11 +313,13 @@ def cal_emission(region_info, exp_config):
         fig_save_dir, f"{region_name_en.lower()}_emission_reduction.png"
     )
     for_latex = exp_config.get("for_latex", False)
+    plot_title = exp_config.get("plot_title", False)
     fig_path = plot_emission_reduction_analysis(
         results_df,
         bundle_results=bundle_results,
         save_path=save_path,
         for_latex=for_latex,
+        plot_title=plot_title,
     )
     print(f"\n图表已保存: {fig_path}")
 
@@ -327,7 +329,7 @@ def cal_emission(region_info, exp_config):
         fig_save_dir, f"{region_name_en.lower()}_road_distance_distribution.png"
     )
     dist_fig_path = plot_road_distance_distribution(
-        road_distances, annual_sales, save_path=dist_save_path, for_latex=for_latex
+        road_distances, annual_sales, save_path=dist_save_path, for_latex=for_latex, plot_title=plot_title
     )
     print(f"道路距离分布图已保存: {dist_fig_path}")
 
@@ -342,6 +344,7 @@ def cal_emission(region_info, exp_config):
         annual_sales,
         save_path=detour_save_path,
         for_latex=for_latex,
+        plot_title=plot_title,
     )
     print(f"距离-绕行比散点图已保存: {detour_fig_path}")
 

@@ -1475,7 +1475,7 @@ def run_validation_tests():
 
 
 def run_sensitivity_analysis(
-    save_dir: str = None, exp_config: Dict = None, for_latex: bool = False
+    save_dir: str = None, exp_config: Dict = None, for_latex: bool = False, plot_title: bool = False
 ):
     """
     运行敏感性分析
@@ -1571,6 +1571,7 @@ def run_sensitivity_analysis(
             "Drone Velocity": f"{default_drone_params.v_level:.2f} km/h",
         },
         for_latex=for_latex,
+        plot_title=plot_title,
     )
     if save_path:
         print(f"\n图表已保存: {save_path}")
@@ -1621,6 +1622,7 @@ def run_sensitivity_analysis(
             "Drone Velocity": f"{default_drone_params.v_level:.2f} km/h",
         },
         for_latex=for_latex,
+        plot_title=plot_title,
     )
     if save_path:
         print(f"\n图表已保存: {save_path}")
@@ -1668,6 +1670,7 @@ def run_sensitivity_analysis(
             "Drone Velocity": f"{default_drone_params.v_level:.2f} km/h",
         },
         for_latex=for_latex,
+        plot_title=plot_title,
     )
     if save_path:
         print(f"\n图表已保存: {save_path}")
@@ -1731,6 +1734,7 @@ def run_sensitivity_analysis(
             "Hover Time": f"{default_drone_params.hover_time:.2f} s",
         },
         for_latex=for_latex,
+        plot_title=plot_title,
     )
     if save_path:
         print(f"\n图表已保存: {save_path}")
@@ -1806,6 +1810,7 @@ def run_sensitivity_analysis(
             "Rider Weight": f"{rider_weight_default:.2f} kg",
         },
         for_latex=for_latex,
+        plot_title=plot_title,
     )
     if save_path:
         print(f"\n图表已保存: {save_path}")
@@ -1833,6 +1838,7 @@ def run_sensitivity_analysis(
             "E-bike Body": f"{default_ebike_params.w_body:.2f} kg",
         },
         for_latex=for_latex,
+        plot_title=plot_title,
     )
     if save_path:
         print(f"图表已保存: {save_path}")
@@ -1879,6 +1885,7 @@ def run_sensitivity_analysis(
             "Drone Velocity": f"{default_drone_params.v_level:.2f} km/h",
         },
         for_latex=for_latex,
+        plot_title=plot_title,
     )
     if save_path:
         print(f"\n图表已保存: {save_path}")
@@ -1892,6 +1899,7 @@ def run_lifecycle_sensitivity_analysis(
     save_dir: str = None,
     exp_config: Dict = None,
     for_latex: bool = False,
+    plot_title: bool = False,
     n_orders_ebike: int = 1,
     n_orders_drone: int = 1,
 ):
@@ -2001,6 +2009,7 @@ def run_lifecycle_sensitivity_analysis(
             "Drone Orders/Trip": f"{n_orders_drone}",
         },
         for_latex=for_latex,
+        plot_title=plot_title,
     )
     if save_path:
         print(f"\n图表已保存: {save_path}")
@@ -2053,6 +2062,7 @@ def run_lifecycle_sensitivity_analysis(
             "Drone Orders/Trip": f"{n_orders_drone}",
         },
         for_latex=for_latex,
+        plot_title=plot_title,
     )
     if save_path:
         print(f"\n图表已保存: {save_path}")
@@ -2104,6 +2114,7 @@ def run_lifecycle_sensitivity_analysis(
             "Drone Orders/Trip": f"{n_orders_drone}",
         },
         for_latex=for_latex,
+        plot_title=plot_title,
     )
     if save_path:
         print(f"\n图表已保存: {save_path}")
@@ -2128,17 +2139,20 @@ if __name__ == "__main__":
     exp_config = load_config(os.path.join(project_root, "experiment.toml"))
     figures_dir = exp_config["figures_dir"]
     for_latex = exp_config.get("for_latex", False)
+    plot_title = exp_config.get("plot_title", False)
 
     lca = run_validation_tests()
     run_sensitivity_analysis(
         save_dir=os.path.join(figures_dir, "sensitivity"),
         exp_config=exp_config,
         for_latex=for_latex,
+        plot_title=plot_title,
     )
     run_lifecycle_sensitivity_analysis(
         save_dir=os.path.join(figures_dir, "lifecycle"),
         exp_config=exp_config,
         for_latex=for_latex,
+        plot_title=plot_title,
         n_orders_ebike=1,
         n_orders_drone=1,
     )

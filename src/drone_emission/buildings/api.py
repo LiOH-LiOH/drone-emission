@@ -156,6 +156,7 @@ def load_buildings(region_info, exp_config):
         os.makedirs(fig_dir)
 
     for_latex = exp_config.get("for_latex", False)
+    plot_title = exp_config.get("plot_title", False)
     save_path = os.path.join(fig_dir, f"{region_name_en.lower()}_buildings_vis.png")
 
     visualize_buildings(
@@ -166,6 +167,7 @@ def load_buildings(region_info, exp_config):
         original_boundaries_dict=boundaries_dict,
         save_path=save_path,
         for_latex=for_latex,
+        plot_title=plot_title,
     )
 
     # Height heatmap visualization
@@ -181,4 +183,5 @@ def load_buildings(region_info, exp_config):
         original_boundaries_dict=boundaries_dict,
         save_path=height_save_path,
         for_latex=for_latex,
+        plot_title=plot_title,
     )
