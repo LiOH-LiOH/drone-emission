@@ -671,7 +671,38 @@
       "min_lng": 120.0,
       "max_lng": 120.25
     },
-    "stats": {},
+    "stats": {
+      "enlarged_boundaries": {
+        "min_lat": 30.105033919704063,
+        "max_lat": 30.394966080295937,
+        "min_lng": 119.94794601515564,
+        "max_lng": 120.30205398484436
+      },
+      "building_count": 264595,
+      "building_height_mean": 7.994835975310499,
+      "building_height_max": 128.59091186523438,
+      "building_height_min": 0.005788969341665506,
+      "building_volume_total": 1980069687.3377874,
+      "building_area_total": 158818789.38043886,
+      "total_store_annual_sales": 88078164.0,
+      "total_odpair_annual_sales": 73324937,
+      "odpair_count": 1565879,
+      "roadnet_node_count": 268885,
+      "roadnet_edge_count": 523200,
+      "roadnet_length_total": 18981676.0,
+      "avg_road_distance_m": 2880.9128829075626,
+      "avg_straight_distance_m": 1954.253359407023,
+      "detour_ratio": 1.4741757352187512,
+      "valid_path_count": 1482902,
+      "invalid_path_count": 82977,
+      "province": "浙江",
+      "total_ebike_lifecycle": 155817.15917788498,
+      "total_drone_lifecycle": 117065.83052269563,
+      "max_lifecycle_reduction_pct": 28.758256849505397,
+      "optimal_threshold_km": 0.8985653738684123,
+      "optimal_drone_ratio_pct": 90.35117017342975,
+      "lifecycle_all_drone_reduction_pct": 24.869744038235105
+    },
     "cache": {}
   },
   "chengdu": {
@@ -685,7 +716,38 @@
       "min_lng": 103.9,
       "max_lng": 104.15
     },
-    "stats": {},
+    "stats": {
+      "enlarged_boundaries": {
+        "min_lat": 30.505033919704065,
+        "max_lat": 30.794966080295936,
+        "min_lng": 103.8477319398179,
+        "max_lng": 104.2022680601821
+      },
+      "building_count": 397302,
+      "building_height_mean": 7.567771845437264,
+      "building_height_max": 121.30537414550781,
+      "building_height_min": 0.006820928305387497,
+      "building_volume_total": 2622012758.480048,
+      "building_area_total": 219909222.8196482,
+      "total_store_annual_sales": 121730592.0,
+      "total_odpair_annual_sales": 99672480,
+      "odpair_count": 2480618,
+      "roadnet_node_count": 201108,
+      "roadnet_edge_count": 389198,
+      "roadnet_length_total": 18270442.0,
+      "avg_road_distance_m": 2998.3162435455424,
+      "avg_straight_distance_m": 2019.584724916199,
+      "detour_ratio": 1.4846201828298908,
+      "valid_path_count": 2370248,
+      "invalid_path_count": 110370,
+      "province": "四川",
+      "total_ebike_lifecycle": 104812.2974603454,
+      "total_drone_lifecycle": 57647.30744134788,
+      "max_lifecycle_reduction_pct": 47.09465080227915,
+      "optimal_threshold_km": 0.3825796712875371,
+      "optimal_drone_ratio_pct": 94.9999959687465,
+      "lifecycle_all_drone_reduction_pct": 44.999481131345185
+    },
     "cache": {}
   },
   "wuhan": {
@@ -699,7 +761,38 @@
       "min_lng": 114.15,
       "max_lng": 114.45
     },
-    "stats": {},
+    "stats": {
+      "enlarged_boundaries": {
+        "min_lat": 30.405033919704064,
+        "max_lat": 30.794966080295936,
+        "min_lng": 114.0977589348664,
+        "max_lng": 114.5022410651336
+      },
+      "building_count": 390190,
+      "building_height_mean": 8.350118382781087,
+      "building_height_max": 153.2248992919922,
+      "building_height_min": 0.006573792081326246,
+      "building_volume_total": 2795225186.459294,
+      "building_area_total": 216546656.8038338,
+      "total_store_annual_sales": 64749036.0,
+      "total_odpair_annual_sales": 54816196,
+      "odpair_count": 964608,
+      "roadnet_node_count": 174907,
+      "roadnet_edge_count": 321304,
+      "roadnet_length_total": 15944734.0,
+      "avg_road_distance_m": 2985.2023435647466,
+      "avg_straight_distance_m": 1884.0621514346099,
+      "detour_ratio": 1.5844500359458307,
+      "valid_path_count": 927904,
+      "invalid_path_count": 36704,
+      "province": "湖北",
+      "total_ebike_lifecycle": 89808.56422987346,
+      "total_drone_lifecycle": 60280.69576439148,
+      "max_lifecycle_reduction_pct": 35.95149249993569,
+      "optimal_threshold_km": 0.5200482673645019,
+      "optimal_drone_ratio_pct": 95.00004146762208,
+      "lifecycle_all_drone_reduction_pct": 32.87867779502924
+    },
     "cache": {}
   },
   "nanjing": {
@@ -713,7 +806,38 @@
       "min_lng": 118.65,
       "max_lng": 118.9
     },
-    "stats": {},
+    "stats": {
+      "enlarged_boundaries": {
+        "min_lat": 31.855033919704063,
+        "max_lat": 32.194966080295934,
+        "min_lng": 118.59696250347285,
+        "max_lng": 118.95303749652716
+      },
+      "building_count": 280705,
+      "building_height_mean": 8.09357169629537,
+      "building_height_max": 128.2765350341797,
+      "building_height_min": -1.0,
+      "building_volume_total": 2442313363.9724994,
+      "building_area_total": 190418973.9272543,
+      "total_store_annual_sales": 75883740.0,
+      "total_odpair_annual_sales": 60591411,
+      "odpair_count": 1133330,
+      "roadnet_node_count": 183725,
+      "roadnet_edge_count": 356915,
+      "roadnet_length_total": 14971924.0,
+      "avg_road_distance_m": 2954.5656704605094,
+      "avg_straight_distance_m": 2028.4650150495142,
+      "detour_ratio": 1.456552441644348,
+      "valid_path_count": 1027003,
+      "invalid_path_count": 106327,
+      "province": "江苏",
+      "total_ebike_lifecycle": 124324.62815702314,
+      "total_drone_lifecycle": 99176.0404638313,
+      "max_lifecycle_reduction_pct": 28.02703034680034,
+      "optimal_threshold_km": 0.9097019329282976,
+      "optimal_drone_ratio_pct": 85.74581101709123,
+      "lifecycle_all_drone_reduction_pct": 20.228162405142236
+    },
     "cache": {}
   },
   "chongqing": {
@@ -727,7 +851,38 @@
       "min_lng": 106.4,
       "max_lng": 106.7
     },
-    "stats": {},
+    "stats": {
+      "enlarged_boundaries": {
+        "min_lat": 29.405033919704064,
+        "max_lat": 29.744966080295935,
+        "min_lng": 106.3482976380741,
+        "max_lng": 106.75170236192591
+      },
+      "building_count": 174079,
+      "building_height_mean": 10.127136070133538,
+      "building_height_max": 128.27749633789062,
+      "building_height_min": 0.008606081828474998,
+      "building_volume_total": 2797276249.9237814,
+      "building_area_total": 157675325.42827767,
+      "total_store_annual_sales": 94488504.0,
+      "total_odpair_annual_sales": 80567135,
+      "odpair_count": 1892774,
+      "roadnet_node_count": 214199,
+      "roadnet_edge_count": 373528,
+      "roadnet_length_total": 15410170.0,
+      "avg_road_distance_m": 3092.062367856818,
+      "avg_straight_distance_m": 1748.9033933343273,
+      "detour_ratio": 1.7680006680996398,
+      "valid_path_count": 1815517,
+      "invalid_path_count": 77257,
+      "province": "重庆",
+      "total_ebike_lifecycle": 225063.72240089095,
+      "total_drone_lifecycle": 140845.52656150697,
+      "max_lifecycle_reduction_pct": 40.16231819251347,
+      "optimal_threshold_km": 0.4538751425743104,
+      "optimal_drone_ratio_pct": 94.9999841502472,
+      "lifecycle_all_drone_reduction_pct": 37.41971160033146
+    },
     "cache": {}
   },
   "xian": {
@@ -741,7 +896,38 @@
       "min_lng": 108.8,
       "max_lng": 109.1
     },
-    "stats": {},
+    "stats": {
+      "enlarged_boundaries": {
+        "min_lat": 34.10503391970406,
+        "max_lat": 34.39496608029594,
+        "min_lng": 108.74560048640403,
+        "max_lng": 109.15439951359596
+      },
+      "building_count": 356075,
+      "building_height_mean": 7.8109137995102875,
+      "building_height_max": 106.75068664550781,
+      "building_height_min": -1.0,
+      "building_volume_total": 2926686741.4504037,
+      "building_area_total": 246060636.54472563,
+      "total_store_annual_sales": 70239600.0,
+      "total_odpair_annual_sales": 37144737,
+      "odpair_count": 669682,
+      "roadnet_node_count": 171159,
+      "roadnet_edge_count": 312705,
+      "roadnet_length_total": 15522376.0,
+      "avg_road_distance_m": 2910.173989767673,
+      "avg_straight_distance_m": 1939.7830304415404,
+      "detour_ratio": 1.5002574742110455,
+      "valid_path_count": 659038,
+      "invalid_path_count": 10644,
+      "province": "陕西",
+      "total_ebike_lifecycle": 86362.21333569178,
+      "total_drone_lifecycle": 61500.21109140391,
+      "max_lifecycle_reduction_pct": 30.168633249845804,
+      "optimal_threshold_km": 0.8825804381012917,
+      "optimal_drone_ratio_pct": 94.99986560785567,
+      "lifecycle_all_drone_reduction_pct": 28.788055891583898
+    },
     "cache": {}
   },
   "tianjin": {
@@ -755,7 +941,38 @@
       "min_lng": 117.05,
       "max_lng": 117.35
     },
-    "stats": {},
+    "stats": {
+      "enlarged_boundaries": {
+        "min_lat": 38.955033919704064,
+        "max_lat": 39.24496608029594,
+        "min_lng": 116.9920574853688,
+        "max_lng": 117.40794251463119
+      },
+      "building_count": 228609,
+      "building_height_mean": 8.333847467042641,
+      "building_height_max": 124.49415588378906,
+      "building_height_min": 0.006484911777079105,
+      "building_volume_total": 2831735694.452655,
+      "building_area_total": 242066285.13168383,
+      "total_store_annual_sales": 55552884.0,
+      "total_odpair_annual_sales": 45493875,
+      "odpair_count": 802603,
+      "roadnet_node_count": 179067,
+      "roadnet_edge_count": 301870,
+      "roadnet_length_total": 14197646.0,
+      "avg_road_distance_m": 3189.459473844672,
+      "avg_straight_distance_m": 2186.4119369569867,
+      "detour_ratio": 1.4587642062930333,
+      "valid_path_count": 786006,
+      "invalid_path_count": 16597,
+      "province": "天津",
+      "total_ebike_lifecycle": 114293.40732612702,
+      "total_drone_lifecycle": 83149.60322959453,
+      "max_lifecycle_reduction_pct": 28.917654509270907,
+      "optimal_threshold_km": 0.8055892892003061,
+      "optimal_drone_ratio_pct": 94.99989409458973,
+      "lifecycle_all_drone_reduction_pct": 27.248994342837427
+    },
     "cache": {}
   },
   "changsha": {

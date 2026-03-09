@@ -2,6 +2,7 @@
 .vscode
 __pycache__/
 cache/
+logs/
 data/
 gba_data/
 figures/

@@ -47,7 +47,7 @@ fi
 
 cd src/drone_emission
 
-REGIONS=(beijing shanghai guangzhou)
+REGIONS=(changsha qingdao xiamen)
 
 PARALLEL=${1:-1}  # Default to 1 (sequential), pass number for parallel jobs
 ENV=${2:-remote}  # Default to remote (entrypoint.sh is typically run on server)
