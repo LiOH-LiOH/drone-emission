@@ -36,6 +36,14 @@ def prepare_sales(region_info, exp_config):
 
     region_data = pd.read_csv(save_path)
 
+    # Save merchant/sales statistics
+    total_merchants = len(region_data)
+    total_monthly_sales = region_data["month_sales"].sum()
+    mean_monthly_sales = region_data["month_sales"].mean()
+    region_info.set_stat("total_merchants", int(total_merchants))
+    region_info.set_stat("total_monthly_sales", float(total_monthly_sales))
+    region_info.set_stat("mean_monthly_sales", round(float(mean_monthly_sales), 2))
+
     fig_dir = os.path.join(
         exp_config["figures_dir"], region_level, region_name_en.lower()
     )
