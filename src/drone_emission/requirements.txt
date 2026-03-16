@@ -9,6 +9,7 @@ networkx
 numpy
 osmnx
 pandas
+pypinyin
 pyproj
 requests
 scikit-learn

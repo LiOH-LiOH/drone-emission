@@ -17,6 +17,25 @@ python main.py --region nanshan
 
 The `--region` flag selects which region to analyze (defined in `regions.json`).
 
+Run all regions via `entrypoint.sh` (wraps in tmux session with resource limits, logs to `./logs/`):
+```bash
+./entrypoint.sh                # Sequential, remote env (default)
+./entrypoint.sh 4              # 4 parallel jobs, remote env
+./entrypoint.sh 1 local        # Sequential, local env
+```
+Add `--all` to process every region in `regions.json` instead of the hardcoded list:
+```bash
+./entrypoint.sh --all          # Sequential, all regions
+./entrypoint.sh 4 --all        # 4 parallel jobs, all regions (each region in its own process)
+```
+
+Consolidate per-region stats into a single summary:
+```bash
+cd src/drone_emission
+python consolidate_stats.py            # merge all per-region stats
+python consolidate_stats.py --migrate  # one-time migration from old regions.json
+```
+
 To run emission model validation and sensitivity analysis directly:
 ```bash
 python -m emission.cal_single_delivery
@@ -25,7 +44,8 @@ python -m emission.cal_single_delivery
 ## Configuration Files
 
 - **`experiment.toml`**: Experiment parameters (data directories, delivery radius, OD generation params)
-- **`regions.json`**: Region definitions with boundaries, stats, and cache. Modified at runtime to persist computed statistics.
+- **`regions.json`**: **Read-only** static region definitions (boundaries, names, levels). Never written during pipeline runs.
+- **`data/{level}/{city}/region_stats.json`**: Per-region runtime stats and cache. Each process writes only its own region's file, enabling safe parallel execution.
 
 ## Architecture
 
@@ -36,30 +56,39 @@ python -m emission.cal_single_delivery
 3. **demand** - Generate OD pairs using gravity model (store → building matching)
 4. **roadnet** - Fetch OSM road network, compute road distances for OD pairs
 5. **emission** - Calculate and compare drone vs e-bike emissions
-6. **urban_factors** - Analyze urban features (population density, terrain, delivery distance) vs emission reduction potential
+6. **equity** - Zone-level equity analysis of emission reductions
 
-Each stage is controlled by uncommenting the relevant function call in `main.py:run_region_analysis()`.
+All stages above are active in `main.py:run_region_analysis()`. The `profit` stage exists but is currently commented out.
 
 ### Key Modules
 
 - **`emission/cal_single_delivery.py`**: Core emission models with `EbikeEnergyModel`, `DroneEnergyModel`, and `LifeCycleEmissions` classes. Contains detailed physics-based power calculations.
-- **`roadnet/router.py`**: `RoadNetRouter` class for efficient shortest path computation with KD-tree optimization and batch processing.
+- **`roadnet/`**: Road network loading and routing. Includes `sparse_graph.py` and `tile_router.py` for efficient shortest path computation with KD-tree optimization and batch processing.
 - **`demand/api.py`**: Gravity model implementation for generating delivery demand between stores and buildings.
-- **`urban_factors/`**: Analysis of urban features (population density, terrain, delivery distance distribution) and their relationship to emission reduction potential.
-- **`utils/region_config.py`**: `RegionRegistry` singleton pattern for managing region configurations with stats/cache persistence.
+- **`equity/`**: Zone-level equity analysis of emission reductions (grid-based zones, feature extraction, emission comparison).
+- **`profit/`**: Profit/cost analysis comparing drone vs e-bike delivery economics (currently disabled in pipeline).
+- **`analysis/`**: Cross-region analysis and correlation studies. Not part of the main pipeline; used for post-hoc research.
+- **`calibration/`**: Model calibration scripts (Eleme order data, mean distance, milk-run). Not part of the main pipeline.
+- **`visualization/`**: Plotting functions for all stages (buildings, demand, emission, equity, profit, roadnet, sales, cross-region analysis).
+- **`utils/region_config.py`**: `RegionRegistry` singleton pattern for managing region configurations. Loads static config from `regions.json` and per-region stats from `data/{level}/{city}/region_stats.json`. Use `registry.save_region(key)` to persist a single region's stats.
+- **`consolidate_stats.py`**: Merges all per-region stats into `data/all_region_stats.json` and `.csv`. Use `--migrate` for one-time migration of stats from `regions.json` to per-region files.
+- **`generate_city_configs.py`**: Auto-discovers cities from sales data and generates `regions.json` entries with boundaries fetched from Aliyun DataV API.
 
 ### Data Flow
 
 ```
-regions.json + experiment.toml
+regions.json (static config) + experiment.toml
         ↓
     RegionInfo + ExpConfig
         ↓
     [Stage APIs receive (region_info, exp_config)]
         ↓
     data/{level}/{region}/*.csv, *.geojson, *.graphml
+    data/{level}/{region}/region_stats.json  ← per-region stats
         ↓
     figures/{level}/{region}/*.png
+        ↓
+    consolidate_stats.py → data/all_region_stats.{json,csv}
 ```
 
 ### Coordinate Systems
@@ -82,14 +111,14 @@ pip install -r src/drone_emission/requirements.txt
 LaTeX source files are in `docs/`. Compilation is configured via VS Code LaTeX Workshop.
 
 ### Build Output
-- **Auxiliary files** (.aux, .log, .bbl, etc.) → `docs/build/`
+- Each document's **auxiliary files** (.aux, .log, .bbl, etc.) go to a `build/` subdirectory relative to its `main.tex` (e.g. `docs/slides/build/`). Use `-output-directory=build` when compiling from the document's directory.
 - **PDF files** → `docs/pdf/`
 
 ### Recipes
-- **"xelatex -> biber -> xelatex*2 -> copy"**: For documents with bibliography (main.tex, proposal.tex)
-- **"xelatex -> copy"**: For simple documents without bibliography (abstract.tex)
+- **"xelatex -> biber -> xelatex*2 -> copy"**: For documents with bibliography (slides, proposal)
+- **"xelatex -> copy"**: For simple documents without bibliography (poster)
 
-### Files
-- `main.tex`: Beamer presentation for PhD confirmation seminar
-- `proposal.tex`: Research proposal document
-- `abstract.tex`: Standalone abstract
+### Documents
+- `docs/slides/main.tex`: Beamer presentation for PhD confirmation seminar
+- `docs/proposal/main.tex`: Research proposal document
+- `docs/poster/main.tex`: Conference poster

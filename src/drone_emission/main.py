@@ -1,4 +1,5 @@
 import argparse
+import traceback
 from pathlib import Path
 
 from buildings import load_buildings
@@ -62,27 +63,89 @@ def run_region_analysis(region_key: str, config: dict):
     # registry.save()
 
 
-if __name__ == "__main__":
+def has_emission_results(region_config) -> bool:
+    """Check if a region already has emission results in stats."""
+    return "total_ebike_lifecycle" in region_config.stats
+
+
+def run_all(config: dict, level: str = "city", skip_completed: bool = False):
+    """Run analysis for all regions of the given level."""
+    registry = get_registry()
+    regions = registry.list_by_level(level)
+
+    if not regions:
+        print(f"No regions found with level '{level}'.")
+        return
+
+    total = len(regions)
+    succeeded = 0
+    skipped = 0
+    failed = []
+
+    print(f"Found {total} {level}-level regions to process.")
+    if skip_completed:
+        print("Skip-completed mode: regions with emission results will be skipped.")
+
+    for i, (region_key, region_config) in enumerate(sorted(regions.items()), 1):
+        print(f"\n{'='*60}")
+        print(f"Processing {level} {i}/{total}: {region_key} ({region_config.region_name_cn})")
+        print(f"{'='*60}")
+
+        if skip_completed and has_emission_results(region_config):
+            print(f"Skipping {region_key} (already has emission results)")
+            skipped += 1
+            continue
+
+        try:
+            run_region_analysis(region_key, config)
+            registry.save_region(region_key)
+            succeeded += 1
+        except Exception as e:
+            print(f"\nERROR processing {region_key}: {e}")
+            traceback.print_exc()
+            failed.append(region_key)
+            # Save progress even on failure
+            registry.save_region(region_key)
+
+    print(f"\n{'='*60}")
+    print(f"Batch run complete:")
+    print(f"  Total:     {total}")
+    print(f"  Succeeded: {succeeded}")
+    print(f"  Skipped:   {skipped}")
+    print(f"  Failed:    {len(failed)}")
+    if failed:
+        print(f"  Failed regions: {', '.join(failed)}")
+
+
+def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--env", type=str, default=None, help="Environment name")
     parser.add_argument(
         "--region", type=str, default="nanshan", help="Region to analyze"
     )
-    args = parser.parse_args()
+    parser.add_argument(
+        "--all", action="store_true", help="Run all regions of the specified level"
+    )
+    parser.add_argument(
+        "--level", type=str, default="city", help="Region level to process with --all (default: city)"
+    )
+    parser.add_argument(
+        "--skip-completed", action="store_true",
+        help="Skip regions that already have emission results"
+    )
+    return parser.parse_args()
 
-    # Initialize region configuration
-    registry = init_registry(str(REGIONS_CONFIG_PATH))
 
-    # Example: Dynamically add new region at runtime
-    # registry.register(
-    #     "baoan",
-    #     region_name_cn="Baoan District",
-    #     region_name_en="Baoan",
-    #     region_level="district",
-    #     parent_city="shenzhen",
-    # )
+if __name__ == "__main__":
+    args = parse_args()
 
     config = load_config(str(EXP_CONFIG_PATH), env=args.env)
 
-    run_region_analysis(args.region, config)
-    registry.save()
+    # Initialize region configuration with per-region stats support
+    registry = init_registry(str(REGIONS_CONFIG_PATH), data_dir=config.get("data_dir"))
+
+    if getattr(args, "all"):
+        run_all(config, level=args.level, skip_completed=args.skip_completed)
+    else:
+        run_region_analysis(args.region, config)
+        registry.save_region(args.region)

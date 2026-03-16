@@ -2,9 +2,12 @@
 Region Configuration Management Module
 
 Using Dataclass + JSON serialization, supports:
-1. Static region configuration
-2. Runtime statistics data persistence (stats)
+1. Static region configuration (read-only regions.json)
+2. Runtime statistics data persistence (per-region stats files)
 3. Computed data caching for reuse (cache)
+
+Stats/cache are stored per-region in data/{level}/{city}/region_stats.json
+to avoid write conflicts during parallel multiprocessing runs.
 """
 
 import json
@@ -24,6 +27,10 @@ class RegionConfig:
     boundaries_dict: Optional[Dict[str, float]] = None
     stats: Dict[str, Any] = field(default_factory=dict)  # Statistics for output
     cache: Dict[str, Any] = field(default_factory=dict)  # Computed data for reuse
+
+    def __post_init__(self):
+        # Path to per-region stats file, set by RegionRegistry
+        self._stats_path: Optional[str] = None
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary format"""
@@ -48,51 +55,89 @@ class RegionConfig:
         """Get a cached computed value"""
         return self.cache.get(key, default)
 
+    def save_stats(self):
+        """Save stats and cache to per-region stats file."""
+        if not self._stats_path:
+            return
+        path = Path(self._stats_path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        data = {"stats": self.stats, "cache": self.cache}
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+
+    def load_stats(self):
+        """Load stats and cache from per-region stats file if it exists."""
+        if not self._stats_path:
+            return
+        path = Path(self._stats_path)
+        if not path.exists():
+            return
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        self.stats.update(data.get("stats", {}))
+        self.cache.update(data.get("cache", {}))
+
 
 class RegionRegistry:
     """
     Region Configuration Registry
 
     Features:
-    - Load configuration from JSON
+    - Load static configuration from regions.json (read-only)
+    - Load/save runtime stats from per-region files in data/{level}/{city}/region_stats.json
     - Support runtime dynamic region registration
-    - Persist to JSON
     """
 
-    def __init__(self, config_path: Optional[str] = None):
+    def __init__(self, config_path: Optional[str] = None, data_dir: Optional[str] = None):
         self._regions: Dict[str, RegionConfig] = {}
         self._config_path = config_path
+        self._data_dir = data_dir
 
         if config_path and Path(config_path).exists():
             self.load(config_path)
 
+    def _stats_path_for(self, region: RegionConfig) -> Optional[str]:
+        """Return the per-region stats file path, or None if data_dir is not set."""
+        if not self._data_dir:
+            return None
+        return str(
+            Path(self._data_dir)
+            / region.region_level
+            / region.region_name_en.lower()
+            / "region_stats.json"
+        )
+
     def load(self, config_path: str):
-        """Load configuration from JSON file"""
+        """Load static config from JSON, then load per-region stats from data dir."""
         with open(config_path, "r", encoding="utf-8") as f:
             data = json.load(f)
 
         for region_key, region_data in data.items():
-            self._regions[region_key] = RegionConfig(
+            region = RegionConfig(
                 region_name_cn=region_data["region_name_cn"],
                 region_name_en=region_data["region_name_en"],
                 region_level=region_data["region_level"],
                 parent_city=region_data.get("parent_city"),
                 boundaries_dict=region_data.get("boundaries_dict"),
+                # Start with stats/cache from regions.json as fallback
                 stats=region_data.get("stats", {}),
                 cache=region_data.get("cache", {}),
             )
+            region._stats_path = self._stats_path_for(region)
+            # Override with per-region stats file if it exists
+            region.load_stats()
+            self._regions[region_key] = region
         self._config_path = config_path
 
-    def save(self, config_path: Optional[str] = None):
-        """Save configuration to JSON file"""
-        path = config_path or self._config_path
-        if not path:
-            raise ValueError("No config path specified")
+    def save(self):
+        """Save all regions' stats to their per-region files."""
+        for region in self._regions.values():
+            region.save_stats()
 
-        data = {key: region.to_dict() for key, region in self._regions.items()}
-
-        with open(path, "w", encoding="utf-8") as f:
-            json.dump(data, f, ensure_ascii=False, indent=2)
+    def save_region(self, region_key: str):
+        """Save only one region's stats (used in per-city processing)."""
+        region = self._regions[region_key]
+        region.save_stats()
 
     def register(
         self,
@@ -113,6 +158,7 @@ class RegionRegistry:
             boundaries_dict=boundaries_dict,
             stats=stats or {},
         )
+        config._stats_path = self._stats_path_for(config)
         self._regions[region_key] = config
         return config
 
@@ -164,8 +210,15 @@ def get_registry() -> RegionRegistry:
     return _default_registry
 
 
-def init_registry(config_path: str) -> RegionRegistry:
-    """Initialize the region registry"""
+def init_registry(config_path: str, data_dir: Optional[str] = None) -> RegionRegistry:
+    """Initialize the region registry.
+
+    Args:
+        config_path: Path to regions.json (static config).
+        data_dir: Base data directory. When set, per-region stats are loaded
+            from and saved to data/{level}/{city}/region_stats.json instead of
+            writing back to regions.json.
+    """
     global _default_registry
-    _default_registry = RegionRegistry(config_path)
+    _default_registry = RegionRegistry(config_path, data_dir=data_dir)
     return _default_registry
