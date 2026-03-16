@@ -183,8 +183,8 @@ def generate_configs(sales_path: str, dry_run: bool = False, data_dir: str = Non
     print(f"Reading sales data from: {sales_path}")
     df = pd.read_csv(sales_path, usecols=["province", "city"])
 
-    # Extract unique cities with their provinces
-    city_province = df.drop_duplicates(subset=["city"]).set_index("city")["province"]
+    # Extract unique cities with their provinces (drop rows with NaN city names)
+    city_province = df.dropna(subset=["city"]).drop_duplicates(subset=["city"]).set_index("city")["province"]
     cities = sorted(city_province.index.tolist())
     print(f"Found {len(cities)} unique cities in combined_data.csv")
 

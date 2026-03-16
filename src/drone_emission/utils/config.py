@@ -26,9 +26,12 @@ def configure_cache(exp_config: Dict[str, Any]) -> None:
     _cache_root = exp_config.get("cache_dir", _cache_root)
     os.makedirs(_cache_root, exist_ok=True)
 
-    # OSMnx cache
-    import osmnx as ox
-    ox.settings.cache_folder = get_cache_dir("osmnx")
+    # OSMnx cache (only if osmnx is already imported)
+    try:
+        import osmnx as ox
+        ox.settings.cache_folder = get_cache_dir("osmnx")
+    except ImportError:
+        pass
 
 
 def load_config(config_path: str, env: str = None) -> Dict[str, Any]:

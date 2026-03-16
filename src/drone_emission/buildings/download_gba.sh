@@ -122,11 +122,21 @@ echo "---- Step 4: Producing LoD1 GeoJSON with heights ----"
 echo "This merges ODbLPolygon + Polygon + LoD1 JSON -> complete GeoJSON"
 echo ""
 
+# Symlink only this tile into a temp directory to avoid integrity check
+# conflicts with other tiles being downloaded in parallel
+TMPDIR=$(mktemp -d)
+mkdir -p "${TMPDIR}/odbl" "${TMPDIR}/poly" "${TMPDIR}/json"
+ln -s "${ODBL_DIR}/${TILE}.geojson" "${TMPDIR}/odbl/${TILE}.geojson"
+ln -s "${POLYGON_DIR}/${TILE}.geojson" "${TMPDIR}/poly/${TILE}.geojson"
+ln -s "${LOD1_DIR}/${TILE}.json" "${TMPDIR}/json/${TILE}.json"
+
 python "${DATA_DIR}/produce_lod1.py" \
-    --odbl_root "${DATA_DIR}/ODbLPolygon" \
-    --polygon_root "${DATA_DIR}/Polygon" \
-    --json_root "${DATA_DIR}/LoD1" \
-    --output_root "${OUTPUT_DIR}"
+    --odbl_root "${TMPDIR}/odbl" \
+    --polygon_root "${TMPDIR}/poly" \
+    --json_root "${TMPDIR}/json" \
+    --output_root "${OUTPUT_DIR}/${REGION}"
+
+rm -rf "${TMPDIR}"
 
 echo ""
 echo "============================================================"
