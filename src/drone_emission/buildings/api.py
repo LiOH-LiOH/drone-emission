@@ -1,3 +1,4 @@
+import fcntl
 import os
 import subprocess
 
@@ -44,18 +45,31 @@ def _resolve_gba_data_path(boundaries_dict: dict, exp_config: dict) -> str:
         print(f"GBA tile: {tile_name} (region: {gba_region})")
 
         if not os.path.exists(gba_data_path):
-            print(f"GBA tile not found locally, downloading...")
-            script_path = os.path.join(
-                os.path.dirname(__file__), "download_gba.sh"
-            )
-            result = subprocess.run(
-                ["bash", script_path, tile_name, gba_region, gba_data_dir],
-                check=True,
-            )
-            if not os.path.exists(gba_data_path):
-                raise FileNotFoundError(
-                    f"Download completed but GBA tile not found at {gba_data_path}"
-                )
+            # Use file lock to prevent parallel processes from downloading the same tile
+            lock_path = os.path.join(gba_data_dir, f".lock_{gba_region}_{tile_name}")
+            os.makedirs(os.path.dirname(lock_path), exist_ok=True)
+            with open(lock_path, "w") as lock_file:
+                print(f"GBA tile not found locally, acquiring lock...")
+                fcntl.flock(lock_file, fcntl.LOCK_EX)
+                try:
+                    # Re-check after acquiring lock (another process may have finished)
+                    if not os.path.exists(gba_data_path):
+                        print(f"Downloading GBA tile...")
+                        script_path = os.path.join(
+                            os.path.dirname(__file__), "download_gba.sh"
+                        )
+                        subprocess.run(
+                            ["bash", script_path, tile_name, gba_region, gba_data_dir],
+                            check=True,
+                        )
+                        if not os.path.exists(gba_data_path):
+                            raise FileNotFoundError(
+                                f"Download completed but GBA tile not found at {gba_data_path}"
+                            )
+                    else:
+                        print(f"GBA tile already downloaded by another process.")
+                finally:
+                    fcntl.flock(lock_file, fcntl.LOCK_UN)
 
         return gba_data_path
 

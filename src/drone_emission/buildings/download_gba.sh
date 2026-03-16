@@ -134,7 +134,8 @@ python "${DATA_DIR}/produce_lod1.py" \
     --odbl_root "${TMPDIR}/odbl" \
     --polygon_root "${TMPDIR}/poly" \
     --json_root "${TMPDIR}/json" \
-    --output_root "${OUTPUT_DIR}/${REGION}"
+    --output_root "${OUTPUT_DIR}/${REGION}" \
+    --sqlite_root "${TMPDIR}/sqlite"
 
 rm -rf "${TMPDIR}"
 
