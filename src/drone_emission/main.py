@@ -10,6 +10,7 @@ from preprocessing import prepare_sales
 from profit import cal_profit
 from roadnet import load_roadnet
 from utils import load_config
+from utils.config import configure_cache
 from utils.region_config import get_registry, init_registry
 
 # Project root directory
@@ -140,6 +141,7 @@ if __name__ == "__main__":
     args = parse_args()
 
     config = load_config(str(EXP_CONFIG_PATH), env=args.env)
+    configure_cache(config)
 
     # Initialize region configuration with per-region stats support
     registry = init_registry(str(REGIONS_CONFIG_PATH), data_dir=config.get("data_dir"))

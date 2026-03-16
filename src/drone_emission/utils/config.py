@@ -1,10 +1,34 @@
+import os
 import sys
+from pathlib import Path
 from typing import Any, Dict
 
 if sys.version_info >= (3, 11):
     import tomllib
 else:
     import tomli as tomllib
+
+# Default cache root (project-level ./cache)
+_PROJECT_ROOT = str(Path(__file__).parent.parent.parent.parent)
+_cache_root: str = os.path.join(_PROJECT_ROOT, "cache")
+
+
+def get_cache_dir(*subdirs: str) -> str:
+    """Return a cache subdirectory path, creating it if needed."""
+    path = os.path.join(_cache_root, *subdirs)
+    os.makedirs(path, exist_ok=True)
+    return path
+
+
+def configure_cache(exp_config: Dict[str, Any]) -> None:
+    """Set the cache root from exp_config['cache_dir'], then update library caches."""
+    global _cache_root
+    _cache_root = exp_config.get("cache_dir", _cache_root)
+    os.makedirs(_cache_root, exist_ok=True)
+
+    # OSMnx cache
+    import osmnx as ox
+    ox.settings.cache_folder = get_cache_dir("osmnx")
 
 
 def load_config(config_path: str, env: str = None) -> Dict[str, Any]:

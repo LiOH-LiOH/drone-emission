@@ -20,6 +20,7 @@ from pypinyin import lazy_pinyin, Style
 # Ensure local imports work when running from src/drone_emission
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+from utils.config import get_cache_dir
 from utils.coordinates import gcj02_to_wgs84
 from utils import load_config
 
@@ -51,9 +52,7 @@ def get_adcode(city_name_cn: str):
 
 def fetch_boundaries(adcode: str):
     """Fetch GeoJSON boundaries from Aliyun DataV API with local cache."""
-    cache_dir = os.path.join(PROJECT_ROOT, "cache", "boundaries")
-    os.makedirs(cache_dir, exist_ok=True)
-    cache_file = os.path.join(cache_dir, f"{adcode}.json")
+    cache_file = os.path.join(get_cache_dir("boundaries"), f"{adcode}.json")
 
     if os.path.exists(cache_file):
         try:
@@ -309,4 +308,6 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     config = load_config(EXP_CONFIG_PATH, env=args.env)
+    from utils.config import configure_cache
+    configure_cache(config)
     generate_configs(args.sales_path, args.dry_run, data_dir=config.get("data_dir"))

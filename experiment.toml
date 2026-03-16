@@ -51,6 +51,7 @@ engine_efficiency = 0.25  # Gasoline engine thermal efficiency
 
 # ============ Local Environment ============
 [local]
+cache_dir = "/Users/linjingxian/Code/drone-emission/cache"
 data_dir = "/Users/linjingxian/Code/drone-emission/data"
 figures_dir = "/Users/linjingxian/Code/drone-emission/figures"
 sales_path = "/Users/linjingxian/Code/drone-emission/data/combined_data.csv"
@@ -61,6 +62,7 @@ fetch_roadnet = false
 
 # ============ Remote Environment ============
 [remote]
+cache_dir = "/mnt/major_storage/jingxian/drone-emission/cache"
 data_dir = "/mnt/major_storage/jingxian/drone-emission/data"
 figures_dir = "/home/jingxian/code/drone-emission/figures"
 sales_path = "/mnt/major_storage/jingxian/drone-emission/data/combined_data.csv"

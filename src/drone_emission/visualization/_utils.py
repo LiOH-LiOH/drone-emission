@@ -7,6 +7,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import requests
 from matplotlib.colors import LinearSegmentedColormap
+from utils.config import get_cache_dir
 from utils.coordinates import gcj02_to_wgs84
 
 # Global padding coefficient for plotting
@@ -14,11 +15,6 @@ PADDING_COEFF = 0.1
 
 # Global flag for cache configuration
 _CONTEXTILY_CACHE_CONFIGURED = False
-
-# Project root directory (consistent cache location)
-_PROJECT_ROOT = os.path.dirname(
-    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-)
 
 
 def get_adcode(city_name_cn):
@@ -33,10 +29,7 @@ def get_adcode(city_name_cn):
 
 
 def fetch_boundaries(adcode):
-    # Define cache directory (use project root for consistency)
-    cache_dir = os.path.join(_PROJECT_ROOT, "cache", "boundaries")
-    os.makedirs(cache_dir, exist_ok=True)
-    cache_file = os.path.join(cache_dir, f"{adcode}.json")
+    cache_file = os.path.join(get_cache_dir("boundaries"), f"{adcode}.json")
 
     # Try to load from cache
     if os.path.exists(cache_file):
@@ -96,10 +89,9 @@ def configure_contextily_cache():
     global _CONTEXTILY_CACHE_CONFIGURED
     if not _CONTEXTILY_CACHE_CONFIGURED:
         try:
-            cache_dir = os.path.join(_PROJECT_ROOT, "cache", "tiles")
-            os.makedirs(cache_dir, exist_ok=True)
-            ctx.set_cache_dir(cache_dir)
-            print(f"Contextily cache configured at: {cache_dir}")
+            tiles_dir = get_cache_dir("tiles")
+            ctx.set_cache_dir(tiles_dir)
+            print(f"Contextily cache configured at: {tiles_dir}")
             _CONTEXTILY_CACHE_CONFIGURED = True
         except Exception as e:
             print(f"Failed to configure contextily cache: {e}")

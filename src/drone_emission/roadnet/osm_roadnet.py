@@ -1,4 +1,3 @@
-import os
 import warnings
 from typing import Any, Dict, Optional, Tuple
 
@@ -6,12 +5,8 @@ import networkx as nx
 import osmnx as ox
 
 # Configure osmnx settings
-# Place cache at project root (./cache/osmnx) regardless of CWD
-_PROJECT_ROOT = os.path.dirname(
-    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-)
+# Cache folder is set by utils.config.configure_cache() at startup
 ox.settings.use_cache = True
-ox.settings.cache_folder = os.path.join(_PROJECT_ROOT, "cache", "osmnx")
 ox.settings.log_console = False
 
 
