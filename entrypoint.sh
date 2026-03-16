@@ -59,6 +59,10 @@ ENV=${2:-remote}  # Default to remote (entrypoint.sh is typically run on server)
 
 echo "Environment: $ENV (mem=${MEMORY_MAX})"
 
+# ---- Generate city configs from sales data ----
+echo "Generating city configs..."
+python -u generate_city_configs.py --env "$ENV"
+
 if [ "$ALL_MODE" = true ]; then
     if [ "$PARALLEL" -gt 1 ]; then
         echo "Running ALL regions in parallel ($PARALLEL jobs)..."
