@@ -3,13 +3,12 @@ Auto-discover cities from combined_data.csv and generate regions.json entries.
 
 Usage:
     cd src/drone_emission
-    python generate_city_configs.py [--sales-path PATH] [--dry-run]
+    python -m tools.generate_city_configs [--sales-path PATH] [--dry-run]
 """
 
 import argparse
 import json
 import os
-import sys
 import time
 
 import cpca
@@ -17,15 +16,12 @@ import pandas as pd
 import requests
 from pypinyin import lazy_pinyin, Style
 
-# Ensure local imports work when running from src/drone_emission
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-
 from utils.config import get_cache_dir
 from utils.coordinates import gcj02_to_wgs84
 from utils import load_config
 
 PROJECT_ROOT = os.path.dirname(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 )
 REGIONS_JSON_PATH = os.path.join(PROJECT_ROOT, "regions.json")
 EXP_CONFIG_PATH = os.path.join(PROJECT_ROOT, "experiment.toml")

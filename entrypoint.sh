@@ -61,7 +61,7 @@ echo "Environment: $ENV (mem=${MEMORY_MAX})"
 
 # ---- Generate city configs from sales data ----
 echo "Generating city configs..."
-python -u generate_city_configs.py --env "$ENV"
+python -u -m tools.generate_city_configs --env "$ENV"
 
 if [ "$ALL_MODE" = true ]; then
     if [ "$PARALLEL" -gt 1 ]; then

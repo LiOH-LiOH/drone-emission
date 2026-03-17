@@ -1,6 +1,5 @@
 """Correlation analysis between region features and emission results."""
 
-import json
 import math
 import os
 
@@ -8,12 +7,7 @@ import numpy as np
 import pandas as pd
 from scipy import stats
 
-from visualization.analysis import (
-    plot_annual_emissions_comparison,
-    plot_correlation_heatmap,
-    plot_feature_scatter,
-    plot_top_correlations_bar,
-)
+from analysis.constants import VARIABLE_LABELS
 
 # Project root directory
 _PROJECT_ROOT = os.path.dirname(
@@ -54,129 +48,75 @@ FEATURE_VARIABLES = {
     ],
 }
 
-# Human-readable labels for variables
-VARIABLE_LABELS = {
-    # Results
-    "max_lifecycle_reduction_pct": "Max Lifecycle Reduction (%)",
-    "optimal_threshold_km": "Optimal Threshold (km)",
-    "optimal_drone_ratio_pct": "Optimal Drone Ratio (%)",
-    # Building features
-    "building_count": "Building Count",
-    "building_height_mean": "Mean Building Height (m)",
-    "building_height_max": "Max Building Height (m)",
-    "building_volume_total": "Total Building Volume (m³)",
-    "building_area_total": "Total Building Area (m²)",
-    # Road network features
-    "detour_ratio": "Detour Ratio",
-    "avg_road_distance_m": "Avg Road Distance (m)",
-    "avg_straight_distance_m": "Avg Straight Distance (m)",
-    "roadnet_length_total": "Total Road Length (m)",
-    # Demand features
-    "odpair_count": "OD Pair Count",
-    "valid_path_count": "Valid Path Count",
-    # Density features
-    "region_area_km2": "Region Area (km²)",
-    "building_density": "Building Density (per km²)",
-    "road_density": "Road Density (km/km²)",
-    "building_volume_density": "Building Volume Density (m³/km²)",
-    "building_area_ratio": "Building Area Ratio (%)",
-}
+
+# VARIABLE_LABELS is imported from analysis.constants and re-exported
 
 
-def calculate_region_area_km2(boundaries_dict: dict) -> float:
-    """Calculate region area in km² from lat/lng boundaries.
+def _default_csv_path() -> str:
+    """Return default path to all_region_stats.csv."""
+    return os.path.join(_PROJECT_ROOT, "data", "all_region_stats.csv")
 
-    Uses the haversine-based approximation for a rectangular region.
 
-    Args:
-        boundaries_dict: Dict with min_lat, max_lat, min_lng, max_lng.
-
-    Returns:
-        Area in square kilometers.
-    """
-    min_lat = boundaries_dict["min_lat"]
-    max_lat = boundaries_dict["max_lat"]
-    min_lng = boundaries_dict["min_lng"]
-    max_lng = boundaries_dict["max_lng"]
-
-    # Earth's radius in km
+def _calculate_region_area_km2(min_lat, max_lat, min_lng, max_lng) -> float:
+    """Calculate region area in km² from lat/lng boundaries."""
     R = 6371.0
-
-    # Convert to radians
     lat1_rad = math.radians(min_lat)
     lat2_rad = math.radians(max_lat)
-
-    # Height in km (latitude distance)
     height_km = R * math.radians(max_lat - min_lat)
-
-    # Width in km (longitude distance at average latitude)
     avg_lat_rad = (lat1_rad + lat2_rad) / 2
     width_km = R * math.radians(max_lng - min_lng) * math.cos(avg_lat_rad)
-
     return height_km * width_km
 
 
-def load_region_stats(region_keys: list, regions_json_path: str = None) -> pd.DataFrame:
-    """Load statistics for specified regions into a DataFrame.
+def load_region_stats(csv_path: str = None) -> pd.DataFrame:
+    """Load region statistics from consolidated CSV.
 
     Args:
-        region_keys: List of region keys to load.
-        regions_json_path: Path to regions.template.json. Uses default if None.
+        csv_path: Path to all_region_stats.csv. Uses default if None.
 
     Returns:
-        DataFrame with regions as rows and stats as columns.
+        DataFrame with completed regions as rows and stats as columns.
     """
-    if regions_json_path is None:
-        regions_json_path = os.path.join(_PROJECT_ROOT, "regions.template.json")
+    if csv_path is None:
+        csv_path = _default_csv_path()
 
-    with open(regions_json_path, "r", encoding="utf-8") as f:
-        regions_data = json.load(f)
+    df = pd.read_csv(csv_path)
 
-    rows = []
-    for region_key in region_keys:
-        if region_key not in regions_data:
-            print(f"Warning: Region '{region_key}' not found in regions.template.json")
-            continue
+    # Filter to completed cities only
+    df = df[df["total_ebike_lifecycle"].notna()].copy()
 
-        region_info = regions_data[region_key]
-        stats = region_info.get("stats", {})
-        boundaries = region_info.get("boundaries_dict", {})
+    # Compute derived density columns from boundary coordinates
+    has_bounds = (
+        df[["min_lat", "max_lat", "min_lng", "max_lng"]].notna().all(axis=1)
+    )
+    df.loc[has_bounds, "region_area_km2"] = df.loc[has_bounds].apply(
+        lambda r: _calculate_region_area_km2(
+            r["min_lat"], r["max_lat"], r["min_lng"], r["max_lng"]
+        ),
+        axis=1,
+    )
 
-        row = {
-            "region": region_key,
-            "region_name": region_info.get("region_name_en", region_key),
-        }
-        row.update(stats)
+    area = df["region_area_km2"]
+    valid_area = area > 0
 
-        # Calculate region area
-        if boundaries:
-            area_km2 = calculate_region_area_km2(boundaries)
-            row["region_area_km2"] = area_km2
+    if "building_count" in df.columns:
+        df.loc[valid_area, "building_density"] = (
+            df.loc[valid_area, "building_count"] / area[valid_area]
+        )
 
-            # Calculate density metrics
-            if "building_count" in stats and area_km2 > 0:
-                row["building_density"] = stats["building_count"] / area_km2
+    if "roadnet_length_total" in df.columns:
+        df.loc[valid_area, "road_density"] = (
+            df.loc[valid_area, "roadnet_length_total"] / 1000 / area[valid_area]
+        )
 
-            if "roadnet_length_total" in stats and area_km2 > 0:
-                # Convert road length from m to km for road density
-                row["road_density"] = (stats["roadnet_length_total"] / 1000) / area_km2
+    if "building_volume_total" in df.columns:
+        df.loc[valid_area, "building_volume_density"] = (
+            df.loc[valid_area, "building_volume_total"] / area[valid_area]
+        )
 
-            if "building_volume_total" in stats and area_km2 > 0:
-                row["building_volume_density"] = (
-                    stats["building_volume_total"] / area_km2
-                )
-
-            if "building_area_total" in stats and area_km2 > 0:
-                # Building area ratio as percentage
-                area_m2 = area_km2 * 1e6  # Convert km² to m²
-                row["building_area_ratio"] = (
-                    stats["building_area_total"] / area_m2
-                ) * 100
-
-        rows.append(row)
-
-    df = pd.DataFrame(rows)
-    df.set_index("region", inplace=True)
+    # Set index and rename
+    df.set_index("region_key", inplace=True)
+    df.rename(columns={"region_name_en": "region_name"}, inplace=True)
 
     return df
 
@@ -335,99 +275,73 @@ def print_correlation_summary(
     print("\n** indicates |r| >= {:.1f}".format(threshold))
 
 
-def load_annual_emissions(
-    region_keys: list,
-    data_dir: str = None,
-) -> pd.DataFrame:
-    """Load annual emissions data for specified regions.
-
-    Uses total_ebike_lifecycle and total_drone_lifecycle from regions.template.json
-    if available. Otherwise falls back to reduction percentages.
+def load_annual_emissions(csv_path: str = None) -> pd.DataFrame:
+    """Load annual emissions data from consolidated CSV.
 
     Args:
-        region_keys: List of region keys to load.
-        data_dir: Base data directory. Uses default if None.
+        csv_path: Path to all_region_stats.csv. Uses default if None.
 
     Returns:
         DataFrame with emission data for each region.
     """
-    if data_dir is None:
-        data_dir = os.path.join(_PROJECT_ROOT, "data")
+    if csv_path is None:
+        csv_path = _default_csv_path()
 
-    # Load region info for names and optimal thresholds
-    regions_json_path = os.path.join(_PROJECT_ROOT, "regions.template.json")
-    with open(regions_json_path, "r", encoding="utf-8") as f:
-        regions_data = json.load(f)
+    df = pd.read_csv(csv_path)
 
-    rows = []
-    for region_key in region_keys:
-        if region_key not in regions_data:
-            print(f"Warning: Region '{region_key}' not found")
+    # Filter to rows with emission data
+    df = df[df["total_ebike_lifecycle"].notna()].copy()
+
+    # Compute emission columns vectorized (kg -> tonnes)
+    df["all_ebike_tonnes"] = df["total_ebike_lifecycle"] / 1000.0
+    df["all_drone_tonnes"] = df["total_drone_lifecycle"] / 1000.0
+
+    # Optimal mix: apply reduction percentage
+    reduction = df["max_lifecycle_reduction_pct"].fillna(0)
+    df["optimal_mix_tonnes"] = df["all_ebike_tonnes"] * (1 - reduction / 100)
+    df["reduction_pct"] = reduction
+
+    df["region_name"] = df["region_name_en"]
+
+    return df
+
+
+def print_summary_statistics(df: pd.DataFrame):
+    """Print summary statistics for key result and feature variables."""
+    print("\n" + "=" * 60)
+    print("SUMMARY STATISTICS")
+    print("=" * 60)
+    print(f"Total completed cities: {len(df)}")
+
+    key_vars = RESULT_VARIABLES + get_all_feature_variables()
+    available = [v for v in key_vars if v in df.columns]
+
+    for var in available:
+        series = df[var].dropna()
+        if series.empty:
             continue
-
-        region_info = regions_data[region_key]
-        region_name = region_info.get("region_name_en", region_key)
-        stats = region_info.get("stats", {})
-
-        # Use total_ebike_lifecycle and total_drone_lifecycle from stats if available
-        total_ebike = stats.get("total_ebike_lifecycle")
-        total_drone = stats.get("total_drone_lifecycle")
-        reduction_pct = stats.get("max_lifecycle_reduction_pct")
-
-        if total_ebike is not None and total_drone is not None:
-            # Convert from kg to tonnes (values are in kg)
-            all_ebike_tonnes = total_ebike / 1000.0
-            all_drone_tonnes = total_drone / 1000.0
-
-            # Calculate optimal mix: use reduction percentage to derive optimal mix
-            if reduction_pct is not None:
-                optimal_mix_tonnes = all_ebike_tonnes * (1 - reduction_pct / 100)
-            else:
-                optimal_mix_tonnes = all_drone_tonnes
-
-            rows.append(
-                {
-                    "region": region_key,
-                    "region_name": region_name,
-                    "all_ebike_tonnes": all_ebike_tonnes,
-                    "all_drone_tonnes": all_drone_tonnes,
-                    "optimal_mix_tonnes": optimal_mix_tonnes,
-                    "reduction_pct": reduction_pct if reduction_pct else 0,
-                    "has_actual_data": True,
-                }
-            )
-        elif reduction_pct is not None:
-            # Fall back to using reduction percentage with normalized values
-            all_ebike_normalized = 100.0
-            optimal_mix_normalized = 100.0 * (1 - reduction_pct / 100)
-
-            rows.append(
-                {
-                    "region": region_key,
-                    "region_name": region_name,
-                    "all_ebike_tonnes": all_ebike_normalized,
-                    "all_drone_tonnes": None,
-                    "optimal_mix_tonnes": optimal_mix_normalized,
-                    "reduction_pct": reduction_pct,
-                    "has_actual_data": False,
-                }
-            )
-
-    return pd.DataFrame(rows)
+        label = VARIABLE_LABELS.get(var, var)
+        print(f"\n{label} (n={len(series)}):")
+        print(
+            f"  min={series.min():.3f}  max={series.max():.3f}  "
+            f"mean={series.mean():.3f}  median={series.median():.3f}  "
+            f"std={series.std():.3f}"
+        )
 
 
 def run_correlation_analysis(
-    region_keys: list,
+    csv_path: str = None,
     output_dir: str = None,
     for_latex: bool = False,
     plot_title: bool = False,
 ) -> dict:
-    """Run complete correlation analysis for specified regions.
+    """Run complete correlation analysis from consolidated CSV.
 
     Args:
-        region_keys: List of region keys to analyze.
+        csv_path: Path to all_region_stats.csv. Uses default if None.
         output_dir: Directory to save figures. Uses default if None.
         for_latex: If True, export figures for LaTeX.
+        plot_title: If True, show titles on plots.
 
     Returns:
         Dictionary with analysis results.
@@ -437,10 +351,23 @@ def run_correlation_analysis(
 
     os.makedirs(output_dir, exist_ok=True)
 
+    # Lazy imports to avoid circular dependency
+    from visualization.analysis import (
+        plot_correlation_heatmap,
+        plot_emission_distribution,
+        plot_feature_scatter,
+        plot_geographic_pattern,
+        plot_province_boxplot,
+        plot_top_correlations_bar,
+    )
+
     # Load data
-    print(f"Loading data for regions: {region_keys}")
-    df = load_region_stats(region_keys)
-    print(f"Loaded {len(df)} regions with {len(df.columns)} columns")
+    print("Loading data from CSV...")
+    df = load_region_stats(csv_path)
+    print(f"Loaded {len(df)} completed regions with {len(df.columns)} columns")
+
+    # Print summary statistics
+    print_summary_statistics(df)
 
     # Check available variables
     all_features = get_all_feature_variables()
@@ -516,6 +443,39 @@ def run_correlation_analysis(
             plot_title=plot_title,
         )
 
+    # New analyses for large sample size
+    # Emission distribution
+    dist_path = os.path.join(output_dir, "emission_distribution.pdf")
+    plot_emission_distribution(
+        df,
+        save_path=dist_path,
+        for_latex=for_latex,
+        plot_title=plot_title,
+    )
+
+    # Province-level boxplot
+    if "province" in df.columns:
+        for result_var in available_results:
+            province_path = os.path.join(
+                output_dir, f"province_boxplot_{result_var}.pdf"
+            )
+            plot_province_boxplot(
+                df,
+                result_var,
+                save_path=province_path,
+                for_latex=for_latex,
+                plot_title=plot_title,
+            )
+
+    # Geographic pattern (latitude vs reduction)
+    geo_path = os.path.join(output_dir, "geographic_pattern.pdf")
+    plot_geographic_pattern(
+        df,
+        save_path=geo_path,
+        for_latex=for_latex,
+        plot_title=plot_title,
+    )
+
     return {
         "df": df,
         "pearson_corr": pearson_corr,
@@ -526,6 +486,4 @@ def run_correlation_analysis(
 
 
 if __name__ == "__main__":
-    # Run analysis for study regions
-    study_regions = ["chaoyang", "luohu", "gulou", "wuhou", "tianhe", "xihu"]
-    run_correlation_analysis(study_regions, for_latex=True)
+    run_correlation_analysis(for_latex=True)

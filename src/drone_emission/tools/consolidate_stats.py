@@ -8,23 +8,19 @@ data/{level}/{city}/region_stats.json, then outputs:
 
 Usage:
     cd src/drone_emission
-    python consolidate_stats.py                  # consolidate
-    python consolidate_stats.py --migrate        # one-time migration from regions.json
+    python -m tools.consolidate_stats                  # consolidate
+    python -m tools.consolidate_stats --migrate        # one-time migration from regions.json
 """
 
 import argparse
 import csv
 import json
 import os
-import sys
 
 PROJECT_ROOT = os.path.dirname(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 )
 REGIONS_JSON_PATH = os.path.join(PROJECT_ROOT, "regions.json")
-
-# Ensure local imports work
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from utils import load_config
 
@@ -111,7 +107,12 @@ def consolidate(data_dir: str):
     # Write consolidated CSV (one row per region, flattened stats)
     out_csv = os.path.join(data_dir, "all_region_stats.csv")
     stat_keys = sorted(all_stat_keys)
-    fieldnames = ["region_key", "region_name_cn", "region_name_en", "region_level"] + stat_keys
+    boundary_keys = ["min_lat", "max_lat", "min_lng", "max_lng"]
+    fieldnames = (
+        ["region_key", "region_name_cn", "region_name_en", "region_level"]
+        + boundary_keys
+        + stat_keys
+    )
 
     with open(out_csv, "w", encoding="utf-8", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames)
@@ -123,6 +124,10 @@ def consolidate(data_dir: str):
                 "region_name_en": region["region_name_en"],
                 "region_level": region["region_level"],
             }
+            # Flatten boundary coordinates into columns
+            boundaries = region.get("boundaries_dict", {})
+            for bk in boundary_keys:
+                row[bk] = boundaries.get(bk, "")
             for sk in stat_keys:
                 row[sk] = region["stats"].get(sk, "")
             writer.writerow(row)

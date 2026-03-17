@@ -32,8 +32,8 @@ Add `--all` to process every region in `regions.json` instead of the hardcoded l
 Consolidate per-region stats into a single summary:
 ```bash
 cd src/drone_emission
-python consolidate_stats.py            # merge all per-region stats
-python consolidate_stats.py --migrate  # one-time migration from old regions.json
+python -m tools.consolidate_stats            # merge all per-region stats
+python -m tools.consolidate_stats --migrate  # one-time migration from old regions.json
 ```
 
 To run emission model validation and sensitivity analysis directly:
@@ -69,10 +69,11 @@ All stages above are active in `main.py:run_region_analysis()`. The `profit` sta
 - **`profit/`**: Profit/cost analysis comparing drone vs e-bike delivery economics (currently disabled in pipeline).
 - **`analysis/`**: Cross-region analysis and correlation studies. Not part of the main pipeline; used for post-hoc research.
 - **`calibration/`**: Model calibration scripts (Eleme order data, mean distance, milk-run). Not part of the main pipeline.
+- **`tools/`**: Standalone CLI utilities (run via `python -m tools.<name>`):
+  - `consolidate_stats.py`: Merges all per-region stats into `data/all_region_stats.json` and `.csv`. Use `--migrate` for one-time migration of stats from `regions.json` to per-region files.
+  - `generate_city_configs.py`: Auto-discovers cities from sales data and generates `regions.json` entries with boundaries fetched from Aliyun DataV API.
 - **`visualization/`**: Plotting functions for all stages (buildings, demand, emission, equity, profit, roadnet, sales, cross-region analysis).
 - **`utils/region_config.py`**: `RegionRegistry` singleton pattern for managing region configurations. Loads static config from `regions.json` and per-region stats from `data/{level}/{city}/region_stats.json`. Use `registry.save_region(key)` to persist a single region's stats.
-- **`consolidate_stats.py`**: Merges all per-region stats into `data/all_region_stats.json` and `.csv`. Use `--migrate` for one-time migration of stats from `regions.json` to per-region files.
-- **`generate_city_configs.py`**: Auto-discovers cities from sales data and generates `regions.json` entries with boundaries fetched from Aliyun DataV API.
 
 ### Data Flow
 
@@ -88,7 +89,7 @@ regions.json (static config) + experiment.toml
         ↓
     figures/{level}/{region}/*.png
         ↓
-    consolidate_stats.py → data/all_region_stats.{json,csv}
+    tools/consolidate_stats.py → data/all_region_stats.{json,csv}
 ```
 
 ### Coordinate Systems
