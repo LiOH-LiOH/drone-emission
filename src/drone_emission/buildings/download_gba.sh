@@ -27,7 +27,7 @@ POLYGON_FILE="Polygon/${REGION}/${TILE}.geojson"  # ~3.68 GB
 LOD1_JSON_FILE="LoD1/${REGION}/${TILE}.json"      # ~571 MB
 SCRIPT_FILE="produce_lod1.py"
 
-# Local directory structure (matches what produce_lod1.py expects)
+# Local directory structure
 ODBL_DIR="${DATA_DIR}/ODbLPolygon/${REGION}"
 POLYGON_DIR="${DATA_DIR}/Polygon/${REGION}"
 LOD1_DIR="${DATA_DIR}/LoD1/${REGION}"
@@ -41,11 +41,11 @@ echo "Region:     ${REGION}"
 echo "Data dir:   ${DATA_DIR}"
 echo ""
 echo "Files to download:"
-echo "  1. ODbLPolygon  ${ODBL_FILE}        (~183 MB)"
-echo "  2. Polygon      ${POLYGON_FILE}     (~3.68 GB)"
-echo "  3. LoD1 JSON    ${LOD1_JSON_FILE}   (~571 MB)"
+echo "  1. ODbLPolygon  ${ODBL_FILE}"
+echo "  2. Polygon      ${POLYGON_FILE}"
+echo "  3. LoD1 JSON    ${LOD1_JSON_FILE}"
 echo "  4. Script       ${SCRIPT_FILE}"
-echo "  Total: ~4.4 GB"
+echo "  (sizes vary per tile)"
 echo "============================================================"
 
 # ---- Create directories ----
@@ -116,14 +116,16 @@ for pkg in ijson fiona; do
     fi
 done
 
-# ---- Step 4: Run produce_lod1.py ----
+# ---- Step 4: Run produce_lod1.py (single tile) ----
 echo ""
 echo "---- Step 4: Producing LoD1 GeoJSON with heights ----"
-echo "This merges ODbLPolygon + Polygon + LoD1 JSON -> complete GeoJSON"
+echo "Merging ODbLPolygon + Polygon + LoD1 JSON -> GeoJSON for ${TILE}"
 echo ""
 
-# Symlink only this tile into a temp directory to avoid integrity check
-# conflicts with other tiles being downloaded in parallel
+# Isolate this tile via symlinks in a temp directory so that:
+# - produce_lod1.py's integrity check only sees this tile (not other tiles
+#   being downloaded in parallel by other processes)
+# - SQLite index is process-local (avoids "database is locked" errors)
 TMPDIR=$(mktemp -d)
 mkdir -p "${TMPDIR}/odbl" "${TMPDIR}/poly" "${TMPDIR}/json"
 ln -s "${ODBL_DIR}/${TILE}.geojson" "${TMPDIR}/odbl/${TILE}.geojson"

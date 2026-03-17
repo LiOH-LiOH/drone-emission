@@ -237,10 +237,9 @@ def generate_configs(sales_path: str, dry_run: bool = False, data_dir: str = Non
 
         english_name = city_to_english(city_cn)
         province = city_province[city_cn]
-        # Strip trailing 省/自治区/etc for clean province name
-        province_short = province.rstrip("省").rstrip("市")
-        for suffix in ["自治区", "壮族自治区", "回族自治区", "维吾尔自治区"]:
-            province_short = province_short.replace(suffix, "")
+        # Normalize to gef_china.csv format (e.g. 广西壮族自治区 -> 广西)
+        from utils.grid_emission_factor import normalize_province_name
+        province_short = normalize_province_name(province)
 
         # Build region entry, preserving existing stats/cache if present
         old_entry = existing.get(region_key, {})
@@ -296,8 +295,8 @@ if __name__ == "__main__":
     parser.add_argument(
         "--sales-path",
         type=str,
-        default=os.path.join(PROJECT_ROOT, "data", "combined_data.csv"),
-        help="Path to combined_data.csv",
+        default=None,
+        help="Path to combined_data.csv (default: from experiment.toml)",
     )
     parser.add_argument(
         "--dry-run",
@@ -310,4 +309,5 @@ if __name__ == "__main__":
     config = load_config(EXP_CONFIG_PATH, env=args.env)
     from utils.config import configure_cache
     configure_cache(config)
-    generate_configs(args.sales_path, args.dry_run, data_dir=config.get("data_dir"))
+    sales_path = args.sales_path or config.get("sales_path")
+    generate_configs(sales_path, args.dry_run, data_dir=config.get("data_dir"))
