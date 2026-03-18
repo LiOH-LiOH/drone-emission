@@ -4,7 +4,7 @@ import geopandas as gpd
 import matplotlib.pyplot as plt
 import numpy as np
 from shapely.geometry import Point
-from utils.tools import get_epsg_code
+from utils.tools import get_epsg_code, get_epsg_from_bounds
 
 from ._utils import (
     add_basemap_and_boundaries,
@@ -188,8 +188,11 @@ def visualize_store_coverage(
     )
 
     # Draw delivery radius circle using projected CRS for accuracy
-    # Get appropriate UTM EPSG code for the city
-    epsg_code = get_epsg_code(city_name)
+    # Get appropriate UTM EPSG code from boundaries if available, else fall back to Nominatim
+    if boundaries_dict:
+        epsg_code = get_epsg_from_bounds(boundaries_dict)
+    else:
+        epsg_code = get_epsg_code(city_name)
 
     # Create a point in WGS84, project to UTM, buffer, then back to WGS84
     store_point = gpd.GeoSeries([Point(store_lng, store_lat)], crs="EPSG:4326")

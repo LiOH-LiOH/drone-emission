@@ -6,7 +6,7 @@ import pandas as pd
 from haversine import Unit, haversine, haversine_vector
 from sklearn.neighbors import BallTree
 from utils.coordinates import gcj02_to_wgs84, haversine_distance
-from utils.tools import get_epsg_code
+from utils.tools import get_epsg_from_bounds
 from visualization.buildings import visualize_store_coverage
 
 from .cal_area import preprocess_buildings
@@ -69,7 +69,7 @@ def prepare_store_building_matching(region_info, exp_config):
     if buildings_gdf.crs and buildings_gdf.crs.to_epsg() != 4326:
         buildings_gdf = buildings_gdf.to_crs(epsg=4326)
 
-    epsg_code = get_epsg_code(region_name_en.lower())
+    epsg_code = get_epsg_from_bounds(region_info.boundaries_dict)
 
     # Use UTM zone for accurate centroid calculation (zone 50N for Shenzhen area)
     buildings_projected = buildings_gdf.to_crs(epsg=epsg_code)

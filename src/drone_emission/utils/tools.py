@@ -64,6 +64,14 @@ def get_lat_lon(city):
     return lat, lon
 
 
+def get_epsg_from_bounds(boundaries_dict: dict) -> int:
+    """Get UTM EPSG code from a bounding box dictionary."""
+    lat = (boundaries_dict["min_lat"] + boundaries_dict["max_lat"]) / 2
+    lon = (boundaries_dict["min_lng"] + boundaries_dict["max_lng"]) / 2
+    zone = math.floor((lon + 180) / 6) + 1
+    return (32600 + zone) if lat >= 0 else (32700 + zone)
+
+
 def get_epsg_code(city_name: str) -> str:
     """
     Get the EPSG code for the UTM zone of a city.

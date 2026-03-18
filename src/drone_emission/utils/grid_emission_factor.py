@@ -29,5 +29,11 @@ def normalize_province_name(province_raw: str) -> str:
 def fetch_factor(province: str, gef_path: str) -> float:
     """从CSV文件获取省份的电网排放因子 (kg CO2e/kWh)"""
     data = pd.read_csv(gef_path, encoding="gbk")
-    factor = data.loc[data["城市"] == province, "因子"].values[0]
-    return float(factor)
+    match = data.loc[data["城市"] == province, "因子"]
+    if not match.empty:
+        return float(match.values[0])
+    # Fallback: prefix match (e.g. "宁夏" is prefix of "宁夏回族")
+    for _, row in data.iterrows():
+        if province.startswith(row["城市"]):
+            return float(row["因子"])
+    raise ValueError(f"Province '{province}' not found in {gef_path}")
