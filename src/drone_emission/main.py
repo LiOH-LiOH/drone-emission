@@ -150,6 +150,9 @@ if __name__ == "__main__":
     if getattr(args, "all"):
         run_all(config, level=args.level, skip_completed=args.skip_completed)
     else:
+        if args.skip_completed and args.region in registry and has_emission_results(registry[args.region]):
+            print(f"Skipping {args.region} (already has emission results)")
+            sys.exit(0)
         try:
             run_region_analysis(args.region, config)
             registry.save_region(args.region)
