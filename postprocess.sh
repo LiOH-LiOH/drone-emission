@@ -26,6 +26,10 @@ cd src/drone_emission
 python -u -m tools.consolidate_stats --env "$ENV"
 
 echo ""
+echo "=== Enriching region stats ==="
+python -u -m tools.enrich_stats --env "$ENV"
+
+echo ""
 echo "=== Running cross-region analysis ==="
 python -u -m analysis.cross_regions --env "$ENV"
 

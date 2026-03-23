@@ -821,17 +821,38 @@
   \begin{figure}
     \centering
     \includegraphics[width=0.8\linewidth]{../../figures/analysis/regions_map.pdf}
-    \caption{\textbf{Study regions on China map.} The six study regions are located in different parts of China.}
+    \caption{\textbf{35 completed study regions across China.} Regions span diverse geographic and urban contexts, from dense coastal cities to inland prefectures. Analysis covers 332 cities in total (pipeline ongoing).}
     \label{fig:regions_map}
   \end{figure}
 \end{frame}
 
-\begin{frame}{Cross-Region Comparison}
+\begin{frame}{Cross-Region Emission Summary}
+  \begin{columns}
+    \begin{column}{0.48\textwidth}
+      \begin{figure}
+        \centering
+        \includegraphics[width=\linewidth]{../../figures/analysis/emission_distribution.pdf}
+        \caption{\textbf{Distribution of max lifecycle emission reduction across 35 regions.} Mean reduction 30.6\%, ranging from 20.1\% to 51.4\%.}
+        \label{fig:emission_distribution}
+      \end{figure}
+    \end{column}
+    \begin{column}{0.48\textwidth}
+      \begin{figure}
+        \centering
+        \includegraphics[width=\linewidth]{../../figures/analysis/annual_emissions_comparison.pdf}
+        \caption{\textbf{Annual lifecycle emissions comparison.} All e-bike, all drone, and optimal mixed scenarios across regions.}
+        \label{fig:annual_emissions_comparison}
+      \end{figure}
+    \end{column}
+  \end{columns}
+\end{frame}
+
+\begin{frame}{Geographic Pattern}
   \begin{figure}
     \centering
-    \includegraphics[width=0.8\linewidth]{../../figures/analysis/annual_emissions_comparison.pdf}
-    \caption{\textbf{Annual lifecycle emissions across six regions.} Comparing all e-bike, all drone, and optimal mixed scenarios shows consistent emission reduction potential of 23--48\% with optimal deployment.}
-    \label{fig:annual_emissions_comparison}
+    \includegraphics[width=0.8\linewidth]{../../figures/analysis/geographic_pattern.pdf}
+    \caption{\textbf{Geographic pattern of emission reduction potential.} Spatial variation in drone delivery benefits across Chinese cities.}
+    \label{fig:geographic_pattern}
   \end{figure}
 \end{frame}
 
@@ -839,8 +860,38 @@
   \begin{figure}
     \centering
     \includegraphics[width=0.7\linewidth]{../../figures/analysis/correlation_heatmap.pdf}
-    \caption{\textbf{Pearson correlation heatmap between emission reduction and region features.} The heatmap shows the Pearson correlation coefficients between emission reduction and region features.}
+    \caption{\textbf{Pearson correlation heatmap between emission outcomes and urban features} (n=35). Avg road distance ($r=0.53$) and detour ratio ($r=0.50$) are the strongest predictors of lifecycle emission reduction.}
     \label{fig:correlation_heatmap}
+  \end{figure}
+\end{frame}
+
+\begin{frame}{Key Correlations}
+  \begin{columns}[T]
+    \begin{column}{0.48\textwidth}
+      \begin{figure}
+        \centering
+        \includegraphics[width=\linewidth]{../../figures/analysis/scatter_detour_ratio_vs_max_lifecycle_reduction_pct.pdf}
+        \caption{\textbf{Detour ratio vs.\ max lifecycle reduction.} Spearman $r=0.73$ ($p<0.001$): cities with more circuitous road networks benefit most from drone delivery.}
+        \label{fig:scatter_detour_reduction}
+      \end{figure}
+    \end{column}
+    \begin{column}{0.48\textwidth}
+      \begin{figure}
+        \centering
+        \includegraphics[width=\linewidth]{../../figures/analysis/scatter_avg_road_distance_m_vs_max_lifecycle_reduction_pct.pdf}
+        \caption{\textbf{Avg road distance vs.\ max lifecycle reduction.} Pearson $r=0.53$ ($p=0.001$): longer delivery distances amplify the drone emission advantage.}
+        \label{fig:scatter_distance_reduction}
+      \end{figure}
+    \end{column}
+  \end{columns}
+\end{frame}
+
+\begin{frame}{Provincial Variation}
+  \begin{figure}
+    \centering
+    \includegraphics[width=0.8\linewidth]{../../figures/analysis/province_boxplot_max_lifecycle_reduction_pct.pdf}
+    \caption{\textbf{Max lifecycle emission reduction by province.} Provincial-level variation reflects differences in urban morphology and road network structure.}
+    \label{fig:province_boxplot}
   \end{figure}
 \end{frame}
 
@@ -849,18 +900,19 @@
 \begin{frame}{Discussion and Future Work}
   \begin{columns}
     \begin{column}{0.48\textwidth}
-      \textbf{Key Findings:}
+      \textbf{Key Findings (n=35):}
       \begin{itemize}
-        \item All-drone delivery reduces emissions by \textbf{27\%} compared to all e-bike
-        \item Optimal drone-e-bike mix achieves \textbf{30\%} reduction
-        \item Mixed system provides \textbf{3 percentage points} additional savings
+        \item Mean lifecycle emission reduction: \textbf{30.6\%} (range: 20--51\%)
+        \item Optimal distance threshold: \textbf{0.91\,km} on average
+        \item Optimal drone ratio: \textbf{87\%} of deliveries
       \end{itemize}
 
       \vspace{0.5em}
       \textbf{Correlation Insights:}
       \begin{itemize}
-        \item Optimal drone ratio correlates with \textbf{total road length} (r=0.79)
-        \item Max reduction correlates with \textbf{detour ratio} (r=0.66) and \textbf{average road distance} (r=0.73)
+        \item Detour ratio is the strongest predictor (Spearman $r=0.73$, $p<0.001$)
+        \item Avg road distance also significant (Pearson $r=0.53$, $p=0.001$)
+        \item Building density and road density show no significant effect
       \end{itemize}
     \end{column}
     \begin{column}{0.48\textwidth}

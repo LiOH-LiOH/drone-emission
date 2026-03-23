@@ -26,4 +26,20 @@ VARIABLE_LABELS = {
     "road_density": "Road Density (km/km²)",
     "building_volume_density": "Building Volume Density (m³/km²)",
     "building_area_ratio": "Building Area Ratio (%)",
+    # Demand/sales features
+    "store_count": "Store Count",
+    "total_monthly_sales": "Total Monthly Sales",
+    "store_density": "Store Density (per km²)",
+    "sales_intensity": "Sales Intensity (per store)",
+    # Energy features
+    "grid_emission_factor": "Grid Emission Factor (kg CO₂e/kWh)",
+    # Geographic features
+    "latitude": "Latitude (°N)",
+    "longitude": "Longitude (°E)",
+    # Socioeconomic features
+    "population_10k": "Population (10k)",
+    "gdp_100m": "GDP (100M CNY)",
+    "gdp_per_capita": "GDP per Capita (CNY)",
+    "pop_density": "Population Density (per km²)",
+    "sales_per_capita": "Sales per Capita",
 }

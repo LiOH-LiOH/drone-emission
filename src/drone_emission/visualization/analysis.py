@@ -647,6 +647,112 @@ def plot_province_boxplot(
     plt.close(fig)
 
 
+def plot_regression_coefficients(
+    results,
+    result_var: str,
+    save_path: str = None,
+    figsize: tuple = (10, 6),
+    for_latex: bool = False,
+    plot_title: bool = False,
+):
+    """Plot horizontal bar chart of standardized regression coefficients with 95% CI.
+
+    Args:
+        results: statsmodels OLS RegressionResults.
+        result_var: Name of dependent variable (for title).
+        save_path: Path to save figure.
+        figsize: Figure size tuple.
+        for_latex: If True, save as PDF.
+        plot_title: If True, show title.
+    """
+    # Exclude intercept
+    params = results.params.drop("const", errors="ignore")
+    conf = results.conf_int().drop("const", errors="ignore")
+    pvalues = results.pvalues.drop("const", errors="ignore")
+
+    if params.empty:
+        print("No coefficients to plot")
+        return
+
+    # Sort by absolute value
+    order = params.abs().sort_values(ascending=True).index
+    params = params[order]
+    conf = conf.loc[order]
+    pvalues = pvalues[order]
+
+    labels = [VARIABLE_LABELS.get(v, v) for v in params.index]
+    y_pos = np.arange(len(params))
+
+    # Error bars (distance from coefficient to CI bounds)
+    ci_lower = params.values - conf[0].values
+    ci_upper = conf[1].values - params.values
+    errors = np.array([ci_lower, ci_upper])
+
+    # Color by significance
+    colors = []
+    for p in pvalues.values:
+        if p < 0.01:
+            colors.append("#2ecc71")  # Green — highly significant
+        elif p < 0.05:
+            colors.append("#3498db")  # Blue — significant
+        elif p < 0.1:
+            colors.append("#f39c12")  # Orange — marginal
+        else:
+            colors.append("#95a5a6")  # Gray — not significant
+
+    fig, ax = plt.subplots(figsize=figsize)
+
+    ax.barh(y_pos, params.values, xerr=errors, color=colors, alpha=0.8,
+            ecolor="black", capsize=3, height=0.6)
+
+    ax.set_yticks(y_pos)
+    ax.set_yticklabels(labels, fontsize=10)
+    ax.set_xlabel("Standardized Coefficient (β)", fontsize=12)
+    ax.axvline(x=0, color="black", linestyle="-", linewidth=0.8)
+    ax.grid(True, alpha=0.3, linestyle="--", axis="x")
+
+    # Add R² and N annotation
+    ax.text(
+        0.97, 0.03,
+        f"N={int(results.nobs)}, R²={results.rsquared:.3f}, Adj R²={results.rsquared_adj:.3f}",
+        transform=ax.transAxes, ha="right", va="bottom", fontsize=9,
+        bbox=dict(boxstyle="round,pad=0.3", facecolor="wheat", alpha=0.5),
+    )
+
+    # Legend for significance colors
+    from matplotlib.patches import Patch
+    legend_elements = [
+        Patch(facecolor="#2ecc71", label="p < 0.01"),
+        Patch(facecolor="#3498db", label="p < 0.05"),
+        Patch(facecolor="#f39c12", label="p < 0.1"),
+        Patch(facecolor="#95a5a6", label="n.s."),
+    ]
+    ax.legend(handles=legend_elements, loc="lower left", fontsize=8, framealpha=0.8)
+
+    if plot_title:
+        result_label = VARIABLE_LABELS.get(result_var, result_var)
+        ax.set_title(
+            f"OLS Coefficients: {result_label}",
+            fontsize=12,
+            fontweight="bold",
+        )
+
+    plt.tight_layout()
+
+    if save_path:
+        if for_latex and not save_path.endswith(".pdf"):
+            save_path = save_path.rsplit(".", 1)[0] + ".pdf"
+        if plot_title:
+            save_path = _add_title_suffix(save_path)
+        os.makedirs(os.path.dirname(save_path), exist_ok=True)
+        plt.savefig(save_path, dpi=300, bbox_inches="tight")
+        print(f"Regression coefficient plot saved to {save_path}")
+    else:
+        plt.show()
+
+    plt.close(fig)
+
+
 def plot_geographic_pattern(
     df: pd.DataFrame,
     save_path: str = None,

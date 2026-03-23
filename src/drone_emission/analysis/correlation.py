@@ -35,16 +35,31 @@ FEATURE_VARIABLES = {
         "avg_straight_distance_m",
         "roadnet_length_total",
     ],
-    # "demand": [
-    # "odpair_count",
-    # "valid_path_count",
-    # ],
     "density": [
         "region_area_km2",
         "building_density",
         "road_density",
         "building_volume_density",
         # "building_area_ratio",
+    ],
+    "demand": [
+        "store_count",
+        "sales_intensity",
+        "store_density",
+    ],
+    "socioeconomic": [
+        "population_10k",
+        "gdp_100m",
+        "gdp_per_capita",
+        "pop_density",
+        "sales_per_capita",
+    ],
+    "geographic": [
+        "latitude",
+        "longitude",
+    ],
+    "energy": [
+        "grid_emission_factor",
     ],
 }
 
@@ -53,7 +68,10 @@ FEATURE_VARIABLES = {
 
 
 def _default_csv_path() -> str:
-    """Return default path to all_region_stats.csv."""
+    """Return default path to enriched stats CSV (falls back to base CSV)."""
+    enriched = os.path.join(_PROJECT_ROOT, "data", "all_region_stats_enriched.csv")
+    if os.path.exists(enriched):
+        return enriched
     return os.path.join(_PROJECT_ROOT, "data", "all_region_stats.csv")
 
 

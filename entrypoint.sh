@@ -69,8 +69,7 @@ if [ "$ALL_MODE" = true ]; then
         # Extract region keys from regions.json, pipe through xargs for parallel execution
         python -c "import json; [print(k) for k in json.load(open('../../regions.json'))]" \
             | xargs -P "$PARALLEL" -I {} \
-            systemd-run --user --scope -p MemoryMax=${MEMORY_MAX} \
-            python -u main.py --region {} --skip-completed --env "$ENV"
+            bash -c 'systemd-run --user --scope -p MemoryMax='"${MEMORY_MAX}"' python -u main.py --region "$1" --skip-completed --env '"$ENV"' || echo "FAILED: $1"' _ {}
     else
         echo "Running ALL cities via main.py --all..."
         systemd-run --user --scope -p MemoryMax=${MEMORY_MAX} \

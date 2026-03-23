@@ -1,4 +1,5 @@
 import argparse
+import sys
 import traceback
 from pathlib import Path
 
@@ -149,5 +150,11 @@ if __name__ == "__main__":
     if getattr(args, "all"):
         run_all(config, level=args.level, skip_completed=args.skip_completed)
     else:
-        run_region_analysis(args.region, config)
-        registry.save_region(args.region)
+        try:
+            run_region_analysis(args.region, config)
+            registry.save_region(args.region)
+        except Exception as e:
+            print(f"\nERROR processing {args.region}: {e}")
+            traceback.print_exc()
+            registry.save_region(args.region)
+            sys.exit(1)

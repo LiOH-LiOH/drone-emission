@@ -1,8 +1,8 @@
 """Cross-region analysis orchestration.
 
-Reads from all_region_stats.csv produced by consolidate_stats.py and runs
+Reads from all_region_stats_enriched.csv (or all_region_stats.csv) and runs
 all cross-region analyses: China map, correlations, emission distributions,
-province comparisons, and annual emission bar charts.
+province comparisons, annual emission bar charts, and OLS regression.
 
 Usage:
     cd src/drone_emission
@@ -30,6 +30,7 @@ from analysis.correlation import (
     load_region_stats,
     run_correlation_analysis,
 )
+from analysis.regression import run_regression_analysis
 
 # Project root directory (4 levels up from this file)
 PROJECT_ROOT = os.path.dirname(
@@ -38,6 +39,10 @@ PROJECT_ROOT = os.path.dirname(
 
 
 def _get_csv_path(data_dir: str) -> str:
+    """Return path to stats CSV, preferring enriched version if available."""
+    enriched = os.path.join(data_dir, "all_region_stats_enriched.csv")
+    if os.path.exists(enriched):
+        return enriched
     return os.path.join(data_dir, "all_region_stats.csv")
 
 
@@ -100,6 +105,21 @@ def analyze_annual_emissions(
         for_latex=for_latex,
         plot_title=plot_title,
         top_n=10,
+    )
+
+
+def analyze_regression(
+    csv_path: str,
+    for_latex: bool = False,
+    plot_title: bool = False,
+) -> dict:
+    """Run OLS regression analysis on enriched region features."""
+    output_dir = os.path.join(PROJECT_ROOT, "figures", "analysis")
+    return run_regression_analysis(
+        csv_path=csv_path,
+        output_dir=output_dir,
+        for_latex=for_latex,
+        plot_title=plot_title,
     )
 
 
@@ -168,3 +188,9 @@ if __name__ == "__main__":
     print("Running province comparison...")
     print("=" * 60)
     analyze_province_comparison(csv_path, for_latex=True)
+
+    # 5. OLS regression analysis
+    print("\n" + "=" * 60)
+    print("Running regression analysis...")
+    print("=" * 60)
+    analyze_regression(csv_path, for_latex=True)
