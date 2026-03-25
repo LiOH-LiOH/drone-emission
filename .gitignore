@@ -15,3 +15,4 @@ regions.template.json
 build/
 pdf/
 signature.png
+analysis_report.md
