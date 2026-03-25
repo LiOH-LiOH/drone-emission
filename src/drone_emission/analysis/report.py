@@ -117,7 +117,7 @@ def generate_report(csv_path: str) -> str:
         w("\n| Rank | City | Province | Reduction (%) | Opt. Threshold (km) | Drone Ratio (%) | Detour Ratio | Grid EF |")
         w("|------|------|----------|---------------|---------------------|-----------------|--------------|---------|")
         for i, (_, row) in enumerate(sorted_df.head(15).iterrows(), 1):
-            w(f"| {i} | {row.get('region_name_en', 'N/A')} "
+            w(f"| {i} | {row.get('region_name', 'N/A')} "
               f"| {_province_en(row.get('province', 'N/A'))} "
               f"| {_fmt(row.get('max_lifecycle_reduction_pct'))} "
               f"| {_fmt(row.get('optimal_threshold_km'))} "
@@ -129,7 +129,7 @@ def generate_report(csv_path: str) -> str:
         w("\n| Rank | City | Province | Reduction (%) | Opt. Threshold (km) | Drone Ratio (%) | Detour Ratio | Grid EF |")
         w("|------|------|----------|---------------|---------------------|-----------------|--------------|---------|")
         for i, (_, row) in enumerate(sorted_df.tail(15).iterrows(), 1):
-            w(f"| {i} | {row.get('region_name_en', 'N/A')} "
+            w(f"| {i} | {row.get('region_name', 'N/A')} "
               f"| {_province_en(row.get('province', 'N/A'))} "
               f"| {_fmt(row.get('max_lifecycle_reduction_pct'))} "
               f"| {_fmt(row.get('optimal_threshold_km'))} "
@@ -142,7 +142,7 @@ def generate_report(csv_path: str) -> str:
 
     if "province" in df.columns and "max_lifecycle_reduction_pct" in df.columns:
         prov = df.groupby("province").agg(
-            n_cities=("region_name_en", "count"),
+            n_cities=("region_name", "count"),
             mean_reduction=("max_lifecycle_reduction_pct", "mean"),
             median_reduction=("max_lifecycle_reduction_pct", "median"),
             std_reduction=("max_lifecycle_reduction_pct", "std"),
@@ -221,7 +221,7 @@ def generate_report(csv_path: str) -> str:
     w("\n## 8. Full City Data (sorted by emission reduction)")
 
     display_cols = [
-        "region_name_en", "province", "max_lifecycle_reduction_pct",
+        "region_name", "province", "max_lifecycle_reduction_pct",
         "optimal_threshold_km", "optimal_drone_ratio_pct",
         "detour_ratio", "grid_emission_factor", "region_area_km2",
         "building_density", "road_density", "store_count",
@@ -234,7 +234,7 @@ def generate_report(csv_path: str) -> str:
 
         # Header
         header_labels = {
-            "region_name_en": "City",
+            "region_name": "City",
             "province": "Province",
             "max_lifecycle_reduction_pct": "Reduction (%)",
             "optimal_threshold_km": "Threshold (km)",
