@@ -593,41 +593,46 @@ def plot_city_emission_ranking(
 
     fig, ax = plt.subplots(figsize=figsize)
 
-    # Plot all cities
-    ax.plot(
-        plot_df["rank"], plot_df[variable],
-        color="#3498db", linewidth=1.5, zorder=2,
-    )
-    ax.fill_between(
-        plot_df["rank"], plot_df[variable],
-        alpha=0.15, color="#3498db", zorder=1,
-    )
-
-    # Highlight 1st, 25th percentile, 50th percentile
-    highlights = {
+    # Highlight indices
+    highlight_indices = {
         "1st": 0,
         "25%": max(0, int(n * 0.25) - 1),
         "50%": max(0, int(n * 0.50) - 1),
     }
-    colors = {"1st": "#e74c3c", "25%": "#f39c12", "50%": "#2ecc71"}
-    markers = {"1st": "*", "25%": "D", "50%": "o"}
+    highlight_colors = {"1st": "#e74c3c", "25%": "#f39c12", "50%": "#2ecc71"}
+    highlight_set = set(highlight_indices.values())
 
-    for label, idx in highlights.items():
+    # Bar colors: highlight bars get their color, rest get default
+    bar_colors = []
+    for i in range(n):
+        assigned = False
+        for label, idx in highlight_indices.items():
+            if i == idx:
+                bar_colors.append(highlight_colors[label])
+                assigned = True
+                break
+        if not assigned:
+            bar_colors.append("#3498db")
+
+    # Draw bars
+    ax.bar(
+        plot_df["rank"], plot_df[variable],
+        color=bar_colors, width=1.0, edgecolor="none", alpha=0.85, zorder=2,
+    )
+
+    # Annotate highlighted bars
+    for label, idx in highlight_indices.items():
         row = plot_df.iloc[idx]
-        ax.scatter(
-            row["rank"], row[variable],
-            color=colors[label], s=120, zorder=5,
-            marker=markers[label], edgecolors="black", linewidths=0.8,
-        )
         city = row["region_name"]
         value = row[variable]
         ax.annotate(
-            f"{label}: {city}\n({value:.1f}%)",
+            f"{label}: {city} ({value:.1f}%)",
             xy=(row["rank"], value),
-            xytext=(15, 10), textcoords="offset points",
+            xytext=(15, 12), textcoords="offset points",
             fontsize=9, fontweight="bold",
-            arrowprops=dict(arrowstyle="->", color=colors[label], lw=1.2),
-            bbox=dict(boxstyle="round,pad=0.3", facecolor="white", edgecolor=colors[label], alpha=0.9),
+            arrowprops=dict(arrowstyle="->", color=highlight_colors[label], lw=1.2),
+            bbox=dict(boxstyle="round,pad=0.3", facecolor="white",
+                      edgecolor=highlight_colors[label], alpha=0.9),
         )
 
     ax.set_xlabel("City Rank", fontsize=12)
