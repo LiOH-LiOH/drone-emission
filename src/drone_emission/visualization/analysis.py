@@ -577,11 +577,11 @@ def plot_city_emission_ranking(
         for_latex: If True, save as PDF.
         plot_title: If True, show title.
     """
-    if variable not in df.columns or "region_name_en" not in df.columns:
+    if variable not in df.columns or "region_name" not in df.columns:
         print(f"Required columns not found for city ranking plot")
         return
 
-    plot_df = df[["region_name_en", variable]].dropna().copy()
+    plot_df = df[["region_name", variable]].dropna().copy()
     if plot_df.empty:
         print("No data for city ranking plot")
         return
@@ -619,7 +619,7 @@ def plot_city_emission_ranking(
             color=colors[label], s=120, zorder=5,
             marker=markers[label], edgecolors="black", linewidths=0.8,
         )
-        city = row["region_name_en"]
+        city = row["region_name"]
         value = row[variable]
         ax.annotate(
             f"{label}: {city}\n({value:.1f}%)",
