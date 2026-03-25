@@ -21,6 +21,7 @@ from utils import load_config
 from visualization.regions import plot_regions_on_china_map
 from visualization.analysis import (
     plot_annual_emissions_comparison,
+    plot_city_emission_ranking,
     plot_emission_distribution,
     plot_province_boxplot,
 )
@@ -92,6 +93,15 @@ def analyze_annual_emissions(
     plot_emission_distribution(
         df,
         save_path=dist_path,
+        for_latex=for_latex,
+        plot_title=plot_title,
+    )
+
+    # City ranking plot
+    ranking_path = os.path.join(output_dir, "city_emission_ranking.pdf")
+    plot_city_emission_ranking(
+        df,
+        save_path=ranking_path,
         for_latex=for_latex,
         plot_title=plot_title,
     )

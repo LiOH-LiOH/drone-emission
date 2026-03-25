@@ -10,7 +10,7 @@ from scipy import stats
 from visualization._utils import _add_title_suffix
 
 # Import from constants module (no circular dependency)
-from analysis.constants import VARIABLE_LABELS
+from analysis.constants import PROVINCE_NAME_EN, VARIABLE_LABELS
 
 
 def plot_correlation_heatmap(
@@ -559,6 +559,111 @@ def plot_emission_distribution(
     plt.close(fig)
 
 
+def plot_city_emission_ranking(
+    df: pd.DataFrame,
+    variable: str = "max_lifecycle_reduction_pct",
+    save_path: str = None,
+    figsize: tuple = (12, 6),
+    for_latex: bool = False,
+    plot_title: bool = False,
+):
+    """Plot cities ranked by emission reduction with percentile highlights.
+
+    Args:
+        df: DataFrame with region statistics.
+        variable: Variable to rank by.
+        save_path: Path to save figure.
+        figsize: Figure size tuple.
+        for_latex: If True, save as PDF.
+        plot_title: If True, show title.
+    """
+    if variable not in df.columns or "region_name_en" not in df.columns:
+        print(f"Required columns not found for city ranking plot")
+        return
+
+    plot_df = df[["region_name_en", variable]].dropna().copy()
+    if plot_df.empty:
+        print("No data for city ranking plot")
+        return
+
+    # Sort descending by reduction
+    plot_df = plot_df.sort_values(variable, ascending=False).reset_index(drop=True)
+    plot_df["rank"] = plot_df.index + 1
+    n = len(plot_df)
+
+    fig, ax = plt.subplots(figsize=figsize)
+
+    # Plot all cities
+    ax.plot(
+        plot_df["rank"], plot_df[variable],
+        color="#3498db", linewidth=1.5, zorder=2,
+    )
+    ax.fill_between(
+        plot_df["rank"], plot_df[variable],
+        alpha=0.15, color="#3498db", zorder=1,
+    )
+
+    # Highlight 1st, 25th percentile, 50th percentile
+    highlights = {
+        "1st": 0,
+        "25%": max(0, int(n * 0.25) - 1),
+        "50%": max(0, int(n * 0.50) - 1),
+    }
+    colors = {"1st": "#e74c3c", "25%": "#f39c12", "50%": "#2ecc71"}
+    markers = {"1st": "*", "25%": "D", "50%": "o"}
+
+    for label, idx in highlights.items():
+        row = plot_df.iloc[idx]
+        ax.scatter(
+            row["rank"], row[variable],
+            color=colors[label], s=120, zorder=5,
+            marker=markers[label], edgecolors="black", linewidths=0.8,
+        )
+        city = row["region_name_en"]
+        value = row[variable]
+        ax.annotate(
+            f"{label}: {city}\n({value:.1f}%)",
+            xy=(row["rank"], value),
+            xytext=(15, 10), textcoords="offset points",
+            fontsize=9, fontweight="bold",
+            arrowprops=dict(arrowstyle="->", color=colors[label], lw=1.2),
+            bbox=dict(boxstyle="round,pad=0.3", facecolor="white", edgecolor=colors[label], alpha=0.9),
+        )
+
+    ax.set_xlabel("City Rank", fontsize=12)
+    ax.set_ylabel(VARIABLE_LABELS.get(variable, variable), fontsize=12)
+    ax.grid(True, alpha=0.3, linestyle="--")
+
+    # Add summary stats
+    ax.text(
+        0.97, 0.95,
+        f"n={n}\nMean: {plot_df[variable].mean():.1f}%\nMedian: {plot_df[variable].median():.1f}%",
+        transform=ax.transAxes, ha="right", va="top", fontsize=9,
+        bbox=dict(boxstyle="round,pad=0.3", facecolor="wheat", alpha=0.5),
+    )
+
+    if plot_title:
+        ax.set_title(
+            f"City Ranking by {VARIABLE_LABELS.get(variable, variable)}",
+            fontsize=14, fontweight="bold",
+        )
+
+    plt.tight_layout()
+
+    if save_path:
+        if for_latex and not save_path.endswith(".pdf"):
+            save_path = save_path.rsplit(".", 1)[0] + ".pdf"
+        if plot_title:
+            save_path = _add_title_suffix(save_path)
+        os.makedirs(os.path.dirname(save_path), exist_ok=True)
+        plt.savefig(save_path, dpi=300, bbox_inches="tight")
+        print(f"City ranking plot saved to {save_path}")
+    else:
+        plt.show()
+
+    plt.close(fig)
+
+
 def plot_province_boxplot(
     df: pd.DataFrame,
     variable: str,
@@ -589,6 +694,11 @@ def plot_province_boxplot(
     if plot_df.empty:
         print("No data for province boxplot")
         return
+
+    # Translate province names to English
+    plot_df["province"] = plot_df["province"].map(
+        lambda x: PROVINCE_NAME_EN.get(x, x)
+    )
 
     # Group small provinces as "Other"
     province_counts = plot_df["province"].value_counts()
