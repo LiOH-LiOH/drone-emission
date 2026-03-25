@@ -80,4 +80,7 @@ PROVINCE_NAME_EN = {
     "香港": "Hong Kong",
     "澳门": "Macau",
     "台湾": "Taiwan",
+    "宁夏回族": "Ningxia",
+    "广西壮族": "Guangxi",
+    "新疆维吾尔": "Xinjiang",
 }
