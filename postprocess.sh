@@ -34,4 +34,8 @@ echo "=== Running cross-region analysis ==="
 python -u -m analysis.cross_regions --env "$ENV"
 
 echo ""
+echo "=== Generating analysis report ==="
+python -u -m analysis.report --env "$ENV"
+
+echo ""
 echo "Done! Figures saved to figures/analysis/"
