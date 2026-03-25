@@ -6,8 +6,10 @@ from utils.province import get_province_from_district
 from utils.grid_emission_factor import fetch_factor, normalize_province_name
 from visualization.emission import (
     plot_distance_detour_scatter,
+    plot_distance_vs_emission,
     plot_emission_reduction_analysis,
     plot_road_distance_distribution,
+    plot_time_vs_distance,
 )
 
 from .cal_single_delivery import (
@@ -347,5 +349,28 @@ def cal_emission(region_info, exp_config):
         plot_title=plot_title,
     )
     print(f"距离-绕行比散点图已保存: {detour_fig_path}")
+
+    # Trip time vs distance plot
+    optimal_threshold = float(max_row["threshold"])
+    time_dist_path = os.path.join(
+        fig_save_dir, f"{region_name_en.lower()}_time_vs_distance.png"
+    )
+    time_dist_fig = plot_time_vs_distance(
+        road_distances, ebike_time, drone_time,
+        optimal_threshold_km=optimal_threshold,
+        save_path=time_dist_path, for_latex=for_latex, plot_title=plot_title,
+    )
+    print(f"Time vs distance plot saved: {time_dist_fig}")
+
+    # Distance vs emission plot
+    dist_emission_path = os.path.join(
+        fig_save_dir, f"{region_name_en.lower()}_distance_vs_emission.png"
+    )
+    dist_emission_fig = plot_distance_vs_emission(
+        road_distances, ebike_lifecycle, drone_lifecycle,
+        optimal_threshold_km=optimal_threshold,
+        save_path=dist_emission_path, for_latex=for_latex, plot_title=plot_title,
+    )
+    print(f"Distance vs emission plot saved: {dist_emission_fig}")
 
     return results_df

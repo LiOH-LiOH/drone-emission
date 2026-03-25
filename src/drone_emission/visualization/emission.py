@@ -1105,3 +1105,103 @@ def plot_distance_detour_scatter(
     else:
         plt.show()
         return None
+
+
+def _save_or_show(fig, save_path, dpi, for_latex, plot_title):
+    """Helper to save or show a figure."""
+    if save_path:
+        os.makedirs(os.path.dirname(save_path), exist_ok=True)
+        if for_latex and not save_path.endswith(".pdf"):
+            save_path = save_path.rsplit(".", 1)[0] + ".pdf"
+        if plot_title:
+            save_path = _add_title_suffix(save_path)
+        plt.savefig(save_path, dpi=dpi, bbox_inches="tight")
+        plt.close(fig)
+        return save_path
+    else:
+        plt.show()
+        return None
+
+
+def plot_time_vs_distance(
+    road_distances_km,
+    ebike_time_min,
+    drone_time_min,
+    optimal_threshold_km: float,
+    save_path: str = None,
+    dpi: int = 300,
+    for_latex: bool = False,
+    plot_title: bool = False,
+    n_bins: int = 50,
+):
+    """Plot trip time vs trip distance for all-ebike and optimal mix scenarios."""
+    road_distances_km = np.asarray(road_distances_km)
+    ebike_time_min = np.asarray(ebike_time_min)
+    drone_time_min = np.asarray(drone_time_min)
+
+    mix_time = np.where(road_distances_km >= optimal_threshold_km, drone_time_min, ebike_time_min)
+
+    bin_edges = np.linspace(road_distances_km.min(), np.percentile(road_distances_km, 99), n_bins + 1)
+    bin_centers = (bin_edges[:-1] + bin_edges[1:]) / 2
+    bin_idx = np.clip(np.digitize(road_distances_km, bin_edges) - 1, 0, n_bins - 1)
+
+    ebike_means = np.array([ebike_time_min[bin_idx == i].mean() if (bin_idx == i).any() else np.nan for i in range(n_bins)])
+    mix_means = np.array([mix_time[bin_idx == i].mean() if (bin_idx == i).any() else np.nan for i in range(n_bins)])
+
+    fig, ax = plt.subplots(figsize=(10, 6))
+    ax.plot(bin_centers, ebike_means, color="#e74c3c", linewidth=2, label="All E-bike")
+    ax.plot(bin_centers, mix_means, color="#3498db", linewidth=2, label="Optimal Mix")
+    ax.axvline(optimal_threshold_km, color="gray", linestyle="--", linewidth=1, alpha=0.7,
+               label=f"Threshold: {optimal_threshold_km:.1f} km")
+
+    ax.set_xlabel("Trip Distance (km)", fontsize=12)
+    ax.set_ylabel("Trip Time (min)", fontsize=12)
+    ax.legend(fontsize=10)
+    ax.grid(True, alpha=0.3, linestyle="--")
+    if plot_title:
+        ax.set_title("Trip Time vs Distance: All E-bike vs Optimal Mix", fontsize=14)
+
+    plt.tight_layout()
+    return _save_or_show(fig, save_path, dpi, for_latex, plot_title)
+
+
+def plot_distance_vs_emission(
+    road_distances_km,
+    ebike_lifecycle_g,
+    drone_lifecycle_g,
+    optimal_threshold_km: float,
+    save_path: str = None,
+    dpi: int = 300,
+    for_latex: bool = False,
+    plot_title: bool = False,
+    n_bins: int = 50,
+):
+    """Plot lifecycle emission vs trip distance for all-ebike and optimal mix scenarios."""
+    road_distances_km = np.asarray(road_distances_km)
+    ebike_lifecycle_g = np.asarray(ebike_lifecycle_g)
+    drone_lifecycle_g = np.asarray(drone_lifecycle_g)
+
+    mix_emission = np.where(road_distances_km >= optimal_threshold_km, drone_lifecycle_g, ebike_lifecycle_g)
+
+    bin_edges = np.linspace(road_distances_km.min(), np.percentile(road_distances_km, 99), n_bins + 1)
+    bin_centers = (bin_edges[:-1] + bin_edges[1:]) / 2
+    bin_idx = np.clip(np.digitize(road_distances_km, bin_edges) - 1, 0, n_bins - 1)
+
+    ebike_means = np.array([ebike_lifecycle_g[bin_idx == i].mean() if (bin_idx == i).any() else np.nan for i in range(n_bins)])
+    mix_means = np.array([mix_emission[bin_idx == i].mean() if (bin_idx == i).any() else np.nan for i in range(n_bins)])
+
+    fig, ax = plt.subplots(figsize=(10, 6))
+    ax.plot(bin_centers, ebike_means, color="#e74c3c", linewidth=2, label="All E-bike")
+    ax.plot(bin_centers, mix_means, color="#3498db", linewidth=2, label="Optimal Mix")
+    ax.axvline(optimal_threshold_km, color="gray", linestyle="--", linewidth=1, alpha=0.7,
+               label=f"Threshold: {optimal_threshold_km:.1f} km")
+
+    ax.set_xlabel("Trip Distance (km)", fontsize=12)
+    ax.set_ylabel("Lifecycle Emission (g CO\u2082e)", fontsize=12)
+    ax.legend(fontsize=10)
+    ax.grid(True, alpha=0.3, linestyle="--")
+    if plot_title:
+        ax.set_title("Emission vs Distance: All E-bike vs Optimal Mix", fontsize=14)
+
+    plt.tight_layout()
+    return _save_or_show(fig, save_path, dpi, for_latex, plot_title)
