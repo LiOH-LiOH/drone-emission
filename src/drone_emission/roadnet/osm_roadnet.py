@@ -8,6 +8,7 @@ import osmnx as ox
 # Cache folder is set by utils.config.configure_cache() at startup
 ox.settings.use_cache = True
 ox.settings.log_console = False
+ox.settings.requests_timeout = (10, 180)  # (connect, read) — fail fast on unreachable server
 
 
 def fetch_bikeable_roadnet(bbox_4326: Dict[str, float], save_path: str) -> None:
