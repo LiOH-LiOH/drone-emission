@@ -117,10 +117,11 @@ def analyze_equity(region_info, exp_config) -> pd.DataFrame:
     if not has_time_cols:
         print("Warning: Time columns not found. Run emission calculation to add time data.")
 
-    # Load buildings
-    buildings_path = os.path.join(
-        data_dir, f"{region_name_en.lower()}_buildings_preprocessed.geojson"
-    )
+    # Load buildings (prefer .gpkg, fall back to .geojson)
+    base = f"{region_name_en.lower()}_buildings_preprocessed"
+    buildings_path = os.path.join(data_dir, f"{base}.gpkg")
+    if not os.path.exists(buildings_path):
+        buildings_path = os.path.join(data_dir, f"{base}.geojson")
     if os.path.exists(buildings_path):
         buildings_gdf = gpd.read_file(buildings_path)
         print(f"Loaded {len(buildings_gdf)} buildings")

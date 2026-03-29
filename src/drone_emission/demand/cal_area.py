@@ -23,8 +23,9 @@ def preprocess_buildings(building_path, save_path):
     # === Calculate volume (area * height) ===
     buildings_gdf["volume_m3"] = buildings_gdf["area_m2"] * buildings_gdf["height"]
 
-    # === Save preprocessed data ===
-    buildings_gdf.to_file(save_path, driver="GeoJSON")
+    # === Save preprocessed data (prefer GeoPackage for performance) ===
+    save_path = os.path.splitext(save_path)[0] + ".gpkg"
+    buildings_gdf.to_file(save_path, driver="GPKG")
     print(f"Saved preprocessed buildings to {save_path}")
 
     # Print summary statistics
@@ -46,4 +47,4 @@ def preprocess_buildings(building_path, save_path):
         f"max={buildings_gdf['volume_m3'].max():.1f}"
     )
 
-    return buildings_gdf
+    return save_path, buildings_gdf

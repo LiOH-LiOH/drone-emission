@@ -33,21 +33,21 @@ def prepare_store_building_matching(region_info, exp_config):
     region_name_en = region_config["region_name_en"]
     region_level = region_config["region_level"]
 
-    raw_path = os.path.join(
-        exp_config["data_dir"],
-        region_level,
-        region_name_en.lower(),
-        f"{region_name_en.lower()}_buildings.geojson",
+    region_dir = os.path.join(
+        exp_config["data_dir"], region_level, region_name_en.lower()
     )
+    base = region_name_en.lower()
 
-    building_path = os.path.join(
-        exp_config["data_dir"],
-        region_level,
-        region_name_en.lower(),
-        f"{region_name_en.lower()}_buildings_preprocessed.geojson",
-    )
+    # Prefer .gpkg, fall back to legacy .geojson
+    raw_gpkg = os.path.join(region_dir, f"{base}_buildings.gpkg")
+    raw_geojson = os.path.join(region_dir, f"{base}_buildings.geojson")
+    raw_path = raw_gpkg if os.path.exists(raw_gpkg) else raw_geojson
 
-    preprocess_buildings(raw_path, building_path)
+    prep_gpkg = os.path.join(region_dir, f"{base}_buildings_preprocessed.gpkg")
+    prep_geojson = os.path.join(region_dir, f"{base}_buildings_preprocessed.geojson")
+    building_path = prep_gpkg if os.path.exists(prep_gpkg) else prep_geojson
+
+    building_path, buildings_gdf = preprocess_buildings(raw_path, building_path)
     print("Preprocessing of building data completed.")
 
     # === Load store data ===
@@ -60,8 +60,6 @@ def prepare_store_building_matching(region_info, exp_config):
     stores_df = pd.read_csv(store_path)
     print(f"Loaded {len(stores_df)} stores from {store_path}")
 
-    # === Load building data ===
-    buildings_gdf = gpd.read_file(building_path)
     print(f"Loaded {len(buildings_gdf)} buildings from {building_path}")
 
     # === Extract building centroids ===
