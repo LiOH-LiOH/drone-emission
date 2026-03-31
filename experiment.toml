@@ -62,12 +62,12 @@ fetch_roadnet = false
 
 # ============ Remote Environment ============
 [remote]
-cache_dir = "/mnt/major_storage/jingxian/drone-emission/cache"
-data_dir = "/mnt/major_storage/jingxian/drone-emission/data"
+cache_dir = "/mnt/minor_storage/jingxian/drone-emission/cache"
+data_dir = "/mnt/minor_storage/jingxian/drone-emission/data"
 figures_dir = "/home/jingxian/code/drone-emission/figures"
-sales_path = "/mnt/major_storage/jingxian/drone-emission/data/combined_data.csv"
-gef_path = "/mnt/major_storage/jingxian/drone-emission/data/gef_china.csv"
-gba_data_dir = "/mnt/major_storage/jingxian/drone-emission/gba_data"
+sales_path = "/mnt/minor_storage/jingxian/drone-emission/data/combined_data.csv"
+gef_path = "/mnt/minor_storage/jingxian/drone-emission/data/gef_china.csv"
+gba_data_dir = "/mnt/minor_storage/jingxian/drone-emission/gba_data"
 fetch_buildings = true
 fetch_roadnet = true
 
