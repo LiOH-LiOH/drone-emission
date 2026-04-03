@@ -39,6 +39,15 @@ The `--region` flag selects which region to analyze (defined in `regions.json`).
 ./entrypoint.sh 4 --all        # all regions from regions.json
 ```
 
+### Monitoring
+
+Summarize the latest pipeline log (progress, failures, active workers):
+
+```bash
+bash log_summary.sh                          # latest log
+bash log_summary.sh logs/run_20260401.log    # specific log
+```
+
 ### Post-processing
 
 Consolidate per-region stats and run cross-region analysis after the pipeline completes:

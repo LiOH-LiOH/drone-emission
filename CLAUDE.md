@@ -29,6 +29,11 @@ Add `--all` to process every region in `regions.json` instead of the hardcoded l
 ./entrypoint.sh 4 --all        # 4 parallel jobs, all regions (each region in its own process)
 ```
 
+Summarize pipeline log (progress, failures, active workers):
+```bash
+bash log_summary.sh            # latest log in ./logs/
+```
+
 Consolidate per-region stats into a single summary:
 ```bash
 cd src/drone_emission
