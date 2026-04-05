@@ -215,6 +215,13 @@ def generate_configs(sales_path: str, dry_run: bool = False, data_dir: str = Non
         # Ensure adcode is a string and truncate to city level (6 digits)
         adcode_str = str(int(adcode))[:6]
 
+        # Skip province-level entries (adcode ending in 0000)
+        if adcode_str.endswith("0000"):
+            print(f"  WARNING: Province-level adcode {adcode_str}, skipping")
+            skipped_no_adcode += 1
+            errors.append((city_cn, f"province-level adcode {adcode_str}"))
+            continue
+
         # Fetch boundary GeoJSON
         geojson = fetch_boundaries(adcode_str)
         if not geojson:

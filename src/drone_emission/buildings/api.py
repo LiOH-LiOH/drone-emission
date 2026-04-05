@@ -6,7 +6,7 @@ import geopandas as gpd
 import numpy as np
 from visualization.buildings import visualize_building_heights, visualize_buildings
 
-from .load_gba import get_gba_tile_info, load_buildings_from_gba
+from .load_gba import get_gba_tile_infos, load_buildings_from_gba
 
 # Earth radius in kilometers
 EARTH_RADIUS_KM = 6371.0
@@ -61,64 +61,79 @@ def _convert_geojson_to_gpkg(geojson_path: str) -> str:
     return gpkg_path
 
 
-def _resolve_gba_data_path(boundaries_dict: dict, exp_config: dict) -> str:
-    """Resolve the GBA data path for a region, downloading and converting if needed.
+def _ensure_tile_available(tile_name: str, gba_region: str, gba_data_dir: str):
+    """Download and convert a single GBA tile if needed.
 
-    Prefers GeoPackage (.gpkg) over GeoJSON for efficient spatial queries.
-    Prefers gba_data_dir (dynamic tile resolution) over gba_data_path (legacy).
+    Returns the .gpkg path, or None if the tile doesn't exist in GBA.
+    """
+    tile_dir = os.path.join(gba_data_dir, "LoD1_GeoJSON", gba_region)
+    geojson_path = os.path.join(tile_dir, f"{tile_name}.geojson")
+    gpkg_path = os.path.join(tile_dir, f"{tile_name}.gpkg")
+
+    # Already converted
+    if os.path.exists(gpkg_path):
+        return gpkg_path
+
+    # Download if missing
+    if not os.path.exists(geojson_path):
+        lock_path = os.path.join(gba_data_dir, f".lock_{gba_region}_{tile_name}")
+        os.makedirs(os.path.dirname(lock_path), exist_ok=True)
+        with open(lock_path, "w") as lock_file:
+            fcntl.flock(lock_file, fcntl.LOCK_EX)
+            try:
+                if os.path.exists(gpkg_path):
+                    return gpkg_path
+                if not os.path.exists(geojson_path):
+                    print(f"  Downloading GBA tile {tile_name} ({gba_region})...")
+                    script_path = os.path.join(
+                        os.path.dirname(__file__), "download_gba.sh"
+                    )
+                    result = subprocess.run(
+                        ["bash", script_path, tile_name, gba_region, gba_data_dir],
+                        check=False,
+                    )
+                    if result.returncode != 0 or not os.path.exists(geojson_path):
+                        print(f"  WARNING: GBA tile {tile_name} not available, skipping")
+                        return None
+            finally:
+                fcntl.flock(lock_file, fcntl.LOCK_UN)
+
+    # Convert to GeoPackage
+    lock_path = os.path.join(gba_data_dir, f".lock_convert_{gba_region}_{tile_name}")
+    with open(lock_path, "w") as lock_file:
+        fcntl.flock(lock_file, fcntl.LOCK_EX)
+        try:
+            gpkg_path = _convert_geojson_to_gpkg(geojson_path)
+        finally:
+            fcntl.flock(lock_file, fcntl.LOCK_UN)
+    return gpkg_path
+
+
+def _resolve_gba_data_paths(boundaries_dict: dict, exp_config: dict) -> list[str]:
+    """Resolve GBA data paths for a region, downloading and converting if needed.
+
+    Returns a list of .gpkg paths covering all tiles that overlap the bbox.
     """
     gba_data_dir = exp_config.get("gba_data_dir")
 
     if gba_data_dir:
-        tile_name, gba_region = get_gba_tile_info(boundaries_dict)
-        tile_dir = os.path.join(gba_data_dir, "LoD1_GeoJSON", gba_region)
-        geojson_path = os.path.join(tile_dir, f"{tile_name}.geojson")
-        gpkg_path = os.path.join(tile_dir, f"{tile_name}.gpkg")
-        print(f"GBA tile: {tile_name} (region: {gba_region})")
+        tile_infos = get_gba_tile_infos(boundaries_dict)
+        print(f"GBA tiles needed: {len(tile_infos)}")
+        for tn, rg in tile_infos:
+            print(f"  {tn} ({rg})")
 
-        # If .gpkg already exists, use it directly
-        if os.path.exists(gpkg_path):
-            return gpkg_path
+        paths = []
+        for tile_name, gba_region in tile_infos:
+            result = _ensure_tile_available(tile_name, gba_region, gba_data_dir)
+            if result is not None:
+                paths.append(result)
 
-        if not os.path.exists(geojson_path):
-            # Use file lock to prevent parallel processes from downloading the same tile
-            lock_path = os.path.join(gba_data_dir, f".lock_{gba_region}_{tile_name}")
-            os.makedirs(os.path.dirname(lock_path), exist_ok=True)
-            with open(lock_path, "w") as lock_file:
-                print(f"GBA tile not found locally, acquiring lock...")
-                fcntl.flock(lock_file, fcntl.LOCK_EX)
-                try:
-                    # Re-check after acquiring lock (another process may have finished)
-                    if os.path.exists(gpkg_path):
-                        print(f"GBA tile already converted by another process.")
-                        return gpkg_path
-                    if not os.path.exists(geojson_path):
-                        print(f"Downloading GBA tile...")
-                        script_path = os.path.join(
-                            os.path.dirname(__file__), "download_gba.sh"
-                        )
-                        subprocess.run(
-                            ["bash", script_path, tile_name, gba_region, gba_data_dir],
-                            check=True,
-                        )
-                        if not os.path.exists(geojson_path):
-                            raise FileNotFoundError(
-                                f"Download completed but GBA tile not found at {geojson_path}"
-                            )
-                    else:
-                        print(f"GBA tile already downloaded by another process.")
-                finally:
-                    fcntl.flock(lock_file, fcntl.LOCK_UN)
-
-        # Convert to GeoPackage (lock to prevent parallel conversion)
-        lock_path = os.path.join(gba_data_dir, f".lock_convert_{gba_region}_{tile_name}")
-        with open(lock_path, "w") as lock_file:
-            fcntl.flock(lock_file, fcntl.LOCK_EX)
-            try:
-                gpkg_path = _convert_geojson_to_gpkg(geojson_path)
-            finally:
-                fcntl.flock(lock_file, fcntl.LOCK_UN)
-        return gpkg_path
+        if not paths:
+            raise FileNotFoundError(
+                f"No GBA tiles found for bbox {boundaries_dict}. "
+                f"Checked tiles: {tile_infos}"
+            )
+        return paths
 
     # Fallback to legacy gba_data_path
     gba_data_path = exp_config.get("gba_data_path")
@@ -126,7 +141,7 @@ def _resolve_gba_data_path(boundaries_dict: dict, exp_config: dict) -> str:
         raise ValueError(
             "Neither gba_data_dir nor gba_data_path set in experiment.toml"
         )
-    return gba_data_path
+    return [gba_data_path]
 
 
 def load_buildings(region_info, exp_config):
@@ -172,11 +187,11 @@ def load_buildings(region_info, exp_config):
 
     # Fetch buildings if requested or no file exists
     if exp_config.get("fetch_buildings", False) or not os.path.exists(buildings_file):
-        gba_data_path = _resolve_gba_data_path(boundaries_dict, exp_config)
+        gba_data_paths = _resolve_gba_data_paths(boundaries_dict, exp_config)
 
         # load_buildings_from_gba now saves as .gpkg
         buildings_file = load_buildings_from_gba(
-            gba_data_path=gba_data_path,
+            gba_data_paths=gba_data_paths,
             bbox_4326=bbox_4326,
             save_path=gpkg_file,
         )
