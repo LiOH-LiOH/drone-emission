@@ -135,6 +135,10 @@ def parse_args():
         "--skip-completed", action="store_true",
         help="Skip regions that already have emission results"
     )
+    parser.add_argument(
+        "--no-fetch", action="store_true",
+        help="Skip fetching buildings and road network (use existing data files)"
+    )
     return parser.parse_args()
 
 
@@ -142,6 +146,9 @@ if __name__ == "__main__":
     args = parse_args()
 
     config = load_config(str(EXP_CONFIG_PATH), env=args.env)
+    if args.no_fetch:
+        config["fetch_buildings"] = False
+        config["fetch_roadnet"] = False
     configure_cache(config)
 
     # Initialize region configuration with per-region stats support

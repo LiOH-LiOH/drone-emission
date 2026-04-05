@@ -66,8 +66,10 @@ echo "Environment: $ENV (mem=${MEMORY_MAX}, parallel=${PARALLEL})"
 echo "Rerunning ${CITY_COUNT} affected cities..."
 echo ""
 
+# Buildings already saved by rerun_affected_clean.sh, roadnet unchanged.
+# --no-fetch skips re-fetching buildings and road network.
 cat "../../${CITY_LIST}" | xargs -P "$PARALLEL" -I {} \
-    bash -c 'systemd-run --user --scope -p MemoryMax='"${MEMORY_MAX}"' python -u main.py --region "$1" --skip-completed --env '"$ENV"' || echo "FAILED: $1"' _ {}
+    bash -c 'systemd-run --user --scope -p MemoryMax='"${MEMORY_MAX}"' python -u main.py --region "$1" --no-fetch --env '"$ENV"' || echo "FAILED: $1"' _ {}
 
 echo ""
 echo "Done!"
