@@ -1,5 +1,6 @@
 .venv
 .vscode
+.claude/
 __pycache__/
 cache/
 logs/
