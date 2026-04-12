@@ -95,6 +95,7 @@ def main():
 
     regions = list(registry.list_by_level("city").items())
     total = len(regions)
+    print(f"Found {total} city-level regions")
 
     computed = 0
     cached = 0
@@ -109,13 +110,17 @@ def main():
             circ = region.get_stat("circuity_avg")
             ent = region.get_stat("orientation_entropy")
             print(
-                f"  [{i}/{total}] {key}: circuity={circ:.4f}, "
+                f"  [{i}/{total}] {key}: computed — "
+                f"circuity={circ:.4f}, "
                 f"entropy={f'{ent:.3f}' if ent else 'N/A'}"
             )
         elif result == "cached":
             cached += 1
+            if i % 50 == 0 or i == total:
+                print(f"  [{i}/{total}] ... ({cached} cached so far)")
         elif result == "no_graphml":
             missing += 1
+            print(f"  [{i}/{total}] {key}: no GraphML file")
         else:
             errors += 1
             print(f"  [{i}/{total}] {key}: {result}")
