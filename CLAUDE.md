@@ -128,3 +128,15 @@ LaTeX source files are in `docs/`. Compilation is configured via VS Code LaTeX W
 - `docs/slides/main.tex`: Beamer presentation for PhD confirmation seminar
 - `docs/proposal/main.tex`: Research proposal document
 - `docs/poster/main.tex`: Conference poster
+- `docs/paper/main.tex`: Nature Sustainability paper (separate git repo, synced with Overleaf)
+
+### Paper (`docs/paper/`)
+- **Target:** Nature Sustainability (≤5,000 words main text, ≤6 display items, ≤50 refs)
+- **Sync:** Separate git repo cloned from Overleaf. `git push` from `docs/paper/` to sync. Listed in main repo's `.gitignore`.
+- **Template:** Springer Nature `sn-jnl.cls` with `sn-nature` style, compiled with `pdflatex`
+- **Build:** `cd docs/paper && pdflatex main && bibtex main && pdflatex main && pdflatex main`
+- **Structure:** Introduction → Results & Discussion → Conclusion → Methods (after refs)
+- **Style:** Nature family — results-first, no separate lit review, policy-oriented framing, number-rich, multi-panel figures. See `docs/paper/reviews/summary_*.md` for reference paper summaries.
+- **Sections:** `sections/{intro,results,method,conclusion}.tex` — currently contain structured TODO outlines
+- **Bibliography:** `sn-bibliography.bib` (copied from `docs/shared/delivery_emission.bib`)
+- **Figures:** `figures/fig1-fig6` (6 main figures, copied from `figures/analysis/` and `figures/lifecycle/`)
