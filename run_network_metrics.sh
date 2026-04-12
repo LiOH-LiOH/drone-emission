@@ -3,10 +3,12 @@
 # Compute OSMnx network metrics for all regions, then re-consolidate and re-run analysis.
 # Lightweight — only reads existing GraphML files, no full pipeline re-run.
 #
-# Usage: ./run_network_metrics.sh [env]
+# Usage: ./run_network_metrics.sh [parallel_jobs] [env]
 # Examples:
-#   ./run_network_metrics.sh          # remote env (default)
-#   ./run_network_metrics.sh local    # local env
+#   ./run_network_metrics.sh          # 4 parallel, remote env (default)
+#   ./run_network_metrics.sh 8        # 8 parallel, remote env
+#   ./run_network_metrics.sh 1        # sequential, remote env
+#   ./run_network_metrics.sh 4 local  # 4 parallel, local env
 
 SESSION_NAME="network-metrics"
 
@@ -43,8 +45,9 @@ fi
 
 cd src/drone_emission
 
-ENV=${1:-remote}
-echo "Environment: $ENV"
+PARALLEL=${1:-4}
+ENV=${2:-remote}
+echo "Environment: $ENV, Parallel jobs: $PARALLEL"
 echo "Started at: $(date)"
 echo ""
 
@@ -52,7 +55,29 @@ echo ""
 echo "========================================"
 echo "Step 1/3: Computing network metrics..."
 echo "========================================"
-python -u -m tools.compute_network_metrics --env "$ENV"
+
+if [ "$PARALLEL" -gt 1 ]; then
+    echo "Running $PARALLEL cities in parallel..."
+    python -c "
+import json, os, sys
+sys.path.insert(0, '.')
+from utils import load_config
+from utils.region_config import RegionRegistry
+config = load_config('../../experiment.toml', env='$ENV')
+registry = RegionRegistry('../../regions.json', data_dir=config['data_dir'])
+for key in sorted(registry.list_by_level('city')):
+    region = registry[key]
+    if region.stats.get('circuity_avg') is None:
+        print(key)
+" | xargs -P "$PARALLEL" -I {} \
+    python -u -m tools.compute_network_metrics --env "$ENV" --region {}
+
+    echo ""
+    echo "Parallel computation complete."
+else
+    echo "Running sequentially..."
+    python -u -m tools.compute_network_metrics --env "$ENV"
+fi
 
 echo ""
 

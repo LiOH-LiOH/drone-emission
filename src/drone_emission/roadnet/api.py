@@ -199,8 +199,9 @@ def _compute_network_metrics(graphml_path, region_info):
             four_way_plus / intersections if intersections > 0 else 0,
         )
 
-    # Orientation entropy
+    # Orientation entropy (requires bearings on edges)
     try:
+        Gu = ox.bearing.add_edge_bearings(Gu)
         entropy = ox.bearing.orientation_entropy(Gu)
         region_info.set_stat("orientation_entropy", entropy)
     except Exception:
