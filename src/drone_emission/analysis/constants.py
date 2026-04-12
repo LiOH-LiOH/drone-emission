@@ -17,6 +17,19 @@ VARIABLE_LABELS = {
     "avg_road_distance_m": "Avg Road Distance (m)",
     "avg_straight_distance_m": "Avg Straight Distance (m)",
     "roadnet_length_total": "Total Road Length (m)",
+    "roadnet_node_count": "Intersection Count",
+    "roadnet_edge_count": "Road Segment Count",
+    # Derived road network features
+    "intersection_density": "Intersection Density (per km²)",
+    "avg_block_length": "Avg Block Length (m)",
+    "road_connectivity": "Road Connectivity (edges/node)",
+    "road_distance_excess": "Road Distance Excess (m)",
+    # OSMnx network metrics
+    "circuity_avg": "Avg Circuity",
+    "dead_end_proportion": "Dead-End Proportion",
+    "four_way_proportion": "4-Way Intersection Proportion",
+    "orientation_entropy": "Orientation Entropy",
+    "avg_street_length": "Avg Street Length (m)",
     # Demand features
     "odpair_count": "OD Pair Count",
     "valid_path_count": "Valid Path Count",

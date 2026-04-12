@@ -34,6 +34,17 @@ FEATURE_VARIABLES = {
         "avg_road_distance_m",
         "avg_straight_distance_m",
         "roadnet_length_total",
+        # Derived features
+        "intersection_density",
+        "avg_block_length",
+        "road_connectivity",
+        "road_distance_excess",
+        # OSMnx network metrics
+        "circuity_avg",
+        "dead_end_proportion",
+        "four_way_proportion",
+        "orientation_entropy",
+        "avg_street_length",
     ],
     "density": [
         "region_area_km2",
@@ -130,6 +141,31 @@ def load_region_stats(csv_path: str = None) -> pd.DataFrame:
     if "building_volume_total" in df.columns:
         df.loc[valid_area, "building_volume_density"] = (
             df.loc[valid_area, "building_volume_total"] / area[valid_area]
+        )
+
+    # Derived road network features
+    if "roadnet_node_count" in df.columns:
+        df.loc[valid_area, "intersection_density"] = (
+            df.loc[valid_area, "roadnet_node_count"] / area[valid_area]
+        )
+
+    if "roadnet_length_total" in df.columns and "roadnet_edge_count" in df.columns:
+        valid_edges = df["roadnet_edge_count"] > 0
+        df.loc[valid_edges, "avg_block_length"] = (
+            df.loc[valid_edges, "roadnet_length_total"]
+            / df.loc[valid_edges, "roadnet_edge_count"]
+        )
+
+    if "roadnet_edge_count" in df.columns and "roadnet_node_count" in df.columns:
+        valid_nodes = df["roadnet_node_count"] > 0
+        df.loc[valid_nodes, "road_connectivity"] = (
+            df.loc[valid_nodes, "roadnet_edge_count"]
+            / df.loc[valid_nodes, "roadnet_node_count"]
+        )
+
+    if "avg_road_distance_m" in df.columns and "avg_straight_distance_m" in df.columns:
+        df["road_distance_excess"] = (
+            df["avg_road_distance_m"] - df["avg_straight_distance_m"]
         )
 
     # Set index and rename

@@ -51,6 +51,10 @@ def load_roadnet(region_info, exp_config):
     region_info.set_stat("roadnet_edge_count", graph.num_edges)
     region_info.set_stat("roadnet_length_total", graph.total_length)
 
+    # Compute OSMnx network metrics (skip if already cached)
+    if region_info.get_stat("circuity_avg") is None:
+        _compute_network_metrics(roadnet_data_path, region_info)
+
     # Visualize road network (expensive at city scale — can be disabled)
     fig_dir = os.path.join(
         exp_config["figures_dir"], region_level, region_name_en.lower()
@@ -163,6 +167,55 @@ def load_roadnet(region_info, exp_config):
             region_name_en,
             exp_config,
         )
+
+
+def _compute_network_metrics(graphml_path, region_info):
+    """Compute OSMnx network metrics and save to region stats.
+
+    Loads the full NetworkX graph temporarily, computes structural
+    metrics (circuity, dead-end proportion, 4-way proportion,
+    orientation entropy, avg street length), then frees memory.
+    """
+    import osmnx as ox
+
+    G = ox.load_graphml(graphml_path)
+    Gu = ox.convert.to_undirected(G)
+
+    # OSMnx basic stats
+    stats = ox.stats.basic_stats(G)
+    region_info.set_stat("circuity_avg", stats.get("circuity_avg"))
+    region_info.set_stat("avg_street_length", stats.get("street_length_avg"))
+
+    # Node degree proportions (from street_count attribute)
+    spn = ox.stats.streets_per_node(G)
+    total_nodes = len(spn)
+    if total_nodes > 0:
+        dead_ends = sum(1 for v in spn.values() if v == 1)
+        intersections = sum(1 for v in spn.values() if v >= 2)
+        four_way_plus = sum(1 for v in spn.values() if v >= 4)
+        region_info.set_stat("dead_end_proportion", dead_ends / total_nodes)
+        region_info.set_stat(
+            "four_way_proportion",
+            four_way_plus / intersections if intersections > 0 else 0,
+        )
+
+    # Orientation entropy
+    try:
+        entropy = ox.bearing.orientation_entropy(Gu)
+        region_info.set_stat("orientation_entropy", entropy)
+    except Exception:
+        pass  # Some graphs may lack bearing data
+
+    circuity = stats.get("circuity_avg", "N/A")
+    dead_pct = region_info.get_stat("dead_end_proportion")
+    entropy = region_info.get_stat("orientation_entropy")
+    print(
+        f"  Network metrics: circuity={circuity}, "
+        f"dead_end_pct={f'{dead_pct:.3f}' if dead_pct is not None else 'N/A'}, "
+        f"entropy={f'{entropy:.3f}' if entropy is not None else 'N/A'}"
+    )
+
+    del G, Gu
 
 
 def _visualize_sample_paths(
