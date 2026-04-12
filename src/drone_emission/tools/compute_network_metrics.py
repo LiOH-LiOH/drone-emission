@@ -4,6 +4,12 @@ Compute OSMnx network metrics for all regions from existing GraphML files.
 Lightweight script — does NOT re-run the full pipeline. Just loads each
 city's GraphML, computes structural metrics, and saves to region_stats.json.
 
+Metrics computed:
+  - dead_end_proportion: fraction of nodes that are dead-ends (cul-de-sacs)
+  - four_way_proportion: fraction of intersections that are 4-way+
+  - orientation_entropy: Shannon entropy of street bearings (grid order)
+  - avg_street_length: mean undirected edge length (m)
+
 Usage:
     cd src/drone_emission
     python -m tools.compute_network_metrics --env remote
@@ -25,6 +31,9 @@ PROJECT_ROOT = os.path.dirname(
 from utils import load_config
 from utils.region_config import RegionRegistry
 
+# Marker stat used to check whether metrics have been computed
+_CACHE_KEY = "orientation_entropy"
+
 
 def _file_size_mb(path):
     try:
@@ -34,12 +43,12 @@ def _file_size_mb(path):
 
 
 def compute_metrics_for_region(region, data_dir, force=False):
-    """Compute OSMnx metrics for a single region from its GraphML file."""
+    """Compute network metrics for a single region from its GraphML file."""
     level = region.region_level
     name_en = region.region_name_en.lower()
 
     # Check cache
-    if not force and region.get_stat("circuity_avg") is not None:
+    if not force and region.get_stat(_CACHE_KEY) is not None:
         return "cached", 0
 
     # Find GraphML file
@@ -61,10 +70,10 @@ def compute_metrics_for_region(region, data_dir, force=False):
 
         Gu = ox.convert.to_undirected(G)
 
-        # Basic stats (circuity is the slow part)
-        stats = ox.stats.basic_stats(G)
-        region.set_stat("circuity_avg", stats.get("circuity_avg"))
-        region.set_stat("avg_street_length", stats.get("street_length_avg"))
+        # Avg street length (manual — much faster than basic_stats)
+        total_len = sum(float(d["length"]) for u, v, d in Gu.edges(data=True))
+        n_edges = Gu.number_of_edges()
+        region.set_stat("avg_street_length", total_len / n_edges if n_edges > 0 else 0)
 
         # Node degree proportions
         spn = ox.stats.streets_per_node(G)
@@ -115,12 +124,12 @@ def process_single_region(region_key, env, force=False):
     result, elapsed = compute_metrics_for_region(region, data_dir, force=force)
 
     if result == "computed":
-        circ = region.get_stat("circuity_avg")
         ent = region.get_stat("orientation_entropy")
+        de = region.get_stat("dead_end_proportion")
         print(
             f"{region_key}: done in {elapsed:.0f}s — "
-            f"circuity={f'{circ:.4f}' if circ else 'N/A'}, "
-            f"entropy={f'{ent:.3f}' if ent else 'N/A'}",
+            f"entropy={f'{ent:.3f}' if ent else 'N/A'}, "
+            f"dead_end={f'{de:.3f}' if de else 'N/A'}",
             flush=True,
         )
     elif result == "cached":
@@ -131,7 +140,7 @@ def process_single_region(region_key, env, force=False):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Compute OSMnx network metrics from existing GraphML files"
+        description="Compute network metrics from existing GraphML files"
     )
     parser.add_argument("--env", type=str, default=None, help="Environment name")
     parser.add_argument(
@@ -172,12 +181,12 @@ def main():
         if result == "computed":
             computed += 1
             total_time += elapsed
-            circ = region.get_stat("circuity_avg")
             ent = region.get_stat("orientation_entropy")
+            de = region.get_stat("dead_end_proportion")
             print(
                 f"  [{i}/{total}] {key}: done in {elapsed:.0f}s — "
-                f"circuity={f'{circ:.4f}' if circ else 'N/A'}, "
-                f"entropy={f'{ent:.3f}' if ent else 'N/A'}",
+                f"entropy={f'{ent:.3f}' if ent else 'N/A'}, "
+                f"dead_end={f'{de:.3f}' if de else 'N/A'}",
                 flush=True,
             )
         elif result == "cached":

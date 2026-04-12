@@ -52,7 +52,7 @@ def load_roadnet(region_info, exp_config):
     region_info.set_stat("roadnet_length_total", graph.total_length)
 
     # Compute OSMnx network metrics (skip if already cached)
-    if region_info.get_stat("circuity_avg") is None:
+    if region_info.get_stat("orientation_entropy") is None:
         _compute_network_metrics(roadnet_data_path, region_info)
 
     # Visualize road network (expensive at city scale — can be disabled)
@@ -173,20 +173,25 @@ def _compute_network_metrics(graphml_path, region_info):
     """Compute OSMnx network metrics and save to region stats.
 
     Loads the full NetworkX graph temporarily, computes structural
-    metrics (circuity, dead-end proportion, 4-way proportion,
-    orientation entropy, avg street length), then frees memory.
+    metrics (dead-end proportion, 4-way proportion, orientation entropy,
+    avg street length), then frees memory.
+
+    Note: circuity_avg is NOT computed because the unsimplified graph
+    stores edge length = great-circle distance, making circuity = 1.0.
     """
+    import gc
+
     import osmnx as ox
 
     G = ox.load_graphml(graphml_path)
     Gu = ox.convert.to_undirected(G)
 
-    # OSMnx basic stats
-    stats = ox.stats.basic_stats(G)
-    region_info.set_stat("circuity_avg", stats.get("circuity_avg"))
-    region_info.set_stat("avg_street_length", stats.get("street_length_avg"))
+    # Avg street length (manual — avoids slow basic_stats)
+    total_len = sum(float(d["length"]) for u, v, d in Gu.edges(data=True))
+    n_edges = Gu.number_of_edges()
+    region_info.set_stat("avg_street_length", total_len / n_edges if n_edges > 0 else 0)
 
-    # Node degree proportions (from street_count attribute)
+    # Node degree proportions
     spn = ox.stats.streets_per_node(G)
     total_nodes = len(spn)
     if total_nodes > 0:
@@ -205,18 +210,18 @@ def _compute_network_metrics(graphml_path, region_info):
         entropy = ox.bearing.orientation_entropy(Gu)
         region_info.set_stat("orientation_entropy", entropy)
     except Exception:
-        pass  # Some graphs may lack bearing data
+        pass
 
-    circuity = stats.get("circuity_avg", "N/A")
     dead_pct = region_info.get_stat("dead_end_proportion")
     entropy = region_info.get_stat("orientation_entropy")
     print(
-        f"  Network metrics: circuity={circuity}, "
-        f"dead_end_pct={f'{dead_pct:.3f}' if dead_pct is not None else 'N/A'}, "
+        f"  Network metrics: "
+        f"dead_end={f'{dead_pct:.3f}' if dead_pct is not None else 'N/A'}, "
         f"entropy={f'{entropy:.3f}' if entropy is not None else 'N/A'}"
     )
 
     del G, Gu
+    gc.collect()
 
 
 def _visualize_sample_paths(

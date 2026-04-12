@@ -40,7 +40,6 @@ FEATURE_VARIABLES = {
         "road_connectivity",
         "road_distance_excess",
         # OSMnx network metrics
-        "circuity_avg",
         "dead_end_proportion",
         "four_way_proportion",
         "orientation_entropy",

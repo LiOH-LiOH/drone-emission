@@ -25,7 +25,6 @@ VARIABLE_LABELS = {
     "road_connectivity": "Road Connectivity (edges/node)",
     "road_distance_excess": "Road Distance Excess (m)",
     # OSMnx network metrics
-    "circuity_avg": "Avg Circuity",
     "dead_end_proportion": "Dead-End Proportion",
     "four_way_proportion": "4-Way Intersection Proportion",
     "orientation_entropy": "Orientation Entropy",

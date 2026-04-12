@@ -67,7 +67,7 @@ config = load_config('../../experiment.toml', env='$ENV')
 registry = RegionRegistry('../../regions.json', data_dir=config['data_dir'])
 for key in sorted(registry.list_by_level('city')):
     region = registry[key]
-    if region.stats.get('circuity_avg') is None:
+    if region.stats.get('orientation_entropy') is None:
         print(key)
 " | xargs -P "$PARALLEL" -I {} \
     python -u -m tools.compute_network_metrics --env "$ENV" --region {}
