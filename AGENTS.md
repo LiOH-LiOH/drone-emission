@@ -1,0 +1,25 @@
+# Repository Guidelines
+
+## Project Structure & Module Organization
+Source code lives in `src/drone_emission/`. `main.py` is the pipeline entry point, while stage modules are split into `preprocessing/`, `buildings/`, `demand/`, `roadnet/`, `emission/`, `equity/`, and `profit/`. Shared helpers belong in `utils/`; standalone scripts and CLIs belong in `tools/`; plotting code belongs in `visualization/`; broader analysis and calibration logic live in `analysis/` and `calibration/`. Root shell scripts such as `entrypoint.sh`, `postprocess.sh`, and `test_run.sh` orchestrate common workflows. Generated runtime outputs go to ignored directories such as `data/`, `figures/`, `cache/`, and `logs/`. Documentation assets are under `docs/`.
+
+## Build, Test, and Development Commands
+- `bash setup.sh`: create `.venv`, copy `regions.json` from the template when missing, and install `src/drone_emission/requirements.txt`.
+- `source .venv/bin/activate`: activate the local environment before running Python commands.
+- `cd src/drone_emission && python main.py --region nanshan --env local`: run one region locally.
+- `./test_run.sh [region] [env]`: smoke-test the full single-region pipeline, defaulting to `changsha remote`.
+- `./entrypoint.sh 4 --all`: run the multi-region pipeline wrapper with four workers.
+- `./postprocess.sh local`: consolidate per-region stats and run cross-region analysis.
+- `bash log_summary.sh [logs/file.log]`: summarize a pipeline log.
+
+## Coding Style & Naming Conventions
+Use Python 3.10+ and follow PEP 8 conventions: four-space indentation, `snake_case` for modules, functions, and variables, and `PascalCase` for classes. Keep stage APIs small and explicit; prefer passing `region_info` and `exp_config` rather than reading globals in new code. Use `pathlib.Path` for project-root paths when practical, and keep comments focused on non-obvious pipeline behavior.
+
+## Testing Guidelines
+There is no formal pytest suite in the current tree. Validate changes with the narrowest runnable workflow: use `./test_run.sh <region> local` for end-to-end changes, or run the affected module/tool directly from `src/drone_emission`. For data-fetching work, use existing cached files when possible with `python main.py --region <region> --env local --no-fetch`. Record the region, environment, and command used in PR notes.
+
+## Commit & Pull Request Guidelines
+Recent commits use short imperative summaries such as `Fix circuity issue` and `Update network features`; keep the first line concise and action-oriented. Pull requests should describe the affected pipeline stage, list validation commands, note data/config assumptions, and include figures or screenshots when visualization output changes. Link related issues or experiment notes when available.
+
+## Security & Configuration Tips
+Do not commit generated data, logs, caches, figures, virtual environments, or local `regions.json`. Keep experiment parameters in `experiment.toml`, and treat region stats under `data/{level}/{region}/region_stats.json` as runtime state.
