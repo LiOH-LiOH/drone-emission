@@ -31,7 +31,7 @@ from analysis.correlation import (
     load_region_stats,
     run_correlation_analysis,
 )
-from analysis.regression import run_regression_analysis
+from analysis.regression import analyze_hierarchical_regression, run_regression_analysis
 
 # Project root directory (4 levels up from this file)
 PROJECT_ROOT = os.path.dirname(
@@ -199,8 +199,14 @@ if __name__ == "__main__":
     print("=" * 60)
     analyze_province_comparison(csv_path, for_latex=True)
 
-    # 5. OLS regression analysis
+    # 5. OLS regression analysis (existing VIF-based)
     print("\n" + "=" * 60)
     print("Running regression analysis...")
     print("=" * 60)
     analyze_regression(csv_path, for_latex=True)
+
+    # 6. Hierarchical regression + Lasso feature selection
+    print("\n" + "=" * 60)
+    print("Running hierarchical regression...")
+    print("=" * 60)
+    analyze_hierarchical_regression(csv_path, for_latex=True)

@@ -766,6 +766,8 @@
   \end{columns}
 \end{frame}
 
+% Equity frames hidden — not contributing to current narrative
+\iffalse
 \begin{frame}{Equity Analysis - Zone-Level Heatmaps}
   \begin{columns}[T]
     \begin{column}{0.48\textwidth}
@@ -816,6 +818,7 @@
     \label{fig:zone_correlations}
   \end{figure}
 \end{frame}
+\fi
 
 \begin{frame}{Study Regions}
   \begin{figure}
@@ -847,6 +850,15 @@
   \end{columns}
 \end{frame}
 
+\begin{frame}{City Emission Reduction Ranking}
+  \begin{figure}
+    \centering
+    \includegraphics[width=0.85\linewidth]{../../figures/analysis/city_emission_ranking.pdf}
+    \caption{\textbf{312 cities ranked by max lifecycle emission reduction.} Zhaotong (55.0\%) leads; Zhongwei (11.5\%) trails. Percentile markers highlight the distribution spread.}
+    \label{fig:city_emission_ranking}
+  \end{figure}
+\end{frame}
+
 \begin{frame}{Geographic Pattern}
   \begin{figure}
     \centering
@@ -857,12 +869,46 @@
 \end{frame}
 
 \begin{frame}{Correlation Analysis}
-  \begin{figure}
-    \centering
-    \includegraphics[width=0.7\linewidth]{../../figures/analysis/correlation_heatmap.pdf}
-    \caption{\textbf{Correlation heatmap between emission outcomes and urban features} (n=312). Grid emission factor (Pearson $r=-0.84$) is the dominant predictor; detour ratio (Spearman $r=0.62$) is the strongest road network predictor.}
-    \label{fig:correlation_heatmap}
-  \end{figure}
+  \begin{columns}[T]
+    \begin{column}{0.52\textwidth}
+      \begin{figure}
+        \centering
+        \includegraphics[width=\linewidth]{../../figures/analysis/correlation_heatmap.pdf}
+        \caption{\textbf{Feature--outcome correlation heatmap.} Pearson correlations between 24 urban features and 3 emission outcomes across 312 cities.}
+        \label{fig:correlation_heatmap}
+      \end{figure}
+    \end{column}
+    \begin{column}{0.46\textwidth}
+      \begin{table}
+        \centering
+        \caption{\textbf{Top predictors of max lifecycle reduction.} Pearson and Spearman correlation coefficients with max emission reduction ($n$=312).}
+        \label{tab:top_correlations}
+        {\scriptsize
+        \begin{tabular}{lrr}
+          \toprule
+          \textbf{Feature} & \textbf{Pearson} & \textbf{Spearman} \\
+          \midrule
+          Grid emission factor & $-0.84$ & $-0.62$ \\
+          Detour ratio         & $+0.45$ & $+0.62$ \\
+          Latitude             & $-0.48$ & $-0.53$ \\
+          Avg block length     & $-0.47$ & $-0.48$ \\
+          Avg street length    & $-0.47$ & $-0.47$ \\
+          Road connectivity    & $-0.30$ & $-0.46$ \\
+          Orientation entropy  & $+0.27$ & $+0.33$ \\
+          Dead-end proportion  & $-0.25$ & $-0.30$ \\
+          \bottomrule
+        \end{tabular}
+        }
+      \end{table}
+      \vspace{-0.3em}
+      \textbf{Key insights:}
+      \begin{itemize}\setlength{\itemsep}{2pt}
+        \item Grid cleanliness dominates ($r=-0.84$)
+        \item Detour ratio is the strongest network feature ($r_s=0.62$)
+        \item Road structure metrics independently significant
+      \end{itemize}
+    \end{column}
+  \end{columns}
 \end{frame}
 
 \begin{frame}{Dominant Predictor: Grid Emission Factor}
@@ -889,25 +935,22 @@
   \end{columns}
 \end{frame}
 
-\begin{frame}{Road Network Predictors}
-  \begin{columns}[T]
-    \begin{column}{0.48\textwidth}
-      \begin{figure}
-        \centering
-        \includegraphics[width=\linewidth]{../../figures/analysis/scatter_detour_ratio_vs_max_lifecycle_reduction_pct.pdf}
-        \caption{\textbf{Detour ratio vs.\ max lifecycle reduction.} Spearman $r=0.62$ ($p<10^{-34}$): cities with more circuitous road networks benefit most from drone delivery.}
-        \label{fig:scatter_detour_reduction}
-      \end{figure}
-    \end{column}
-    \begin{column}{0.48\textwidth}
-      \begin{figure}
-        \centering
-        \includegraphics[width=\linewidth]{../../figures/analysis/scatter_avg_road_distance_m_vs_max_lifecycle_reduction_pct.pdf}
-        \caption{\textbf{Avg road distance vs.\ max lifecycle reduction.} Pearson $r=0.32$ ($p<10^{-8}$): longer delivery distances amplify the drone emission advantage.}
-        \label{fig:scatter_distance_reduction}
-      \end{figure}
-    \end{column}
-  \end{columns}
+\begin{frame}{Detour Ratio and Grid Emission Factor}
+  \begin{figure}
+    \centering
+    \includegraphics[width=\linewidth]{../../figures/analysis/scatter_detour_ratio_vs_reduction_by_gef.pdf}
+    \caption{Both clean (green, $r$=0.72, $n$=41) and dirty grids (red, $r$=0.83, $n$=238) show higher detour ratio $\rightarrow$ greater drone advantage, but at different baselines.}
+    \label{fig:scatter_detour_reduction}
+  \end{figure}
+\end{frame}
+
+\begin{frame}{Road Structure: Block Length}
+  \begin{figure}
+    \centering
+    \includegraphics[width=0.65\linewidth]{../../figures/analysis/scatter_avg_block_length_vs_max_lifecycle_reduction_pct.pdf}
+    \caption{\textbf{Avg block length vs.\ max lifecycle reduction.} Spearman $r=-0.48$ ($p<10^{-17}$): shorter road segments between intersections correlate with greater drone delivery advantage.}
+    \label{fig:scatter_block_length_reduction}
+  \end{figure}
 \end{frame}
 
 \begin{frame}{Geographic Correlations}
@@ -927,35 +970,93 @@
         \item Northern/eastern $\rightarrow$ coal grids + flat plains
       \end{itemize}
       \vspace{0.5em}
-      \textbf{Insignificant factors:}
+      \textbf{Road structure features:}
       \begin{itemize}
-        \item Building density: near-zero correlation
-        \item Road density: near-zero correlation
-        \item Building count: near-zero correlation
+        \item Orientation entropy ($r=0.33$): grid-like streets favor drones
+        \item Dead-end proportion ($r=-0.32$): cul-de-sacs reduce drone advantage
+        \item Avg block length ($r=-0.48$): shorter blocks favor drones
       \end{itemize}
       \vspace{0.5em}
-      Physical urban infrastructure matters far less than grid carbon intensity and road geometry.
+      Grid carbon intensity and road network geometry are the key predictors; building density is insignificant.
     \end{column}
   \end{columns}
 \end{frame}
 
-\begin{frame}{Regression Analysis}
+\begin{frame}{Hierarchical Regression --- Emission Reduction}
+  \begin{columns}[T]
+    \begin{column}{0.46\textwidth}
+      \textbf{Nested OLS models} (N=279):
+      \begin{footnotesize}
+      \begin{tabular}{lrrr}
+        \toprule
+        \textbf{Model} & \textbf{R\textsuperscript{2}} & \textbf{$\Delta$R\textsuperscript{2}} & \textbf{p($\Delta$F)} \\
+        \midrule
+        M1: GEF only         & 0.70 & 0.70 & $<$0.001 \\
+        M2: + Detour ratio   & 0.83 & 0.13 & $<$0.001 \\
+        M3: + Entropy, Block & 0.86 & 0.03 & $<$0.001 \\
+        \bottomrule
+      \end{tabular}
+      \end{footnotesize}
+      \vspace{0.3em}
+
+      \textbf{M3 standardized coefficients:}
+      \begin{footnotesize}
+      \begin{tabular}{lr}
+        \toprule
+        \textbf{Variable} & \textbf{$\beta$} \\
+        \midrule
+        Grid emission factor & $-0.88$*** \\
+        Detour ratio         & $+0.35$*** \\
+        Orientation entropy  & $-0.21$*** \\
+        Avg block length     & $-0.12$*** \\
+        \bottomrule
+      \end{tabular}
+      \end{footnotesize}
+    \end{column}
+    \begin{column}{0.50\textwidth}
+      \textbf{Interpretation:}
+      \begin{itemize}\setlength{\itemsep}{2pt}
+        \item GEF alone explains \textbf{70\%} of variance
+        \item Detour ratio adds \textbf{13\%}: circuitous roads $\rightarrow$ drones save more
+        \item Road structure adds \textbf{3\%}: low entropy (grid streets) and short blocks (dense intersections) favor drones
+        \item 4 features $\rightarrow$ \textbf{R\textsuperscript{2}=0.86}; density/demand features are not significant
+      \end{itemize}
+    \end{column}
+  \end{columns}
+\end{frame}
+
+\begin{frame}{Regression --- All Three Targets}
   \begin{columns}[T]
     \begin{column}{0.48\textwidth}
       \begin{figure}
         \centering
-        \includegraphics[width=\linewidth]{../../figures/analysis/regression_coefficients_max_lifecycle_reduction_pct.pdf}
-        \caption{\textbf{Regression coefficients for max lifecycle emission reduction.} Standardized coefficients from multivariate regression.}
-        \label{fig:regression_full}
+        \includegraphics[width=\linewidth]{../../figures/analysis/hierarchical_r2_max_lifecycle_reduction_pct.pdf}
+        \caption{\textbf{Hierarchical R\textsuperscript{2} comparison} for max lifecycle reduction. Each bar adds one group of predictors; Lasso (dashed) confirms with R\textsuperscript{2}=0.91 using 17 features.}
+        \label{fig:hierarchical_r2}
       \end{figure}
     \end{column}
     \begin{column}{0.48\textwidth}
-      \begin{figure}
-        \centering
-        \includegraphics[width=\linewidth]{../../figures/analysis/regression_coefficients_max_lifecycle_reduction_pct_parsimonious.pdf}
-        \caption{\textbf{Parsimonious model.} Reduced model retaining only significant predictors.}
-        \label{fig:regression_parsimonious}
-      \end{figure}
+      \textbf{Summary across targets:}
+      \vspace{0.3em}
+      \begin{footnotesize}
+      \begin{tabular}{lcc}
+        \toprule
+        \textbf{Target} & \textbf{M1} & \textbf{M3} \\
+        \midrule
+        Max reduction (\%)    & 0.70 & \textbf{0.86} \\
+        Optimal threshold (km) & 0.64 & 0.66 \\
+        Optimal drone ratio (\%) & 0.26 & \textbf{0.46} \\
+        \bottomrule
+      \end{tabular}
+      \end{footnotesize}
+      \vspace{0.5em}
+
+      \textbf{Key finding:}
+      \begin{itemize}
+        \item \textbf{Emission reduction}: GEF dominates, road features refine
+        \item \textbf{Distance threshold}: almost entirely driven by GEF
+        \item \textbf{Drone ratio}: road structure adds \textbf{20\%} R\textsuperscript{2} --- orientation entropy ($\beta=-0.44$) and block length ($\beta=-0.30$) are the strongest predictors after GEF
+      \end{itemize}
     \end{column}
   \end{columns}
 \end{frame}
@@ -963,8 +1064,8 @@
 \begin{frame}{Provincial Variation}
   \begin{figure}
     \centering
-    \includegraphics[width=0.8\linewidth]{../../figures/analysis/province_boxplot_max_lifecycle_reduction_pct.pdf}
-    \caption{\textbf{Max lifecycle emission reduction by province} (n=312). Yunnan (mean 49.5\%, GEF=0.11) and Sichuan (mean 46.2\%, GEF=0.14) lead; Ningxia ($\sim$16\%) and Xinjiang ($\sim$19\%) trail. Provincial variation strongly reflects grid carbon intensity.}
+    \includegraphics[width=0.55\linewidth]{../../figures/analysis/province_boxplot_max_lifecycle_reduction_pct.pdf}
+    \caption{\textbf{Max lifecycle emission reduction by province} (n=312). Yunnan (49.5\%, GEF=0.11) and Sichuan (46.2\%, GEF=0.14) lead; Ningxia ($\sim$16\%) and Xinjiang ($\sim$19\%) trail.}
     \label{fig:province_boxplot}
   \end{figure}
 \end{frame}
@@ -1033,19 +1134,19 @@
       \end{itemize}
 
       \vspace{0.5em}
-      \textbf{Correlation Insights:}
+      \textbf{Regression Insights (R\textsuperscript{2}=0.86):}
       \begin{itemize}
-        \item Grid emission factor is the dominant predictor (Pearson $r=-0.84$)
-        \item Detour ratio is the strongest road network predictor (Spearman $r=0.62$)
-        \item Building density and road density show no significant effect
+        \item Grid emission factor explains \textbf{70\%} of variance ($\beta=-0.88$)
+        \item Road network adds \textbf{16\%}: detour ratio ($\beta=+0.35$), orientation entropy ($\beta=-0.21$)
+        \item For drone ratio, road structure adds \textbf{20\%} R\textsuperscript{2}
       \end{itemize}
     \end{column}
     \begin{column}{0.48\textwidth}
       \textbf{Policy Implications:}
       \begin{itemize}
-        \item Grid decarbonization \textbf{amplifies} drone delivery's sustainability benefit
-        \item Prioritize drone deployment in \textbf{clean-grid regions} for maximum impact
-        \item Every city benefits from optimal drone-e-bike mix
+        \item Grid decarbonization \textbf{amplifies} drone delivery's emission benefit
+        \item Prioritize drone deployment in \textbf{clean-grid, complex-road} cities
+        \item Road network structure is a tractable predictor for planners
       \end{itemize}
 
       \vspace{0.5em}

@@ -222,6 +222,160 @@ def plot_feature_scatter(
     plt.close(fig)
 
 
+def plot_grouped_scatter(
+    df: pd.DataFrame,
+    feature_var: str,
+    result_var: str,
+    group_var: str,
+    threshold: float,
+    save_path: str = None,
+    figsize: tuple = (8, 6),
+    for_latex: bool = False,
+    plot_title: bool = False,
+    group_labels: tuple = None,
+):
+    """Plot scatter with two groups split by threshold, each with its own regression line.
+
+    Args:
+        df: DataFrame with region statistics.
+        feature_var: X-axis variable name.
+        result_var: Y-axis variable name.
+        group_var: Variable to split groups on.
+        threshold: Split threshold for group_var.
+        save_path: Path to save figure.
+        figsize: Figure size tuple.
+        for_latex: If True, save as PDF.
+        plot_title: If True, show title.
+        group_labels: Tuple of (low_label, high_label). Auto-generated if None.
+    """
+    valid_mask = df[[feature_var, result_var, group_var]].notna().all(axis=1)
+    plot_df = df.loc[valid_mask]
+
+    low_mask = plot_df[group_var] <= threshold
+    high_mask = ~low_mask
+
+    if group_labels is None:
+        group_labels = (
+            f"Low GEF ($\\leq$ {threshold})",
+            f"High GEF (> {threshold})",
+        )
+
+    fig, ax = plt.subplots(figsize=figsize)
+
+    # Global x-range with padding so regression lines extend to plot edges
+    x_data_min = plot_df[feature_var].min()
+    x_data_max = plot_df[feature_var].max()
+    x_pad = (x_data_max - x_data_min) * 0.03
+    x_global_min = x_data_min - x_pad
+    x_global_max = x_data_max + x_pad
+
+    # Continuous colormap: dark green (clean) -> dark orange -> dark red (dirty)
+    # Skips yellow — all colors saturated and visible on white background
+    from matplotlib.colors import LinearSegmentedColormap, Normalize
+    cmap = LinearSegmentedColormap.from_list(
+        "gef", ["#006837", "#31A354", "#D95F0E", "#A50F15"]
+    )
+    gef_vals = plot_df[group_var].values
+    norm = Normalize(vmin=gef_vals.min(), vmax=gef_vals.max())
+
+    # Scatter all points colored by GEF
+    sc = ax.scatter(
+        plot_df[feature_var].values, plot_df[result_var].values,
+        s=22, alpha=0.6, c=gef_vals, cmap=cmap, norm=norm,
+        edgecolors="none", zorder=10,
+    )
+    cbar = fig.colorbar(sc, ax=ax, shrink=0.75, pad=0.02)
+    cbar.set_label(VARIABLE_LABELS.get(group_var, group_var), fontsize=10)
+
+    # Two regression lines by group (dark green / dark red to match colormap ends)
+    line_colors = ["#006837", "#A50F15"]
+    masks = [low_mask, high_mask]
+    for mask, color, label in zip(masks, line_colors, group_labels):
+        x = plot_df.loc[mask, feature_var].values
+        y = plot_df.loc[mask, result_var].values
+        if len(x) < 3:
+            continue
+        slope, intercept, r_value, _, _ = stats.linregress(x, y)
+        x_line = np.linspace(x_global_min, x_global_max, 100)
+        y_line = slope * x_line + intercept
+        ax.plot(
+            x_line, y_line, color=color, linewidth=2.5, alpha=0.9, zorder=15,
+            label=label,
+        )
+        n = len(x)
+        x_mean = np.mean(x)
+        se = np.sqrt(np.sum((y - (slope * x + intercept)) ** 2) / (n - 2))
+        t_val = stats.t.ppf(0.975, n - 2)
+        ci = t_val * se * np.sqrt(
+            1.0 / n + (x_line - x_mean) ** 2 / np.sum((x - x_mean) ** 2)
+        )
+        ax.fill_between(x_line, y_line - ci, y_line + ci, alpha=0.10, color=color, zorder=5)
+
+    # Annotate selected cities
+    if "region_name" in plot_df.columns:
+        highlight = [
+            "Kunming", "Chengdu", "Panzhihua", "Yuxi",
+            "Beijing", "Shanghai", "Chongqing", "Shenzhen",
+        ]
+        offsets = {
+            "Kunming": (-12, 10), "Chengdu": (-12, -14),
+            "Panzhihua": (-50, -8), "Yuxi": (-8, -14),
+            "Beijing": (8, 8), "Shanghai": (8, -12),
+            "Chongqing": (-14, -14), "Shenzhen": (8, 8),
+        }
+        for city in highlight:
+            row = plot_df[plot_df["region_name"] == city]
+            if row.empty:
+                continue
+            cx = row[feature_var].iloc[0]
+            cy = row[result_var].iloc[0]
+            gef = row[group_var].iloc[0]
+            dot_color = cmap(norm(gef))
+            ax.scatter(
+                cx, cy, s=70, marker="o",
+                facecolors=dot_color, edgecolors="black", linewidths=1.2,
+                zorder=20, alpha=0.95,
+            )
+            ox, oy = offsets.get(city, (8, 8))
+            ax.annotate(
+                city, (cx, cy), xytext=(ox, oy),
+                textcoords="offset points", fontsize=8,
+                fontweight="bold", color="black",
+                arrowprops=dict(arrowstyle="->", color="0.3", lw=0.8),
+                bbox=dict(boxstyle="round,pad=0.2", facecolor="white",
+                          edgecolor="0.6", alpha=0.85),
+                zorder=25,
+            )
+
+    ax.set_xlim(x_global_min, x_global_max)
+    ax.set_xlabel(VARIABLE_LABELS.get(feature_var, feature_var), fontsize=12)
+    ax.set_ylabel(VARIABLE_LABELS.get(result_var, result_var), fontsize=12)
+    ax.legend(loc="best", fontsize=9)
+    ax.grid(True, alpha=0.3, linestyle="--")
+
+    if plot_title:
+        ax.set_title(
+            f"{VARIABLE_LABELS.get(feature_var, feature_var)} vs "
+            f"{VARIABLE_LABELS.get(result_var, result_var)}",
+            fontsize=12, fontweight="bold",
+        )
+
+    plt.tight_layout()
+
+    if save_path:
+        if for_latex and not save_path.endswith(".pdf"):
+            save_path = save_path.rsplit(".", 1)[0] + ".pdf"
+        if plot_title:
+            save_path = _add_title_suffix(save_path)
+        os.makedirs(os.path.dirname(save_path), exist_ok=True)
+        plt.savefig(save_path, dpi=300, bbox_inches="tight")
+        print(f"Grouped scatter saved to {save_path}")
+    else:
+        plt.show()
+
+    plt.close(fig)
+
+
 def plot_top_correlations_bar(
     corr_df: pd.DataFrame,
     result_var: str,
@@ -862,6 +1016,90 @@ def plot_regression_coefficients(
         os.makedirs(os.path.dirname(save_path), exist_ok=True)
         plt.savefig(save_path, dpi=300, bbox_inches="tight")
         print(f"Regression coefficient plot saved to {save_path}")
+    else:
+        plt.show()
+
+    plt.close(fig)
+
+
+def plot_hierarchical_r2_comparison(
+    hier_results: list[dict],
+    result_var: str,
+    lasso_r2: float = None,
+    save_path: str = None,
+    figsize: tuple = (10, 5),
+    for_latex: bool = False,
+    plot_title: bool = False,
+):
+    """Plot grouped bar chart comparing R² across hierarchical models.
+
+    Shows cumulative R² (bars) with delta-R² labeled, plus optional
+    Lasso R² as a horizontal reference line.
+
+    Args:
+        hier_results: List of dicts from run_hierarchical_regression().
+        result_var: Dependent variable name (for labels).
+        lasso_r2: Optional Lasso R² to show as reference line.
+        save_path: Path to save figure.
+        figsize: Figure size tuple.
+        for_latex: If True, save as PDF.
+        plot_title: If True, show title.
+    """
+    if not hier_results:
+        return
+
+    names = [r["name"] for r in hier_results]
+    r2_vals = [r["r2"] for r in hier_results]
+    r2_adj_vals = [r["r2_adj"] for r in hier_results]
+    delta_vals = [r["delta_r2"] for r in hier_results]
+
+    x = np.arange(len(names))
+    width = 0.35
+
+    fig, ax = plt.subplots(figsize=figsize)
+
+    bars1 = ax.bar(x - width / 2, r2_vals, width, label="R²", color="#3498db", alpha=0.85)
+    bars2 = ax.bar(x + width / 2, r2_adj_vals, width, label="Adjusted R²", color="#2ecc71", alpha=0.85)
+
+    # Label delta-R² on each R² bar
+    for bar, delta, r2 in zip(bars1, delta_vals, r2_vals):
+        label_text = f"Δ={delta:.3f}" if delta > 0.001 else f"R²={r2:.3f}"
+        ax.text(
+            bar.get_x() + bar.get_width() / 2, bar.get_height() + 0.005,
+            label_text, ha="center", va="bottom", fontsize=8, fontweight="bold",
+        )
+
+    # Lasso reference line
+    if lasso_r2 is not None:
+        ax.axhline(
+            y=lasso_r2, color="#e74c3c", linestyle="--", linewidth=1.5,
+            label=f"Lasso R² = {lasso_r2:.3f}",
+        )
+
+    ax.set_ylabel("R²", fontsize=12)
+    ax.set_xticks(x)
+    ax.set_xticklabels(names, fontsize=9, rotation=15, ha="right")
+    ax.set_ylim(0, max(r2_vals + ([lasso_r2] if lasso_r2 else [])) * 1.15)
+    ax.legend(fontsize=9, loc="upper left")
+    ax.grid(True, alpha=0.3, linestyle="--", axis="y")
+
+    if plot_title:
+        result_label = VARIABLE_LABELS.get(result_var, result_var)
+        ax.set_title(
+            f"Hierarchical Regression: {result_label}",
+            fontsize=12, fontweight="bold",
+        )
+
+    plt.tight_layout()
+
+    if save_path:
+        if for_latex and not save_path.endswith(".pdf"):
+            save_path = save_path.rsplit(".", 1)[0] + ".pdf"
+        if plot_title:
+            save_path = _add_title_suffix(save_path)
+        os.makedirs(os.path.dirname(save_path), exist_ok=True)
+        plt.savefig(save_path, dpi=300, bbox_inches="tight")
+        print(f"Hierarchical R² comparison saved to {save_path}")
     else:
         plt.show()
 
