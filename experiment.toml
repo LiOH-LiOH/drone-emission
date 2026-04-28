@@ -20,6 +20,11 @@ g_param = [1, 1.7, 0.5]       # Gravity model parameters: [alpha, beta, gamma]
 min_distance_km = 0.05    # Minimum distance to avoid division issues
 min_sales = 5             # Minimum annual sales threshold per building
 
+# Sensitivity stage parameters
+[sensitivity]
+enable = true            # Set false to skip the sensitivity stage entirely
+skip_if_done = true      # If all 3 output CSVs exist, skip recomputation
+
 # Equity analysis parameters
 [equity_params]
 unit_lat = 0.02          # ~2.2 km grid cell height

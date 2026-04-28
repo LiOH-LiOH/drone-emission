@@ -8,6 +8,7 @@ data/
 gba_data/
 figures/
 archive/
+notes/
 .DS_Store
 backup_*
 scripts/

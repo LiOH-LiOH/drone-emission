@@ -10,6 +10,7 @@ from equity import analyze_equity
 from preprocessing import prepare_sales
 from profit import cal_profit
 from roadnet import load_roadnet
+from sensitivity.api import run_sensitivity
 from utils import load_config
 from utils.config import configure_cache
 from utils.region_config import get_registry, init_registry
@@ -48,6 +49,10 @@ def run_region_analysis(region_key: str, config: dict):
         exp_config=config,
     )
     cal_emission(
+        region_info=region,
+        exp_config=config,
+    )
+    run_sensitivity(
         region_info=region,
         exp_config=config,
     )

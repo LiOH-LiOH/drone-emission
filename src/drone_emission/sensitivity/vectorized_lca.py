@@ -1,0 +1,221 @@
+"""Vectorized lifecycle-emission helpers for the sensitivity stage.
+
+Per-OD lifecycle emissions reduce to closed-form `alpha + beta * d` per scenario
+for both modes (use-phase + production amortization both linear in distance with
+intercept). This module exposes vectorized numpy implementations that produce
+numerically identical results to ``LifeCycleEmissions.calculate_lifecycle_emissions_per_order_simple``
+when run with matching parameters. See ``tests/test_vectorized_lca.py``.
+
+The scalar reference (in emission/cal_single_delivery.py) has these structural
+properties that we mirror:
+
+* E-bike use phase: ``energy_kwh = (P_go + P_return) * d / velocity`` already
+  accounts for round-trip via the sum of loaded + empty one-way powers.
+* Drone use phase: takeoff/landing/hover energies are scenario-constants;
+  level-flight energy scales linearly with one-way distance.
+* Production amortization: ``delivery_time_min`` is computed from per-OD
+  distance (``2*d/v*60 + loading_time_min``), so ``deliveries_per_day`` and the
+  resulting ``prod_per_delivery_kg`` vary per OD. The scalar code uses
+  ``2*d/v*60 + loading`` as the round-trip flight time even for drone (it does
+  NOT add takeoff/landing/hover); we mirror that simplification exactly.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import Optional
+
+import numpy as np
+
+from emission.cal_single_delivery import (
+    DroneEnergyModel,
+    DroneParams,
+    EbikeEnergyModel,
+    EbikeParams,
+)
+
+
+@dataclass
+class EbikeScenario:
+    """Per-scenario knobs for the ebike vectorized LCA.
+
+    Attributes:
+        kappa: Bundling factor applied to each OD distance.
+        gef_mult: Multiplier applied to the use-phase grid emission factor.
+        energy_mult: Multiplier on use-phase energy (e.g. for drone scenarios
+            this maps to drone aero uncertainty; ebike rarely varies).
+        payload_kg: Payload weight per order (kg).
+        rider_weight: Rider weight (kg).
+        lifespan_yr: Override for vehicle body lifespan (years). ``None``
+            keeps the params.lifespan default.
+        battery_lifespan_yr: Override for battery lifespan (years).
+        n_orders_per_delivery: Orders amortized per delivery trip.
+        include_production: If False, zero out production amortization.
+        include_use: If False, zero out use-phase emissions.
+    """
+
+    kappa: float = 1.0
+    gef_mult: float = 1.0
+    energy_mult: float = 1.0
+    payload_kg: float = 1.0
+    rider_weight: float = 70.0
+    lifespan_yr: Optional[float] = None
+    battery_lifespan_yr: Optional[float] = None
+    n_orders_per_delivery: int = 1
+    include_production: bool = True
+    include_use: bool = True
+
+
+@dataclass
+class DroneScenario:
+    """Per-scenario knobs for the drone vectorized LCA."""
+
+    gef_mult: float = 1.0
+    energy_mult: float = 1.0
+    payload_kg: float = 1.0
+    lifespan_yr: Optional[float] = None
+    battery_lifespan_yr: Optional[float] = None
+    n_orders_per_delivery: int = 1
+    include_production: bool = True
+    include_use: bool = True
+
+
+def _ebike_production_lifetime_kg(p: EbikeParams, lifespan: float, battery_lifespan: float) -> float:
+    """Per-year-equivalent production+disposal mass for an ebike.
+
+    Mirrors ``LifeCycleEmissions.calculate_ebike_production_emissions`` plus
+    the body/lifespan + battery/battery_lifespan amortization at lines
+    1219-1225 of cal_single_delivery.py.
+    """
+    body_prod = p.e_body * p.w_body
+    body_dispose = p.e_body_dispose * p.w_body
+    total_battery_kwh = p.v_battery * p.n_battery
+    battery_prod = p.e_battery * total_battery_kwh
+    battery_dispose = p.e_battery_dispose * total_battery_kwh
+    body_lifetime = (body_prod + body_dispose) / lifespan
+    battery_lifetime = (battery_prod + battery_dispose) / battery_lifespan
+    return body_lifetime + battery_lifetime
+
+
+def _drone_production_lifetime_kg(p: DroneParams, lifespan: float, battery_lifespan: float) -> float:
+    body_prod = p.e_body * p.w_body
+    body_dispose = p.e_body_dispose * p.w_body
+    total_battery_kwh = p.v_battery * p.n_battery
+    battery_prod = p.e_battery * total_battery_kwh
+    battery_dispose = p.e_battery_dispose * total_battery_kwh
+    body_lifetime = (body_prod + body_dispose) / lifespan
+    battery_lifetime = (battery_prod + battery_dispose) / battery_lifespan
+    return body_lifetime + battery_lifetime
+
+
+def compute_ebike_per_order_g(
+    distances_km: np.ndarray,
+    ebike_params: EbikeParams,
+    scenario: EbikeScenario,
+) -> np.ndarray:
+    """Vectorized per-order lifecycle emissions for the ebike mode (g CO2e).
+
+    ``distances_km`` is the one-way distance per OD pair. ``scenario.kappa``
+    is applied internally so the caller can pass a single distance array
+    regardless of bundling assumption.
+
+    Returns an array shaped like ``distances_km``.
+    """
+    p = ebike_params
+    s = scenario
+    lifespan = s.lifespan_yr if s.lifespan_yr is not None else p.lifespan
+    battery_lifespan = (
+        s.battery_lifespan_yr if s.battery_lifespan_yr is not None else p.battery_lifespan
+    )
+
+    d_eff = np.asarray(distances_km, dtype=float) * s.kappa
+
+    # Use-phase: scenario-constant powers from existing energy model (cached scalars)
+    eng = EbikeEnergyModel(p)
+    velocity_kmh = p.velocity
+    velocity_ms = velocity_kmh / 3.6
+    w_go = p.w_body + p.w_battery + s.rider_weight + s.payload_kg
+    w_return = p.w_body + p.w_battery + s.rider_weight
+    P_go, _ = eng.calculate_power(w_go, velocity_ms)
+    P_return, _ = eng.calculate_power(w_return, velocity_ms)
+    # Mirror cal_single_delivery.py:401: energy_kwh = (P_go + P_return) * (d / v)
+    # already encodes round trip (loaded one-way + empty one-way).
+    energy_kwh = (P_go + P_return) * d_eff / velocity_kmh * s.energy_mult
+    use_g = energy_kwh * p.e_use * s.gef_mult * 1000.0
+    if not s.include_use:
+        use_g = np.zeros_like(d_eff)
+
+    # Production amortization, per OD
+    delivery_time_min = 2.0 * d_eff / velocity_kmh * 60.0 + p.loading_time_min
+    deliveries_per_day = p.working_hours_per_day * 60.0 / delivery_time_min
+    annual_prod_kg = _ebike_production_lifetime_kg(p, lifespan, battery_lifespan)
+    # Mirror lines 1226-1227: prod_per_delivery_kg = annual_prod * lifespan / lifetime_deliveries
+    # where lifetime_deliveries = deliveries_per_day * working_days * lifespan
+    # => the lifespan in numerator and denominator cancel:
+    prod_per_delivery_kg = annual_prod_kg / (deliveries_per_day * p.working_days_per_year)
+    prod_g = prod_per_delivery_kg * 1000.0
+    if not s.include_production:
+        prod_g = np.zeros_like(d_eff)
+
+    total_g = (prod_g + use_g) / s.n_orders_per_delivery
+    return total_g
+
+
+def compute_drone_per_order_g(
+    distances_km: np.ndarray,
+    drone_params: DroneParams,
+    scenario: DroneScenario,
+) -> np.ndarray:
+    """Vectorized per-order lifecycle emissions for the drone mode (g CO2e)."""
+    p = drone_params
+    s = scenario
+    lifespan = s.lifespan_yr if s.lifespan_yr is not None else p.lifespan
+    battery_lifespan = (
+        s.battery_lifespan_yr if s.battery_lifespan_yr is not None else p.battery_lifespan
+    )
+
+    d = np.asarray(distances_km, dtype=float)
+
+    # Use-phase: scenario-constant powers via existing flight-angle power calc
+    eng = DroneEnergyModel(p)
+    w_loaded = p.w_body + p.w_battery + s.payload_kg
+    w_empty = p.w_body + p.w_battery
+    v_level_ms = p.v_level / 3.6
+    v_vertical_ms = p.v_vertical / 3.6
+
+    P_takeoff_loaded, _ = eng.calculate_flight_angle_power(w_loaded, v_vertical_ms, 90)
+    P_landing_loaded, _ = eng.calculate_flight_angle_power(w_loaded, v_vertical_ms, -90)
+    P_hover_loaded, _ = eng.calculate_flight_angle_power(w_loaded, 0.0, 0)
+    P_level_loaded, _ = eng.calculate_flight_angle_power(w_loaded, v_level_ms, 0)
+    P_takeoff_empty, _ = eng.calculate_flight_angle_power(w_empty, v_vertical_ms, 90)
+    P_landing_empty, _ = eng.calculate_flight_angle_power(w_empty, v_vertical_ms, -90)
+    P_level_empty, _ = eng.calculate_flight_angle_power(w_empty, v_level_ms, 0)
+
+    t_takeoff_h = (p.h_takeoff / 1000.0) / p.v_vertical
+    t_landing_h = t_takeoff_h
+    t_hover_h = p.hover_time / 3600.0
+    E_const = (
+        P_takeoff_loaded * t_takeoff_h
+        + P_landing_loaded * t_landing_h
+        + P_hover_loaded * t_hover_h
+        + P_takeoff_empty * t_takeoff_h
+        + P_landing_empty * t_landing_h
+    )
+    # Linear-in-distance: level flight loaded + empty
+    energy_kwh = (E_const + (P_level_loaded + P_level_empty) * d / p.v_level) * s.energy_mult
+    use_g = energy_kwh * p.e_use * s.gef_mult * 1000.0
+    if not s.include_use:
+        use_g = np.zeros_like(d)
+
+    # Production amortization, per OD. The scalar code uses
+    # delivery_time_min = 2*d/v_level*60 + loading; we mirror exactly.
+    delivery_time_min = 2.0 * d / p.v_level * 60.0 + p.loading_time_min
+    deliveries_per_day = p.working_hours_per_day * 60.0 / delivery_time_min
+    annual_prod_kg = _drone_production_lifetime_kg(p, lifespan, battery_lifespan)
+    prod_per_delivery_kg = annual_prod_kg / (deliveries_per_day * p.working_days_per_year)
+    prod_g = prod_per_delivery_kg * 1000.0
+    if not s.include_production:
+        prod_g = np.zeros_like(d)
+
+    total_g = (prod_g + use_g) / s.n_orders_per_delivery
+    return total_g
