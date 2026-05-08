@@ -1,15 +1,57 @@
 import json
 import os
 
+import cpca
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import requests
+from matplotlib.colors import LinearSegmentedColormap, TwoSlopeNorm
 
 # Project root directory
 _PROJECT_ROOT = os.path.dirname(
     os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 )
+
+
+def _batch_city_to_adcode(city_names: list) -> dict:
+    """Resolve Chinese city names to 6-digit adcodes using cpca (batched)."""
+    adcode_map = {}
+    try:
+        df = cpca.transform(list(city_names))
+        for city_name, adcode in zip(city_names, df["adcode"]):
+            if not pd.isna(adcode):
+                adcode_map[city_name] = str(int(adcode))[:6]
+    except Exception as e:
+        print(f"Error in batch adcode resolution: {e}")
+    return adcode_map
+
+
+def _fetch_city_boundaries(adcode: str):
+    """Fetch city boundary GeoJSON from cache or DataV API."""
+    cache_dir = os.path.join(_PROJECT_ROOT, "cache", "boundaries")
+    os.makedirs(cache_dir, exist_ok=True)
+    cache_file = os.path.join(cache_dir, f"{adcode}.json")
+
+    if os.path.exists(cache_file):
+        try:
+            with open(cache_file, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            pass
+
+    url = f"https://geo.datav.aliyun.com/areas_v3/bound/{adcode}_full.json"
+    try:
+        print(f"Downloading boundaries for adcode {adcode}...")
+        response = requests.get(url, timeout=30)
+        response.raise_for_status()
+        data = response.json()
+        with open(cache_file, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False)
+        return data
+    except Exception as e:
+        print(f"Failed to fetch boundaries for adcode {adcode}: {e}")
+        return None
 
 
 def _fetch_china_boundaries():
@@ -75,6 +117,96 @@ def _plot_china_boundaries(ax, geojson_data):
                 plot_polygon(polygon)
 
 
+_MUNICIPALITY_PREFIXES = frozenset({"11", "12", "31", "50", "81", "82"})
+
+
+def _fill_geometry(ax, geometry, facecolor):
+    """Fill a single GeoJSON geometry dict on the axes."""
+    if not geometry:
+        return
+
+    geom_type = geometry.get("type")
+    coords = geometry.get("coordinates")
+
+    def fill_rings(rings):
+        if isinstance(rings[0][0], (list, tuple)) and isinstance(
+            rings[0][0][0], (list, tuple)
+        ):
+            for subrings in rings:
+                fill_rings(subrings)
+        else:
+            outer = rings[0]
+            xs, ys = zip(*[(pt[0], pt[1]) for pt in outer])
+            ax.fill(
+                xs, ys,
+                facecolor=facecolor,
+                edgecolor="none",
+                linewidth=0,
+                zorder=2,
+            )
+
+    if geom_type == "Polygon":
+        fill_rings(coords)
+    elif geom_type == "MultiPolygon":
+        for polygon in coords:
+            fill_rings(polygon)
+
+
+def _ensure_all_china_city_areas():
+    """Return list of (adcode, name, geometry_dict) for every city-level area in China.
+
+    For municipalities and SARs the province-level geometry (from the China
+    boundary) is used directly. For regular provinces the boundary is fetched
+    and its city/prefecture features are returned.
+    """
+    china = _fetch_china_boundaries()
+    if not china:
+        return []
+
+    areas = []
+    missing_provinces = 0
+
+    for feature in china.get("features", []):
+        props = feature.get("properties", {})
+        prov_adcode = str(props.get("adcode", ""))
+        prov_name = props.get("name", "")
+        # Skip pseudo-provinces like 九段线 (100000_JD)
+        if not prov_adcode.isdigit():
+            continue
+        prov_prefix = prov_adcode[:2] if len(prov_adcode) >= 2 else ""
+
+        if prov_prefix in _MUNICIPALITY_PREFIXES:
+            # Municipality or SAR: use province-level geometry directly
+            geometry = feature.get("geometry")
+            if geometry:
+                areas.append((prov_adcode, prov_name, geometry))
+        else:
+            # Regular province: fetch full boundary to get city features
+            prov_geojson = _fetch_city_boundaries(prov_adcode)
+            if not prov_geojson:
+                # Fallback: use province-level geometry from China boundary
+                geometry = feature.get("geometry")
+                if geometry:
+                    areas.append((prov_adcode, prov_name, geometry))
+                else:
+                    missing_provinces += 1
+                continue
+
+            for city_feat in prov_geojson.get("features", []):
+                city_props = city_feat.get("properties", {})
+                city_adcode = str(city_props.get("adcode", ""))
+                city_name = city_props.get("name", "")
+                geometry = city_feat.get("geometry")
+                if geometry:
+                    areas.append((city_adcode, city_name, geometry))
+
+    print(
+        f"Built {len(areas)} city-level areas across China "
+        f"(missing {missing_provinces} provinces)"
+    )
+    return areas
+
+
 def plot_regions_on_china_map(
     region_keys: list = None,
     regions_json_path: str = None,
@@ -85,178 +217,131 @@ def plot_regions_on_china_map(
     plot_title: bool = False,
     color_by: str = "max_lifecycle_reduction_pct",
 ):
-    """Plot study regions as scatter points on a China map.
+    """Plot a full city-boundary choropleth map of China.
 
-    Supports two data sources: CSV (preferred for large-scale analysis) or
-    regions.json (legacy). When using CSV, points are color-coded by the
-    specified variable.
+    Every city-level area is filled: study cities with valid reduction data use
+    a diverging green colour scale centred at 0; all other areas are light gray.
+    China province outlines are drawn on top for geographic context.
 
     Args:
         region_keys: List of region keys to plot. If None, plots all regions.
         regions_json_path: Path to regions.json (legacy mode).
-        csv_path: Path to all_region_stats.csv (preferred for large-scale analysis).
+        csv_path: Path to all_region_stats.csv (preferred).
         save_path: Path to save the figure. If None, displays the plot.
         figsize: Figure size tuple (width, height).
         for_latex: If True, skip title for LaTeX export and save as PDF.
         plot_title: If True, show title.
-        color_by: Column name to color-code points by (only used with csv_path).
+        color_by: Column name to color-code regions by (only used with csv_path).
     """
-    # Load data from CSV or JSON
+    # --- Load study-city data ---------------------------------------------------
     if csv_path is not None:
         df = pd.read_csv(csv_path)
-        # Filter to rows with boundary data
-        df = df[df[["min_lat", "max_lat", "min_lng", "max_lng"]].notna().all(axis=1)].copy()
         if region_keys is not None:
             df = df[df["region_key"].isin(region_keys)]
 
-        # Compute center coordinates
-        lats = ((df["min_lat"] + df["max_lat"]) / 2).values
-        lngs = ((df["min_lng"] + df["max_lng"]) / 2).values
-        region_names = df["region_name_en"].values
+        region_names_cn = df["region_name_cn"].values
         color_values = df[color_by].values if color_by in df.columns else None
     else:
-        # Legacy JSON mode
         if regions_json_path is None:
             regions_json_path = os.path.join(_PROJECT_ROOT, "regions.json")
-
         with open(regions_json_path, "r", encoding="utf-8") as f:
             regions_data = json.load(f)
 
-        region_names = []
-        lats = []
-        lngs = []
-
-        for region_key, region_info in regions_data.items():
-            if region_keys is not None and region_key not in region_keys:
+        names_cn = []
+        for rk, ri in regions_data.items():
+            if region_keys is not None and rk not in region_keys:
                 continue
-
-            boundaries = region_info.get("boundaries_dict", {})
-            if not boundaries:
-                continue
-
-            center_lat = (boundaries["min_lat"] + boundaries["max_lat"]) / 2
-            center_lng = (boundaries["min_lng"] + boundaries["max_lng"]) / 2
-
-            region_names.append(region_info.get("region_name_en", region_key))
-            lats.append(center_lat)
-            lngs.append(center_lng)
-
-        lats = np.array(lats)
-        lngs = np.array(lngs)
-        region_names = np.array(region_names)
+            names_cn.append(ri.get("region_name_cn", rk))
+        region_names_cn = np.array(names_cn)
         color_values = None
 
-    n_points = len(lats)
+    # Study city name → adcode
+    unique_study_names = list(set(region_names_cn))
+    study_name_to_adcode = _batch_city_to_adcode(unique_study_names)
 
-    # Create figure
+    # Study city adcode → reduction value (float or NaN)
+    study_adcode_to_val = {}
+    if color_values is not None:
+        color_vals = color_values.astype(float)
+        for i, name_cn in enumerate(region_names_cn):
+            adcode = study_name_to_adcode.get(name_cn)
+            if adcode:
+                study_adcode_to_val[adcode] = color_vals[i]
+
+    # --- Build full-China city coverage -----------------------------------------
+    all_areas = _ensure_all_china_city_areas()
+
+    # --- Colour mapping ---------------------------------------------------------
+    from analysis.constants import VARIABLE_LABELS
+
+    cmap = LinearSegmentedColormap.from_list("green_diverging", [
+        "#d7191c",
+        "#fdae61",
+        "#ffffbf",
+        "#a6d96a",
+        "#1a9641",
+    ])
+
+    valid_values = [v for v in study_adcode_to_val.values() if not np.isnan(v)]
+    if valid_values:
+        max_abs = max(abs(min(valid_values)), abs(max(valid_values)))
+        norm = TwoSlopeNorm(vmin=-max_abs, vcenter=0, vmax=max_abs)
+    else:
+        norm = None
+
+    GRAY_FILL = "#cccccc"
+
+    # --- Plot -------------------------------------------------------------------
     fig, ax = plt.subplots(figsize=figsize)
 
-    # China approximate boundaries for context
     china_lat_range = (18, 54)
     china_lng_range = (73, 135)
 
-    # Fetch and plot China base map
+    # 1. Fill every city-level area (background)
+    plotted_total = 0
+    plotted_colored = 0
+    for adcode, name, geometry in all_areas:
+        val = study_adcode_to_val.get(adcode)
+        if val is not None and norm is not None and not np.isnan(val):
+            facecolor = cmap(norm(val))
+            plotted_colored += 1
+        else:
+            facecolor = GRAY_FILL
+        _fill_geometry(ax, geometry, facecolor)
+        plotted_total += 1
+
+    # 2. Province outlines on top
     china_geojson = _fetch_china_boundaries()
     _plot_china_boundaries(ax, china_geojson)
 
-    # Plot scatter points
-    if color_values is not None and not np.all(np.isnan(color_values.astype(float))):
-        # Color-coded scatter with colorbar
-        valid_mask = ~pd.isna(color_values)
-        color_vals = color_values.astype(float)
-
-        scatter = ax.scatter(
-            lngs[valid_mask],
-            lats[valid_mask],
-            c=color_vals[valid_mask],
-            cmap="RdYlGn",
-            s=40 if n_points > 20 else 100,
-            alpha=0.8,
-            edgecolors="black",
-            linewidths=0.5,
-            zorder=10,
-        )
-        # Points without color data
-        if (~valid_mask).any():
-            ax.scatter(
-                lngs[~valid_mask],
-                lats[~valid_mask],
-                c="gray",
-                s=20,
-                alpha=0.5,
-                edgecolors="black",
-                linewidths=0.3,
-                zorder=9,
-            )
-        from analysis.constants import VARIABLE_LABELS
-        cbar = plt.colorbar(scatter, ax=ax, shrink=0.7, pad=0.02)
+    # 3. Colorbar
+    if valid_values and norm is not None:
+        sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
+        sm.set_array([])
+        cbar = plt.colorbar(sm, ax=ax, shrink=0.7, pad=0.02)
         cbar.set_label(VARIABLE_LABELS.get(color_by, color_by), fontsize=10)
-    else:
-        ax.scatter(
-            lngs,
-            lats,
-            c="red",
-            s=40 if n_points > 20 else 100,
-            alpha=0.8,
-            edgecolors="darkred",
-            linewidths=1.0,
-            zorder=10,
-        )
 
-    # Add region labels: all if <=20, otherwise only top/bottom 5 outliers
-    if n_points <= 20:
-        for name, lat, lng in zip(region_names, lats, lngs):
-            ax.annotate(
-                name,
-                (lng, lat),
-                xytext=(5, 5),
-                textcoords="offset points",
-                fontsize=9,
-                fontweight="bold",
-                color="darkblue",
-                zorder=11,
-            )
-    elif color_values is not None:
-        # Annotate top/bottom 5 outliers
-        valid_mask = ~pd.isna(color_values)
-        if valid_mask.sum() > 0:
-            valid_idx = np.where(valid_mask)[0]
-            valid_vals = color_values.astype(float)[valid_idx]
-            sorted_idx = valid_idx[np.argsort(valid_vals)]
-            n_annotate = min(5, len(sorted_idx) // 2)
-            annotate_idx = np.concatenate([sorted_idx[:n_annotate], sorted_idx[-n_annotate:]])
-            for idx in annotate_idx:
-                ax.annotate(
-                    region_names[idx],
-                    (lngs[idx], lats[idx]),
-                    xytext=(5, 5),
-                    textcoords="offset points",
-                    fontsize=7,
-                    color="darkblue",
-                    zorder=11,
-                )
+    print(
+        f"Plotted {plotted_total} areas ({plotted_colored} colored by reduction, "
+        f"{plotted_total - plotted_colored} gray)"
+    )
 
-    # Set axis limits to show China context
+    # --- Axes setup -------------------------------------------------------------
     ax.set_xlim(china_lng_range)
     ax.set_ylim(china_lat_range)
-
-    # Labels
     ax.set_xlabel("Longitude", fontsize=12)
     ax.set_ylabel("Latitude", fontsize=12)
+    ax.grid(True, alpha=0.3, linestyle="--")
+
+    avg_lat = np.mean(china_lat_range)
+    ax.set_aspect(1.0 / np.cos(np.radians(avg_lat)))
 
     if plot_title:
         ax.set_title("Study Regions in China", fontsize=14, fontweight="bold")
 
-    # Add grid
-    ax.grid(True, alpha=0.3, linestyle="--")
-
-    # Adjust aspect ratio for geographic data
-    avg_lat = np.mean(china_lat_range)
-    ax.set_aspect(1.0 / np.cos(np.radians(avg_lat)))
-
     plt.tight_layout()
 
-    # Save or show
+    # --- Save / show ------------------------------------------------------------
     if save_path:
         if for_latex and not save_path.endswith(".pdf"):
             save_path = save_path.rsplit(".", 1)[0] + ".pdf"
@@ -270,5 +355,4 @@ def plot_regions_on_china_map(
         plt.show()
 
     plt.close(fig)
-
     return fig, ax
