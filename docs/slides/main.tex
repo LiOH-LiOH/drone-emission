@@ -1120,39 +1120,157 @@
   \footnotesize{YN=Yunnan, SC=Sichuan, NX=Ningxia, XJ=Xinjiang, SN=Shaanxi, HL=Heilongjiang, IM=Inner Mongolia}
 \end{frame}
 
+\section{Robustness}
+
+\begin{frame}{Robustness --- One-At-a-Time Sensitivity}
+  \begin{columns}
+    \begin{column}{0.55\textwidth}
+      \centering
+      \includegraphics[width=\linewidth]{../../figures/sensitivity/oat_tornado_t.pdf}
+    \end{column}
+    \begin{column}{0.45\textwidth}
+      \footnotesize
+      \textbf{6 features perturbed around the $\kappa{=}1$ anchor (n=313 cities):}
+      \begin{itemize}
+        \item Drone energy multiplier: median $|\Delta|$ \textbf{17.0} pct pts
+        \item Provincial GEF multiplier: median $|\Delta|$ \textbf{14.4} pct pts
+        \item $\kappa$ (e-bike bundling): \textbf{2.0} pct pts (small near anchor)
+        \item Payload, lifespans: $<\!1$ pct pt each
+      \end{itemize}
+      \vspace{0.4em}
+      \textbf{Anchor-baseline result:}
+      \begin{itemize}
+        \item Median reduction \textbf{27.2\%} (P25=23.6, P75=32.1)
+        \item Optimal threshold \textbf{0.99\,km}, drone share \textbf{85\%}
+        \item \textbf{100\%} of 313 cities benefit at no-bundling baseline
+      \end{itemize}
+    \end{column}
+  \end{columns}
+\end{frame}
+
+\begin{frame}{Robustness --- E-bike Bundling ($\kappa$) Collapse}
+  \begin{columns}
+    \begin{column}{0.55\textwidth}
+      \centering
+      \includegraphics[width=\linewidth]{../../figures/sensitivity/oat_beneficial_share_t.pdf}
+    \end{column}
+    \begin{column}{0.45\textwidth}
+      \footnotesize
+      \textbf{Beneficial-city share by $\kappa$:}
+      \begin{tabular}{rrr}
+        \toprule
+        $\kappa$ & \% cities $>$0 & median red. \\
+        \midrule
+        1.0 & \textbf{100.0\%} & 27.2\% \\
+        0.9 & 100.0\% & 20.0\% \\
+        0.8 & 100.0\% & 11.7\% \\
+        0.7 & 99.4\% & 4.1\% \\
+        0.6 & \textbf{78.6\%} & 1.1\% \\
+        \bottomrule
+      \end{tabular}
+      \vspace{0.4em}
+      \begin{itemize}
+        \item Bundling consumes most of the median advantage by $\kappa{=}0.7$
+        \item Even at $\kappa{=}0.6$, $\sim$79\% of cities still benefit
+        \item Drone-mixing adds only \textbf{+4.1 pct pts} on top of bundled e-bike at today's grid
+      \end{itemize}
+    \end{column}
+  \end{columns}
+\end{frame}
+
+\begin{frame}{Mechanism Decomposition --- Shapley Values}
+  \begin{columns}
+    \begin{column}{0.5\textwidth}
+      \centering
+      \includegraphics[width=\linewidth]{../../figures/sensitivity/shapley_aggregate_stacked_t.pdf}
+    \end{column}
+    \begin{column}{0.5\textwidth}
+      \footnotesize
+      \textbf{4 binary mechanisms, full-permutation Shapley (n=313):}
+      \begin{tabular}{lr}
+        \toprule
+        Mechanism & median (pct pts) \\
+        \midrule
+        M3 Production amortization & \textbf{+25.0} \\
+        M1 Routing geometry & \textbf{+11.0} \\
+        M2 E-bike bundling & \textbf{$-$10.4} \\
+        M4 Grid carbon intensity & \textbf{$-$20.6} \\
+        Residual (use-phase asym.) & $\sim 0$ \\
+        \bottomrule
+      \end{tabular}
+      \vspace{0.4em}
+      \begin{itemize}
+        \item Drone advantage is built by \textbf{production scaling + straight-line routing}
+        \item Eroded by \textbf{bundling} and \textbf{dirty grids}
+        \item Drones do \emph{not} win on per-km energy efficiency
+      \end{itemize}
+    \end{column}
+  \end{columns}
+\end{frame}
+
+\begin{frame}{Future Grid --- 2030 and 2060 Scenarios}
+  \begin{columns}
+    \begin{column}{0.55\textwidth}
+      \centering
+      \includegraphics[width=\linewidth]{../../figures/sensitivity/named_boxplot_t.pdf}
+    \end{column}
+    \begin{column}{0.45\textwidth}
+      \footnotesize
+      \textbf{Optimal-mixed reduction vs anchor ($\kappa{=}0.7$):}
+      \begin{itemize}
+        \item Today's grid: \textbf{+31.7\%}
+        \item 2030 (GEF$\times$0.65): \textbf{+52.7\%}
+        \item 2060 (GEF$\times$0.10): \textbf{+89.5\%}
+      \end{itemize}
+      \vspace{0.4em}
+      \textbf{Even on top of bundled e-bike (same $\kappa$):}
+      \begin{itemize}
+        \item Today: $+4.1$ pct pts
+        \item 2030: $+33.7$ pct pts
+        \item 2060: \textbf{$+85.3$} pct pts
+      \end{itemize}
+      \vspace{0.4em}
+      \textbf{Conservative 2-km threshold} captures $\sim$90\% of optimal benefit (24.5\% vs 27.2\% at $\kappa{=}1$).
+      \vspace{0.4em}
+      \scriptsize\textit{2030/2060 GEF multipliers are placeholders pending IEA WEO 2024 / Tsinghua ICCSD.}
+    \end{column}
+  \end{columns}
+\end{frame}
+
 \section{Discussion}
 
 \begin{frame}{Discussion and Future Work}
   \begin{columns}
     \begin{column}{0.48\textwidth}
-      \textbf{Key Findings (n=312):}
+      \textbf{Key Findings (n=313):}
       \begin{itemize}
         \item Mean lifecycle emission reduction: \textbf{29.2\%} (range: 11.5--55.0\%)
-        \item Optimal distance threshold: \textbf{0.95\,km} on average
-        \item Optimal drone ratio: \textbf{85\%} of deliveries
-        \item \textbf{93\%} of cities achieve $>$20\% reduction
+        \item Optimal threshold \textbf{0.99\,km}, drone ratio \textbf{85\%}
+        \item \textbf{100\%} of cities benefit at no-bundling baseline; \textbf{$\sim$79\%} still benefit at $\kappa{=}0.6$
+        \item Conservative 2-km threshold captures \textbf{$\sim$90\%} of optimal benefit
       \end{itemize}
 
-      \vspace{0.5em}
-      \textbf{Regression Insights (R\textsuperscript{2}=0.86):}
+      \vspace{0.4em}
+      \textbf{Mechanism (Shapley, pct pts):}
       \begin{itemize}
-        \item Grid emission factor explains \textbf{70\%} of variance ($\beta=-0.88$)
-        \item Road network adds \textbf{16\%}: detour ratio ($\beta=+0.35$), orientation entropy ($\beta=-0.21$)
-        \item For drone ratio, road structure adds \textbf{20\%} R\textsuperscript{2}
+        \item Production amortization \textbf{+25}, Routing \textbf{+11}
+        \item Bundling \textbf{$-$10}, Grid carbon \textbf{$-$21}
+        \item Drones do \emph{not} win on per-km energy
       \end{itemize}
     \end{column}
     \begin{column}{0.48\textwidth}
       \textbf{Policy Implications:}
       \begin{itemize}
-        \item Grid decarbonization \textbf{amplifies} drone delivery's emission benefit
+        \item Grid decarbonization \textbf{amplifies} drone benefit (2060: $+89.5$\%)
+        \item Drone-mixing adds only \textbf{$+4$ pct pts} on top of bundled e-bike at today's grid
         \item Prioritize drone deployment in \textbf{clean-grid, complex-road} cities
         \item Road network structure is a tractable predictor for planners
       \end{itemize}
 
-      \vspace{0.5em}
+      \vspace{0.4em}
       \textbf{Future Work:}
       \begin{itemize}
-        \item Consider different \textbf{bundle sizes} for both drone and e-bike deliveries
+        \item Replace 2030/2060 GEF placeholders with \textbf{IEA WEO 2024} / Tsinghua ICCSD figures
         \item Incorporate \textbf{economic} analysis
         \item Account for \textbf{weather impact} on drone operations
       \end{itemize}
