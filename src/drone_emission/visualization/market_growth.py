@@ -55,7 +55,6 @@ def plot_market_size_bar(
     forecast_size = market_size[len(actual_years) :]
 
     # Create figure
-    plt.rcParams["font.family"] = ["Arial", "DejaVu Sans", "sans-serif"]
     fig, ax = plt.subplots(figsize=(12, 7))
 
     # Plot bars
