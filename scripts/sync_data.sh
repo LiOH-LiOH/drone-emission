@@ -2,14 +2,14 @@
 # sync_data.sh - Sync sensitive data files to remote server
 #
 # Usage:
-#   bash sync_data.sh              # uses default remote host
-#   bash sync_data.sh hku-cpu      # specify SSH host
+#   bash scripts/sync_data.sh              # uses default remote host
+#   bash scripts/sync_data.sh hku-cpu      # specify SSH host
 
 set -euo pipefail
 
 REMOTE_HOST="${1:-hku-sto}"
 REMOTE_DIR="/home/jingxian/code/drone-emission/src"
-LOCAL_DIR="$(cd "$(dirname "$0")" && pwd)"
+LOCAL_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 
 FILES=(
     "data/combined_data.csv"

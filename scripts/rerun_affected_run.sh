@@ -2,14 +2,14 @@
 
 # Step 2: Rerun cities listed in affected_cities.txt through the full pipeline.
 #
-# Run rerun_affected_clean.sh first to generate affected_cities.txt.
+# Run scripts/rerun_affected_clean.sh first to generate affected_cities.txt.
 # Wraps in tmux session with resource limits, like entrypoint.sh.
 #
-# Usage: ./rerun_affected_run.sh [parallel_jobs] [env]
+# Usage: bash scripts/rerun_affected_run.sh [parallel_jobs] [env]
 # Examples:
-#   ./rerun_affected_run.sh           # 4 parallel, remote (default)
-#   ./rerun_affected_run.sh 8         # 8 parallel
-#   ./rerun_affected_run.sh 1 local   # sequential, local
+#   bash scripts/rerun_affected_run.sh           # 4 parallel, remote (default)
+#   bash scripts/rerun_affected_run.sh 8         # 8 parallel
+#   bash scripts/rerun_affected_run.sh 1 local   # sequential, local
 
 MEMORY_MAX="128G"
 SESSION_NAME="rerun-affected"
@@ -29,7 +29,7 @@ if [ -z "$TMUX" ] && [ -z "$INSIDE_RERUN" ]; then
 fi
 
 # ---- Actual work (runs inside tmux) ----
-cd "$(dirname "$0")"
+cd "$(dirname "$0")/.."
 
 PARALLEL=${1:-4}
 ENV=${2:-remote}

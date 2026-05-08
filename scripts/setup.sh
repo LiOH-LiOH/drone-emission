@@ -1,9 +1,9 @@
 #!/bin/bash
-# setup.sh - Create venv and install dependencies
+# setup.sh - Create venv and install dependencies (run from repo root)
 #
 # Usage:
-#   bash setup.sh          # uses python3
-#   bash setup.sh python3.11  # specify python version
+#   bash scripts/setup.sh             # uses python3
+#   bash scripts/setup.sh python3.11  # specify python version
 
 set -euo pipefail
 
@@ -11,7 +11,7 @@ PYTHON="${1:-python3}"
 VENV_DIR=".venv"
 REQ_FILE="src/drone_emission/requirements.txt"
 
-cd "$(dirname "$0")"
+cd "$(dirname "$0")/.."
 
 # Copy regions config template if regions.json doesn't exist
 if [ ! -f "regions.json" ]; then

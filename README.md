@@ -11,8 +11,8 @@ Key findings across studied regions show that an all-drone scenario can reduce e
 Requires Python 3.10+.
 
 ```bash
-bash setup.sh              # create venv and install dependencies
-bash setup.sh python3.11   # specify python version
+bash scripts/setup.sh              # create venv and install dependencies
+bash scripts/setup.sh python3.11   # specify python version
 ```
 
 ## Quick Start
@@ -39,13 +39,20 @@ The `--region` flag selects which region to analyze (defined in `regions.json`).
 ./entrypoint.sh 4 --all        # all regions from regions.json
 ```
 
+### Sensitivity & network-metrics stages
+
+```bash
+./run_sensitivity.sh           # sensitivity analysis (after emission stage)
+./run_network_metrics.sh       # OSMnx network metrics (post-hoc, optional)
+```
+
 ### Monitoring
 
 Summarize the latest pipeline log (progress, failures, active workers):
 
 ```bash
-bash log_summary.sh                          # latest log
-bash log_summary.sh logs/run_20260401.log    # specific log
+bash scripts/log_summary.sh                          # latest log
+bash scripts/log_summary.sh logs/run_20260401.log    # specific log
 ```
 
 ### Post-processing
@@ -56,6 +63,8 @@ Consolidate per-region stats and run cross-region analysis after the pipeline co
 ./postprocess.sh               # remote env (default)
 ./postprocess.sh local         # local env
 ```
+
+Other utilities (single-region smoke test, surgical reruns, data sync) live under `scripts/`.
 
 ## Pipeline Stages
 

@@ -17,7 +17,41 @@ python main.py --region nanshan
 
 The `--region` flag selects which region to analyze (defined in `regions.json`).
 
-Run all regions via `entrypoint.sh` (wraps in tmux session with resource limits, logs to `./logs/`):
+### Shell scripts layout
+
+Top-level scripts at the repo root run the pipeline or one of its stages:
+
+- `entrypoint.sh` — main pipeline (preprocessing → buildings → demand → roadnet → emission → equity)
+- `run_sensitivity.sh` — sensitivity-analysis stage (depends on emission-stage OD CSVs)
+- `run_network_metrics.sh` — OSMnx network metrics (post-hoc, reads existing GraphML files)
+- `postprocess.sh` — consolidate per-region stats + cross-region analysis + report
+
+Everything else lives under `scripts/` (utilities, surgical reruns, one-time setup): `scripts/setup.sh`, `scripts/sync_data.sh`, `scripts/test_run.sh`, `scripts/log_summary.sh`, `scripts/rerun_affected_{clean,run}.sh`, `scripts/download_figures.sh`, `scripts/rsync_retry.sh`. Run them as `bash scripts/<name>.sh ...`.
+
+### Canonical rerun sequence
+
+To rerun the whole analysis end-to-end:
+
+```bash
+# 1. Main pipeline
+./entrypoint.sh --all                  # or: ./entrypoint.sh 4 --all (4 parallel)
+
+# 2. Sensitivity (skips regions whose 3 CSVs already exist)
+./run_sensitivity.sh                   # 4 parallel, remote (default)
+
+# 3. (Optional) Network metrics — only if you need updated OSMnx topology stats
+./run_network_metrics.sh
+
+# 4. Post-process (consolidate stats + cross-region analysis + report + snapshot)
+./postprocess.sh
+
+# 5. (Optional) Cross-region sensitivity tables
+cd src/drone_emission && ../../.venv/bin/python -m tools.consolidate_sensitivity
+```
+
+### entrypoint.sh
+
+Wraps execution in tmux with resource limits, logs to `./logs/`:
 ```bash
 ./entrypoint.sh                # Sequential, remote env (default)
 ./entrypoint.sh 4              # 4 parallel jobs, remote env
@@ -29,10 +63,14 @@ Add `--all` to process every region in `regions.json` instead of the hardcoded l
 ./entrypoint.sh 4 --all        # 4 parallel jobs, all regions (each region in its own process)
 ```
 
+### Monitoring
+
 Summarize pipeline log (progress, failures, active workers):
 ```bash
-bash log_summary.sh            # latest log in ./logs/
+bash scripts/log_summary.sh    # latest log in ./logs/
 ```
+
+### Standalone tools
 
 Consolidate per-region stats into a single summary:
 ```bash
@@ -41,7 +79,7 @@ python -m tools.consolidate_stats            # merge all per-region stats
 python -m tools.consolidate_stats --migrate  # one-time migration from old regions.json
 ```
 
-To run emission model validation and sensitivity analysis directly:
+Run emission model validation and sensitivity analysis directly:
 ```bash
 python -m emission.cal_single_delivery
 ```

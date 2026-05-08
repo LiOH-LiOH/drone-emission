@@ -8,15 +8,15 @@
 #   - If count increased: save new buildings, clean downstream data, add to rerun list
 #   - If count unchanged: skip
 #
-# Run this BEFORE rerun_affected_run.sh.
-# Outputs affected city keys to affected_cities.txt.
+# Run this BEFORE scripts/rerun_affected_run.sh.
+# Outputs affected city keys to affected_cities.txt at repo root.
 #
 # Usage:
-#   bash rerun_affected_clean.sh [env]
-#   bash rerun_affected_clean.sh remote   # (default)
+#   bash scripts/rerun_affected_clean.sh [env]
+#   bash scripts/rerun_affected_clean.sh remote   # (default)
 
 set -euo pipefail
-cd "$(dirname "$0")"
+cd "$(dirname "$0")/.."
 
 ENV=${1:-remote}
 

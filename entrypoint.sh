@@ -10,7 +10,7 @@
 #   ./entrypoint.sh 1 local   # Sequential, all cities, local env
 
 # Resource limits (edit below):
-MEMORY_MAX="128G"
+MEMORY_MAX="64G"
 SESSION_NAME="drone-emission"
 
 # ---- If not inside tmux, wrap ourselves in a tmux session ----
