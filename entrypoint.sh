@@ -5,9 +5,10 @@
 #
 # Usage: ./entrypoint.sh [parallel_jobs] [env] [--all]
 # Examples:
-#   ./entrypoint.sh           # 4 parallel jobs, all cities, remote env (default)
-#   ./entrypoint.sh 8         # 8 parallel jobs, all cities, remote env
-#   ./entrypoint.sh 1 local   # Sequential, all cities, local env
+#   ./entrypoint.sh           # Sequential, remote env (default)
+#   ./entrypoint.sh 4         # 4 parallel jobs, remote env
+#   ./entrypoint.sh 1 local   # Sequential, local env
+# Add --all to process every region in regions.json instead of the hardcoded list.
 
 # Resource limits (edit below):
 MEMORY_MAX="64G"
@@ -47,14 +48,14 @@ fi
 cd src/drone_emission
 
 # Parse flags
-ALL_MODE=true
+ALL_MODE=false
 for arg in "$@"; do
     if [ "$arg" = "--all" ]; then
         ALL_MODE=true
     fi
 done
 
-PARALLEL=${1:-4}  # Default to 4 parallel jobs
+PARALLEL=${1:-1}  # Default to 1 (sequential)
 ENV=${2:-remote}  # Default to remote (entrypoint.sh is typically run on server)
 
 echo "Environment: $ENV (mem=${MEMORY_MAX})"

@@ -1183,4 +1183,165 @@ def plot_geographic_pattern(
     else:
         plt.show()
 
+
+def plot_province_orders_emission(
+    df: pd.DataFrame,
+    save_path: str = None,
+    figsize: tuple = (14, 6),
+    for_latex: bool = False,
+    plot_title: bool = False,
+    dpi: int = 300,
+):
+    """Bar (orders) + scatter (e-bike emission) by province, sorted by order volume.
+
+    Args:
+        df: all_region_stats DataFrame with columns province, total_odpair_annual_sales,
+            total_ebike_lifecycle.
+        save_path: Path without extension. Saves PNG or PDF; shows interactively if None.
+        for_latex: Save as PDF when True.
+        plot_title: Add title when True.
+        dpi: Output resolution.
+    """
+    sub = df[["province", "total_odpair_annual_sales", "total_ebike_lifecycle"]].dropna()
+    prov = (
+        sub.groupby("province")
+        .agg(
+            total_orders=("total_odpair_annual_sales", "sum"),
+            total_emission=("total_ebike_lifecycle", "sum"),
+        )
+        .reset_index()
+        .sort_values("total_orders", ascending=False)
+    )
+
+    prov["province_en"] = prov["province"].map(PROVINCE_NAME_EN).fillna(prov["province"])
+
+    orders_m = prov["total_orders"] / 1e6
+    emission_kt = prov["total_emission"] / 1e3
+
+    x = np.arange(len(prov))
+    bar_color = "#4C8CBF"
+    scatter_color = "#E05C2B"
+
+    fig, ax1 = plt.subplots(figsize=figsize)
+
+    ax1.bar(x, orders_m, color=bar_color, alpha=0.8, label="Annual orders")
+    ax1.set_xlabel("Province", fontsize=12)
+    ax1.set_ylabel("Annual orders (millions)", fontsize=12, color=bar_color)
+    ax1.tick_params(axis="y", labelcolor=bar_color)
+    ax1.set_xticks(x)
+    ax1.set_xticklabels(prov["province_en"], rotation=45, ha="right", fontsize=9)
+    ax1.yaxis.grid(True, linestyle="--", alpha=0.4)
+    ax1.set_axisbelow(True)
+
+    ax2 = ax1.twinx()
+    ax2.scatter(x, emission_kt, color=scatter_color, s=50, zorder=5, label="E-bike emission")
+    ax2.set_ylabel("Total e-bike lifecycle emission (t CO₂eq)", fontsize=12, color=scatter_color)
+    ax2.tick_params(axis="y", labelcolor=scatter_color)
+
+    handles = [
+        plt.Rectangle((0, 0), 1, 1, color=bar_color, alpha=0.8),
+        plt.Line2D([0], [0], marker="o", color="w", markerfacecolor=scatter_color, markersize=8),
+    ]
+    ax1.legend(handles, ["Annual orders", "E-bike lifecycle emission"], loc="upper right", fontsize=10)
+
+    if plot_title:
+        fig.suptitle("Province-level Delivery Orders and E-bike Lifecycle Emissions", fontsize=14, fontweight="bold")
+
+    plt.tight_layout()
+
+    if save_path:
+        ext = ".pdf" if for_latex else ".png"
+        out = save_path + ext
+        if plot_title:
+            out = _add_title_suffix(out)
+        os.makedirs(os.path.dirname(out), exist_ok=True)
+        plt.savefig(out, dpi=dpi, bbox_inches="tight")
+        print(f"Saved: {out}")
+    else:
+        plt.show()
+
+    plt.close(fig)
+
+
+def plot_province_orders_both_emissions(
+    df: pd.DataFrame,
+    save_path: str = None,
+    figsize: tuple = (14, 6),
+    for_latex: bool = False,
+    plot_title: bool = False,
+    dpi: int = 300,
+):
+    """Bar (orders) + two scatters (e-bike and drone emission) by province, sorted by order volume.
+
+    Args:
+        df: all_region_stats DataFrame with columns province, total_odpair_annual_sales,
+            total_ebike_lifecycle, total_drone_lifecycle.
+        save_path: Path without extension. Saves PNG or PDF; shows interactively if None.
+        for_latex: Save as PDF when True.
+        plot_title: Add title when True.
+        dpi: Output resolution.
+    """
+    sub = df[["province", "total_odpair_annual_sales", "total_ebike_lifecycle", "total_drone_lifecycle"]].dropna()
+    prov = (
+        sub.groupby("province")
+        .agg(
+            total_orders=("total_odpair_annual_sales", "sum"),
+            total_ebike=("total_ebike_lifecycle", "sum"),
+            total_drone=("total_drone_lifecycle", "sum"),
+        )
+        .reset_index()
+        .sort_values("total_orders", ascending=False)
+    )
+
+    prov["province_en"] = prov["province"].map(PROVINCE_NAME_EN).fillna(prov["province"])
+
+    orders_m = prov["total_orders"] / 1e6
+    ebike_kt = prov["total_ebike"] / 1e3
+    drone_kt = prov["total_drone"] / 1e3
+
+    x = np.arange(len(prov))
+    bar_color = "#4C8CBF"
+    ebike_color = "#E05C2B"
+    drone_color = "#2CA02C"
+
+    fig, ax1 = plt.subplots(figsize=figsize)
+
+    ax1.bar(x, orders_m, color=bar_color, alpha=0.8)
+    ax1.set_xlabel("Province", fontsize=12)
+    ax1.set_ylabel("Annual orders (millions)", fontsize=12, color=bar_color)
+    ax1.tick_params(axis="y", labelcolor=bar_color)
+    ax1.set_xticks(x)
+    ax1.set_xticklabels(prov["province_en"], rotation=45, ha="right", fontsize=9)
+    ax1.yaxis.grid(True, linestyle="--", alpha=0.4)
+    ax1.set_axisbelow(True)
+
+    ax2 = ax1.twinx()
+    ax2.scatter(x, ebike_kt, color=ebike_color, s=50, zorder=5, marker="o")
+    ax2.scatter(x, drone_kt, color=drone_color, s=50, zorder=5, marker="^")
+    ax2.set_ylabel("Total lifecycle emission (t CO₂eq)", fontsize=12)
+    ax2.tick_params(axis="y")
+
+    handles = [
+        plt.Rectangle((0, 0), 1, 1, color=bar_color, alpha=0.8),
+        plt.Line2D([0], [0], marker="o", color="w", markerfacecolor=ebike_color, markersize=8),
+        plt.Line2D([0], [0], marker="^", color="w", markerfacecolor=drone_color, markersize=8),
+    ]
+    ax1.legend(handles, ["Annual orders", "E-bike emission", "Drone emission"], loc="upper right", fontsize=10)
+
+    if plot_title:
+        fig.suptitle("Province-level Delivery Orders and Lifecycle Emissions", fontsize=14, fontweight="bold")
+
+    plt.tight_layout()
+
+    if save_path:
+        ext = ".pdf" if for_latex else ".png"
+        out = save_path + ext
+        if plot_title:
+            out = _add_title_suffix(out)
+        os.makedirs(os.path.dirname(out), exist_ok=True)
+        plt.savefig(out, dpi=dpi, bbox_inches="tight")
+        print(f"Saved: {out}")
+    else:
+        plt.show()
+
     plt.close(fig)
