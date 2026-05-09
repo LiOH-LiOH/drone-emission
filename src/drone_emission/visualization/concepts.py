@@ -259,27 +259,40 @@ def plot_detour_ratio_concept(
     _add_polyline(ax, bike_route, color=_COLORS["bike_shadow"], linewidth=7.5, zorder=7, alpha=0.16)
     _add_polyline(ax, bike_route, color=_COLORS["bike"], linewidth=4.0, zorder=8)
     _add_arrow_head(ax, bike_route, _COLORS["bike"], zorder=8)
-    _add_polyline(ax, bike_route, color=_COLORS["bike"], linewidth=4.0, zorder=25, alpha=0.35)
-    _add_arrow_head(ax, bike_route, _COLORS["bike"], zorder=25, alpha=0.35)
+    _add_polyline(ax, bike_route, color=_COLORS["bike"], linewidth=4.0, zorder=25, alpha=0.2)
+    _add_arrow_head(ax, bike_route, _COLORS["bike"], zorder=25, alpha=0.2)
 
     _add_drone_path(ax, origin, destination)
 
-    origin_xy = _add_marker(ax, origin,      color=_COLORS["origin"],      label="Merchant", label_offset=(-0.25, -0.36))
-    dest_xy   = _add_marker(ax, destination, color=_COLORS["destination"], label="Customer",  label_offset=(0.25, 0.40))
+    origin_xy = _add_marker(ax, origin,      color=_COLORS["origin"],      label="Merchant", label_offset=(-0.25, -0.36), zorder=65)
+    dest_xy   = _add_marker(ax, destination, color=_COLORS["destination"], label="Customer",  label_offset=(0.90, 0.40),  zorder=65)
 
     mid_bike = _project(4.75, _GRID_Y[1])
     ax.text(mid_bike[0], mid_bike[1] - 0.72, "E-bike route\non roads",
             color=_COLORS["bike"], fontsize=10.0, ha="center", va="top", fontweight="bold", zorder=60)
 
     mid_drone = _project(4.75, 3.0, _CRUISE_ALT)
-    ax.text(mid_drone[0] + 0.3, mid_drone[1] + 0.38, "Drone: takeoff,\ncruise, land",
+    ax.text(mid_drone[0] + 0.3, mid_drone[1] + 0.55, "Drone route\non air space",
             color=_COLORS["drone"], fontsize=10.5, ha="center", va="bottom", fontweight="bold", zorder=60)
+
+    # Segment labels on the side of each drone flight phase
+    tkoff_mid = _project(_GRID_X[0], _GRID_Y[0], _CRUISE_ALT / 2)
+    ax.text(tkoff_mid[0] + 0.18, tkoff_mid[1], "takeoff",
+            color=_COLORS["drone"], fontsize=8.5, ha="left", va="center", zorder=60)
+
+    cruise_mid = _project(4.75, 3.0, _CRUISE_ALT)
+    ax.text(cruise_mid[0], cruise_mid[1] - 0.28, "cruise",
+            color=_COLORS["drone"], fontsize=8.5, ha="center", va="top", zorder=60)
+
+    land_mid = _project(_GRID_X[3], _GRID_Y[2], _CRUISE_ALT / 2)
+    ax.text(land_mid[0] - 0.18, land_mid[1], "land",
+            color=_COLORS["drone"], fontsize=8.5, ha="right", va="center", zorder=60)
 
     ax.plot([origin_xy[0], dest_xy[0]], [origin_xy[1], dest_xy[1]],
             color=_COLORS["drone"], linewidth=1.2, alpha=0.28, linestyle=":", zorder=18)
 
     straight_mid = (np.array(origin_xy) + np.array(dest_xy)) / 2
-    ax.text(straight_mid[0] + 0.1, straight_mid[1] + 1.4, "Straight-line distance",
+    ax.text(straight_mid[0] - 1.8, straight_mid[1] + 1.4, "Straight-line distance",
             color=_COLORS["drone"], fontsize=9.5, ha="center", va="bottom", zorder=60)
 
     road_label = _project(7.25, _GRID_Y[2])
