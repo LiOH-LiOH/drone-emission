@@ -13,13 +13,9 @@ import sys
 import pandas as pd
 
 
-def _resolve(out_dir: str, basename: str, for_latex: bool) -> str:
-    ext = ".pdf" if for_latex else ".png"
-    return os.path.join(out_dir, basename + ext).removesuffix(ext)
-
-
-def render_all(data_dir: str, figures_dir: str, for_latex: bool = False, plot_title: bool = False, dpi: int = 300):
+def render_all(data_dir: str, figures_dir: str, for_latex: bool = False, plot_title: bool = False):
     from visualization.analysis import plot_province_orders_emission, plot_province_orders_both_emissions
+    from visualization.concepts import plot_detour_ratio_concept
 
     out = os.path.join(figures_dir, "paper")
     os.makedirs(out, exist_ok=True)
@@ -36,7 +32,6 @@ def render_all(data_dir: str, figures_dir: str, for_latex: bool = False, plot_ti
         save_path=os.path.join(out, "province_orders_emission"),
         for_latex=for_latex,
         plot_title=plot_title,
-        dpi=dpi,
     )
 
     plot_province_orders_both_emissions(
@@ -44,7 +39,12 @@ def render_all(data_dir: str, figures_dir: str, for_latex: bool = False, plot_ti
         save_path=os.path.join(out, "province_orders_both_emissions"),
         for_latex=for_latex,
         plot_title=plot_title,
-        dpi=dpi,
+    )
+
+    plot_detour_ratio_concept(
+        save_path=os.path.join(out, "detour_ratio_concept.png"),
+        for_latex=for_latex,
+        plot_title=plot_title,
     )
 
 
@@ -74,6 +74,7 @@ def main():
 
     print(f"for_latex={for_latex}, plot_title={plot_title}")
     render_all(config["data_dir"], config["figures_dir"], for_latex=for_latex, plot_title=plot_title)
+
 
 
 if __name__ == "__main__":
