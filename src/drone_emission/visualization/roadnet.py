@@ -126,6 +126,168 @@ def visualize_path(
     plt.close(fig)
 
 
+def plot_distance_comparison(
+    od_df,
+    graph,
+    router,
+    save_path: Optional[str] = None,
+    for_latex: bool = False,
+    plot_title: bool = False,
+    n_samples: int = 4,
+) -> None:
+    """Visualize sampled delivery paths comparing straight-line vs road network distance.
+
+    Samples OD pairs at detour-ratio quantiles (20/40/60/80th percentile) and plots
+    each as a panel showing the road path (blue) and straight-line (red dashed).
+    Uses SparseGraph local edges for background roads — no full NetworkX load needed.
+
+    Args:
+        od_df: OD DataFrame with columns from_lat, from_lng, to_lat, to_lng,
+               distance_km, road_distance_m, annual_sales.
+        graph: SparseGraph built from the region's graphml file.
+        router: TileRouter wrapping the SparseGraph.
+        save_path: Path to save figure (with .png extension). Shows plot if None.
+        for_latex: If True, save as PDF.
+        plot_title: If True, show title.
+        n_samples: Maximum number of sample panels to show.
+    """
+    from matplotlib.collections import LineCollection
+
+    from ._utils import configure_contextily_cache
+
+    valid_df = od_df[
+        (od_df["road_distance_m"] >= 0) & (od_df["road_distance_m"] > 100)
+    ].copy()
+
+    if len(valid_df) == 0:
+        print("No valid samples for distance comparison visualization")
+        return
+
+    valid_df["detour_ratio"] = valid_df["road_distance_m"] / (valid_df["distance_km"] * 1000)
+
+    samples = []
+    for q in [0.2, 0.4, 0.6, 0.8]:
+        qval = valid_df["detour_ratio"].quantile(q)
+        closest_idx = (valid_df["detour_ratio"] - qval).abs().nsmallest(1).index
+        samples.extend(closest_idx.tolist())
+
+    samples = list(dict.fromkeys(samples))[:n_samples]
+    sample_df = valid_df.loc[samples]
+
+    sample_paths = []
+    for _, row in sample_df.iterrows():
+        origin = (row["from_lat"], row["from_lng"])
+        destination = (row["to_lat"], row["to_lng"])
+        path_result = router.find_shortest_path(origin, destination)
+        sample_paths.append({
+            "origin": origin,
+            "destination": destination,
+            "straight_distance": row["distance_km"] * 1000,
+            "road_distance": row["road_distance_m"],
+            "path_result": path_result,
+        })
+
+    n_cols = min(2, len(sample_paths))
+    n_rows = (len(sample_paths) + n_cols - 1) // n_cols
+    fig, axes = plt.subplots(n_rows, n_cols, figsize=(4 * n_cols, 4 * n_rows))
+    if len(sample_paths) == 1:
+        axes = np.array([axes])
+    axes = axes.flatten()
+
+    padding = 0.003
+    for idx, sample in enumerate(sample_paths):
+        ax = axes[idx]
+        path_result = sample["path_result"]
+        origin = sample["origin"]
+        destination = sample["destination"]
+        straight_dist = sample["straight_distance"]
+        road_dist = sample["road_distance"]
+        detour = road_dist / straight_dist if straight_dist > 0 else 0
+
+        local_bounds = {
+            "min_lat": min(origin[0], destination[0]) - padding,
+            "max_lat": max(origin[0], destination[0]) + padding,
+            "min_lng": min(origin[1], destination[1]) - padding,
+            "max_lng": max(origin[1], destination[1]) + padding,
+        }
+
+        edge_coords = graph.get_local_edges(local_bounds)
+        if len(edge_coords) > 0:
+            segments = [[(ec[1], ec[0]), (ec[3], ec[2])] for ec in edge_coords]
+            lc = LineCollection(segments, colors="#ddd", linewidths=0.3, zorder=1)
+            ax.add_collection(lc)
+
+        if path_result["success"] and len(path_result["path_coordinates"]) > 1:
+            path_lngs = [c[1] for c in path_result["path_coordinates"]]
+            path_lats = [c[0] for c in path_result["path_coordinates"]]
+            ax.plot(path_lngs, path_lats, color="blue", linewidth=2, alpha=0.8, zorder=10)
+
+        ax.plot(
+            [origin[1], destination[1]], [origin[0], destination[0]],
+            color="red", linewidth=2, linestyle="--", alpha=0.8, zorder=20, label="Straight line",
+        )
+        ax.scatter(
+            origin[1], origin[0], c="green", s=80, marker="o",
+            zorder=25, edgecolors="white", linewidth=1.5, label="Origin",
+        )
+        ax.scatter(
+            destination[1], destination[0], c="red", s=80, marker="s",
+            zorder=25, edgecolors="white", linewidth=1.5, label="Destination",
+        )
+
+        ax.set_xlim(local_bounds["min_lng"], local_bounds["max_lng"])
+        ax.set_ylim(local_bounds["min_lat"], local_bounds["max_lat"])
+
+        try:
+            configure_contextily_cache()
+            ctx.add_basemap(
+                ax, crs="EPSG:4326",
+                source=ctx.providers.OpenStreetMap.Mapnik,
+                zoom=16, alpha=0.5, zorder=0,
+            )
+        except Exception as e:
+            print(f"Could not add basemap for sample {idx}: {e}")
+
+        ax.set_title(
+            f"Sample {idx + 1}\n"
+            f"Straight: {straight_dist:.0f}m | Road: {road_dist:.0f}m\n"
+            f"Detour ratio: {detour:.2f}",
+            fontsize=9,
+        )
+        ax.set_xlabel("Longitude", fontsize=8)
+        ax.set_ylabel("Latitude", fontsize=8)
+        ax.tick_params(labelsize=7)
+        if idx == 0:
+            ax.legend(loc="upper right", fontsize=7)
+
+    for idx in range(len(sample_paths), len(axes)):
+        axes[idx].set_visible(False)
+
+    if plot_title:
+        plt.suptitle(
+            "Straight-line vs Road Network Distance Comparison",
+            fontsize=14, fontweight="bold", y=1.02,
+        )
+
+    plt.tight_layout()
+
+    if save_path:
+        if for_latex and not save_path.endswith(".pdf"):
+            save_path = save_path.rsplit(".", 1)[0] + ".pdf"
+        if plot_title:
+            save_path = _add_title_suffix(save_path)
+        if save_path.endswith(".pdf"):
+            for ax in axes[:len(sample_paths)]:
+                ax.set_rasterization_zorder(12)
+        os.makedirs(os.path.dirname(save_path), exist_ok=True)
+        plt.savefig(save_path, dpi=200, bbox_inches="tight")
+        print(f"Distance comparison saved to {save_path}")
+    else:
+        plt.show()
+
+    plt.close(fig)
+
+
 def visualize_distance_comparison(
     G: nx.MultiDiGraph,
     sample_paths: List[Dict[str, Any]],

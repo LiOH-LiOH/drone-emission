@@ -9,7 +9,7 @@ from typing import Iterable, Sequence
 import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib import patheffects as pe
-from matplotlib.patches import Circle, FancyArrowPatch, Polygon
+from matplotlib.patches import Circle, FancyArrowPatch, FancyBboxPatch, Polygon
 
 from visualization._utils import _add_title_suffix
 
@@ -320,6 +320,330 @@ def plot_detour_ratio_concept(
         plt.savefig(save_path, dpi=300, bbox_inches="tight", pad_inches=0.05,
                     facecolor=fig.get_facecolor())
         print(f"Detour ratio concept saved to {save_path}")
+    else:
+        plt.show()
+
+    plt.close(fig)
+
+
+# ---------------------------------------------------------------------------
+# Emission model LCA flowchart
+# ---------------------------------------------------------------------------
+
+def plot_emission_model_flowchart(
+    save_path: str = None,
+    figsize: tuple = (10.5, 5.8),
+    for_latex: bool = False,
+    plot_title: bool = False,
+):
+    """LCA flowchart (poster/paper style) for e-bike and drone delivery emission model.
+
+    2×3 grid: rows = vehicle type (e-bike, drone),
+    columns = lifecycle phase (production, use phase, end-of-life).
+    Each item rendered as a centred block; row labels use programmatic icons.
+
+    Args:
+        save_path: Path to save figure. Shows plot if None.
+        figsize: Figure size tuple.
+        for_latex: If True, save as PDF.
+        plot_title: If True, show title.
+    """
+    # --- Colours (aligned with shared _COLORS) ---
+    BIKE_C   = "#d95f35"
+    BIKE_LT  = "#fdf1ec"
+    BIKE_BK  = "#e07858"   # item block border, e-bike
+    DRONE_C  = "#1f77b4"
+    DRONE_LT = "#edf4fb"
+    DRONE_BK = "#4a8ec0"   # item block border, drone
+    HDR_BG   = "#2c3d4f"
+    HDR_FG   = "#ffffff"
+    DIV_C    = "#c0cad2"
+    ARROW_C  = "#5a6872"
+    TXT      = "#1c2830"
+    STXT     = "#5a6878"
+    NOTE_C   = "#8898a8"
+    BLK_BG   = "#ffffff"   # item block fill
+
+    W, H = figsize
+    fig, ax = plt.subplots(figsize=figsize)
+    fig.patch.set_facecolor("white")
+    ax.set_facecolor("white")
+    ax.set_xlim(0, W)
+    ax.set_ylim(0, H)
+    ax.axis("off")
+
+    # --- Layout (1 coord ≈ 1 inch) ---
+    LBL  = (0.04, 0.64)
+    PROD = (0.72, 3.10)    # 2.38 wide
+    USE  = (3.50, 7.34)    # 3.84 wide
+    DISP = (7.72, 10.12)   # 2.40 wide
+    ARR1 = (PROD[1], USE[0])
+    ARR2 = (USE[1],  DISP[0])
+    HROW = (5.44, 5.76)
+    EROW = (2.96, 5.20)    # 2.24 tall
+    DROW = (0.26, 2.76)    # 2.50 tall
+
+    CX_LBL  = (LBL[0]  + LBL[1])  / 2
+    CX_PROD = (PROD[0] + PROD[1]) / 2
+    CX_USE  = (USE[0]  + USE[1])  / 2
+    CX_DISP = (DISP[0] + DISP[1]) / 2
+
+    # Block geometry
+    BH  = 0.255   # standard item block height
+    BG  = 0.058   # gap between blocks
+    BW  = {       # block widths by column
+        "prod": PROD[1] - PROD[0] - 0.30,
+        "use":  USE[1]  - USE[0]  - 0.40,
+        "disp": DISP[1] - DISP[0] - 0.30,
+    }
+    # Drone USE sub-columns
+    CX_DIV  = CX_USE + 0.08           # divider x
+    CX_USEL = (USE[0] + CX_DIV) / 2   # left sub-col centre
+    CX_USER = (CX_DIV + USE[1]) / 2   # right sub-col centre
+    BW_SUB  = (USE[1] - USE[0]) / 2 - 0.34
+
+    # --- Private helpers ---
+    def _box(x0, x1, y0, y1, fc, ec, lw=1.4, r=0.12):
+        ax.add_patch(FancyBboxPatch(
+            (x0, y0), x1 - x0, y1 - y0,
+            boxstyle=f"round,pad=0,rounding_size={r}",
+            facecolor=fc, edgecolor=ec, linewidth=lw, zorder=2,
+        ))
+
+    def _t(x, y, s, **kw):
+        kw.setdefault("zorder", 5)
+        ax.text(x, y, s, **kw)
+
+    def _cell_hdr(cx, y, label, c):
+        """Centred bold cell header; returns y below."""
+        _t(cx, y, label, fontsize=9.5, fontweight="bold", color=c,
+           ha="center", va="top")
+        return y - 0.30
+
+    def _sub_hdr(cx, y, label):
+        """Centred sub-section header (smaller, dark); returns y below."""
+        _t(cx, y, label, fontsize=8.5, fontweight="bold", color=TXT,
+           ha="center", va="top")
+        return y - 0.26
+
+    def _blk(cx, y_top, w, h, label, bg, brd, fs=9.0, sub=None):
+        """Draw one centred item block. Returns y_bottom."""
+        x0, y_bot = cx - w / 2, y_top - h
+        ax.add_patch(FancyBboxPatch(
+            (x0, y_bot), w, h,
+            boxstyle="round,pad=0,rounding_size=0.06",
+            facecolor=bg, edgecolor=brd, linewidth=0.9, zorder=4,
+        ))
+        if sub:
+            _t(cx, (y_top + y_bot) / 2 + h * 0.14, label,
+               fontsize=fs, color=TXT, ha="center", va="center")
+            _t(cx, (y_top + y_bot) / 2 - h * 0.16, sub,
+               fontsize=fs - 1.4, color=STXT, ha="center", va="center",
+               style="italic")
+        else:
+            _t(cx, (y_top + y_bot) / 2, label,
+               fontsize=fs, color=TXT, ha="center", va="center")
+        return y_bot
+
+    def _blk_col(cx, y, items, w, bg, brd, bh=None, gap=None):
+        """Stack item blocks downward from y. Items: str or (label, sub) tuple."""
+        h   = bh  if bh  is not None else BH
+        gap_ = gap if gap is not None else BG
+        for item in items:
+            if isinstance(item, tuple):
+                y = _blk(cx, y, w, h, item[0], bg, brd, sub=item[1])
+            else:
+                y = _blk(cx, y, w, h, item, bg, brd)
+            y -= gap_
+        return y + gap_
+
+    def _arrow(ym, xgap):
+        ax.add_patch(FancyArrowPatch(
+            (xgap[0] + 0.05, ym), (xgap[1] - 0.05, ym),
+            arrowstyle="-|>", mutation_scale=12,
+            color=ARROW_C, linewidth=1.4, zorder=6,
+        ))
+
+    # --- Programmatic icons ---
+    def _icon_ebike(cx, cy, s, color):
+        """Simplified bicycle silhouette centred at (cx, cy), scale s."""
+        lw = 1.3
+        wr = s * 0.28
+        wL = (cx - s * 0.52, cy - s * 0.15)
+        wR = (cx + s * 0.52, cy - s * 0.15)
+        for w in [wL, wR]:
+            ax.add_patch(Circle(w, wr, fill=False,
+                                edgecolor=color, linewidth=lw, zorder=10))
+        bb = (cx,           wL[1])
+        sc = (cx - s*0.08,  cy + s*0.20)
+        ht = (wR[0],        cy + s*0.08)
+        for p1, p2 in [(wL, bb), (wL, sc), (bb, sc), (sc, ht), (sc, wR), (ht, wR)]:
+            ax.plot([p1[0], p2[0]], [p1[1], p2[1]],
+                    color=color, lw=lw, solid_capstyle="round", zorder=10)
+        # seat
+        sy = sc[1] + s * 0.06
+        ax.plot([sc[0] - s*0.13, sc[0] + s*0.07], [sy, sy],
+                color=color, lw=lw * 1.5, solid_capstyle="round", zorder=10)
+        # handlebar stem + bar
+        ax.plot([ht[0], ht[0]], [ht[1], ht[1] + s*0.11],
+                color=color, lw=lw, solid_capstyle="round", zorder=10)
+        hy = ht[1] + s * 0.11
+        ax.plot([ht[0] - s*0.08, ht[0] + s*0.05], [hy, hy],
+                color=color, lw=lw * 1.2, solid_capstyle="round", zorder=10)
+
+    def _icon_drone(cx, cy, s, color):
+        """Simplified quadcopter viewed from above, centred at (cx, cy), scale s."""
+        lw = 1.3
+        arm = s * 0.46
+        pr  = s * 0.20
+        for dx, dy in [(1, 0), (-1, 0), (0, 1), (0, -1)]:
+            tip = (cx + dx * arm, cy + dy * arm)
+            ax.plot([cx, tip[0]], [cy, tip[1]],
+                    color=color, lw=lw * 1.5, solid_capstyle="round", zorder=10)
+            ax.add_patch(Circle(tip, pr, fill=False,
+                                edgecolor=color, linewidth=lw, zorder=10))
+        ax.add_patch(Circle((cx, cy), s * 0.13,
+                            facecolor=color, edgecolor="none", zorder=11))
+
+    # ===== Column headers =====
+    for (x0, x1), lbl in [
+        (PROD, "PRODUCTION"), (USE, "USE PHASE"), (DISP, "END-OF-LIFE")
+    ]:
+        _box(x0, x1, HROW[0], HROW[1], HDR_BG, HDR_BG, r=0.09)
+        _t((x0 + x1) / 2, (HROW[0] + HROW[1]) / 2, lbl,
+           color=HDR_FG, fontsize=11.0, fontweight="bold", ha="center", va="center")
+
+    # ===== Row labels with icons =====
+    for (y0, y1), lbl, icon_fn, c in [
+        (EROW, "E-bike", _icon_ebike, BIKE_C),
+        (DROW, "Drone",  _icon_drone, DRONE_C),
+    ]:
+        _box(LBL[0], LBL[1], y0 + 0.08, y1 - 0.08, "white", c, lw=2.0, r=0.10)
+        ym = (y0 + y1) / 2
+        # Icon in upper portion, label below
+        icon_s = 0.30
+        icon_fn(CX_LBL, ym + 0.28, icon_s, c)
+        _t(CX_LBL, ym - 0.32, lbl,
+           color=c, fontsize=9.0, fontweight="bold", ha="center", va="center")
+
+    # ===== E-BIKE ROW =====
+    y0, y1 = EROW
+    C, LT, BK = BIKE_C, BIKE_LT, BIKE_BK
+
+    _box(PROD[0], PROD[1], y0, y1, LT, C, lw=1.5)
+    cy = y1 - 0.16
+    cy = _cell_hdr(CX_PROD, cy, "Manufacturing", C)
+    cy -= 0.04
+    _blk_col(CX_PROD, cy, [
+        "Frame manufacturing",
+        "Battery manufacturing",
+        "5 packs × 0.24 kWh",
+        "Battery lifespan: 2 yr",
+        "Vehicle lifespan: 4 yr",
+    ], BW["prod"], BLK_BG, BK)
+
+    _box(USE[0], USE[1], y0, y1, LT, C, lw=1.5)
+    cy = y1 - 0.16
+    cy = _cell_hdr(CX_USE, cy, "Round-trip delivery", C)
+    _t(CX_USE, cy, "Laden outbound  ·  Unladen return",
+       fontsize=8.0, color=STXT, ha="center", va="top", style="italic")
+    cy -= 0.22
+    _blk_col(CX_USE, cy, [
+        "Rolling resistance",
+        "Aerodynamic drag",
+        "Road grade",
+        "Acceleration",
+        "Auxiliary systems",
+    ], BW["use"], BLK_BG, BK)
+
+    _box(DISP[0], DISP[1], y0, y1, LT, C, lw=1.5)
+    eol_h = ((y1 - y0) - 0.16 - 0.30 - 0.12 - 0.14 - BG) / 2  # fill cell height
+    cy = y1 - 0.16
+    cy = _cell_hdr(CX_DISP, cy, "End-of-life processing", C)
+    cy -= 0.12
+    _blk_col(CX_DISP, cy, [
+        ("Frame (body)", "material recovery"),
+        ("Battery packs", "chemical recycling"),
+    ], BW["disp"], BLK_BG, BK, bh=eol_h)
+
+    # ===== DRONE ROW =====
+    y0, y1 = DROW
+    C, LT, BK = DRONE_C, DRONE_LT, DRONE_BK
+
+    _box(PROD[0], PROD[1], y0, y1, LT, C, lw=1.5)
+    cy = y1 - 0.16
+    cy = _cell_hdr(CX_PROD, cy, "Manufacturing", C)
+    cy -= 0.04
+    _blk_col(CX_PROD, cy, [
+        "Airframe manufacturing",
+        "Battery manufacturing",
+        "4 packs × 0.389 kWh",
+        "Battery lifespan: 2 yr",
+        "Vehicle lifespan: 4 yr",
+    ], BW["prod"], BLK_BG, BK)
+
+    _box(USE[0], USE[1], y0, y1, LT, C, lw=1.5)
+    ax.plot([CX_DIV, CX_DIV], [y0 + 0.20, y1 - 0.20],
+            color=DIV_C, linewidth=0.9, zorder=3)
+    cy = y1 - 0.16
+    cy = _cell_hdr(CX_USE, cy, "Round-trip delivery", C)
+    cy -= 0.08
+    cy_l = _sub_hdr(CX_USEL, cy, "Flight segments:")
+    cy_r = _sub_hdr(CX_USER, cy, "Per-segment power:")
+    _blk_col(CX_USEL, cy_l, [
+        "Vertical takeoff",
+        "Level cruise",
+        "Hover at delivery",
+        "Level cruise",
+        "Vertical landing",
+    ], BW_SUB, BLK_BG, BK)
+    _blk_col(CX_USER, cy_r, [
+        "Induced rotor",
+        "Blade profile drag",
+        "Body drag",
+        "Climb / descent",
+        "Auxiliary systems",
+    ], BW_SUB, BLK_BG, BK)
+
+    _box(DISP[0], DISP[1], y0, y1, LT, C, lw=1.5)
+    eol_h_d = ((y1 - y0) - 0.16 - 0.30 - 0.12 - 0.14 - BG) / 2
+    cy = y1 - 0.16
+    cy = _cell_hdr(CX_DISP, cy, "End-of-life processing", C)
+    cy -= 0.12
+    _blk_col(CX_DISP, cy, [
+        ("Airframe", "material recovery"),
+        ("Battery packs", "chemical recycling"),
+    ], BW["disp"], BLK_BG, BK, bh=eol_h_d)
+
+    # ===== Phase arrows =====
+    for (ry0, ry1) in [EROW, DROW]:
+        ym = (ry0 + ry1) / 2
+        _arrow(ym, ARR1)
+        _arrow(ym, ARR2)
+
+    # ===== Lifecycle allocation note =====
+    _t(W / 2, 0.13,
+       "Production & end-of-life emissions amortised over vehicle lifetime deliveries  ·  "
+       "Use-phase emissions per delivery trip",
+       fontsize=7.5, color=NOTE_C, ha="center", va="bottom", style="italic")
+
+    if plot_title:
+        ax.set_title(
+            "Life Cycle Emission Model: E-Bike and Drone Last-Mile Delivery",
+            fontsize=12.0, fontweight="bold", pad=5, color=TXT,
+        )
+
+    plt.tight_layout(pad=0.15)
+
+    if save_path:
+        if for_latex and not save_path.endswith(".pdf"):
+            save_path = save_path.rsplit(".", 1)[0] + ".pdf"
+        if plot_title:
+            save_path = _add_title_suffix(save_path)
+        os.makedirs(os.path.dirname(save_path), exist_ok=True)
+        plt.savefig(save_path, dpi=300, bbox_inches="tight", pad_inches=0.05,
+                    facecolor="white")
+        print(f"Emission model flowchart saved to {save_path}")
     else:
         plt.show()
 
