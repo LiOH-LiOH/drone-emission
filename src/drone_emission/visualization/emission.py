@@ -703,6 +703,16 @@ def plot_air_road_joint(
     if plot_title:
         fig.suptitle("Air vs Road Distance Joint Distribution (Shanghai)", fontsize=13)
 
+    # After equal-aspect shrinks ax_main, snap marginals to its actual bounds.
+    fig.canvas.draw()
+    m = ax_main.get_position()
+    r = ax_right.get_position()
+    t = ax_top.get_position()
+    c = ax_cbar.get_position()
+    ax_right.set_position([r.x0, m.y0, r.width, m.height])
+    ax_top.set_position([m.x0, t.y0, m.width, t.height])
+    ax_cbar.set_position([c.x0, m.y0, c.width, m.height])
+
     if save_path:
         if for_latex and not save_path.endswith(".pdf"):
             save_path = save_path.rsplit(".", 1)[0] + ".pdf"
