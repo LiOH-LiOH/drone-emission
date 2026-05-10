@@ -128,7 +128,7 @@ def _render_shanghai_air_road_joint(data_dir, out, for_latex, plot_title):
         save_path=os.path.join(out, "shanghai_air_road_joint.png"),
         for_latex=for_latex,
         plot_title=plot_title,
-        max_km=5.0,
+        max_air_km=5.0,
     )
 
 
