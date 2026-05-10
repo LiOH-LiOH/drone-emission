@@ -578,23 +578,23 @@ def plot_air_detour_distribution(
 def plot_air_road_joint(
     df: pd.DataFrame,
     save_path: str = None,
-    figsize: tuple = (9, 9),
+    figsize: tuple = (9, 6),
     for_latex: bool = False,
     plot_title: bool = False,
     max_km: float = 8.0,
     gridsize: int = 40,
 ):
-    """Joint distribution of air and road distance with sales-weighted density.
+    """Joint distribution of road (x) and air (y) distance with sales-weighted density.
 
-    Centre: hexbin of air (x) vs road (y) distance weighted by annual sales.
-    Top marginal: air distance distribution weighted by annual sales.
-    Right marginal: road distance distribution weighted by annual sales.
-    Diagonal reference lines show detour ratio = 1.2×, 1.5×, 2.0×.
+    Centre: hexbin of road (x) vs air (y) distance weighted by annual sales.
+    Top marginal: road distance distribution weighted by annual sales.
+    Right marginal: air distance distribution weighted by annual sales.
+    Reference lines show detour ratio = 1.2×, 1.5×, 2.0× (air = road / ratio).
 
     Args:
         df: DataFrame with 'distance_km', 'road_distance_m', 'annual_sales' columns.
         save_path: Path to save figure. Shows plot if None.
-        figsize: Figure size tuple.
+        figsize: Figure size tuple (default 3:2).
         for_latex: If True, save as PDF.
         plot_title: If True, show title.
         max_km: Upper bound for both axes in km.
@@ -611,12 +611,13 @@ def plot_air_road_joint(
     mask = (air_km <= max_km) & (road_km <= max_km)
     air_km, road_km, sales = air_km[mask], road_km[mask], sales[mask]
 
+    # Same bin width for both axes
     n_bars = 30
     bins = np.linspace(0, max_km, n_bars + 1)
     bin_centers = (bins[:-1] + bins[1:]) / 2
     bin_width = bins[1] - bins[0]
-    air_weights, _ = np.histogram(air_km, bins=bins, weights=sales)
     road_weights, _ = np.histogram(road_km, bins=bins, weights=sales)
+    air_weights, _ = np.histogram(air_km, bins=bins, weights=sales)
 
     fig = plt.figure(figsize=figsize)
     gs = gridspec.GridSpec(
@@ -630,9 +631,9 @@ def plot_air_road_joint(
     ax_corner = fig.add_subplot(gs[0, 1])
     ax_corner.set_visible(False)
 
-    # --- Centre: hexbin ---
+    # --- Centre: hexbin (x=road, y=air) ---
     hb = ax_main.hexbin(
-        air_km, road_km,
+        road_km, air_km,
         C=sales,
         reduce_C_function=np.sum,
         gridsize=gridsize,
@@ -640,17 +641,16 @@ def plot_air_road_joint(
         mincnt=1,
         extent=[0, max_km, 0, max_km],
     )
-    ax_main.set_xlabel("Air Distance (km)", fontsize=11)
-    ax_main.set_ylabel("Road Distance (km)", fontsize=11)
+    ax_main.set_xlabel("Road Distance (km)", fontsize=11)
+    ax_main.set_ylabel("Air Distance (km)", fontsize=11)
     ax_main.set_xlim(0, max_km)
     ax_main.set_ylim(0, max_km)
 
-    # Detour ratio reference lines
+    # Detour ratio reference lines: detour = road/air → air = road/ratio → y = x/ratio
     ref_ratios = [(1.2, "--", "#555555"), (1.5, "-.", "#333333"), (2.0, ":", "#111111")]
     for ratio, ls, color in ref_ratios:
-        x_end = min(max_km, max_km / ratio)
         ax_main.plot(
-            [0, x_end], [0, ratio * x_end],
+            [0, max_km], [0, max_km / ratio],
             linestyle=ls, color=color, linewidth=1.0, alpha=0.7,
             label=f"detour = {ratio}×",
         )
@@ -662,16 +662,16 @@ def plot_air_road_joint(
     cb.formatter = plt.FuncFormatter(lambda x, _: f"{x/1e6:.1f}M" if x >= 1e6 else f"{x:.0f}")
     cb.update_ticks()
 
-    # --- Top marginal: air distance ---
-    ax_top.bar(bin_centers, air_weights, width=bin_width * 0.85, color="#4CAF50", edgecolor="white", alpha=0.8)
+    # --- Top marginal: road distance ---
+    ax_top.bar(bin_centers, road_weights, width=bin_width * 0.85, color="#4CAF50", edgecolor="white", alpha=0.8)
     ax_top.set_ylabel("Sales (M)", fontsize=9)
     ax_top.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, _: f"{x/1e6:.1f}"))
     ax_top.tick_params(labelbottom=False)
     ax_top.set_xlim(0, max_km)
     ax_top.grid(True, alpha=0.3, axis="y")
 
-    # --- Right marginal: road distance (horizontal) ---
-    ax_right.barh(bin_centers, road_weights, height=bin_width * 0.85, color="#2196F3", edgecolor="white", alpha=0.8)
+    # --- Right marginal: air distance (horizontal) ---
+    ax_right.barh(bin_centers, air_weights, height=bin_width * 0.85, color="#2196F3", edgecolor="white", alpha=0.8)
     ax_right.set_xlabel("Sales (M)", fontsize=9)
     ax_right.xaxis.set_major_formatter(plt.FuncFormatter(lambda x, _: f"{x/1e6:.1f}"))
     ax_right.tick_params(labelleft=False)
