@@ -277,32 +277,13 @@ def plot_distance_comparison(
         ax.set_ylabel("")
         ax.tick_params(left=False, bottom=False, labelleft=False, labelbottom=False)
 
-        # Place stats text in the corner with greatest perpendicular distance
-        # from the straight-line route — least likely to overlap the path.
-        b = local_bounds
-        corners = [
-            (b["min_lng"], b["min_lat"], 0.03, 0.03, "left",  "bottom"),
-            (b["max_lng"], b["min_lat"], 0.97, 0.03, "right", "bottom"),
-            (b["min_lng"], b["max_lat"], 0.03, 0.97, "left",  "top"),
-            (b["max_lng"], b["max_lat"], 0.97, 0.97, "right", "top"),
-        ]
-        # Exclude top-right on first panel (legend lives there)
-        candidates = [c for c in corners if not (idx == 0 and c[4] == "right" and c[5] == "top")]
-        x1, y1 = origin[1], origin[0]
-        x2, y2 = destination[1], destination[0]
-        dx, dy = x2 - x1, y2 - y1
-        line_len = max((dx**2 + dy**2) ** 0.5, 1e-10)
-        def _perp_dist(cx, cy):
-            return abs(dy * cx - dx * cy + x2 * y1 - y2 * x1) / line_len
-        best = max(candidates, key=lambda c: _perp_dist(c[0], c[1]))
-        _, _, ax_x, ax_y, ha, va = best
         ax.text(
-            ax_x, ax_y,
+            0.97, 0.03,
             f"Straight: {straight_dist:.0f} m\nRoad: {road_dist:.0f} m\nDetour: {detour:.2f}",
-            transform=ax.transAxes, fontsize=9, va=va, ha=ha, zorder=80,
+            transform=ax.transAxes, fontsize=9, va="bottom", ha="right", zorder=80,
             bbox=dict(boxstyle="round,pad=0.4", facecolor="white", edgecolor="#d3d8d5", alpha=0.92),
         )
-        if idx == 0:
+        if idx == 1:
             ax.legend(loc="upper right", fontsize=9, framealpha=0.9)
 
     for idx in range(len(sample_paths), len(axes)):
