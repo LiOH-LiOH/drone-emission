@@ -575,6 +575,125 @@ def plot_air_detour_distribution(
     plt.close(fig)
 
 
+def plot_air_road_joint(
+    df: pd.DataFrame,
+    save_path: str = None,
+    figsize: tuple = (9, 9),
+    for_latex: bool = False,
+    plot_title: bool = False,
+    max_km: float = 8.0,
+    gridsize: int = 40,
+):
+    """Joint distribution of air and road distance with sales-weighted density.
+
+    Centre: hexbin of air (x) vs road (y) distance weighted by annual sales.
+    Top marginal: air distance distribution weighted by annual sales.
+    Right marginal: road distance distribution weighted by annual sales.
+    Diagonal reference lines show detour ratio = 1.2×, 1.5×, 2.0×.
+
+    Args:
+        df: DataFrame with 'distance_km', 'road_distance_m', 'annual_sales' columns.
+        save_path: Path to save figure. Shows plot if None.
+        figsize: Figure size tuple.
+        for_latex: If True, save as PDF.
+        plot_title: If True, show title.
+        max_km: Upper bound for both axes in km.
+        gridsize: Hexbin grid resolution.
+    """
+    import matplotlib.gridspec as gridspec
+
+    valid = df[(df["road_distance_m"] >= 0) & (df["distance_km"] > 0)].copy()
+    air_km = valid["distance_km"].values
+    road_km = valid["road_distance_m"].values / 1000.0
+    sales = valid["annual_sales"].values
+
+    # Clip to axis range
+    mask = (air_km <= max_km) & (road_km <= max_km)
+    air_km, road_km, sales = air_km[mask], road_km[mask], sales[mask]
+
+    n_bars = 30
+    bins = np.linspace(0, max_km, n_bars + 1)
+    bin_centers = (bins[:-1] + bins[1:]) / 2
+    bin_width = bins[1] - bins[0]
+    air_weights, _ = np.histogram(air_km, bins=bins, weights=sales)
+    road_weights, _ = np.histogram(road_km, bins=bins, weights=sales)
+
+    fig = plt.figure(figsize=figsize)
+    gs = gridspec.GridSpec(
+        2, 2,
+        height_ratios=[1, 4], width_ratios=[4, 1],
+        hspace=0.05, wspace=0.05,
+    )
+    ax_top = fig.add_subplot(gs[0, 0])
+    ax_main = fig.add_subplot(gs[1, 0], sharex=ax_top)
+    ax_right = fig.add_subplot(gs[1, 1], sharey=ax_main)
+    ax_corner = fig.add_subplot(gs[0, 1])
+    ax_corner.set_visible(False)
+
+    # --- Centre: hexbin ---
+    hb = ax_main.hexbin(
+        air_km, road_km,
+        C=sales,
+        reduce_C_function=np.sum,
+        gridsize=gridsize,
+        cmap="YlOrRd",
+        mincnt=1,
+        extent=[0, max_km, 0, max_km],
+    )
+    ax_main.set_xlabel("Air Distance (km)", fontsize=11)
+    ax_main.set_ylabel("Road Distance (km)", fontsize=11)
+    ax_main.set_xlim(0, max_km)
+    ax_main.set_ylim(0, max_km)
+
+    # Detour ratio reference lines
+    ref_ratios = [(1.2, "--", "#555555"), (1.5, "-.", "#333333"), (2.0, ":", "#111111")]
+    for ratio, ls, color in ref_ratios:
+        x_end = min(max_km, max_km / ratio)
+        ax_main.plot(
+            [0, x_end], [0, ratio * x_end],
+            linestyle=ls, color=color, linewidth=1.0, alpha=0.7,
+            label=f"detour = {ratio}×",
+        )
+    ax_main.legend(fontsize=9, loc="upper left")
+
+    # Colourbar
+    cb = fig.colorbar(hb, ax=ax_right, pad=0.02, fraction=0.3)
+    cb.set_label("Annual Sales (sum)", fontsize=9)
+    cb.formatter = plt.FuncFormatter(lambda x, _: f"{x/1e6:.1f}M" if x >= 1e6 else f"{x:.0f}")
+    cb.update_ticks()
+
+    # --- Top marginal: air distance ---
+    ax_top.bar(bin_centers, air_weights, width=bin_width * 0.85, color="#4CAF50", edgecolor="white", alpha=0.8)
+    ax_top.set_ylabel("Sales (M)", fontsize=9)
+    ax_top.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, _: f"{x/1e6:.1f}"))
+    ax_top.tick_params(labelbottom=False)
+    ax_top.set_xlim(0, max_km)
+    ax_top.grid(True, alpha=0.3, axis="y")
+
+    # --- Right marginal: road distance (horizontal) ---
+    ax_right.barh(bin_centers, road_weights, height=bin_width * 0.85, color="#2196F3", edgecolor="white", alpha=0.8)
+    ax_right.set_xlabel("Sales (M)", fontsize=9)
+    ax_right.xaxis.set_major_formatter(plt.FuncFormatter(lambda x, _: f"{x/1e6:.1f}"))
+    ax_right.tick_params(labelleft=False)
+    ax_right.set_ylim(0, max_km)
+    ax_right.grid(True, alpha=0.3, axis="x")
+
+    if plot_title:
+        fig.suptitle("Air vs Road Distance Joint Distribution (Shanghai)", fontsize=13)
+
+    if save_path:
+        if for_latex and not save_path.endswith(".pdf"):
+            save_path = save_path.rsplit(".", 1)[0] + ".pdf"
+        if plot_title:
+            save_path = _add_title_suffix(save_path)
+        os.makedirs(os.path.dirname(save_path), exist_ok=True)
+        plt.savefig(save_path, dpi=300, bbox_inches="tight")
+        print(f"Air road joint distribution saved to {save_path}")
+    else:
+        plt.show()
+    plt.close(fig)
+
+
 def plot_emission_comparison_bar(
     ebike_emissions: float,
     drone_emissions: float,
