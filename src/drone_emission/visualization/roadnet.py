@@ -276,13 +276,18 @@ def plot_distance_comparison(
         ax.set_xlabel("")
         ax.set_ylabel("")
         ax.tick_params(left=False, bottom=False, labelleft=False, labelbottom=False)
+
+        # Place stats text near the midpoint of the route
+        text_lng = (origin[1] + destination[1]) / 2
+        text_lat = (origin[0] + destination[0]) / 2
         ax.text(
-            0.03, 0.03,
+            text_lng, text_lat,
             f"Straight: {straight_dist:.0f} m\nRoad: {road_dist:.0f} m\nDetour: {detour:.2f}",
-            transform=ax.transAxes, fontsize=7, va="bottom", ha="left", zorder=80,
-            bbox=dict(boxstyle="round,pad=0.35", facecolor="white", edgecolor="#d3d8d5", alpha=0.9),
+            fontsize=9, va="center", ha="center", zorder=80,
+            bbox=dict(boxstyle="round,pad=0.4", facecolor="white", edgecolor="#d3d8d5", alpha=0.92),
         )
-        ax.legend(loc="upper right", fontsize=7, framealpha=0.9)
+        if idx == 0:
+            ax.legend(loc="upper right", fontsize=9, framealpha=0.9)
 
     for idx in range(len(sample_paths), len(axes)):
         axes[idx].set_visible(False)
