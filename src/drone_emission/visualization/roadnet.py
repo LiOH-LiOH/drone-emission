@@ -277,7 +277,8 @@ def plot_distance_comparison(
         ax.set_ylabel("")
         ax.tick_params(left=False, bottom=False, labelleft=False, labelbottom=False)
 
-        # Place stats text in the corner farthest from both endpoints
+        # Place stats text in the corner with greatest perpendicular distance
+        # from the straight-line route — least likely to overlap the path.
         b = local_bounds
         corners = [
             (b["min_lng"], b["min_lat"], 0.03, 0.03, "left",  "bottom"),
@@ -287,10 +288,13 @@ def plot_distance_comparison(
         ]
         # Exclude top-right on first panel (legend lives there)
         candidates = [c for c in corners if not (idx == 0 and c[4] == "right" and c[5] == "top")]
-        best = max(candidates, key=lambda c: (
-            (c[0] - origin[1])**2 + (c[1] - origin[0])**2 +
-            (c[0] - destination[1])**2 + (c[1] - destination[0])**2
-        ))
+        x1, y1 = origin[1], origin[0]
+        x2, y2 = destination[1], destination[0]
+        dx, dy = x2 - x1, y2 - y1
+        line_len = max((dx**2 + dy**2) ** 0.5, 1e-10)
+        def _perp_dist(cx, cy):
+            return abs(dy * cx - dx * cy + x2 * y1 - y2 * x1) / line_len
+        best = max(candidates, key=lambda c: _perp_dist(c[0], c[1]))
         _, _, ax_x, ax_y, ha, va = best
         ax.text(
             ax_x, ax_y,
