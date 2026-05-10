@@ -30,19 +30,14 @@ def _render_shanghai_heatmap(data_dir, out, for_latex, plot_title):
         print(f"Shanghai heatmap skipped — missing {sales_path}")
         return
 
-    from utils.region_config import get_registry
     from visualization.sales import plot_sales_heatmap
-
-    registry = get_registry()
-    region_info = registry.get_region(region_key)
-    region_dict = region_info.to_dict()
 
     df = pd.read_csv(sales_path)
     plot_sales_heatmap(
         df,
-        region_dict["region_name_en"],
-        region_dict["region_name_cn"],
-        boundaries_dict=region_dict.get("boundaries_dict"),
+        "Shanghai",
+        "上海市",
+        boundaries_dict=None,
         save_path=os.path.join(out, "shanghai_heatmap.png"),
         for_latex=for_latex,
         plot_title=plot_title,
