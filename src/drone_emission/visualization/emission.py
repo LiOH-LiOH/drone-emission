@@ -483,6 +483,98 @@ def plot_road_detour_distribution(
     plt.close(fig)
 
 
+def plot_air_detour_distribution(
+    df: pd.DataFrame,
+    save_path: str = None,
+    figsize: tuple = (10, 5),
+    for_latex: bool = False,
+    plot_title: bool = False,
+    n_bins: int = 20,
+    max_km: float = 8.0,
+):
+    """Air distance weighted bar chart with detour ratio boxplot on twin y-axis.
+
+    Left y-axis: bar chart of air distance weighted by annual sales.
+    Right y-axis: boxplot of detour ratio (road / air) per air distance bin.
+
+    Args:
+        df: DataFrame with 'road_distance_m', 'distance_km', 'annual_sales' columns.
+        save_path: Path to save figure. Shows plot if None.
+        figsize: Figure size tuple.
+        for_latex: If True, save as PDF.
+        plot_title: If True, show title.
+        n_bins: Number of distance bins.
+        max_km: Upper bound of air distance axis in km.
+    """
+    valid = df[(df["road_distance_m"] >= 0) & (df["distance_km"] > 0)].copy()
+    air_km = valid["distance_km"].values
+    detour = (valid["road_distance_m"].values / 1000.0) / air_km
+    sales = valid["annual_sales"].values
+
+    bins = np.linspace(0, max_km, n_bins + 1)
+    bin_centers = (bins[:-1] + bins[1:]) / 2
+    bin_width = bins[1] - bins[0]
+
+    weights, _ = np.histogram(air_km, bins=bins, weights=sales)
+
+    bin_idx = np.clip(np.digitize(air_km, bins) - 1, 0, n_bins - 1)
+    detour_groups = [detour[bin_idx == i] for i in range(n_bins)]
+
+    fig, ax_bar = plt.subplots(figsize=figsize)
+    ax_box = ax_bar.twinx()
+
+    # --- Left: weighted bar chart ---
+    ax_bar.bar(
+        bin_centers, weights,
+        width=bin_width * 0.85,
+        color="#4CAF50", edgecolor="white", alpha=0.7,
+        zorder=2,
+    )
+    ax_bar.set_xlabel("Air Distance (km)", fontsize=11)
+    ax_bar.set_ylabel("Weighted Count (Annual Sales)", fontsize=11)
+    ax_bar.set_xlim(0, max_km)
+    ax_bar.grid(True, alpha=0.3, axis="y", zorder=1)
+    ax_bar.yaxis.set_major_formatter(
+        plt.FuncFormatter(lambda x, _: f"{x/1e6:.1f}M" if x >= 1e6 else f"{x:.0f}")
+    )
+
+    # --- Right: boxplot of detour ratio per air distance bin ---
+    nonempty = [(i, g) for i, g in enumerate(detour_groups) if len(g) > 0]
+    if nonempty:
+        positions = [bin_centers[i] for i, _ in nonempty]
+        groups = [g for _, g in nonempty]
+        ax_box.boxplot(
+            groups,
+            positions=positions,
+            widths=bin_width * 0.5,
+            patch_artist=True,
+            showfliers=False,
+            medianprops=dict(color="#E65100", linewidth=1.5),
+            boxprops=dict(facecolor="#B3E5FC", alpha=0.85),
+            whiskerprops=dict(linewidth=1.0),
+            capprops=dict(linewidth=1.0),
+            zorder=3,
+        )
+
+    ax_box.axhline(1.0, color="gray", linestyle="--", linewidth=1.0, alpha=0.6, zorder=2)
+    ax_box.set_ylabel("Detour Ratio (road / air)", fontsize=11)
+
+    if plot_title:
+        ax_bar.set_title("Air Distance Distribution & Detour Ratio", fontsize=13)
+
+    if save_path:
+        if for_latex and not save_path.endswith(".pdf"):
+            save_path = save_path.rsplit(".", 1)[0] + ".pdf"
+        if plot_title:
+            save_path = _add_title_suffix(save_path)
+        os.makedirs(os.path.dirname(save_path), exist_ok=True)
+        plt.savefig(save_path, dpi=300, bbox_inches="tight")
+        print(f"Air detour distribution saved to {save_path}")
+    else:
+        plt.show()
+    plt.close(fig)
+
+
 def plot_emission_comparison_bar(
     ebike_emissions: float,
     drone_emissions: float,
