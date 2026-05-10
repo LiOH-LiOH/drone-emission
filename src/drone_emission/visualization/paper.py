@@ -2,8 +2,15 @@
 
 Run:
     cd src/drone_emission
-    ../../.venv/bin/python -m visualization.paper --png   # PNG (fast iteration)
-    ../../.venv/bin/python -m visualization.paper          # PDF (for LaTeX)
+    ../../.venv/bin/python -m visualization.paper --png              # PNG (fast iteration)
+    ../../.venv/bin/python -m visualization.paper                    # PDF (for LaTeX)
+    ../../.venv/bin/python -m visualization.paper --only shanghai_heatmap
+    ../../.venv/bin/python -m visualization.paper --only shanghai_heatmap,distance_comparison
+
+Available figures:
+    detour_ratio_concept, emission_model_flowchart,
+    shanghai_heatmap, distance_comparison,
+    province_orders_emission, province_orders_both_emissions
 """
 
 import argparse
@@ -11,6 +18,37 @@ import os
 import sys
 
 import pandas as pd
+
+
+def _render_shanghai_heatmap(data_dir, out, for_latex, plot_title):
+    """Load Shanghai sales data and render the sales heatmap figure."""
+    region_key = "shanghai"
+    region_level = "city"
+    sales_path = os.path.join(data_dir, region_level, region_key, f"{region_key}_sales.csv")
+
+    if not os.path.exists(sales_path):
+        print(f"Shanghai heatmap skipped — missing {sales_path}")
+        return
+
+    from utils.region_config import get_registry
+    from visualization.sales import plot_sales_heatmap
+
+    registry = get_registry()
+    region_info = registry.get_region(region_key)
+    region_dict = region_info.to_dict()
+
+    df = pd.read_csv(sales_path)
+    plot_sales_heatmap(
+        df,
+        region_dict["region_name_en"],
+        region_dict["region_name_cn"],
+        boundaries_dict=region_dict.get("boundaries_dict"),
+        save_path=os.path.join(out, "shanghai_heatmap.png"),
+        for_latex=for_latex,
+        plot_title=plot_title,
+        lng_range=(121.0, 121.9),
+        lat_range=(30.9, 31.55),
+    )
 
 
 def _render_distance_comparison(data_dir, out, for_latex, plot_title, plot_fn):
@@ -41,7 +79,7 @@ def _render_distance_comparison(data_dir, out, for_latex, plot_title, plot_fn):
     )
 
 
-def render_all(data_dir: str, figures_dir: str, for_latex: bool = False, plot_title: bool = False):
+def render_all(data_dir: str, figures_dir: str, for_latex: bool = False, plot_title: bool = False, only: set = None):
     from visualization.analysis import plot_province_orders_emission, plot_province_orders_both_emissions
     from visualization.concepts import plot_detour_ratio_concept, plot_emission_model_flowchart
     from visualization.roadnet import plot_distance_comparison
@@ -49,48 +87,66 @@ def render_all(data_dir: str, figures_dir: str, for_latex: bool = False, plot_ti
     out = os.path.join(figures_dir, "paper")
     os.makedirs(out, exist_ok=True)
 
+    def _want(name):
+        return only is None or name in only
+
     # --- Concept figures (no data dependency) ---
-    plot_detour_ratio_concept(
-        save_path=os.path.join(out, "detour_ratio_concept.png"),
-        for_latex=for_latex,
-        plot_title=plot_title,
-    )
+    if _want("detour_ratio_concept"):
+        plot_detour_ratio_concept(
+            save_path=os.path.join(out, "detour_ratio_concept.png"),
+            for_latex=for_latex,
+            plot_title=plot_title,
+        )
 
-    plot_emission_model_flowchart(
-        save_path=os.path.join(out, "emission_model_flowchart.png"),
-        for_latex=for_latex,
-        plot_title=plot_title,
-    )
+    if _want("emission_model_flowchart"):
+        plot_emission_model_flowchart(
+            save_path=os.path.join(out, "emission_model_flowchart.png"),
+            for_latex=for_latex,
+            plot_title=plot_title,
+        )
 
-    # --- Data-driven figures ---
-    stats_path = os.path.join(data_dir, "all_region_stats.csv")
-    if not os.path.exists(stats_path):
-        print(f"Missing {stats_path}; run consolidate_stats first — skipping data figures")
-        return
+    # --- Shanghai figures (independent of all_region_stats) ---
+    if _want("shanghai_heatmap"):
+        _render_shanghai_heatmap(
+            data_dir=data_dir,
+            out=out,
+            for_latex=for_latex,
+            plot_title=plot_title,
+        )
 
-    df = pd.read_csv(stats_path)
+    if _want("distance_comparison"):
+        _render_distance_comparison(
+            data_dir=data_dir,
+            out=out,
+            for_latex=for_latex,
+            plot_title=plot_title,
+            plot_fn=plot_distance_comparison,
+        )
 
-    plot_province_orders_emission(
-        df,
-        save_path=os.path.join(out, "province_orders_emission"),
-        for_latex=for_latex,
-        plot_title=plot_title,
-    )
+    # --- Cross-region stats figures ---
+    stats_figures = {"province_orders_emission", "province_orders_both_emissions"}
+    if only is None or only & stats_figures:
+        stats_path = os.path.join(data_dir, "all_region_stats.csv")
+        if not os.path.exists(stats_path):
+            print(f"Missing {stats_path}; run consolidate_stats first — skipping stats figures")
+        else:
+            df = pd.read_csv(stats_path)
 
-    plot_province_orders_both_emissions(
-        df,
-        save_path=os.path.join(out, "province_orders_both_emissions"),
-        for_latex=for_latex,
-        plot_title=plot_title,
-    )
+            if _want("province_orders_emission"):
+                plot_province_orders_emission(
+                    df,
+                    save_path=os.path.join(out, "province_orders_emission"),
+                    for_latex=for_latex,
+                    plot_title=plot_title,
+                )
 
-    _render_distance_comparison(
-        data_dir=data_dir,
-        out=out,
-        for_latex=for_latex,
-        plot_title=plot_title,
-        plot_fn=plot_distance_comparison,
-    )
+            if _want("province_orders_both_emissions"):
+                plot_province_orders_both_emissions(
+                    df,
+                    save_path=os.path.join(out, "province_orders_both_emissions"),
+                    for_latex=for_latex,
+                    plot_title=plot_title,
+                )
 
 
 def _bootstrap_paths():
@@ -108,6 +164,7 @@ def main():
     parser.add_argument("--env", type=str, default=None)
     parser.add_argument("--png", action="store_true", help="Force PNG output")
     parser.add_argument("--titled", action="store_true", help="Add titles to figures")
+    parser.add_argument("--only", type=str, default=None, help="Comma-separated figure names to render")
     args = parser.parse_args()
 
     project_root = os.path.normpath(
@@ -116,9 +173,10 @@ def main():
     config = load_config(os.path.join(project_root, "experiment.toml"), env=args.env)
     for_latex = (not args.png) and config.get("for_latex", False)
     plot_title = args.titled or config.get("plot_title", False)
+    only = set(args.only.split(",")) if args.only else None
 
-    print(f"for_latex={for_latex}, plot_title={plot_title}")
-    render_all(config["data_dir"], config["figures_dir"], for_latex=for_latex, plot_title=plot_title)
+    print(f"for_latex={for_latex}, plot_title={plot_title}, only={only or 'all'}")
+    render_all(config["data_dir"], config["figures_dir"], for_latex=for_latex, plot_title=plot_title, only=only)
 
 
 

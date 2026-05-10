@@ -76,26 +76,40 @@ def _prepare_data(df):
 
 
 def plot_sales_heatmap(
-    df, region_name, region_name_cn, boundaries_dict=None, save_path=None, for_latex=False, plot_title=False
+    df, region_name, region_name_cn, boundaries_dict=None, save_path=None,
+    for_latex=False, plot_title=False, lng_range=None, lat_range=None,
 ):
+    """Plot sales heatmap for a region.
+
+    Args:
+        df: DataFrame with 'lat', 'lng', 'month_sales' columns.
+        region_name: English region name.
+        region_name_cn: Chinese region name.
+        boundaries_dict: Optional boundary dict for axis limits.
+        save_path: Path to save figure. Shows plot if None.
+        for_latex: If True, save as PDF.
+        plot_title: If True, show title and stats text.
+        lng_range: Optional (min_lng, max_lng) to fix histogram and view extent.
+        lat_range: Optional (min_lat, max_lat) to fix histogram and view extent.
+    """
     lng, lat, sales = _prepare_data(df)
     fig, ax, aspect_ratio, plot_height, plot_width = setup_figure(
         lng, lat, boundaries_dict
     )
 
     # Create weighted 2D histogram (weighted by sales)
-    # Increase resolution (approx 5x previous)
     bins_x = 1000
     bins_y = int(bins_x * (plot_height / plot_width))
 
-    # Add padding to prevent heatmap clipping at data boundaries
-    # This allows Gaussian smoothing to diffuse naturally at edges
-    pad_x = (lng.max() - lng.min()) * HEATMAP_PADDING_COEFF
-    pad_y = (lat.max() - lat.min()) * HEATMAP_PADDING_COEFF
-    heatmap_range = [
-        [lng.min() - pad_x, lng.max() + pad_x],
-        [lat.min() - pad_y, lat.max() + pad_y],
-    ]
+    if lng_range is not None and lat_range is not None:
+        heatmap_range = [list(lng_range), list(lat_range)]
+    else:
+        pad_x = (lng.max() - lng.min()) * HEATMAP_PADDING_COEFF
+        pad_y = (lat.max() - lat.min()) * HEATMAP_PADDING_COEFF
+        heatmap_range = [
+            [lng.min() - pad_x, lng.max() + pad_x],
+            [lat.min() - pad_y, lat.max() + pad_y],
+        ]
 
     # Generate weighted 2D histogram
     heatmap, xedges, yedges = np.histogram2d(
@@ -147,6 +161,10 @@ def plot_sales_heatmap(
         for_latex,
         plot_title,
     )
+
+    if lng_range is not None and lat_range is not None:
+        ax.set_xlim(lng_range)
+        ax.set_ylim(lat_range)
 
 
 def plot_store_scatter(
