@@ -394,23 +394,23 @@ def plot_road_air_distance_distribution(
 def plot_road_detour_distribution(
     df: pd.DataFrame,
     save_path: str = None,
-    figsize: tuple = (10, 8),
+    figsize: tuple = (10, 5),
     for_latex: bool = False,
     plot_title: bool = False,
     n_bins: int = 20,
     max_km: float = 10.0,
 ):
-    """Road distance weighted distribution with detour ratio boxplot per bin.
+    """Road distance weighted bar chart with detour ratio boxplot on twin y-axis.
 
-    Top panel: bar chart of road distance weighted by annual sales.
-    Bottom panel: boxplot of detour ratio (road / air distance) per road distance bin.
+    Left y-axis: bar chart of road distance weighted by annual sales.
+    Right y-axis: boxplot of detour ratio (road / air distance) per bin.
 
     Args:
         df: DataFrame with 'road_distance_m', 'distance_km', 'annual_sales' columns.
         save_path: Path to save figure. Shows plot if None.
         figsize: Figure size tuple.
         for_latex: If True, save as PDF.
-        plot_title: If True, show titles.
+        plot_title: If True, show title.
         n_bins: Number of distance bins.
         max_km: Upper bound of distance axis in km.
     """
@@ -428,26 +428,25 @@ def plot_road_detour_distribution(
     bin_idx = np.clip(np.digitize(road_km, bins) - 1, 0, n_bins - 1)
     detour_groups = [detour[bin_idx == i] for i in range(n_bins)]
 
-    fig, (ax_bar, ax_box) = plt.subplots(
-        2, 1, figsize=figsize, sharex=True,
-        gridspec_kw={"hspace": 0.08},
-    )
+    fig, ax_bar = plt.subplots(figsize=figsize)
+    ax_box = ax_bar.twinx()
 
-    # --- Top: weighted bar chart ---
+    # --- Left: weighted bar chart ---
     ax_bar.bar(
         bin_centers, weights,
         width=bin_width * 0.85,
-        color="#4CAF50", edgecolor="white", alpha=0.85,
+        color="#4CAF50", edgecolor="white", alpha=0.7,
+        zorder=2,
     )
-    ax_bar.set_ylabel("Weighted Count\n(Annual Sales)", fontsize=11)
-    ax_bar.grid(True, alpha=0.3, axis="y")
+    ax_bar.set_xlabel("Road Distance (km)", fontsize=11)
+    ax_bar.set_ylabel("Weighted Count (Annual Sales)", fontsize=11)
+    ax_bar.set_xlim(0, max_km)
+    ax_bar.grid(True, alpha=0.3, axis="y", zorder=1)
     ax_bar.yaxis.set_major_formatter(
-        plt.FuncFormatter(lambda x, _: f"{x/1e6:.1f}×10⁶" if x >= 1e6 else f"{x:.0f}")
+        plt.FuncFormatter(lambda x, _: f"{x/1e6:.1f}M" if x >= 1e6 else f"{x:.0f}")
     )
-    if plot_title:
-        ax_bar.set_title("Road Distance Distribution (Weighted by Annual Sales)", fontsize=13)
 
-    # --- Bottom: boxplot of detour ratio per bin ---
+    # --- Right: boxplot of detour ratio per bin ---
     nonempty = [(i, g) for i, g in enumerate(detour_groups) if len(g) > 0]
     if nonempty:
         positions = [bin_centers[i] for i, _ in nonempty]
@@ -455,22 +454,21 @@ def plot_road_detour_distribution(
         ax_box.boxplot(
             groups,
             positions=positions,
-            widths=bin_width * 0.7,
+            widths=bin_width * 0.5,
             patch_artist=True,
             showfliers=False,
             medianprops=dict(color="#E65100", linewidth=1.5),
-            boxprops=dict(facecolor="#B3E5FC", alpha=0.8),
+            boxprops=dict(facecolor="#B3E5FC", alpha=0.85),
             whiskerprops=dict(linewidth=1.0),
             capprops=dict(linewidth=1.0),
+            zorder=3,
         )
 
-    ax_box.axhline(1.0, color="gray", linestyle="--", linewidth=1.0, alpha=0.7)
-    ax_box.set_xlabel("Road Distance (km)", fontsize=11)
-    ax_box.set_ylabel("Detour Ratio\n(road / air)", fontsize=11)
-    ax_box.set_xlim(0, max_km)
-    ax_box.grid(True, alpha=0.3, axis="y")
+    ax_box.axhline(1.0, color="gray", linestyle="--", linewidth=1.0, alpha=0.6, zorder=2)
+    ax_box.set_ylabel("Detour Ratio (road / air)", fontsize=11)
+
     if plot_title:
-        ax_box.set_title("Detour Ratio per Road Distance Bin", fontsize=13)
+        ax_bar.set_title("Road Distance Distribution & Detour Ratio", fontsize=13)
 
     if save_path:
         if for_latex and not save_path.endswith(".pdf"):
