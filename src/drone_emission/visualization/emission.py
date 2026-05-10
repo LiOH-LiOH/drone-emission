@@ -578,7 +578,7 @@ def plot_air_detour_distribution(
 def plot_air_road_joint(
     df: pd.DataFrame,
     save_path: str = None,
-    figsize: tuple = (13, 6),
+    figsize: tuple = None,
     for_latex: bool = False,
     plot_title: bool = False,
     max_road_km: float = None,
@@ -614,6 +614,15 @@ def plot_air_road_joint(
     if max_air_km is None:
         max_air_km = float(np.percentile(air_km, 99))
 
+    if figsize is None:
+        # Size the figure so 1 km = 1 km on both axes (equal aspect).
+        # GridSpec: width_ratios=[4,1,0.15], height_ratios=[1,4]
+        main_h = 5.0  # inches for the main panel
+        main_w = main_h * (max_road_km / max_air_km)
+        total_w = main_w * (4 + 1 + 0.15) / 4
+        total_h = main_h * (4 + 1) / 4
+        figsize = (total_w, total_h)
+
     mask = (air_km <= max_air_km) & (road_km <= max_road_km)
     air_km, road_km, sales = air_km[mask], road_km[mask], sales[mask]
 
@@ -630,15 +639,16 @@ def plot_air_road_joint(
 
     fig = plt.figure(figsize=figsize)
     gs = gridspec.GridSpec(
-        2, 2,
-        height_ratios=[1, 4], width_ratios=[4, 1],
+        2, 3,
+        height_ratios=[1, 4], width_ratios=[4, 1, 0.15],
         hspace=0.05, wspace=0.25,
     )
     ax_top = fig.add_subplot(gs[0, 0])
     ax_main = fig.add_subplot(gs[1, 0], sharex=ax_top)
     ax_right = fig.add_subplot(gs[1, 1], sharey=ax_main)
-    ax_corner = fig.add_subplot(gs[0, 1])
-    ax_corner.set_visible(False)
+    ax_cbar = fig.add_subplot(gs[1, 2])
+    for ax in [fig.add_subplot(gs[0, 1]), fig.add_subplot(gs[0, 2])]:
+        ax.set_visible(False)
 
     # --- Centre: hexbin (x=road, y=air) ---
     hb = ax_main.hexbin(
@@ -654,6 +664,7 @@ def plot_air_road_joint(
     ax_main.set_ylabel("Air Distance (km)", fontsize=11)
     ax_main.set_xlim(0, max_road_km)
     ax_main.set_ylim(0, max_air_km)
+    ax_main.set_aspect("equal")
 
     # Detour ratio reference lines: detour = road/air → y = x/ratio
     ref_ratios = [(1.2, "--", "#555555"), (1.5, "-.", "#333333"), (2.0, ":", "#111111")]
@@ -667,8 +678,8 @@ def plot_air_road_joint(
         )
     ax_main.legend(fontsize=9, loc="upper left")
 
-    # Colourbar
-    cb = fig.colorbar(hb, ax=ax_right, pad=0.3, fraction=0.6)
+    # Colourbar in its own dedicated axes
+    cb = fig.colorbar(hb, cax=ax_cbar)
     cb.set_label("Annual Sales (sum)", fontsize=9)
     cb.formatter = plt.FuncFormatter(lambda x, _: f"{x/1e6:.1f}M" if x >= 1e6 else f"{x:.0f}")
     cb.update_ticks()
