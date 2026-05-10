@@ -235,6 +235,8 @@ def plot_distance_comparison(
             zorder=25, edgecolors="white", linewidth=1.5, label="Destination",
         )
 
+        lat_center = (local_bounds["min_lat"] + local_bounds["max_lat"]) / 2
+        ax.set_aspect(1 / np.cos(np.radians(lat_center)))
         ax.set_xlim(local_bounds["min_lng"], local_bounds["max_lng"])
         ax.set_ylim(local_bounds["min_lat"], local_bounds["max_lat"])
 
@@ -248,15 +250,19 @@ def plot_distance_comparison(
         except Exception as e:
             print(f"Could not add basemap for sample {idx}: {e}")
 
+        # Re-apply limits after basemap (contextily may expand them)
+        ax.set_xlim(local_bounds["min_lng"], local_bounds["max_lng"])
+        ax.set_ylim(local_bounds["min_lat"], local_bounds["max_lat"])
+
         ax.set_title(
             f"Sample {idx + 1}\n"
             f"Straight: {straight_dist:.0f}m | Road: {road_dist:.0f}m\n"
             f"Detour ratio: {detour:.2f}",
             fontsize=9,
         )
-        ax.set_xlabel("Longitude", fontsize=8)
-        ax.set_ylabel("Latitude", fontsize=8)
-        ax.tick_params(labelsize=7)
+        ax.set_xlabel("")
+        ax.set_ylabel("")
+        ax.tick_params(left=False, bottom=False, labelleft=False, labelbottom=False)
         if idx == 0:
             ax.legend(loc="upper right", fontsize=7)
 
