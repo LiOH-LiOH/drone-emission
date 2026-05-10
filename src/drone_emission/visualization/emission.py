@@ -294,6 +294,103 @@ def plot_road_distance_distribution(
         return None
 
 
+def plot_road_air_distance_distribution(
+    df: pd.DataFrame,
+    save_path: str = None,
+    figsize: tuple = (10, 8),
+    for_latex: bool = False,
+    plot_title: bool = False,
+    n_bins: int = 20,
+    max_km: float = 10.0,
+):
+    """Road distance weighted distribution with air distance boxplot per bin.
+
+    Top panel: bar chart of road distance weighted by annual sales.
+    Bottom panel: boxplot of air (haversine) distance for each road distance bin.
+
+    Args:
+        df: DataFrame with 'road_distance_m', 'distance_km', 'annual_sales' columns.
+        save_path: Path to save figure. Shows plot if None.
+        figsize: Figure size tuple.
+        for_latex: If True, save as PDF.
+        plot_title: If True, show titles.
+        n_bins: Number of distance bins.
+        max_km: Upper bound of distance axis in km.
+    """
+    valid = df[df["road_distance_m"] >= 0].copy()
+    road_km = valid["road_distance_m"].values / 1000.0
+    air_km = valid["distance_km"].values
+    sales = valid["annual_sales"].values
+
+    bins = np.linspace(0, max_km, n_bins + 1)
+    bin_centers = (bins[:-1] + bins[1:]) / 2
+    bin_width = bins[1] - bins[0]
+
+    # Weighted bar heights
+    weights, _ = np.histogram(road_km, bins=bins, weights=sales)
+
+    # Air distance groups per bin
+    bin_idx = np.digitize(road_km, bins) - 1
+    bin_idx = np.clip(bin_idx, 0, n_bins - 1)
+    air_groups = [air_km[bin_idx == i] for i in range(n_bins)]
+
+    fig, (ax_bar, ax_box) = plt.subplots(
+        2, 1, figsize=figsize, sharex=True,
+        gridspec_kw={"hspace": 0.08},
+    )
+
+    # --- Top: weighted bar chart ---
+    ax_bar.bar(
+        bin_centers, weights,
+        width=bin_width * 0.85,
+        color="#4CAF50", edgecolor="white", alpha=0.85,
+    )
+    ax_bar.set_ylabel("Weighted Count\n(Annual Sales)", fontsize=11)
+    ax_bar.grid(True, alpha=0.3, axis="y")
+    ax_bar.yaxis.set_major_formatter(
+        plt.FuncFormatter(lambda x, _: f"{x/1e6:.1f}×10⁶" if x >= 1e6 else f"{x:.0f}")
+    )
+    if plot_title:
+        ax_bar.set_title("Road Distance Distribution (Weighted by Annual Sales)", fontsize=13)
+
+    # --- Bottom: boxplot of air distance per bin ---
+    nonempty = [(i, g) for i, g in enumerate(air_groups) if len(g) > 0]
+    if nonempty:
+        positions = [bin_centers[i] for i, _ in nonempty]
+        groups = [g for _, g in nonempty]
+        bp = ax_box.boxplot(
+            groups,
+            positions=positions,
+            widths=bin_width * 0.7,
+            patch_artist=True,
+            showfliers=False,
+            medianprops=dict(color="#E65100", linewidth=1.5),
+            boxprops=dict(facecolor="#B3E5FC", alpha=0.8),
+            whiskerprops=dict(linewidth=1.0),
+            capprops=dict(linewidth=1.0),
+        )
+        _ = bp  # suppress unused warning
+
+    ax_box.set_xlabel("Road Distance (km)", fontsize=11)
+    ax_box.set_ylabel("Air Distance (km)", fontsize=11)
+    ax_box.set_xlim(0, max_km)
+    ax_box.grid(True, alpha=0.3, axis="y")
+    if plot_title:
+        ax_box.set_title("Air Distance Distribution per Road Distance Bin", fontsize=13)
+
+    if save_path:
+        if for_latex and not save_path.endswith(".pdf"):
+            save_path = save_path.rsplit(".", 1)[0] + ".pdf"
+        if plot_title:
+            save_path = _add_title_suffix(save_path)
+        os.makedirs(os.path.dirname(save_path), exist_ok=True)
+        plt.savefig(save_path, dpi=300, bbox_inches="tight")
+        print(f"Road air distance distribution saved to {save_path}")
+    else:
+        plt.show()
+    plt.close(fig)
+
+
 def plot_emission_comparison_bar(
     ebike_emissions: float,
     drone_emissions: float,

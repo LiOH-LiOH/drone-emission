@@ -9,7 +9,7 @@ Run:
 
 Available figures:
     detour_ratio_concept, emission_model_flowchart,
-    shanghai_heatmap, distance_comparison,
+    shanghai_heatmap, shanghai_road_air_distance, distance_comparison,
     province_orders_emission, province_orders_both_emissions
 """
 
@@ -43,6 +43,27 @@ def _render_shanghai_heatmap(data_dir, out, for_latex, plot_title):
         plot_title=plot_title,
         lng_range=(121.0, 121.9),
         lat_range=(30.9, 31.55),
+    )
+
+
+def _render_shanghai_road_air_distance(data_dir, out, for_latex, plot_title):
+    """Load Shanghai OD pairs and render the road/air distance figure."""
+    region_key = "shanghai"
+    region_level = "city"
+    od_path = os.path.join(data_dir, region_level, region_key, f"{region_key}_od_pairs.csv")
+
+    if not os.path.exists(od_path):
+        print(f"Road air distance skipped — missing {od_path}")
+        return
+
+    from visualization.emission import plot_road_air_distance_distribution
+
+    df = pd.read_csv(od_path)
+    plot_road_air_distance_distribution(
+        df,
+        save_path=os.path.join(out, "shanghai_road_air_distance.png"),
+        for_latex=for_latex,
+        plot_title=plot_title,
     )
 
 
@@ -103,6 +124,14 @@ def render_all(data_dir: str, figures_dir: str, for_latex: bool = False, plot_ti
     # --- Shanghai figures (independent of all_region_stats) ---
     if _want("shanghai_heatmap"):
         _render_shanghai_heatmap(
+            data_dir=data_dir,
+            out=out,
+            for_latex=for_latex,
+            plot_title=plot_title,
+        )
+
+    if _want("shanghai_road_air_distance"):
+        _render_shanghai_road_air_distance(
             data_dir=data_dir,
             out=out,
             for_latex=for_latex,

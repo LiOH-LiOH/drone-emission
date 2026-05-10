@@ -77,7 +77,7 @@ def _prepare_data(df):
 
 def plot_sales_heatmap(
     df, region_name, region_name_cn, boundaries_dict=None, save_path=None,
-    for_latex=False, plot_title=False, lng_range=None, lat_range=None,
+    for_latex=False, plot_title=False, lng_range=None, lat_range=None, zoom=14,
 ):
     """Plot sales heatmap for a region.
 
@@ -91,6 +91,7 @@ def plot_sales_heatmap(
         plot_title: If True, show title and stats text.
         lng_range: Optional (min_lng, max_lng) to fix histogram and view extent.
         lat_range: Optional (min_lat, max_lat) to fix histogram and view extent.
+        zoom: Basemap tile zoom level (lower = fewer tiles to download).
     """
     lng, lat, sales = _prepare_data(df)
     fig, ax, aspect_ratio, plot_height, plot_width = setup_figure(
@@ -141,7 +142,7 @@ def plot_sales_heatmap(
         zorder=10,  # Ensure heatmap is on top of basemap
     )
 
-    add_basemap_and_boundaries(ax, region_name_cn, boundaries_dict)
+    add_basemap_and_boundaries(ax, region_name_cn, boundaries_dict, zoom=zoom)
 
     # Add colorbar aligned with map height using make_axes_locatable
     divider = make_axes_locatable(ax)
@@ -161,10 +162,6 @@ def plot_sales_heatmap(
         for_latex,
         plot_title,
     )
-
-    if lng_range is not None and lat_range is not None:
-        ax.set_xlim(lng_range)
-        ax.set_ylim(lat_range)
 
 
 def plot_store_scatter(
