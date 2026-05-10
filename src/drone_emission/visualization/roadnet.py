@@ -131,6 +131,7 @@ def plot_distance_comparison(
     graph,
     router,
     save_path: Optional[str] = None,
+    figsize: Optional[tuple] = None,
     for_latex: bool = False,
     plot_title: bool = False,
     n_samples: int = 4,
@@ -138,7 +139,7 @@ def plot_distance_comparison(
     """Visualize sampled delivery paths comparing straight-line vs road network distance.
 
     Samples OD pairs at detour-ratio quantiles (20/40/60/80th percentile) and plots
-    each as a panel showing the road path (blue) and straight-line (red dashed).
+    each as a square panel showing the road path and straight-line.
     Uses SparseGraph local edges for background roads — no full NetworkX load needed.
 
     Args:
@@ -147,6 +148,7 @@ def plot_distance_comparison(
         graph: SparseGraph built from the region's graphml file.
         router: TileRouter wrapping the SparseGraph.
         save_path: Path to save figure (with .png extension). Shows plot if None.
+        figsize: Total figure size tuple. Defaults to (4*n_cols, 4*n_rows).
         for_latex: If True, save as PDF.
         plot_title: If True, show title.
         n_samples: Maximum number of sample panels to show.
@@ -189,7 +191,7 @@ def plot_distance_comparison(
 
     n_cols = min(2, len(sample_paths))
     n_rows = (len(sample_paths) + n_cols - 1) // n_cols
-    fig, axes = plt.subplots(n_rows, n_cols, figsize=(4 * n_cols, 4 * n_rows))
+    fig, axes = plt.subplots(n_rows, n_cols, figsize=figsize or (4 * n_cols, 4 * n_rows))
     if len(sample_paths) == 1:
         axes = np.array([axes])
     axes = axes.flatten()
@@ -220,23 +222,40 @@ def plot_distance_comparison(
         if path_result["success"] and len(path_result["path_coordinates"]) > 1:
             path_lngs = [c[1] for c in path_result["path_coordinates"]]
             path_lats = [c[0] for c in path_result["path_coordinates"]]
-            ax.plot(path_lngs, path_lats, color="blue", linewidth=2, alpha=0.8, zorder=10)
+            ax.plot(path_lngs, path_lats, color="#d95f35", linewidth=2.5, alpha=0.9, zorder=10,
+                    label="E-bike (road)")
 
         ax.plot(
             [origin[1], destination[1]], [origin[0], destination[0]],
-            color="red", linewidth=2, linestyle="--", alpha=0.8, zorder=20, label="Straight line",
+            color="#1f77b4", linewidth=2, linestyle="--", alpha=0.9, zorder=20,
+            label="Drone (straight)",
         )
         ax.scatter(
-            origin[1], origin[0], c="green", s=80, marker="o",
-            zorder=25, edgecolors="white", linewidth=1.5, label="Origin",
+            origin[1], origin[0], c="#2f6f4e", s=90, marker="o",
+            zorder=25, edgecolors="white", linewidth=1.5, label="Merchant",
         )
         ax.scatter(
-            destination[1], destination[0], c="red", s=80, marker="s",
-            zorder=25, edgecolors="white", linewidth=1.5, label="Destination",
+            destination[1], destination[0], c="#3f4b64", s=90, marker="s",
+            zorder=25, edgecolors="white", linewidth=1.5, label="Customer",
         )
 
+        # Expand the tighter axis so the panel is square in display space,
+        # accounting for longitude foreshortening at this latitude.
         lat_center = (local_bounds["min_lat"] + local_bounds["max_lat"]) / 2
-        ax.set_aspect(1 / np.cos(np.radians(lat_center)))
+        cos_lat = np.cos(np.radians(lat_center))
+        lat_span = local_bounds["max_lat"] - local_bounds["min_lat"]
+        lon_span = local_bounds["max_lng"] - local_bounds["min_lng"]
+        lat_disp = lat_span
+        lon_disp = lon_span * cos_lat
+        if lon_disp < lat_disp:
+            extra = (lat_disp - lon_disp) / cos_lat / 2
+            local_bounds["min_lng"] -= extra
+            local_bounds["max_lng"] += extra
+        else:
+            extra = (lon_disp - lat_disp) / 2
+            local_bounds["min_lat"] -= extra
+            local_bounds["max_lat"] += extra
+
         ax.set_xlim(local_bounds["min_lng"], local_bounds["max_lng"])
         ax.set_ylim(local_bounds["min_lat"], local_bounds["max_lat"])
 
