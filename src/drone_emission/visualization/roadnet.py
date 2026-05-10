@@ -273,17 +273,16 @@ def plot_distance_comparison(
         ax.set_xlim(local_bounds["min_lng"], local_bounds["max_lng"])
         ax.set_ylim(local_bounds["min_lat"], local_bounds["max_lat"])
 
-        ax.set_title(
-            f"Sample {idx + 1}\n"
-            f"Straight: {straight_dist:.0f}m | Road: {road_dist:.0f}m\n"
-            f"Detour ratio: {detour:.2f}",
-            fontsize=9,
-        )
         ax.set_xlabel("")
         ax.set_ylabel("")
         ax.tick_params(left=False, bottom=False, labelleft=False, labelbottom=False)
-        if idx == 0:
-            ax.legend(loc="upper right", fontsize=7)
+        ax.text(
+            0.03, 0.03,
+            f"Straight: {straight_dist:.0f} m\nRoad: {road_dist:.0f} m\nDetour: {detour:.2f}",
+            transform=ax.transAxes, fontsize=7, va="bottom", ha="left", zorder=80,
+            bbox=dict(boxstyle="round,pad=0.35", facecolor="white", edgecolor="#d3d8d5", alpha=0.9),
+        )
+        ax.legend(loc="upper right", fontsize=7, framealpha=0.9)
 
     for idx in range(len(sample_paths), len(axes)):
         axes[idx].set_visible(False)
