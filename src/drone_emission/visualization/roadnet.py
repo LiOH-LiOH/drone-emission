@@ -277,13 +277,25 @@ def plot_distance_comparison(
         ax.set_ylabel("")
         ax.tick_params(left=False, bottom=False, labelleft=False, labelbottom=False)
 
-        # Place stats text near the midpoint of the route
-        text_lng = (origin[1] + destination[1]) / 2
-        text_lat = (origin[0] + destination[0]) / 2
+        # Place stats text in the corner farthest from both endpoints
+        b = local_bounds
+        corners = [
+            (b["min_lng"], b["min_lat"], 0.03, 0.03, "left",  "bottom"),
+            (b["max_lng"], b["min_lat"], 0.97, 0.03, "right", "bottom"),
+            (b["min_lng"], b["max_lat"], 0.03, 0.97, "left",  "top"),
+            (b["max_lng"], b["max_lat"], 0.97, 0.97, "right", "top"),
+        ]
+        # Exclude top-right on first panel (legend lives there)
+        candidates = [c for c in corners if not (idx == 0 and c[4] == "right" and c[5] == "top")]
+        best = max(candidates, key=lambda c: (
+            (c[0] - origin[1])**2 + (c[1] - origin[0])**2 +
+            (c[0] - destination[1])**2 + (c[1] - destination[0])**2
+        ))
+        _, _, ax_x, ax_y, ha, va = best
         ax.text(
-            text_lng, text_lat,
+            ax_x, ax_y,
             f"Straight: {straight_dist:.0f} m\nRoad: {road_dist:.0f} m\nDetour: {detour:.2f}",
-            fontsize=9, va="center", ha="center", zorder=80,
+            transform=ax.transAxes, fontsize=9, va=va, ha=ha, zorder=80,
             bbox=dict(boxstyle="round,pad=0.4", facecolor="white", edgecolor="#d3d8d5", alpha=0.92),
         )
         if idx == 0:
