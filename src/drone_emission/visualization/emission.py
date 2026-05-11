@@ -1724,7 +1724,7 @@ def plot_lifecycle_distance_route_factor(
                 range=[[distances[0], distances[-1]], [detour_ratios[0], detour_ratios[-1]]],
                 weights=valid["annual_sales"].values,
             )
-            Zi = gaussian_filter(hist.T, sigma=2.0)
+            Zi = gaussian_filter(hist.T, sigma=4.0)
 
             xi = 0.5 * (xedges[:-1] + xedges[1:])
             yi = 0.5 * (yedges[:-1] + yedges[1:])
@@ -1732,8 +1732,8 @@ def plot_lifecycle_distance_route_factor(
 
             z_sorted = np.sort(Zi.ravel())[::-1]
             z_cumsum = np.cumsum(z_sorted) / z_sorted.sum()
-            # Equal-interval cumulative density levels: 10%, 20%, ..., 90%
-            pcts = np.arange(0.10, 1.0, 0.10)
+            # Equal-interval cumulative density levels: 20%, 40%, 60%, 80%
+            pcts = np.arange(0.20, 1.0, 0.20)
             kde_levels = sorted([z_sorted[np.searchsorted(z_cumsum, p)] for p in pcts])
 
             cs = ax.contour(Xi, Yi, Zi, levels=kde_levels, colors="black",
