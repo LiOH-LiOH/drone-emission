@@ -11,7 +11,8 @@ Available figures:
     detour_ratio_concept, emission_model_flowchart,
     shanghai_heatmap, shanghai_road_air_distance, shanghai_road_detour,
     shanghai_air_detour, shanghai_air_road_joint, distance_comparison,
-    province_orders_emission, province_orders_both_emissions
+    province_orders_emission, province_orders_both_emissions,
+    regions_map
 """
 
 import argparse
@@ -163,6 +164,7 @@ def _render_distance_comparison(data_dir, out, for_latex, plot_title, plot_fn):
 def render_all(data_dir: str, figures_dir: str, for_latex: bool = False, plot_title: bool = False, only: set = None):
     from visualization.analysis import plot_province_orders_emission, plot_province_orders_both_emissions
     from visualization.concepts import plot_detour_ratio_concept, plot_emission_model_flowchart
+    from visualization.regions import plot_regions_on_china_map
     from visualization.roadnet import plot_distance_comparison
 
     out = os.path.join(figures_dir, "paper")
@@ -237,7 +239,7 @@ def render_all(data_dir: str, figures_dir: str, for_latex: bool = False, plot_ti
         )
 
     # --- Cross-region stats figures ---
-    stats_figures = {"province_orders_emission", "province_orders_both_emissions"}
+    stats_figures = {"province_orders_emission", "province_orders_both_emissions", "regions_map"}
     if only is None or only & stats_figures:
         stats_path = os.path.join(data_dir, "all_region_stats.csv")
         if not os.path.exists(stats_path):
@@ -257,6 +259,14 @@ def render_all(data_dir: str, figures_dir: str, for_latex: bool = False, plot_ti
                 plot_province_orders_both_emissions(
                     df,
                     save_path=os.path.join(out, "province_orders_both_emissions"),
+                    for_latex=for_latex,
+                    plot_title=plot_title,
+                )
+
+            if _want("regions_map"):
+                plot_regions_on_china_map(
+                    csv_path=stats_path,
+                    save_path=os.path.join(out, "regions_map.png"),
                     for_latex=for_latex,
                     plot_title=plot_title,
                 )

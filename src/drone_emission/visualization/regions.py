@@ -297,7 +297,19 @@ def plot_regions_on_china_map(
     china_lat_range = (18, 54)
     china_lng_range = (73, 135)
 
-    # 1. Fill every city-level area (background)
+    china_geojson = _fetch_china_boundaries()
+
+    def _draw_map(target_ax, areas_list, study_vals, cmap_, norm_):
+        for adcode, name, geometry in areas_list:
+            val = study_vals.get(adcode)
+            if val is not None and norm_ is not None and not np.isnan(val):
+                facecolor = cmap_(norm_(val))
+            else:
+                facecolor = GRAY_FILL
+            _fill_geometry(target_ax, geometry, facecolor)
+        _plot_china_boundaries(target_ax, china_geojson)
+
+    # 1. Main map
     plotted_total = 0
     plotted_colored = 0
     for adcode, name, geometry in all_areas:
@@ -309,17 +321,25 @@ def plot_regions_on_china_map(
             facecolor = GRAY_FILL
         _fill_geometry(ax, geometry, facecolor)
         plotted_total += 1
-
-    # 2. Province outlines on top
-    china_geojson = _fetch_china_boundaries()
     _plot_china_boundaries(ax, china_geojson)
 
-    # 3. Colorbar
+    # 2. Colorbar
     if valid_values and norm is not None:
         sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
         sm.set_array([])
         cbar = plt.colorbar(sm, ax=ax, shrink=0.7, pad=0.02)
         cbar.set_label(VARIABLE_LABELS.get(color_by, color_by), fontsize=10)
+
+    # 3. Gray legend patch for unstudied regions
+    from matplotlib.patches import Patch
+    ax.legend(
+        handles=[Patch(facecolor=GRAY_FILL, edgecolor="none", label="Unstudied regions")],
+        loc="lower left",
+        fontsize=12,
+        framealpha=0.8,
+        handlelength=1.5,
+        handleheight=1.2,
+    )
 
     print(
         f"Plotted {plotted_total} areas ({plotted_colored} colored by reduction, "
@@ -338,6 +358,18 @@ def plot_regions_on_china_map(
 
     if plot_title:
         ax.set_title("Study Regions in China", fontsize=14, fontweight="bold")
+
+    # 4. South China Sea inset (standard Chinese map convention: ~107–121°E, 3–24°N)
+    inset_ax = ax.inset_axes([0.86, 0.0, 0.14, 0.28])  # [x, y, w, h] in axes fraction
+    _draw_map(inset_ax, all_areas, study_adcode_to_val, cmap, norm)
+    inset_ax.set_xlim(107, 121)
+    inset_ax.set_ylim(3, 24)
+    inset_ax.set_xticks([])
+    inset_ax.set_yticks([])
+    for spine in inset_ax.spines.values():
+        spine.set_linestyle("--")
+        spine.set_linewidth(1.0)
+        spine.set_edgecolor("gray")
 
     plt.tight_layout()
 
