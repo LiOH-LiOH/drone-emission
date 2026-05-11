@@ -1701,16 +1701,6 @@ def plot_lifecycle_distance_route_factor(
     cbar = plt.colorbar(im, ax=ax)
     cbar.set_label("Drone emissions relative to e-bike (%)", fontsize=12)
 
-    X, Y = np.meshgrid(distances, detour_ratios)
-    data_min = np.floor(emission_diff_matrix.min() / 20) * 20
-    data_max = np.ceil(emission_diff_matrix.max() / 20) * 20
-    contour_levels = np.arange(data_min, data_max + 1, 20)
-    linewidths = [3 if lvl == 0 else 2 for lvl in contour_levels]
-    linestyles = ["-" if lvl == 0 else "--" for lvl in contour_levels]
-    contour = ax.contour(X, Y, emission_diff_matrix, levels=contour_levels,
-                         colors="black", linewidths=linewidths, linestyles=linestyles)
-    ax.clabel(contour, inline=True, fontsize=9, fmt=lambda x: f"{x:+.0f}%")
-
     ax.set_xlabel("Air distance (km)", fontsize=12)
     ax.set_ylabel("Detour ratio", fontsize=12)
     if plot_title:
@@ -1718,7 +1708,7 @@ def plot_lifecycle_distance_route_factor(
 
     # --- Overlay order distribution from OD data ---
     if od_df is not None:
-        from scipy.stats import gaussian_kde
+        from scipy.ndimage import gaussian_filter
 
         valid = od_df.dropna(subset=["distance_km", "road_distance_m", "annual_sales"])
         valid = valid[(valid["distance_km"] >= distances[0]) & (valid["distance_km"] <= distances[-1])].copy()
@@ -1726,27 +1716,30 @@ def plot_lifecycle_distance_route_factor(
         valid = valid[(valid["detour"] >= detour_ratios[0]) & (valid["detour"] <= detour_ratios[-1])]
 
         if len(valid) > 10:
-            weights = valid["annual_sales"].values.astype(float)
-            xy = np.vstack([valid["distance_km"].values, valid["detour"].values])
-            kde = gaussian_kde(xy, weights=weights)
+            n_bins = 100
+            hist, xedges, yedges = np.histogram2d(
+                valid["distance_km"].values,
+                valid["detour"].values,
+                bins=n_bins,
+                range=[[distances[0], distances[-1]], [detour_ratios[0], detour_ratios[-1]]],
+                weights=valid["annual_sales"].values,
+            )
+            Zi = gaussian_filter(hist.T, sigma=2.0)
 
-            xi = np.linspace(distances[0], distances[-1], 150)
-            yi = np.linspace(detour_ratios[0], detour_ratios[-1], 150)
+            xi = 0.5 * (xedges[:-1] + xedges[1:])
+            yi = 0.5 * (yedges[:-1] + yedges[1:])
             Xi, Yi = np.meshgrid(xi, yi)
-            Zi = kde(np.vstack([Xi.ravel(), Yi.ravel()])).reshape(Xi.shape)
 
-            # Convert density grid to cumulative probability levels
             z_sorted = np.sort(Zi.ravel())[::-1]
             z_cumsum = np.cumsum(z_sorted) / z_sorted.sum()
-            kde_levels = sorted([
-                z_sorted[np.searchsorted(z_cumsum, p)] for p in [0.50, 0.75, 0.90]
-            ])
+            # Equal-interval cumulative density levels: 10%, 20%, ..., 90%
+            pcts = np.arange(0.10, 1.0, 0.10)
+            kde_levels = sorted([z_sorted[np.searchsorted(z_cumsum, p)] for p in pcts])
 
-            cs = ax.contour(Xi, Yi, Zi, levels=kde_levels, colors="white",
-                            linewidths=[0.8, 1.2, 1.5], linestyles=["dotted", "dashed", "solid"],
-                            alpha=0.9)
-            fmt = {l: lab for l, lab in zip(kde_levels, ["90%", "75%", "50%"])}
-            ax.clabel(cs, fmt=fmt, fontsize=8, inline=True)
+            cs = ax.contour(Xi, Yi, Zi, levels=kde_levels, colors="black",
+                            linewidths=1.0, linestyles="solid", alpha=0.7)
+            fmt = {l: f"{int(round(p * 100))}%" for l, p in zip(kde_levels, pcts)}
+            ax.clabel(cs, fmt=fmt, fontsize=7, inline=True)
 
     plt.tight_layout()
 
