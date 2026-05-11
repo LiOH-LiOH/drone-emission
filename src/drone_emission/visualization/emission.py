@@ -1670,7 +1670,7 @@ def plot_lifecycle_distance_route_factor(
     lca = LifeCycleEmissions()
 
     distances = np.linspace(0.5, 4, 30)
-    detour_ratios = np.linspace(1.0, 2.0, 20)
+    detour_ratios = np.linspace(1.0, 1.8, 20)
 
     emission_diff_matrix = np.zeros((len(detour_ratios), len(distances)))
     for i, r in enumerate(detour_ratios):
@@ -1702,7 +1702,7 @@ def plot_lifecycle_distance_route_factor(
     cbar.set_label("Drone emissions relative to e-bike (%)", fontsize=12)
 
     ax.set_xlabel("Air distance (km)", fontsize=12)
-    ax.set_ylabel("Detour ratio", fontsize=12)
+    ax.set_ylabel("Detour ratio (road / air distance)", fontsize=12)
     if plot_title:
         ax.set_title("Emission comparison: drone vs e-bike", fontsize=14)
 
@@ -1740,6 +1740,11 @@ def plot_lifecycle_distance_route_factor(
                             linewidths=1.0, linestyles="solid", alpha=0.7)
             fmt = {l: f"{int(round(p * 100))}%" for l, p in zip(kde_levels, pcts)}
             ax.clabel(cs, fmt=fmt, fontsize=7, inline=True)
+
+            # Legend entry for contour lines
+            ax.plot([], [], color="black", linewidth=1.0, linestyle="solid",
+                    label="Order distribution (Shanghai)")
+            ax.legend(loc="upper right", fontsize=9, framealpha=0.7)
 
     plt.tight_layout()
 
