@@ -243,7 +243,7 @@ def _draw_distance_panel(ax, sample, graph, show_legend=False, padding=0.003):
         bbox=dict(boxstyle="round,pad=0.4", facecolor="white", edgecolor="#d3d8d5", alpha=0.92),
     )
     if show_legend:
-        ax.legend(loc="upper right", fontsize=9, framealpha=0.9)
+        ax.legend(loc="upper left", fontsize=9, framealpha=0.9)
 
 
 def plot_distance_comparison(
