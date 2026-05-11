@@ -233,6 +233,7 @@ def plot_grouped_scatter(
     for_latex: bool = False,
     plot_title: bool = False,
     group_labels: tuple = None,
+    ax: "plt.Axes" = None,
 ):
     """Plot scatter with two groups split by threshold, each with its own regression line.
 
@@ -247,6 +248,7 @@ def plot_grouped_scatter(
         for_latex: If True, save as PDF.
         plot_title: If True, show title.
         group_labels: Tuple of (low_label, high_label). Auto-generated if None.
+        ax: External axes to draw into. When provided, skips figure creation and save.
     """
     valid_mask = df[[feature_var, result_var, group_var]].notna().all(axis=1)
     plot_df = df.loc[valid_mask]
@@ -260,7 +262,11 @@ def plot_grouped_scatter(
             f"High GEF (> {threshold})",
         )
 
-    fig, ax = plt.subplots(figsize=figsize)
+    _external_ax = ax is not None
+    if _external_ax:
+        fig = ax.get_figure()
+    else:
+        fig, ax = plt.subplots(figsize=figsize)
 
     # Global x-range with padding so regression lines extend to plot edges
     x_data_min = plot_df[feature_var].min()
@@ -299,7 +305,7 @@ def plot_grouped_scatter(
         x_line = np.linspace(x_global_min, x_global_max, 100)
         y_line = slope * x_line + intercept
         ax.plot(
-            x_line, y_line, color=color, linewidth=2.5, alpha=0.9, zorder=15,
+            x_line, y_line, color=color, linewidth=2.5, alpha=0.35, zorder=15,
             label=label,
         )
         n = len(x)
@@ -360,6 +366,65 @@ def plot_grouped_scatter(
             fontsize=12, fontweight="bold",
         )
 
+    if not _external_ax:
+        plt.tight_layout()
+
+    if _external_ax:
+        return
+    if save_path:
+        if for_latex and not save_path.endswith(".pdf"):
+            save_path = save_path.rsplit(".", 1)[0] + ".pdf"
+        if plot_title:
+            save_path = _add_title_suffix(save_path)
+        os.makedirs(os.path.dirname(save_path), exist_ok=True)
+        plt.savefig(save_path, dpi=300, bbox_inches="tight")
+        print(f"Grouped scatter saved to {save_path}")
+    else:
+        plt.show()
+
+    plt.close(fig)
+
+
+def plot_regions_map_and_gef_scatter(
+    df_stats: "pd.DataFrame",
+    df_enriched: "pd.DataFrame",
+    stats_csv_path: str,
+    save_path: str = None,
+    figsize: tuple = (18, 7),
+    for_latex: bool = False,
+    plot_title: bool = False,
+):
+    """Two-panel figure: (a) China choropleth map of reduction, (b) detour ratio vs reduction by GEF.
+
+    Args:
+        df_stats: all_region_stats DataFrame (for map coloring).
+        df_enriched: all_region_stats_enriched DataFrame (has grid_emission_factor).
+        stats_csv_path: Path to all_region_stats.csv (passed to map function).
+        save_path: Path to save figure. Shows plot if None.
+        figsize: Figure size tuple.
+        for_latex: If True, save as PDF.
+        plot_title: If True, show title.
+    """
+    from visualization.regions import plot_regions_on_china_map
+
+    fig, (ax_a, ax_b) = plt.subplots(1, 2, figsize=figsize, gridspec_kw={"width_ratios": [1.6, 1]})
+
+    plot_regions_on_china_map(csv_path=stats_csv_path, ax=ax_a, plot_title=plot_title)
+    plot_grouped_scatter(
+        df_enriched,
+        feature_var="detour_ratio",
+        result_var="max_lifecycle_reduction_pct",
+        group_var="grid_emission_factor",
+        threshold=0.3,
+        ax=ax_b,
+        plot_title=plot_title,
+    )
+
+    ax_a.text(-0.02, 1.02, "a", transform=ax_a.transAxes,
+              fontsize=14, fontweight="bold", va="bottom", ha="right")
+    ax_b.text(-0.08, 1.02, "b", transform=ax_b.transAxes,
+              fontsize=14, fontweight="bold", va="bottom", ha="right")
+
     plt.tight_layout()
 
     if save_path:
@@ -369,7 +434,7 @@ def plot_grouped_scatter(
             save_path = _add_title_suffix(save_path)
         os.makedirs(os.path.dirname(save_path), exist_ok=True)
         plt.savefig(save_path, dpi=300, bbox_inches="tight")
-        print(f"Grouped scatter saved to {save_path}")
+        print(f"Regions map and GEF scatter saved to {save_path}")
     else:
         plt.show()
 

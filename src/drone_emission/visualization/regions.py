@@ -216,6 +216,7 @@ def plot_regions_on_china_map(
     for_latex: bool = False,
     plot_title: bool = False,
     color_by: str = "max_lifecycle_reduction_pct",
+    ax: "plt.Axes" = None,
 ):
     """Plot a full city-boundary choropleth map of China.
 
@@ -232,6 +233,7 @@ def plot_regions_on_china_map(
         for_latex: If True, skip title for LaTeX export and save as PDF.
         plot_title: If True, show title.
         color_by: Column name to color-code regions by (only used with csv_path).
+        ax: External axes to draw into. When provided, skips figure creation and save.
     """
     # --- Load study-city data ---------------------------------------------------
     if csv_path is not None:
@@ -292,7 +294,11 @@ def plot_regions_on_china_map(
     GRAY_FILL = "#cccccc"
 
     # --- Plot -------------------------------------------------------------------
-    fig, ax = plt.subplots(figsize=figsize)
+    _external_ax = ax is not None
+    if _external_ax:
+        fig = ax.get_figure()
+    else:
+        fig, ax = plt.subplots(figsize=figsize)
 
     china_lat_range = (18, 54)
     china_lng_range = (73, 135)
@@ -371,9 +377,12 @@ def plot_regions_on_china_map(
         spine.set_linewidth(1.0)
         spine.set_edgecolor("gray")
 
-    plt.tight_layout()
+    if not _external_ax:
+        plt.tight_layout()
 
     # --- Save / show ------------------------------------------------------------
+    if _external_ax:
+        return
     if save_path:
         if for_latex and not save_path.endswith(".pdf"):
             save_path = save_path.rsplit(".", 1)[0] + ".pdf"

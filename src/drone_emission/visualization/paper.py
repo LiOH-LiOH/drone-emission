@@ -14,7 +14,8 @@ Available figures:
     shanghai_air_detour, shanghai_air_road_joint,
     province_orders_emission, province_orders_both_emissions,
     regions_map,
-    scatter_detour_ratio_vs_reduction_by_gef
+    scatter_detour_ratio_vs_reduction_by_gef,
+    regions_map_and_gef_scatter
 """
 
 import argparse
@@ -165,7 +166,7 @@ def _render_distance_comparison(data_dir, out, for_latex, plot_title, plot_fn):
 
 
 def render_all(data_dir: str, figures_dir: str, for_latex: bool = False, plot_title: bool = False, only: set = None):
-    from visualization.analysis import plot_province_orders_emission, plot_province_orders_both_emissions, plot_grouped_scatter
+    from visualization.analysis import plot_province_orders_emission, plot_province_orders_both_emissions, plot_grouped_scatter, plot_regions_map_and_gef_scatter
     from visualization.concepts import (
         plot_detour_and_lifecycle, plot_detour_lifecycle_distance, plot_emission_model_flowchart,
     )
@@ -270,7 +271,7 @@ def render_all(data_dir: str, figures_dir: str, for_latex: bool = False, plot_ti
         )
 
     # --- Cross-region stats figures ---
-    stats_figures = {"province_orders_emission", "province_orders_both_emissions", "regions_map", "scatter_detour_ratio_vs_reduction_by_gef"}
+    stats_figures = {"province_orders_emission", "province_orders_both_emissions", "regions_map", "scatter_detour_ratio_vs_reduction_by_gef", "regions_map_and_gef_scatter"}
     if only is None or only & stats_figures:
         stats_path = os.path.join(data_dir, "all_region_stats.csv")
         if not os.path.exists(stats_path):
@@ -302,17 +303,32 @@ def render_all(data_dir: str, figures_dir: str, for_latex: bool = False, plot_ti
                     plot_title=plot_title,
                 )
 
-            if _want("scatter_detour_ratio_vs_reduction_by_gef"):
-                plot_grouped_scatter(
-                    df,
-                    feature_var="detour_ratio",
-                    result_var="max_lifecycle_reduction_pct",
-                    group_var="grid_emission_factor",
-                    threshold=0.5,
-                    save_path=os.path.join(out, "scatter_detour_ratio_vs_reduction_by_gef.png"),
-                    for_latex=for_latex,
-                    plot_title=plot_title,
-                )
+            if _want("scatter_detour_ratio_vs_reduction_by_gef") or _want("regions_map_and_gef_scatter"):
+                enriched_path = os.path.join(data_dir, "all_region_stats_enriched.csv")
+                if not os.path.exists(enriched_path):
+                    print(f"GEF figures skipped — missing {enriched_path}; run tools.enrich_stats first")
+                else:
+                    df_enriched = pd.read_csv(enriched_path)
+                    if _want("scatter_detour_ratio_vs_reduction_by_gef"):
+                        plot_grouped_scatter(
+                            df_enriched,
+                            feature_var="detour_ratio",
+                            result_var="max_lifecycle_reduction_pct",
+                            group_var="grid_emission_factor",
+                            threshold=0.3,
+                            save_path=os.path.join(out, "scatter_detour_ratio_vs_reduction_by_gef.png"),
+                            for_latex=for_latex,
+                            plot_title=plot_title,
+                        )
+                    if _want("regions_map_and_gef_scatter"):
+                        plot_regions_map_and_gef_scatter(
+                            df_stats=df,
+                            df_enriched=df_enriched,
+                            stats_csv_path=stats_path,
+                            save_path=os.path.join(out, "regions_map_and_gef_scatter.png"),
+                            for_latex=for_latex,
+                            plot_title=plot_title,
+                        )
 
 
 def _bootstrap_paths():

@@ -23,31 +23,39 @@ from statsmodels.stats.outliers_influence import variance_inflation_factor
 
 from analysis.constants import VARIABLE_LABELS
 
+# Regression focuses on the primary outcome used in the paper narrative.
+REGRESSION_RESULT_VARIABLES = [
+    "max_lifecycle_reduction_pct",
+]
+
+EXCLUDED_REGRESSION_FEATURES = {
+    "detour_ratio",
+}
+
 # Hierarchical model definitions — curated to avoid within-group collinearity.
 # Each successive model adds one conceptual group of predictors.
 HIERARCHICAL_MODELS = {
     "M1: Energy": [
         "grid_emission_factor",
     ],
-    "M2: + Road indirectness": [
+    "M2: + Road structure": [
         "grid_emission_factor",
-        "detour_ratio",
-    ],
-    "M3: + Road structure": [
-        "grid_emission_factor",
-        "detour_ratio",
         "avg_block_length",
         "orientation_entropy",
     ],
-    "M4: Full": [
+    "M3: Full": [
         "grid_emission_factor",
-        "detour_ratio",
         "avg_block_length",
         "orientation_entropy",
         "intersection_density",
         "store_density",
     ],
 }
+
+
+def filter_regression_features(feature_vars: list) -> list:
+    """Remove features excluded from regression models."""
+    return [f for f in feature_vars if f not in EXCLUDED_REGRESSION_FEATURES]
 
 
 def compute_vif(df: pd.DataFrame, feature_vars: list) -> pd.DataFrame:
@@ -372,11 +380,7 @@ def analyze_hierarchical_regression(
     Returns:
         Dict with hierarchical and lasso results per result variable.
     """
-    from analysis.correlation import (
-        RESULT_VARIABLES,
-        get_all_feature_variables,
-        load_region_stats,
-    )
+    from analysis.correlation import get_all_feature_variables, load_region_stats
 
     _PROJECT_ROOT = os.path.dirname(
         os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -393,7 +397,7 @@ def analyze_hierarchical_regression(
 
     all_results = {}
 
-    for result_var in RESULT_VARIABLES:
+    for result_var in REGRESSION_RESULT_VARIABLES:
         if result_var not in df.columns:
             print(f"Skipping {result_var}: not in data")
             continue
@@ -403,7 +407,7 @@ def analyze_hierarchical_regression(
 
         # Lasso regression
         lasso_result = run_lasso_regression(
-            df, result_var, get_all_feature_variables()
+            df, result_var, filter_regression_features(get_all_feature_variables())
         )
 
         all_results[result_var] = {
@@ -500,10 +504,10 @@ def run_regression_analysis(
     Returns:
         Dictionary with regression results per result variable.
     """
-    from analysis.correlation import RESULT_VARIABLES, get_all_feature_variables
+    from analysis.correlation import get_all_feature_variables
 
     if result_vars is None:
-        result_vars = RESULT_VARIABLES
+        result_vars = REGRESSION_RESULT_VARIABLES
 
     df = pd.read_csv(csv_path)
     # Filter to completed cities
@@ -532,6 +536,8 @@ def run_regression_analysis(
         for f in enrichment_features:
             if f in df.columns and f not in feature_vars:
                 feature_vars.append(f)
+
+    feature_vars = filter_regression_features(feature_vars)
 
     available_features = [f for f in feature_vars if f in df.columns]
     print(f"Available features: {len(available_features)}/{len(feature_vars)}")
