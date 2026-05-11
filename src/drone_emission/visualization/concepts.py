@@ -85,22 +85,22 @@ def _add_polyline(
 
 
 def _add_ground(ax: plt.Axes) -> None:
-    plane = _projected([(0, 0), (10.4, 0), (10.4, 7.0), (0, 7.0)])
+    plane = _projected([(0, 0), (9.7, 0), (9.7, 6.3), (0, 6.3)])
     ax.add_patch(Polygon(plane, closed=True, facecolor=_COLORS["ground"],
                          edgecolor=_COLORS["ground_edge"], linewidth=1.2, zorder=1))
-    for x in np.arange(1.0, 10.1, 1.0):
-        _add_polyline(ax, [(x, 0.2), (x, 6.8)], color=_COLORS["grid"], linewidth=0.7, zorder=2)
-    for y in np.arange(0.8, 6.9, 0.9):
-        _add_polyline(ax, [(0.2, y), (10.2, y)], color=_COLORS["grid"], linewidth=0.7, zorder=2)
+    for x in np.arange(1.0, 9.6, 1.0):
+        _add_polyline(ax, [(x, 0.2), (x, 6.1)], color=_COLORS["grid"], linewidth=0.7, zorder=2)
+    for y in np.arange(0.8, 6.3, 0.9):
+        _add_polyline(ax, [(0.2, y), (9.5, y)], color=_COLORS["grid"], linewidth=0.7, zorder=2)
 
 
 def _add_road_network(ax: plt.Axes) -> None:
     for x in _GRID_X:
-        _add_polyline(ax, [(x, 0.0), (x, 7.0)], color=_COLORS["road"], linewidth=8.5, zorder=5)
-        _add_polyline(ax, [(x, 0.0), (x, 7.0)], color=_COLORS["road_dark"], linewidth=1.0, zorder=6, alpha=0.32)
+        _add_polyline(ax, [(x, 0.0), (x, 6.3)], color=_COLORS["road"], linewidth=8.5, zorder=5)
+        _add_polyline(ax, [(x, 0.0), (x, 6.3)], color=_COLORS["road_dark"], linewidth=1.0, zorder=6, alpha=0.32)
     for y in _GRID_Y:
-        _add_polyline(ax, [(0.0, y), (10.5, y)], color=_COLORS["road"], linewidth=8.5, zorder=5)
-        _add_polyline(ax, [(0.0, y), (10.5, y)], color=_COLORS["road_dark"], linewidth=1.0, zorder=6, alpha=0.32)
+        _add_polyline(ax, [(0.0, y), (9.8, y)], color=_COLORS["road"], linewidth=8.5, zorder=5)
+        _add_polyline(ax, [(0.0, y), (9.8, y)], color=_COLORS["road_dark"], linewidth=1.0, zorder=6, alpha=0.32)
 
 
 def _add_building(ax: plt.Axes, x: float, y: float, w: float, d: float, h: float) -> None:
@@ -219,22 +219,8 @@ def _add_scale_annotation(ax: plt.Axes, road_distance: float, straight_distance:
 # Public plot function
 # ---------------------------------------------------------------------------
 
-def plot_detour_ratio_concept(
-    save_path: str = None,
-    figsize: tuple = (8.2, 5.2),
-    for_latex: bool = False,
-    plot_title: bool = False,
-):
-    """Abstract vector figure illustrating the delivery detour ratio concept.
-
-    Args:
-        save_path: Path to save figure. Shows plot if None.
-        figsize: Figure size tuple.
-        for_latex: If True, save as PDF.
-        plot_title: If True, show title and formula annotation.
-    """
-    fig, ax = plt.subplots(figsize=figsize, constrained_layout=False)
-    fig.patch.set_facecolor(_COLORS["background"])
+def _draw_detour_ratio_concept(ax: "plt.Axes", plot_title: bool = False) -> None:
+    """Draw detour ratio concept scene onto *ax*."""
     ax.set_facecolor(_COLORS["background"])
 
     _add_ground(ax)
@@ -252,7 +238,7 @@ def plot_detour_ratio_concept(
         destination,
     ]
 
-    road_distance    = _path_length(bike_route)
+    road_distance     = _path_length(bike_route)
     straight_distance = math.dist(origin, destination)
 
     # E-bike route: solid layer below buildings + transparent layer above
@@ -308,8 +294,27 @@ def plot_detour_ratio_concept(
 
     ax.set_aspect("equal")
     ax.set_xlim(-0.25, 12.75)
-    ax.set_ylim(-0.25, 6.95)
+    ax.set_ylim(-0.25, 4.8)
     ax.axis("off")
+
+
+def plot_detour_ratio_concept(
+    save_path: str = None,
+    figsize: tuple = (8.2, 5.2),
+    for_latex: bool = False,
+    plot_title: bool = False,
+):
+    """Abstract vector figure illustrating the delivery detour ratio concept.
+
+    Args:
+        save_path: Path to save figure. Shows plot if None.
+        figsize: Figure size tuple.
+        for_latex: If True, save as PDF.
+        plot_title: If True, show title and formula annotation.
+    """
+    fig, ax = plt.subplots(figsize=figsize, constrained_layout=False)
+    fig.patch.set_facecolor(_COLORS["background"])
+    _draw_detour_ratio_concept(ax, plot_title=plot_title)
 
     if save_path:
         if for_latex and not save_path.endswith(".pdf"):
@@ -647,4 +652,57 @@ def plot_emission_model_flowchart(
     else:
         plt.show()
 
+    plt.close(fig)
+
+
+# ---------------------------------------------------------------------------
+# Combined: detour ratio concept + lifecycle distance/route-factor heatmap
+# ---------------------------------------------------------------------------
+
+def plot_detour_and_lifecycle(
+    od_df=None,
+    save_path: str = None,
+    figsize: tuple = (10.5, 10.5),
+    for_latex: bool = False,
+    plot_title: bool = False,
+):
+    """Two-panel figure: detour ratio concept (a) above lifecycle heatmap (b).
+
+    Args:
+        od_df: OD pairs DataFrame (distance_km, road_distance_m, annual_sales).
+               When provided, draws iso-density contours on the heatmap panel.
+        save_path: Path to save figure. Shows plot if None.
+        figsize: Figure size tuple.
+        for_latex: If True, save as PDF.
+        plot_title: If True, show titles.
+    """
+    from visualization.emission import _draw_lifecycle_distance_route_factor
+
+    fig = plt.figure(figsize=figsize, constrained_layout=True)
+    fig.set_constrained_layout_pads(hspace=0.02, h_pad=0.02, wspace=0.02, w_pad=0.02)
+    fig.patch.set_facecolor(_COLORS["background"])
+
+    gs = fig.add_gridspec(2, 2, width_ratios=[1, 0.03])
+    ax_a = fig.add_subplot(gs[0, :])     # spans full width (heatmap + colorbar columns)
+    ax_b = fig.add_subplot(gs[1, 0])     # heatmap
+    ax_cbar = fig.add_subplot(gs[1, 1])  # colorbar
+
+    _draw_detour_ratio_concept(ax_a, plot_title=plot_title)
+    _draw_lifecycle_distance_route_factor(ax_b, fig, od_df=od_df, plot_title=plot_title, cax=ax_cbar)
+    ax_b.set_box_aspect(0.5)  # 2:1 w:h
+
+    for ax, label in zip([ax_a, ax_b], ["a", "b"]):
+        ax.text(0.0, 1.02, label, transform=ax.transAxes,
+                fontsize=14, fontweight="bold", va="bottom", ha="left")
+
+    if save_path:
+        if for_latex and not save_path.endswith(".pdf"):
+            save_path = save_path.rsplit(".", 1)[0] + ".pdf"
+        if plot_title:
+            save_path = _add_title_suffix(save_path)
+        os.makedirs(os.path.dirname(save_path), exist_ok=True)
+        plt.savefig(save_path, dpi=300, bbox_inches="tight", facecolor=fig.get_facecolor())
+        print(f"Detour and lifecycle figure saved to {save_path}")
+    else:
+        plt.show()
     plt.close(fig)

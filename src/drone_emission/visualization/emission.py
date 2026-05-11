@@ -1644,27 +1644,8 @@ def plot_distance_vs_emission(
     return _save_or_show(fig, save_path, dpi, for_latex, plot_title)
 
 
-def plot_lifecycle_distance_route_factor(
-    od_df=None,
-    save_path: str = None,
-    figsize: tuple = (10, 6),
-    for_latex: bool = False,
-    plot_title: bool = False,
-):
-    """Heatmap of lifecycle emission difference (drone vs e-bike) over air distance and detour ratio.
-
-    Optionally overlays weighted KDE contour lines from an OD DataFrame to show
-    where actual orders fall in this emission landscape.
-
-    Args:
-        od_df: OD pairs DataFrame with columns distance_km, road_distance_m, annual_sales.
-               When provided, draws iso-density contours (50%/75%/90% of orders).
-        save_path: Path to save figure (with extension). Shows plot if None.
-        figsize: Figure size tuple.
-        for_latex: If True, save as PDF.
-        plot_title: If True, show title.
-    """
-    import numpy as np
+def _draw_lifecycle_distance_route_factor(ax, fig, od_df=None, plot_title: bool = False, cax=None) -> None:
+    """Draw lifecycle distance/route-factor heatmap onto *ax*."""
     from emission.cal_single_delivery import LifeCycleEmissions
 
     lca = LifeCycleEmissions()
@@ -1684,9 +1665,6 @@ def plot_lifecycle_distance_route_factor(
             diff = (drone_result["total_per_order_g"] / ebike_result["total_per_order_g"] - 1) * 100
             emission_diff_matrix[i, j] = diff
 
-    # --- Build figure and draw background heatmap ---
-    fig, ax = plt.subplots(figsize=figsize)
-
     abs_max = max(abs(emission_diff_matrix.min()), abs(emission_diff_matrix.max()))
     im = ax.imshow(
         emission_diff_matrix,
@@ -1698,7 +1676,7 @@ def plot_lifecycle_distance_route_factor(
         vmax=abs_max,
     )
 
-    cbar = plt.colorbar(im, ax=ax)
+    cbar = fig.colorbar(im, cax=cax) if cax is not None else fig.colorbar(im, ax=ax)
     cbar.set_label("Drone emissions relative to e-bike (%)", fontsize=12)
 
     ax.set_xlabel("Air distance (km)", fontsize=12)
@@ -1706,7 +1684,6 @@ def plot_lifecycle_distance_route_factor(
     if plot_title:
         ax.set_title("Emission comparison: drone vs e-bike", fontsize=14)
 
-    # --- Overlay order distribution from OD data ---
     if od_df is not None:
         from scipy.ndimage import gaussian_filter
 
@@ -1741,11 +1718,33 @@ def plot_lifecycle_distance_route_factor(
             fmt = {l: f"{int(round(p * 100))}%" for l, p in zip(kde_levels, pcts)}
             ax.clabel(cs, fmt=fmt, fontsize=7, inline=True)
 
-            # Legend entry for contour lines
             ax.plot([], [], color="black", linewidth=1.0, linestyle="solid",
                     label="Order distribution (Shanghai)")
             ax.legend(loc="upper right", fontsize=9, framealpha=0.7)
 
+
+def plot_lifecycle_distance_route_factor(
+    od_df=None,
+    save_path: str = None,
+    figsize: tuple = (10, 6),
+    for_latex: bool = False,
+    plot_title: bool = False,
+):
+    """Heatmap of lifecycle emission difference (drone vs e-bike) over air distance and detour ratio.
+
+    Optionally overlays weighted KDE contour lines from an OD DataFrame to show
+    where actual orders fall in this emission landscape.
+
+    Args:
+        od_df: OD pairs DataFrame with columns distance_km, road_distance_m, annual_sales.
+               When provided, draws iso-density contours (50%/75%/90% of orders).
+        save_path: Path to save figure (with extension). Shows plot if None.
+        figsize: Figure size tuple.
+        for_latex: If True, save as PDF.
+        plot_title: If True, show title.
+    """
+    fig, ax = plt.subplots(figsize=figsize)
+    _draw_lifecycle_distance_route_factor(ax, fig, od_df=od_df, plot_title=plot_title)
     plt.tight_layout()
 
     if save_path:
