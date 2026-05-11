@@ -32,6 +32,28 @@ EXCLUDED_REGRESSION_FEATURES = {
     "detour_ratio",
 }
 
+REGRESSION_CANDIDATE_FEATURES = [
+    "building_count",
+    "building_volume_total",
+    "roadnet_length_total",
+    "intersection_density",
+    "avg_block_length",
+    "road_connectivity",
+    "road_distance_excess",
+    "dead_end_proportion",
+    "four_way_proportion",
+    "orientation_entropy",
+    "avg_street_length",
+    "region_area_km2",
+    "building_density",
+    "road_density",
+    "building_volume_density",
+    "store_count",
+    "sales_intensity",
+    "store_density",
+    "grid_emission_factor",
+]
+
 # Hierarchical model definitions — curated to avoid within-group collinearity.
 # Each successive model adds one conceptual group of predictors.
 HIERARCHICAL_MODELS = {
@@ -380,7 +402,7 @@ def analyze_hierarchical_regression(
     Returns:
         Dict with hierarchical and lasso results per result variable.
     """
-    from analysis.correlation import get_all_feature_variables, load_region_stats
+    from analysis.correlation import load_region_stats
 
     _PROJECT_ROOT = os.path.dirname(
         os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -407,7 +429,7 @@ def analyze_hierarchical_regression(
 
         # Lasso regression
         lasso_result = run_lasso_regression(
-            df, result_var, filter_regression_features(get_all_feature_variables())
+            df, result_var, filter_regression_features(REGRESSION_CANDIDATE_FEATURES)
         )
 
         all_results[result_var] = {
@@ -504,38 +526,17 @@ def run_regression_analysis(
     Returns:
         Dictionary with regression results per result variable.
     """
-    from analysis.correlation import get_all_feature_variables
+    from analysis.correlation import load_region_stats
 
     if result_vars is None:
         result_vars = REGRESSION_RESULT_VARIABLES
 
-    df = pd.read_csv(csv_path)
-    # Filter to completed cities
-    df = df[df["total_ebike_lifecycle"].notna()].copy()
+    df = load_region_stats(csv_path)
     print(f"Loaded {len(df)} completed regions")
 
     # Auto-detect available features if not specified
     if feature_vars is None:
-        # Start with existing correlation features
-        feature_vars = get_all_feature_variables()
-        # Add new enrichment features if present
-        enrichment_features = [
-            "store_count",
-            "total_monthly_sales",
-            "store_density",
-            "sales_intensity",
-            "grid_emission_factor",
-            "latitude",
-            "longitude",
-            "population_10k",
-            "gdp_100m",
-            "gdp_per_capita",
-            "pop_density",
-            "sales_per_capita",
-        ]
-        for f in enrichment_features:
-            if f in df.columns and f not in feature_vars:
-                feature_vars.append(f)
+        feature_vars = REGRESSION_CANDIDATE_FEATURES.copy()
 
     feature_vars = filter_regression_features(feature_vars)
 

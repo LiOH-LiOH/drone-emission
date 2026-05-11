@@ -58,6 +58,75 @@ def add_experiment_info_box(
     )
 
 
+def plot_emission_reduction_vs_drone_ratio(
+    od_df: pd.DataFrame,
+    save_path: str = None,
+    figsize: tuple = (8, 5),
+    for_latex: bool = False,
+    plot_title: bool = False,
+    n_thresholds: int = 10,
+):
+    """Emission reduction (%) vs drone delivery ratio (%).
+
+    Sweeps road-distance thresholds: orders with road_distance >= threshold
+    are served by drone, others by e-bike. Plots resulting lifecycle reduction
+    against drone share. No bundling.
+
+    Args:
+        od_df: OD pairs DataFrame with road_distance_m, drone_lifecycle_g,
+               ebike_lifecycle_g columns.
+        save_path: Path to save figure (with extension). Shows plot if None.
+        figsize: Figure size tuple.
+        for_latex: If True, save as PDF.
+        plot_title: If True, show title.
+        n_thresholds: Number of interior thresholds between 5th and 95th
+                      percentile of road distance.
+    """
+    road_km = od_df["road_distance_m"].values / 1000.0
+    drone_lc = od_df["drone_lifecycle_g"].values
+    ebike_lc = od_df["ebike_lifecycle_g"].values
+    total_orders = len(od_df)
+    ebike_total = ebike_lc.sum()
+
+    middle = np.linspace(
+        max(0.3, np.percentile(road_km, 5)),
+        np.percentile(road_km, 95),
+        n_thresholds,
+    )
+    thresholds = np.concatenate([[-0.01], middle, [np.inf]])
+
+    drone_ratios = []
+    reductions = []
+    for t in thresholds:
+        use_drone = road_km >= t
+        mixed = np.where(use_drone, drone_lc, ebike_lc).sum()
+        drone_ratios.append(use_drone.sum() / total_orders * 100)
+        reductions.append((ebike_total - mixed) / ebike_total * 100)
+
+    fig, ax = plt.subplots(figsize=figsize)
+    ax.plot(drone_ratios, reductions, "b-s", linewidth=2, markersize=8)
+    ax.axhline(y=0, color="gray", linestyle="--", alpha=0.5)
+    ax.set_xlabel("Drone Delivery Ratio (%)", fontsize=12)
+    ax.set_ylabel("Emission Reduction (%)", fontsize=12)
+    ax.grid(True, alpha=0.3)
+    if plot_title:
+        ax.set_title("Emission Reduction vs Drone Ratio", fontsize=14)
+
+    plt.tight_layout()
+
+    if save_path:
+        if for_latex and not save_path.endswith(".pdf"):
+            save_path = save_path.rsplit(".", 1)[0] + ".pdf"
+        if plot_title:
+            save_path = _add_title_suffix(save_path)
+        os.makedirs(os.path.dirname(save_path), exist_ok=True)
+        plt.savefig(save_path, dpi=300, bbox_inches="tight")
+        print(f"Emission reduction vs drone ratio saved to {save_path}")
+    else:
+        plt.show()
+    plt.close(fig)
+
+
 def plot_emission_reduction_analysis(
     results_df: pd.DataFrame,
     bundle_results: dict = None,
