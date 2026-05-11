@@ -961,6 +961,8 @@ def plot_distance_route_factor_heatmap(
     experiment_settings: Dict[str, str] = None,
     for_latex: bool = False,
     plot_title: bool = False,
+    ylabel: str = "Route Factor (road/straight-line)",
+    xlabel: str = "Delivery Distance (km)",
 ) -> str:
     """
     绘制配送距离 × 路径系数的二维热力图
@@ -982,12 +984,15 @@ def plot_distance_route_factor_heatmap(
     fig, ax = plt.subplots(figsize=(10, 6))
 
     # 创建热力图
+    abs_max = max(abs(emission_diff_matrix.min()), abs(emission_diff_matrix.max()))
     im = ax.imshow(
         emission_diff_matrix,
         cmap="RdYlGn_r",  # 红色=无人机排放高，绿色=无人机排放低
         aspect="auto",
         origin="lower",
         extent=[distances[0], distances[-1], route_factors[0], route_factors[-1]],
+        vmin=-abs_max,
+        vmax=abs_max,
     )
 
     # 添加颜色条
@@ -1016,8 +1021,8 @@ def plot_distance_route_factor_heatmap(
     )
     ax.clabel(contour, inline=True, fontsize=9, fmt=lambda x: f"{x:+.0f}%")
 
-    ax.set_xlabel("Delivery Distance (km)", fontsize=12)
-    ax.set_ylabel("Route Factor (road/straight-line)", fontsize=12)
+    ax.set_xlabel(xlabel, fontsize=12)
+    ax.set_ylabel(ylabel, fontsize=12)
     if plot_title:
         ax.set_title(
             "Emission Comparison: Drone vs E-bike\n(Negative = Drone Better)",
@@ -1637,3 +1642,122 @@ def plot_distance_vs_emission(
 
     plt.tight_layout()
     return _save_or_show(fig, save_path, dpi, for_latex, plot_title)
+
+
+def plot_lifecycle_distance_route_factor(
+    od_df=None,
+    save_path: str = None,
+    figsize: tuple = (10, 6),
+    for_latex: bool = False,
+    plot_title: bool = False,
+):
+    """Heatmap of lifecycle emission difference (drone vs e-bike) over air distance and detour ratio.
+
+    Optionally overlays weighted KDE contour lines from an OD DataFrame to show
+    where actual orders fall in this emission landscape.
+
+    Args:
+        od_df: OD pairs DataFrame with columns distance_km, road_distance_m, annual_sales.
+               When provided, draws iso-density contours (50%/75%/90% of orders).
+        save_path: Path to save figure (with extension). Shows plot if None.
+        figsize: Figure size tuple.
+        for_latex: If True, save as PDF.
+        plot_title: If True, show title.
+    """
+    import numpy as np
+    from emission.cal_single_delivery import LifeCycleEmissions
+
+    lca = LifeCycleEmissions()
+
+    distances = np.linspace(0.5, 4, 30)
+    detour_ratios = np.linspace(1.0, 2.0, 20)
+
+    emission_diff_matrix = np.zeros((len(detour_ratios), len(distances)))
+    for i, r in enumerate(detour_ratios):
+        for j, d in enumerate(distances):
+            ebike_result = lca.calculate_lifecycle_emissions_per_order_simple(
+                d * r, n_orders_per_delivery=1, vehicle_type="ebike"
+            )
+            drone_result = lca.calculate_lifecycle_emissions_per_order_simple(
+                d, n_orders_per_delivery=1, vehicle_type="drone"
+            )
+            diff = (drone_result["total_per_order_g"] / ebike_result["total_per_order_g"] - 1) * 100
+            emission_diff_matrix[i, j] = diff
+
+    # --- Build figure and draw background heatmap ---
+    fig, ax = plt.subplots(figsize=figsize)
+
+    abs_max = max(abs(emission_diff_matrix.min()), abs(emission_diff_matrix.max()))
+    im = ax.imshow(
+        emission_diff_matrix,
+        cmap="RdYlGn_r",
+        aspect="auto",
+        origin="lower",
+        extent=[distances[0], distances[-1], detour_ratios[0], detour_ratios[-1]],
+        vmin=-abs_max,
+        vmax=abs_max,
+    )
+
+    cbar = plt.colorbar(im, ax=ax)
+    cbar.set_label("Drone emissions relative to e-bike (%)", fontsize=12)
+
+    X, Y = np.meshgrid(distances, detour_ratios)
+    data_min = np.floor(emission_diff_matrix.min() / 20) * 20
+    data_max = np.ceil(emission_diff_matrix.max() / 20) * 20
+    contour_levels = np.arange(data_min, data_max + 1, 20)
+    linewidths = [3 if lvl == 0 else 2 for lvl in contour_levels]
+    linestyles = ["-" if lvl == 0 else "--" for lvl in contour_levels]
+    contour = ax.contour(X, Y, emission_diff_matrix, levels=contour_levels,
+                         colors="black", linewidths=linewidths, linestyles=linestyles)
+    ax.clabel(contour, inline=True, fontsize=9, fmt=lambda x: f"{x:+.0f}%")
+
+    ax.set_xlabel("Air distance (km)", fontsize=12)
+    ax.set_ylabel("Detour ratio", fontsize=12)
+    if plot_title:
+        ax.set_title("Emission comparison: drone vs e-bike", fontsize=14)
+
+    # --- Overlay order distribution from OD data ---
+    if od_df is not None:
+        from scipy.stats import gaussian_kde
+
+        valid = od_df.dropna(subset=["distance_km", "road_distance_m", "annual_sales"])
+        valid = valid[(valid["distance_km"] >= distances[0]) & (valid["distance_km"] <= distances[-1])].copy()
+        valid["detour"] = valid["road_distance_m"] / (valid["distance_km"] * 1000)
+        valid = valid[(valid["detour"] >= detour_ratios[0]) & (valid["detour"] <= detour_ratios[-1])]
+
+        if len(valid) > 10:
+            weights = valid["annual_sales"].values.astype(float)
+            xy = np.vstack([valid["distance_km"].values, valid["detour"].values])
+            kde = gaussian_kde(xy, weights=weights)
+
+            xi = np.linspace(distances[0], distances[-1], 150)
+            yi = np.linspace(detour_ratios[0], detour_ratios[-1], 150)
+            Xi, Yi = np.meshgrid(xi, yi)
+            Zi = kde(np.vstack([Xi.ravel(), Yi.ravel()])).reshape(Xi.shape)
+
+            # Convert density grid to cumulative probability levels
+            z_sorted = np.sort(Zi.ravel())[::-1]
+            z_cumsum = np.cumsum(z_sorted) / z_sorted.sum()
+            kde_levels = sorted([
+                z_sorted[np.searchsorted(z_cumsum, p)] for p in [0.50, 0.75, 0.90]
+            ])
+
+            cs = ax.contour(Xi, Yi, Zi, levels=kde_levels, colors="white",
+                            linewidths=[0.8, 1.2, 1.5], linestyles=["dotted", "dashed", "solid"],
+                            alpha=0.9)
+            fmt = {l: lab for l, lab in zip(kde_levels, ["90%", "75%", "50%"])}
+            ax.clabel(cs, fmt=fmt, fontsize=8, inline=True)
+
+    plt.tight_layout()
+
+    if save_path:
+        os.makedirs(os.path.dirname(save_path), exist_ok=True)
+        if for_latex and not save_path.endswith(".pdf"):
+            save_path = save_path.rsplit(".", 1)[0] + ".pdf"
+        if plot_title:
+            save_path = _add_title_suffix(save_path)
+        plt.savefig(save_path, dpi=300, bbox_inches="tight")
+        plt.close(fig)
+        print(f"Lifecycle distance route factor heatmap saved to {save_path}")
+    else:
+        plt.show()

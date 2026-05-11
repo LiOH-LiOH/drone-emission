@@ -8,7 +8,7 @@ Run:
     ../../.venv/bin/python -m visualization.paper --only shanghai_heatmap,distance_comparison
 
 Available figures:
-    detour_ratio_concept, emission_model_flowchart,
+    detour_ratio_concept, emission_model_flowchart, lifecycle_distance_route_factor,
     shanghai_heatmap, shanghai_road_air_distance, shanghai_road_detour,
     shanghai_air_detour, shanghai_air_road_joint, distance_comparison,
     province_orders_emission, province_orders_both_emissions,
@@ -161,6 +161,22 @@ def _render_distance_comparison(data_dir, out, for_latex, plot_title, plot_fn):
     )
 
 
+def _render_lifecycle_distance_route_factor(data_dir, out, for_latex, plot_title):
+    """Compute lifecycle emission heatmap and optionally overlay Shanghai order distribution."""
+    od_path = os.path.join(data_dir, "city", "shanghai", "shanghai_od_pairs.csv")
+    od_df = pd.read_csv(od_path) if os.path.exists(od_path) else None
+    if od_df is None:
+        print("lifecycle_distance_route_factor: Shanghai OD missing, rendering without overlay")
+
+    from visualization.emission import plot_lifecycle_distance_route_factor
+    plot_lifecycle_distance_route_factor(
+        od_df=od_df,
+        save_path=os.path.join(out, "lifecycle_distance_route_factor.png"),
+        for_latex=for_latex,
+        plot_title=plot_title,
+    )
+
+
 def render_all(data_dir: str, figures_dir: str, for_latex: bool = False, plot_title: bool = False, only: set = None):
     from visualization.analysis import plot_province_orders_emission, plot_province_orders_both_emissions
     from visualization.concepts import plot_detour_ratio_concept, plot_emission_model_flowchart
@@ -184,6 +200,14 @@ def render_all(data_dir: str, figures_dir: str, for_latex: bool = False, plot_ti
     if _want("emission_model_flowchart"):
         plot_emission_model_flowchart(
             save_path=os.path.join(out, "emission_model_flowchart.png"),
+            for_latex=for_latex,
+            plot_title=plot_title,
+        )
+
+    if _want("lifecycle_distance_route_factor"):
+        _render_lifecycle_distance_route_factor(
+            data_dir=data_dir,
+            out=out,
             for_latex=for_latex,
             plot_title=plot_title,
         )
