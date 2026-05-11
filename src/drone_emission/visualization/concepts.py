@@ -778,6 +778,7 @@ def plot_detour_lifecycle_distance(
     required = {"road_distance_m", "drone_lifecycle_g", "ebike_lifecycle_g"}
     if od_df is not None and required.issubset(od_df.columns):
         _draw_emission_reduction_vs_drone_ratio(ax_d, od_df, plot_title=plot_title)
+        ax_d.set_box_aspect(2 / 3)
     else:
         ax_d.set_facecolor("#e8e8e8")
         ax_d.text(0.5, 0.5, "lifecycle data\nnot available", transform=ax_d.transAxes,
@@ -786,9 +787,9 @@ def plot_detour_lifecycle_distance(
 
     ax_a.text(0.0, 1.02, "a", transform=ax_a.transAxes,
               fontsize=14, fontweight="bold", va="bottom", ha="left")
-    ax_b.text(0.0, 1.02, "b", transform=ax_b.transAxes,
+    ax_c.text(0.0, 1.02, "b", transform=ax_c.transAxes,
               fontsize=14, fontweight="bold", va="bottom", ha="left")
-    ax_c.text(0.0, 1.02, "c", transform=ax_c.transAxes,
+    ax_b.text(0.0, 1.02, "c", transform=ax_b.transAxes,
               fontsize=14, fontweight="bold", va="bottom", ha="left")
     ax_d.text(0.0, 1.02, "d", transform=ax_d.transAxes,
               fontsize=14, fontweight="bold", va="bottom", ha="left")
