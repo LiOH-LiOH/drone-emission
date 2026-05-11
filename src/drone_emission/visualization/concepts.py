@@ -78,29 +78,34 @@ def _add_polyline(
     z: float = 0.0,
     linestyle: str = "-",
     capstyle: str = "round",
+    clip_patch=None,
 ) -> None:
     xy = _projected(points, z=z)
-    ax.plot(xy[:, 0], xy[:, 1], color=color, linewidth=linewidth, alpha=alpha,
-            linestyle=linestyle, solid_capstyle=capstyle, zorder=zorder)
+    line, = ax.plot(xy[:, 0], xy[:, 1], color=color, linewidth=linewidth, alpha=alpha,
+                    linestyle=linestyle, solid_capstyle=capstyle, zorder=zorder)
+    if clip_patch is not None:
+        line.set_clip_path(clip_patch)
 
 
-def _add_ground(ax: plt.Axes) -> None:
+def _add_ground(ax: plt.Axes) -> "Polygon":
     plane = _projected([(0, 0), (9.7, 0), (9.7, 6.3), (0, 6.3)])
-    ax.add_patch(Polygon(plane, closed=True, facecolor=_COLORS["ground"],
-                         edgecolor=_COLORS["ground_edge"], linewidth=1.2, zorder=1))
+    patch = Polygon(plane, closed=True, facecolor=_COLORS["ground"],
+                    edgecolor=_COLORS["ground_edge"], linewidth=1.2, zorder=1)
+    ax.add_patch(patch)
     for x in np.arange(1.0, 9.6, 1.0):
         _add_polyline(ax, [(x, 0.2), (x, 6.1)], color=_COLORS["grid"], linewidth=0.7, zorder=2)
     for y in np.arange(0.8, 6.3, 0.9):
         _add_polyline(ax, [(0.2, y), (9.5, y)], color=_COLORS["grid"], linewidth=0.7, zorder=2)
+    return patch
 
 
-def _add_road_network(ax: plt.Axes) -> None:
+def _add_road_network(ax: plt.Axes, clip_patch=None) -> None:
     for x in _GRID_X:
-        _add_polyline(ax, [(x, 0.0), (x, 6.3)], color=_COLORS["road"], linewidth=8.5, zorder=5)
-        _add_polyline(ax, [(x, 0.0), (x, 6.3)], color=_COLORS["road_dark"], linewidth=1.0, zorder=6, alpha=0.32)
+        _add_polyline(ax, [(x, 0.0), (x, 6.3)], color=_COLORS["road"], linewidth=12.0, zorder=5, clip_patch=clip_patch)
+        _add_polyline(ax, [(x, 0.0), (x, 6.3)], color=_COLORS["road_dark"], linewidth=1.0, zorder=6, alpha=0.32, clip_patch=clip_patch)
     for y in _GRID_Y:
-        _add_polyline(ax, [(0.0, y), (9.8, y)], color=_COLORS["road"], linewidth=8.5, zorder=5)
-        _add_polyline(ax, [(0.0, y), (9.8, y)], color=_COLORS["road_dark"], linewidth=1.0, zorder=6, alpha=0.32)
+        _add_polyline(ax, [(0.0, y), (9.7, y)], color=_COLORS["road"], linewidth=12.0, zorder=5, clip_patch=clip_patch)
+        _add_polyline(ax, [(0.0, y), (9.7, y)], color=_COLORS["road_dark"], linewidth=1.0, zorder=6, alpha=0.32, clip_patch=clip_patch)
 
 
 def _add_building(ax: plt.Axes, x: float, y: float, w: float, d: float, h: float) -> None:
@@ -135,7 +140,7 @@ def _add_buildings(ax: plt.Axes) -> None:
         [0.75, 0.50, 0.65, 0.55],
         [0.45, 0.65, 0.75, 0.50],
     ]
-    bw, bd, margin = 0.65, 0.50, 0.28
+    bw, bd, margin = 0.65, 0.50, 0.38
     for (x0, y0, x1, y1), heights in zip(blocks, block_heights):
         col_gap = x1 - x0 - 2 * margin - 2 * bw
         row_gap = y1 - y0 - 2 * margin - 2 * bd
@@ -223,8 +228,8 @@ def _draw_detour_ratio_concept(ax: "plt.Axes", plot_title: bool = False) -> None
     """Draw detour ratio concept scene onto *ax*."""
     ax.set_facecolor(_COLORS["background"])
 
-    _add_ground(ax)
-    _add_road_network(ax)
+    ground_patch = _add_ground(ax)
+    _add_road_network(ax, clip_patch=ground_patch)
     _add_buildings(ax)
 
     origin      = (_GRID_X[0], _GRID_Y[0])
