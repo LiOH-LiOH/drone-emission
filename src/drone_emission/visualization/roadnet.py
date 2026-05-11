@@ -126,49 +126,19 @@ def visualize_path(
     plt.close(fig)
 
 
-def plot_distance_comparison(
-    od_df,
-    graph,
-    router,
-    save_path: Optional[str] = None,
-    figsize: Optional[tuple] = None,
-    for_latex: bool = False,
-    plot_title: bool = False,
-    n_samples: int = 4,
-) -> None:
-    """Visualize sampled delivery paths comparing straight-line vs road network distance.
-
-    Samples OD pairs at detour-ratio quantiles (20/40/60/80th percentile) and plots
-    each as a square panel showing the road path and straight-line.
-    Uses SparseGraph local edges for background roads — no full NetworkX load needed.
-
-    Args:
-        od_df: OD DataFrame with columns from_lat, from_lng, to_lat, to_lng,
-               distance_km, road_distance_m, annual_sales.
-        graph: SparseGraph built from the region's graphml file.
-        router: TileRouter wrapping the SparseGraph.
-        save_path: Path to save figure (with .png extension). Shows plot if None.
-        figsize: Total figure size tuple. Defaults to (4*n_cols, 4*n_rows).
-        for_latex: If True, save as PDF.
-        plot_title: If True, show title.
-        n_samples: Maximum number of sample panels to show.
-    """
-    from matplotlib.collections import LineCollection
-
-    from ._utils import configure_contextily_cache
-
+def _compute_distance_samples(od_df, router, n_samples=2):
+    """Sample OD pairs at detour-ratio quantiles and compute shortest paths."""
     valid_df = od_df[
         (od_df["road_distance_m"] >= 0) & (od_df["road_distance_m"] > 100)
     ].copy()
-
     if len(valid_df) == 0:
-        print("No valid samples for distance comparison visualization")
-        return
+        return []
 
     valid_df["detour_ratio"] = valid_df["road_distance_m"] / (valid_df["distance_km"] * 1000)
 
+    quantiles = np.linspace(0.25, 0.75, n_samples)
     samples = []
-    for q in [0.2, 0.4, 0.6, 0.8]:
+    for q in quantiles:
         qval = valid_df["detour_ratio"].quantile(q)
         closest_idx = (valid_df["detour_ratio"] - qval).abs().nsmallest(1).index
         samples.extend(closest_idx.tolist())
@@ -188,112 +158,140 @@ def plot_distance_comparison(
             "road_distance": row["road_distance_m"],
             "path_result": path_result,
         })
+    return sample_paths
 
-    n_cols = min(2, len(sample_paths))
-    n_rows = (len(sample_paths) + n_cols - 1) // n_cols
-    fig, axes = plt.subplots(n_rows, n_cols, figsize=figsize or (4 * n_cols, 4 * n_rows))
-    if len(sample_paths) == 1:
+
+def _draw_distance_panel(ax, sample, graph, show_legend=False, padding=0.003):
+    """Draw one distance comparison sample onto *ax*."""
+    from matplotlib.collections import LineCollection
+    from ._utils import configure_contextily_cache
+
+    path_result = sample["path_result"]
+    origin = sample["origin"]
+    destination = sample["destination"]
+    straight_dist = sample["straight_distance"]
+    road_dist = sample["road_distance"]
+    detour = road_dist / straight_dist if straight_dist > 0 else 0
+
+    local_bounds = {
+        "min_lat": min(origin[0], destination[0]) - padding,
+        "max_lat": max(origin[0], destination[0]) + padding,
+        "min_lng": min(origin[1], destination[1]) - padding,
+        "max_lng": max(origin[1], destination[1]) + padding,
+    }
+
+    edge_coords = graph.get_local_edges(local_bounds)
+    if len(edge_coords) > 0:
+        segments = [[(ec[1], ec[0]), (ec[3], ec[2])] for ec in edge_coords]
+        lc = LineCollection(segments, colors="#ddd", linewidths=0.3, zorder=1)
+        ax.add_collection(lc)
+
+    if path_result["success"] and len(path_result["path_coordinates"]) > 1:
+        path_lngs = [c[1] for c in path_result["path_coordinates"]]
+        path_lats = [c[0] for c in path_result["path_coordinates"]]
+        ax.plot(path_lngs, path_lats, color="#d95f35", linewidth=2.5, alpha=0.9, zorder=10,
+                label="E-bike (road)")
+
+    ax.plot(
+        [origin[1], destination[1]], [origin[0], destination[0]],
+        color="#1f77b4", linewidth=2, linestyle="--", alpha=0.9, zorder=20,
+        label="Drone (straight)",
+    )
+    ax.scatter(origin[1], origin[0], c="#2f6f4e", s=90, marker="o",
+               zorder=25, edgecolors="white", linewidth=1.5, label="Merchant")
+    ax.scatter(destination[1], destination[0], c="#3f4b64", s=90, marker="s",
+               zorder=25, edgecolors="white", linewidth=1.5, label="Customer")
+
+    # Expand the tighter axis so the panel is square in display space,
+    # accounting for longitude foreshortening at this latitude.
+    lat_center = (local_bounds["min_lat"] + local_bounds["max_lat"]) / 2
+    cos_lat = np.cos(np.radians(lat_center))
+    lat_span = local_bounds["max_lat"] - local_bounds["min_lat"]
+    lon_span = local_bounds["max_lng"] - local_bounds["min_lng"]
+    lat_disp = lat_span
+    lon_disp = lon_span * cos_lat
+    if lon_disp < lat_disp:
+        extra = (lat_disp - lon_disp) / cos_lat / 2
+        local_bounds["min_lng"] -= extra
+        local_bounds["max_lng"] += extra
+    else:
+        extra = (lon_disp - lat_disp) / 2
+        local_bounds["min_lat"] -= extra
+        local_bounds["max_lat"] += extra
+
+    ax.set_xlim(local_bounds["min_lng"], local_bounds["max_lng"])
+    ax.set_ylim(local_bounds["min_lat"], local_bounds["max_lat"])
+
+    try:
+        configure_contextily_cache()
+        ctx.add_basemap(ax, crs="EPSG:4326",
+                        source=ctx.providers.OpenStreetMap.Mapnik,
+                        zoom=16, alpha=0.5, zorder=0)
+    except Exception as e:
+        print(f"Could not add basemap: {e}")
+
+    ax.set_xlim(local_bounds["min_lng"], local_bounds["max_lng"])
+    ax.set_ylim(local_bounds["min_lat"], local_bounds["max_lat"])
+    ax.set_xlabel("")
+    ax.set_ylabel("")
+    ax.tick_params(left=False, bottom=False, labelleft=False, labelbottom=False)
+
+    ax.text(
+        0.97, 0.03,
+        f"Straight: {straight_dist:.0f} m\nRoad: {road_dist:.0f} m\nDetour: {detour:.2f}",
+        transform=ax.transAxes, fontsize=9, va="bottom", ha="right", zorder=80,
+        bbox=dict(boxstyle="round,pad=0.4", facecolor="white", edgecolor="#d3d8d5", alpha=0.92),
+    )
+    if show_legend:
+        ax.legend(loc="upper right", fontsize=9, framealpha=0.9)
+
+
+def plot_distance_comparison(
+    od_df,
+    graph,
+    router,
+    save_path: Optional[str] = None,
+    figsize: Optional[tuple] = None,
+    for_latex: bool = False,
+    plot_title: bool = False,
+    n_samples: int = 2,
+) -> None:
+    """Visualize sampled delivery paths comparing straight-line vs road network distance.
+
+    Samples OD pairs at detour-ratio quantiles and plots each as a square panel
+    showing the road path and straight-line distance.
+
+    Args:
+        od_df: OD DataFrame with columns from_lat, from_lng, to_lat, to_lng,
+               distance_km, road_distance_m, annual_sales.
+        graph: SparseGraph built from the region's graphml file.
+        router: TileRouter wrapping the SparseGraph.
+        save_path: Path to save figure (with .png extension). Shows plot if None.
+        figsize: Total figure size tuple. Defaults to (4, 4*n_samples).
+        for_latex: If True, save as PDF.
+        plot_title: If True, show title.
+        n_samples: Number of sample panels to show.
+    """
+    sample_paths = _compute_distance_samples(od_df, router, n_samples)
+    if not sample_paths:
+        print("No valid samples for distance comparison visualization")
+        return
+
+    n_rows = len(sample_paths)
+    fig, axes = plt.subplots(n_rows, 1, figsize=figsize or (4, 4 * n_rows))
+    if n_rows == 1:
         axes = np.array([axes])
     axes = axes.flatten()
 
-    padding = 0.003
-    for idx, sample in enumerate(sample_paths):
-        ax = axes[idx]
-        path_result = sample["path_result"]
-        origin = sample["origin"]
-        destination = sample["destination"]
-        straight_dist = sample["straight_distance"]
-        road_dist = sample["road_distance"]
-        detour = road_dist / straight_dist if straight_dist > 0 else 0
-
-        local_bounds = {
-            "min_lat": min(origin[0], destination[0]) - padding,
-            "max_lat": max(origin[0], destination[0]) + padding,
-            "min_lng": min(origin[1], destination[1]) - padding,
-            "max_lng": max(origin[1], destination[1]) + padding,
-        }
-
-        edge_coords = graph.get_local_edges(local_bounds)
-        if len(edge_coords) > 0:
-            segments = [[(ec[1], ec[0]), (ec[3], ec[2])] for ec in edge_coords]
-            lc = LineCollection(segments, colors="#ddd", linewidths=0.3, zorder=1)
-            ax.add_collection(lc)
-
-        if path_result["success"] and len(path_result["path_coordinates"]) > 1:
-            path_lngs = [c[1] for c in path_result["path_coordinates"]]
-            path_lats = [c[0] for c in path_result["path_coordinates"]]
-            ax.plot(path_lngs, path_lats, color="#d95f35", linewidth=2.5, alpha=0.9, zorder=10,
-                    label="E-bike (road)")
-
-        ax.plot(
-            [origin[1], destination[1]], [origin[0], destination[0]],
-            color="#1f77b4", linewidth=2, linestyle="--", alpha=0.9, zorder=20,
-            label="Drone (straight)",
-        )
-        ax.scatter(
-            origin[1], origin[0], c="#2f6f4e", s=90, marker="o",
-            zorder=25, edgecolors="white", linewidth=1.5, label="Merchant",
-        )
-        ax.scatter(
-            destination[1], destination[0], c="#3f4b64", s=90, marker="s",
-            zorder=25, edgecolors="white", linewidth=1.5, label="Customer",
-        )
-
-        # Expand the tighter axis so the panel is square in display space,
-        # accounting for longitude foreshortening at this latitude.
-        lat_center = (local_bounds["min_lat"] + local_bounds["max_lat"]) / 2
-        cos_lat = np.cos(np.radians(lat_center))
-        lat_span = local_bounds["max_lat"] - local_bounds["min_lat"]
-        lon_span = local_bounds["max_lng"] - local_bounds["min_lng"]
-        lat_disp = lat_span
-        lon_disp = lon_span * cos_lat
-        if lon_disp < lat_disp:
-            extra = (lat_disp - lon_disp) / cos_lat / 2
-            local_bounds["min_lng"] -= extra
-            local_bounds["max_lng"] += extra
-        else:
-            extra = (lon_disp - lat_disp) / 2
-            local_bounds["min_lat"] -= extra
-            local_bounds["max_lat"] += extra
-
-        ax.set_xlim(local_bounds["min_lng"], local_bounds["max_lng"])
-        ax.set_ylim(local_bounds["min_lat"], local_bounds["max_lat"])
-
-        try:
-            configure_contextily_cache()
-            ctx.add_basemap(
-                ax, crs="EPSG:4326",
-                source=ctx.providers.OpenStreetMap.Mapnik,
-                zoom=16, alpha=0.5, zorder=0,
-            )
-        except Exception as e:
-            print(f"Could not add basemap for sample {idx}: {e}")
-
-        # Re-apply limits after basemap (contextily may expand them)
-        ax.set_xlim(local_bounds["min_lng"], local_bounds["max_lng"])
-        ax.set_ylim(local_bounds["min_lat"], local_bounds["max_lat"])
-
-        ax.set_xlabel("")
-        ax.set_ylabel("")
-        ax.tick_params(left=False, bottom=False, labelleft=False, labelbottom=False)
-
-        ax.text(
-            0.97, 0.03,
-            f"Straight: {straight_dist:.0f} m\nRoad: {road_dist:.0f} m\nDetour: {detour:.2f}",
-            transform=ax.transAxes, fontsize=9, va="bottom", ha="right", zorder=80,
-            bbox=dict(boxstyle="round,pad=0.4", facecolor="white", edgecolor="#d3d8d5", alpha=0.92),
-        )
-        if idx == 1:
-            ax.legend(loc="upper right", fontsize=9, framealpha=0.9)
+    for idx, (ax, sample) in enumerate(zip(axes, sample_paths)):
+        _draw_distance_panel(ax, sample, graph, show_legend=(idx == 0))
 
     for idx in range(len(sample_paths), len(axes)):
         axes[idx].set_visible(False)
 
     if plot_title:
-        plt.suptitle(
-            "Straight-line vs Road Network Distance Comparison",
-            fontsize=14, fontweight="bold", y=1.02,
-        )
+        plt.suptitle("Straight-line vs Road Network Distance Comparison",
+                     fontsize=14, fontweight="bold", y=1.02)
 
     plt.tight_layout()
 

@@ -706,3 +706,82 @@ def plot_detour_and_lifecycle(
     else:
         plt.show()
     plt.close(fig)
+
+
+# ---------------------------------------------------------------------------
+# Combined three-panel: concept (a) + lifecycle heatmap (b) + distance maps (c)
+# ---------------------------------------------------------------------------
+
+def plot_detour_lifecycle_distance(
+    od_df=None,
+    graph=None,
+    router=None,
+    save_path: str = None,
+    figsize: tuple = (15.0, 10.5),
+    for_latex: bool = False,
+    plot_title: bool = False,
+):
+    """Three-panel figure: detour concept (a, top-left), lifecycle heatmap (b, bottom-left),
+    distance comparison maps (c, right spanning both rows).
+
+    Panel c renders as two placeholder grey boxes when graph/router are unavailable
+    (e.g. local debugging without Shanghai road data).
+
+    Args:
+        od_df: Shanghai OD DataFrame. Used for heatmap overlay and distance map sampling.
+        graph: SparseGraph for distance comparison road network.
+        router: TileRouter for distance comparison shortest paths.
+        save_path: Path to save figure. Shows plot if None.
+        figsize: Figure size tuple.
+        for_latex: If True, save as PDF.
+        plot_title: If True, show titles.
+    """
+    from visualization.emission import _draw_lifecycle_distance_route_factor
+
+    fig = plt.figure(figsize=figsize, constrained_layout=True)
+    fig.set_constrained_layout_pads(hspace=0.02, h_pad=0.02, wspace=0.04, w_pad=0.04)
+    fig.patch.set_facecolor(_COLORS["background"])
+
+    gs = fig.add_gridspec(2, 3, width_ratios=[1, 0.03, 0.55])
+    ax_a   = fig.add_subplot(gs[0, 0:2])   # concept: spans data + colorbar columns
+    ax_b   = fig.add_subplot(gs[1, 0])      # lifecycle heatmap
+    ax_cbar = fig.add_subplot(gs[1, 1])     # colorbar
+    ax_c1  = fig.add_subplot(gs[0, 2])      # distance map 1
+    ax_c2  = fig.add_subplot(gs[1, 2])      # distance map 2
+
+    _draw_detour_ratio_concept(ax_a, plot_title=plot_title)
+    _draw_lifecycle_distance_route_factor(ax_b, fig, od_df=od_df, plot_title=plot_title, cax=ax_cbar)
+    ax_b.set_box_aspect(0.5)
+
+    if graph is not None and router is not None and od_df is not None:
+        from visualization.roadnet import _compute_distance_samples, _draw_distance_panel
+        sample_paths = _compute_distance_samples(od_df, router, n_samples=2)
+        for idx, (ax, sample) in enumerate(zip([ax_c1, ax_c2], sample_paths)):
+            _draw_distance_panel(ax, sample, graph, show_legend=(idx == 0))
+            if for_latex:
+                ax.set_rasterization_zorder(12)
+    else:
+        for ax in [ax_c1, ax_c2]:
+            ax.set_facecolor("#e8e8e8")
+            ax.text(0.5, 0.5, "road data\nnot available", transform=ax.transAxes,
+                    ha="center", va="center", fontsize=10, color="#888888")
+            ax.tick_params(left=False, bottom=False, labelleft=False, labelbottom=False)
+
+    ax_a.text(0.0, 1.02, "a", transform=ax_a.transAxes,
+              fontsize=14, fontweight="bold", va="bottom", ha="left")
+    ax_b.text(0.0, 1.02, "b", transform=ax_b.transAxes,
+              fontsize=14, fontweight="bold", va="bottom", ha="left")
+    ax_c1.text(0.0, 1.02, "c", transform=ax_c1.transAxes,
+               fontsize=14, fontweight="bold", va="bottom", ha="left")
+
+    if save_path:
+        if for_latex and not save_path.endswith(".pdf"):
+            save_path = save_path.rsplit(".", 1)[0] + ".pdf"
+        if plot_title:
+            save_path = _add_title_suffix(save_path)
+        os.makedirs(os.path.dirname(save_path), exist_ok=True)
+        plt.savefig(save_path, dpi=300, bbox_inches="tight", facecolor=fig.get_facecolor())
+        print(f"Detour, lifecycle, and distance figure saved to {save_path}")
+    else:
+        plt.show()
+    plt.close(fig)

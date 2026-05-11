@@ -8,9 +8,10 @@ Run:
     ../../.venv/bin/python -m visualization.paper --only shanghai_heatmap,distance_comparison
 
 Available figures:
-    detour_and_lifecycle, emission_model_flowchart,
+    detour_lifecycle_distance, emission_model_flowchart,
+    detour_and_lifecycle, distance_comparison,
     shanghai_heatmap, shanghai_road_air_distance, shanghai_road_detour,
-    shanghai_air_detour, shanghai_air_road_joint, distance_comparison,
+    shanghai_air_detour, shanghai_air_road_joint,
     province_orders_emission, province_orders_both_emissions,
     regions_map
 """
@@ -158,12 +159,15 @@ def _render_distance_comparison(data_dir, out, for_latex, plot_title, plot_fn):
         save_path=os.path.join(out, "distance_comparison.png"),
         for_latex=for_latex,
         plot_title=plot_title,
+        n_samples=2,
     )
 
 
 def render_all(data_dir: str, figures_dir: str, for_latex: bool = False, plot_title: bool = False, only: set = None):
     from visualization.analysis import plot_province_orders_emission, plot_province_orders_both_emissions
-    from visualization.concepts import plot_detour_and_lifecycle, plot_emission_model_flowchart
+    from visualization.concepts import (
+        plot_detour_and_lifecycle, plot_detour_lifecycle_distance, plot_emission_model_flowchart,
+    )
     from visualization.regions import plot_regions_on_china_map
     from visualization.roadnet import plot_distance_comparison
 
@@ -189,6 +193,27 @@ def render_all(data_dir: str, figures_dir: str, for_latex: bool = False, plot_ti
         plot_detour_and_lifecycle(
             od_df=od_df,
             save_path=os.path.join(out, "detour_and_lifecycle.png"),
+            for_latex=for_latex,
+            plot_title=plot_title,
+        )
+
+    if _want("detour_lifecycle_distance"):
+        od_path = os.path.join(data_dir, "city", "shanghai", "shanghai_od_pairs.csv")
+        graphml_path = os.path.join(data_dir, "city", "shanghai", "shanghai_roadnet.graphml")
+        od_df = pd.read_csv(od_path) if os.path.exists(od_path) else None
+        graph, router = None, None
+        if os.path.exists(graphml_path) and od_df is not None:
+            from roadnet.sparse_graph import SparseGraph
+            from roadnet.tile_router import TileRouter
+            graph = SparseGraph.from_graphml(graphml_path)
+            router = TileRouter(graph)
+        else:
+            print("detour_lifecycle_distance: Shanghai road data missing, panel c will show placeholder")
+        plot_detour_lifecycle_distance(
+            od_df=od_df,
+            graph=graph,
+            router=router,
+            save_path=os.path.join(out, "detour_lifecycle_distance.png"),
             for_latex=for_latex,
             plot_title=plot_title,
         )
