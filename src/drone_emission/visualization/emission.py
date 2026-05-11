@@ -58,6 +58,38 @@ def add_experiment_info_box(
     )
 
 
+def _draw_emission_reduction_vs_drone_ratio(ax, od_df, plot_title: bool = False, n_thresholds: int = 10):
+    """Draw the emission reduction vs drone ratio curve onto *ax*."""
+    road_km = od_df["road_distance_m"].values / 1000.0
+    drone_lc = od_df["drone_lifecycle_g"].values
+    ebike_lc = od_df["ebike_lifecycle_g"].values
+    total_orders = len(od_df)
+    ebike_total = ebike_lc.sum()
+
+    middle = np.linspace(
+        max(0.3, np.percentile(road_km, 5)),
+        np.percentile(road_km, 95),
+        n_thresholds,
+    )
+    thresholds = np.concatenate([[-0.01], middle, [np.inf]])
+
+    drone_ratios = []
+    reductions = []
+    for t in thresholds:
+        use_drone = road_km >= t
+        mixed = np.where(use_drone, drone_lc, ebike_lc).sum()
+        drone_ratios.append(use_drone.sum() / total_orders * 100)
+        reductions.append((ebike_total - mixed) / ebike_total * 100)
+
+    ax.plot(drone_ratios, reductions, "b-s", linewidth=2, markersize=6)
+    ax.axhline(y=0, color="gray", linestyle="--", alpha=0.5)
+    ax.set_xlabel("Drone Delivery Ratio (%)", fontsize=12)
+    ax.set_ylabel("Emission Reduction (%)", fontsize=12)
+    ax.grid(True, alpha=0.3)
+    if plot_title:
+        ax.set_title("Emission Reduction vs Drone Ratio", fontsize=14)
+
+
 def plot_emission_reduction_vs_drone_ratio(
     od_df: pd.DataFrame,
     save_path: str = None,
@@ -82,36 +114,8 @@ def plot_emission_reduction_vs_drone_ratio(
         n_thresholds: Number of interior thresholds between 5th and 95th
                       percentile of road distance.
     """
-    road_km = od_df["road_distance_m"].values / 1000.0
-    drone_lc = od_df["drone_lifecycle_g"].values
-    ebike_lc = od_df["ebike_lifecycle_g"].values
-    total_orders = len(od_df)
-    ebike_total = ebike_lc.sum()
-
-    middle = np.linspace(
-        max(0.3, np.percentile(road_km, 5)),
-        np.percentile(road_km, 95),
-        n_thresholds,
-    )
-    thresholds = np.concatenate([[-0.01], middle, [np.inf]])
-
-    drone_ratios = []
-    reductions = []
-    for t in thresholds:
-        use_drone = road_km >= t
-        mixed = np.where(use_drone, drone_lc, ebike_lc).sum()
-        drone_ratios.append(use_drone.sum() / total_orders * 100)
-        reductions.append((ebike_total - mixed) / ebike_total * 100)
-
     fig, ax = plt.subplots(figsize=figsize)
-    ax.plot(drone_ratios, reductions, "b-s", linewidth=2, markersize=8)
-    ax.axhline(y=0, color="gray", linestyle="--", alpha=0.5)
-    ax.set_xlabel("Drone Delivery Ratio (%)", fontsize=12)
-    ax.set_ylabel("Emission Reduction (%)", fontsize=12)
-    ax.grid(True, alpha=0.3)
-    if plot_title:
-        ax.set_title("Emission Reduction vs Drone Ratio", fontsize=14)
-
+    _draw_emission_reduction_vs_drone_ratio(ax, od_df, plot_title=plot_title, n_thresholds=n_thresholds)
     plt.tight_layout()
 
     if save_path:
