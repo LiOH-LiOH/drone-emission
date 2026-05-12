@@ -13,9 +13,13 @@ Available figures:
     shanghai_heatmap, shanghai_road_air_distance, shanghai_road_detour,
     shanghai_air_detour, shanghai_air_road_joint, shanghai_emission_reduction,
     province_orders_emission, province_orders_both_emissions,
+    province_total_ebike_lifecycle,
+    city_ebike_rank_top10, city_ebike_rank_bottom10,
+    city_reduction_rank_top10,
     regions_map,
     scatter_detour_ratio_vs_reduction_by_gef,
-    regions_map_and_gef_scatter
+    regions_map_and_gef_scatter,
+    regions_map_city_province_ranks
 """
 
 import argparse
@@ -193,7 +197,7 @@ def _render_distance_comparison(data_dir, out, for_latex, plot_title, plot_fn):
 
 
 def render_all(data_dir: str, figures_dir: str, for_latex: bool = False, plot_title: bool = False, only: set = None):
-    from visualization.analysis import plot_province_orders_emission, plot_province_orders_both_emissions, plot_grouped_scatter, plot_regions_map_and_gef_scatter
+    from visualization.analysis import plot_province_orders_emission, plot_province_orders_both_emissions, plot_province_total_ebike_lifecycle, plot_city_ebike_rank_top10, plot_city_ebike_rank_bottom10, plot_city_reduction_rank_top10, plot_grouped_scatter, plot_regions_map_and_gef_scatter, plot_regions_map_city_province_ranks
     from visualization.concepts import (
         plot_detour_and_lifecycle, plot_detour_lifecycle_distance, plot_emission_model_flowchart,
     )
@@ -306,7 +310,7 @@ def render_all(data_dir: str, figures_dir: str, for_latex: bool = False, plot_ti
         )
 
     # --- Cross-region stats figures ---
-    stats_figures = {"province_orders_emission", "province_orders_both_emissions", "regions_map", "scatter_detour_ratio_vs_reduction_by_gef", "regions_map_and_gef_scatter"}
+    stats_figures = {"province_orders_emission", "province_orders_both_emissions", "province_total_ebike_lifecycle", "city_ebike_rank_top10", "city_ebike_rank_bottom10", "city_reduction_rank_top10", "regions_map", "scatter_detour_ratio_vs_reduction_by_gef", "regions_map_and_gef_scatter", "regions_map_city_province_ranks"}
     if only is None or only & stats_figures:
         stats_path = os.path.join(data_dir, "all_region_stats.csv")
         if not os.path.exists(stats_path):
@@ -330,10 +334,51 @@ def render_all(data_dir: str, figures_dir: str, for_latex: bool = False, plot_ti
                     plot_title=plot_title,
                 )
 
+            if _want("province_total_ebike_lifecycle"):
+                plot_province_total_ebike_lifecycle(
+                    df,
+                    save_path=os.path.join(out, "province_total_ebike_lifecycle"),
+                    for_latex=for_latex,
+                    plot_title=plot_title,
+                )
+
+            if _want("city_ebike_rank_top10"):
+                plot_city_ebike_rank_top10(
+                    df,
+                    save_path=os.path.join(out, "city_ebike_rank_top10"),
+                    for_latex=for_latex,
+                    plot_title=plot_title,
+                )
+
+            if _want("city_ebike_rank_bottom10"):
+                plot_city_ebike_rank_bottom10(
+                    df,
+                    save_path=os.path.join(out, "city_ebike_rank_bottom10"),
+                    for_latex=for_latex,
+                    plot_title=plot_title,
+                )
+
+            if _want("city_reduction_rank_top10"):
+                plot_city_reduction_rank_top10(
+                    df,
+                    save_path=os.path.join(out, "city_reduction_rank_top10"),
+                    for_latex=for_latex,
+                    plot_title=plot_title,
+                )
+
             if _want("regions_map"):
                 plot_regions_on_china_map(
                     csv_path=stats_path,
                     save_path=os.path.join(out, "regions_map.png"),
+                    for_latex=for_latex,
+                    plot_title=plot_title,
+                )
+
+            if _want("regions_map_city_province_ranks"):
+                plot_regions_map_city_province_ranks(
+                    df_stats=df,
+                    stats_csv_path=stats_path,
+                    save_path=os.path.join(out, "regions_map_city_province_ranks.png"),
                     for_latex=for_latex,
                     plot_title=plot_title,
                 )

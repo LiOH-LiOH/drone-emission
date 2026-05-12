@@ -441,6 +441,62 @@ def plot_regions_map_and_gef_scatter(
     plt.close(fig)
 
 
+def plot_regions_map_city_province_ranks(
+    df_stats: "pd.DataFrame",
+    stats_csv_path: str,
+    save_path: str = None,
+    figsize: tuple = (18, 14),
+    for_latex: bool = False,
+    plot_title: bool = False,
+):
+    """Three-panel figure: (a) China choropleth, (b) top-10 city ebike rank, (c) province ebike ranking.
+
+    Top row: regions map | city_ebike_rank_top10. Bottom row spans full width with
+    province_total_ebike_lifecycle.
+
+    Args:
+        df_stats: all_region_stats DataFrame.
+        stats_csv_path: Path to all_region_stats.csv (for map function).
+        save_path: Path to save figure. Shows plot if None.
+        figsize: Figure size tuple.
+        for_latex: If True, save as PDF.
+        plot_title: If True, show titles on panels.
+    """
+    from visualization.regions import plot_regions_on_china_map
+
+    fig = plt.figure(figsize=figsize)
+    gs = fig.add_gridspec(
+        2, 2,
+        height_ratios=[0.6, 0.55],
+        width_ratios=[1.6, 1.0],
+        hspace=0.25, wspace=0.18,
+    )
+    ax_a = fig.add_subplot(gs[0, 0])
+    ax_b = fig.add_subplot(gs[0, 1])
+    ax_c = fig.add_subplot(gs[1, :])
+
+    plot_regions_on_china_map(csv_path=stats_csv_path, ax=ax_a, plot_title=plot_title)
+    plot_city_ebike_rank_top10(df_stats, ax=ax_b, plot_title=plot_title)
+    plot_province_total_ebike_lifecycle(df_stats, ax=ax_c, plot_title=plot_title)
+
+    for ax_panel, label in ((ax_a, "a"), (ax_b, "b"), (ax_c, "c")):
+        ax_panel.text(-0.05, 1.02, label, transform=ax_panel.transAxes,
+                      fontsize=16, fontweight="bold", va="bottom", ha="right")
+
+    if save_path:
+        if for_latex and not save_path.endswith(".pdf"):
+            save_path = save_path.rsplit(".", 1)[0] + ".pdf"
+        if plot_title:
+            save_path = _add_title_suffix(save_path)
+        os.makedirs(os.path.dirname(save_path), exist_ok=True)
+        plt.savefig(save_path, dpi=300, bbox_inches="tight")
+        print(f"Regions map + city/province ranks saved to {save_path}")
+    else:
+        plt.show()
+
+    plt.close(fig)
+
+
 def plot_top_correlations_bar(
     corr_df: pd.DataFrame,
     result_var: str,
@@ -1406,6 +1462,340 @@ def plot_province_orders_both_emissions(
         os.makedirs(os.path.dirname(out), exist_ok=True)
         plt.savefig(out, dpi=dpi, bbox_inches="tight")
         print(f"Saved: {out}")
+    else:
+        plt.show()
+
+    plt.close(fig)
+
+
+def plot_province_total_ebike_lifecycle(
+    df: pd.DataFrame,
+    save_path: str = None,
+    figsize: tuple = (14, 6),
+    for_latex: bool = False,
+    plot_title: bool = False,
+    ax: "plt.Axes" = None,
+):
+    """Province bar chart ranked by total annual e-bike emission, with reduction% boxplot overlay.
+
+    Bars (left axis) show summed total_ebike_lifecycle per province, sorted descending.
+    Boxplot (right axis) shows per-city distribution of max_lifecycle_reduction_pct
+    within each province.
+
+    Args:
+        df: all_region_stats DataFrame with province, total_ebike_lifecycle,
+            max_lifecycle_reduction_pct.
+        save_path: Path without extension. Saves PNG or PDF; shows interactively if None.
+        figsize: Figure size tuple.
+        for_latex: Save as PDF when True.
+        plot_title: Add title when True.
+    """
+    needed = ["province", "total_ebike_lifecycle", "max_lifecycle_reduction_pct"]
+    sub = df[needed].dropna().copy()
+    if sub.empty:
+        print("Province total ebike lifecycle skipped — no rows with required columns")
+        return
+
+    sub["province_en"] = sub["province"].map(PROVINCE_NAME_EN).fillna(sub["province"])
+
+    prov = (
+        sub.groupby("province_en")
+        .agg(total_ebike=("total_ebike_lifecycle", "sum"))
+        .reset_index()
+        .sort_values("total_ebike", ascending=False)
+    )
+
+    ordered = prov["province_en"].tolist()
+    ebike_t = prov["total_ebike"].values / 1e3
+    reduction_data = [
+        sub.loc[sub["province_en"] == p, "max_lifecycle_reduction_pct"].values
+        for p in ordered
+    ]
+
+    x = np.arange(len(ordered))
+    bar_color = "#B0B0B0"
+    box_color = "#1F6E2D"
+
+    _external_ax = ax is not None
+    if _external_ax:
+        ax1 = ax
+        fig = ax1.get_figure()
+    else:
+        fig, ax1 = plt.subplots(figsize=figsize)
+
+    ax1.bar(x, ebike_t, color=bar_color, alpha=0.85, zorder=2, label="Total e-bike emission")
+    ax1.set_xlabel("Province", fontsize=12)
+    ax1.set_ylabel("Total e-bike lifecycle emission (t CO₂eq / yr)", fontsize=12, color=bar_color)
+    ax1.tick_params(axis="y", labelcolor=bar_color)
+    ax1.set_xticks(x)
+    ax1.set_xticklabels(ordered, rotation=45, ha="right", fontsize=9)
+    ax1.yaxis.grid(True, linestyle="--", alpha=0.4)
+    ax1.set_axisbelow(True)
+
+    ax2 = ax1.twinx()
+    bp = ax2.boxplot(
+        reduction_data,
+        positions=x,
+        widths=0.5,
+        patch_artist=True,
+        showfliers=False,
+        manage_ticks=False,
+        zorder=3,
+    )
+    for patch in bp["boxes"]:
+        patch.set_facecolor(box_color)
+        patch.set_edgecolor(box_color)
+        patch.set_alpha(0.35)
+    for whisker in bp["whiskers"]:
+        whisker.set_color(box_color)
+    for cap in bp["caps"]:
+        cap.set_color(box_color)
+    for median in bp["medians"]:
+        median.set_color(box_color)
+        median.set_linewidth(1.5)
+    ax2.set_ylabel("Max lifecycle reduction (%)", fontsize=12, color=box_color)
+    ax2.tick_params(axis="y", labelcolor=box_color)
+    ax2.set_xlim(ax1.get_xlim())
+
+    handles = [
+        plt.Rectangle((0, 0), 1, 1, color=bar_color, alpha=0.85),
+        plt.Rectangle((0, 0), 1, 1, facecolor=box_color, alpha=0.35, edgecolor=box_color),
+    ]
+    ax1.legend(
+        handles,
+        ["Total e-bike emission", "Max reduction % (per-city distribution)"],
+        loc="upper right",
+        fontsize=10,
+    )
+
+    if plot_title:
+        title = "Province e-bike emission ranking with reduction-% distribution"
+        if _external_ax:
+            ax1.set_title(title, fontsize=12, fontweight="bold")
+        else:
+            fig.suptitle(title, fontsize=14, fontweight="bold")
+
+    if _external_ax:
+        return
+
+    plt.tight_layout()
+
+    if save_path:
+        ext = ".pdf" if for_latex else ".png"
+        out = save_path + ext
+        if plot_title:
+            out = _add_title_suffix(out)
+        os.makedirs(os.path.dirname(out), exist_ok=True)
+        plt.savefig(out, dpi=300, bbox_inches="tight")
+        print(f"Province total ebike lifecycle saved to {out}")
+    else:
+        plt.show()
+
+    plt.close(fig)
+
+
+def _plot_city_ebike_rank(
+    df: pd.DataFrame,
+    mode: str,
+    n: int,
+    save_path: str = None,
+    figsize: tuple = (10, 7),
+    for_latex: bool = False,
+    plot_title: bool = False,
+    ax: "plt.Axes" = None,
+):
+    """Shared horizontal grouped-bar plot for top/bottom city ebike rankings."""
+    needed = ["region_name_en", "total_ebike_lifecycle", "total_drone_lifecycle"]
+    sub = df[needed].dropna()
+    if sub.empty:
+        print(f"City ebike rank ({mode}) skipped — no rows with ebike + drone emissions")
+        return
+
+    ascending = mode == "bottom"
+    ranked = sub.sort_values("total_ebike_lifecycle", ascending=ascending).head(n)
+    # Largest bar at top for readability
+    ranked = ranked.sort_values("total_ebike_lifecycle", ascending=True).reset_index(drop=True)
+
+    cities = ranked["region_name_en"].tolist()
+    # Raw stats are kg CO₂eq; convert to tonnes for display.
+    ebike_t = ranked["total_ebike_lifecycle"].values / 1e3
+    drone_t = ranked["total_drone_lifecycle"].values / 1e3
+
+    y = np.arange(len(cities))
+    bar_h = 0.6
+    ebike_color = "#E05C2B"
+    drone_color = "#2CA02C"
+
+    _external_ax = ax is not None
+    if _external_ax:
+        fig = ax.get_figure()
+    else:
+        fig, ax = plt.subplots(figsize=figsize)
+    # E-bike (orange) is the full bar; drone (green) overlays from 0, covering the avoided portion.
+    ax.barh(y, ebike_t, height=bar_h, color=ebike_color, alpha=0.85, label="E-bike (total)", zorder=2)
+    ax.barh(y, drone_t, height=bar_h, color=drone_color, alpha=0.95, label="Drone (residual)", zorder=3)
+
+    ax.set_yticks(y)
+    ax.set_yticklabels(cities, fontsize=10)
+    ax.set_xlabel("Annual lifecycle emission (t CO₂eq)", fontsize=12)
+    ax.xaxis.grid(True, linestyle="--", alpha=0.4)
+    ax.set_axisbelow(True)
+    ax.legend(loc="lower right", fontsize=10)
+
+    xmax = ebike_t.max()
+    pad = xmax * 0.01
+    for i, (e, d) in enumerate(zip(ebike_t, drone_t)):
+        reduction = e - d
+        fmt = "{:,.2f}" if reduction < 10 else ("{:,.1f}" if reduction < 100 else "{:,.0f}")
+        reduction_pct = reduction / e * 100 if e > 0 else 0
+        ax.text(e + pad, i, f"{fmt.format(reduction)} (−{reduction_pct:.1f}%)",
+                va="center", ha="left",
+                fontsize=9, color="black", zorder=4)
+    ax.set_xlim(0, xmax * 1.22)
+
+    if plot_title:
+        label = "Top" if mode == "top" else "Bottom"
+        title = f"{label} {n} Cities by Annual E-bike Lifecycle Emission"
+        if _external_ax:
+            ax.set_title(title, fontsize=12, fontweight="bold")
+        else:
+            fig.suptitle(title, fontsize=14, fontweight="bold")
+
+    if _external_ax:
+        return
+
+    plt.tight_layout()
+
+    if save_path:
+        ext = ".pdf" if for_latex else ".png"
+        out = save_path + ext
+        if plot_title:
+            out = _add_title_suffix(out)
+        os.makedirs(os.path.dirname(out), exist_ok=True)
+        plt.savefig(out, dpi=300, bbox_inches="tight")
+        print(f"City ebike rank ({mode} {n}) saved to {out}")
+    else:
+        plt.show()
+
+    plt.close(fig)
+
+
+def plot_city_ebike_rank_top10(
+    df: pd.DataFrame,
+    save_path: str = None,
+    figsize: tuple = (10, 7),
+    for_latex: bool = False,
+    plot_title: bool = False,
+    ax: "plt.Axes" = None,
+):
+    """Horizontal grouped bars: top-10 cities by annual e-bike lifecycle emission, with drone alongside.
+
+    Args:
+        df: all_region_stats DataFrame with region_name_en, total_ebike_lifecycle, total_drone_lifecycle.
+        save_path: Path without extension. Saves PNG or PDF; shows interactively if None.
+        figsize: Figure size tuple.
+        for_latex: Save as PDF when True.
+        plot_title: Add title when True.
+        ax: External axes. When provided, skips figure creation and save.
+    """
+    _plot_city_ebike_rank(df, "top", 10, save_path, figsize, for_latex, plot_title, ax=ax)
+
+
+def plot_city_ebike_rank_bottom10(
+    df: pd.DataFrame,
+    save_path: str = None,
+    figsize: tuple = (10, 7),
+    for_latex: bool = False,
+    plot_title: bool = False,
+    ax: "plt.Axes" = None,
+):
+    """Horizontal grouped bars: bottom-10 cities by annual e-bike lifecycle emission, with drone alongside.
+
+    Args:
+        df: all_region_stats DataFrame with region_name_en, total_ebike_lifecycle, total_drone_lifecycle.
+        save_path: Path without extension. Saves PNG or PDF; shows interactively if None.
+        figsize: Figure size tuple.
+        for_latex: Save as PDF when True.
+        plot_title: Add title when True.
+        ax: External axes. When provided, skips figure creation and save.
+    """
+    _plot_city_ebike_rank(df, "bottom", 10, save_path, figsize, for_latex, plot_title, ax=ax)
+
+
+def plot_city_reduction_rank_top10(
+    df: pd.DataFrame,
+    save_path: str = None,
+    figsize: tuple = (10, 7),
+    for_latex: bool = False,
+    plot_title: bool = False,
+):
+    """Horizontal bars: top-10 cities by absolute emission reduction value (e-bike − drone).
+
+    Each bar's length is the avoided annual lifecycle emission (t CO₂eq). Labels show
+    the absolute reduction and the percentage reduction relative to e-bike baseline.
+
+    Args:
+        df: all_region_stats DataFrame with region_name_en, total_ebike_lifecycle, total_drone_lifecycle.
+        save_path: Path without extension. Saves PNG or PDF; shows interactively if None.
+        figsize: Figure size tuple.
+        for_latex: Save as PDF when True.
+        plot_title: Add title when True.
+    """
+    needed = ["region_name_en", "total_ebike_lifecycle", "total_drone_lifecycle"]
+    sub = df[needed].dropna().copy()
+    if sub.empty:
+        print("City reduction rank skipped — no rows with ebike + drone emissions")
+        return
+
+    # Raw stats are kg CO₂eq; convert to tonnes.
+    sub["ebike_t"] = sub["total_ebike_lifecycle"] / 1e3
+    sub["drone_t"] = sub["total_drone_lifecycle"] / 1e3
+    sub["reduction_t"] = sub["ebike_t"] - sub["drone_t"]
+
+    ranked = sub.sort_values("reduction_t", ascending=False).head(10)
+    ranked = ranked.sort_values("reduction_t", ascending=True).reset_index(drop=True)
+
+    cities = ranked["region_name_en"].tolist()
+    reduction = ranked["reduction_t"].values
+    ebike = ranked["ebike_t"].values
+
+    y = np.arange(len(cities))
+    bar_color = "#1F77B4"
+
+    fig, ax = plt.subplots(figsize=figsize)
+    ax.barh(y, reduction, height=0.65, color=bar_color, alpha=0.85, zorder=2)
+
+    ax.set_yticks(y)
+    ax.set_yticklabels(cities, fontsize=10)
+    ax.set_xlabel("Annual emission reduction (t CO₂eq)", fontsize=12)
+    ax.xaxis.grid(True, linestyle="--", alpha=0.4)
+    ax.set_axisbelow(True)
+
+    xmax = reduction.max()
+    pad = xmax * 0.01
+    for i, (r, e) in enumerate(zip(reduction, ebike)):
+        fmt = "{:,.2f}" if r < 10 else ("{:,.1f}" if r < 100 else "{:,.0f}")
+        pct = r / e * 100 if e > 0 else 0
+        ax.text(r + pad, i, f"{fmt.format(r)}  (−{pct:.1f}%)",
+                va="center", fontsize=9, color=bar_color, fontweight="bold", zorder=3)
+    ax.set_xlim(0, xmax * 1.22)
+
+    if plot_title:
+        fig.suptitle(
+            "Top 10 Cities by Annual Emission Reduction",
+            fontsize=14, fontweight="bold",
+        )
+
+    plt.tight_layout()
+
+    if save_path:
+        ext = ".pdf" if for_latex else ".png"
+        out = save_path + ext
+        if plot_title:
+            out = _add_title_suffix(out)
+        os.makedirs(os.path.dirname(out), exist_ok=True)
+        plt.savefig(out, dpi=300, bbox_inches="tight")
+        print(f"City reduction rank (top 10) saved to {out}")
     else:
         plt.show()
 
