@@ -219,6 +219,9 @@ def plot_regions_on_china_map(
     ax: "plt.Axes" = None,
     df: "pd.DataFrame" = None,
     colorbar_label: str = None,
+    norm: "TwoSlopeNorm" = None,
+    draw_colorbar: bool = True,
+    draw_legend: bool = True,
 ):
     """Plot a full city-boundary choropleth map of China.
 
@@ -240,6 +243,10 @@ def plot_regions_on_china_map(
             `region_name_cn` and the `color_by` column.
         colorbar_label: Override label for the colorbar / legend (defaults to
             VARIABLE_LABELS[color_by]).
+        norm: Pre-built TwoSlopeNorm to share scale across multi-panel callers.
+            If provided, skips per-axes auto-normalization.
+        draw_colorbar: If False, skip drawing the per-axes colorbar (caller draws a shared one).
+        draw_legend: If False, skip the "Unstudied regions" legend patch.
     """
     # --- Load study-city data ---------------------------------------------------
     if df is not None:
@@ -296,11 +303,10 @@ def plot_regions_on_china_map(
     ])
 
     valid_values = [v for v in study_adcode_to_val.values() if not np.isnan(v)]
-    if valid_values:
-        max_abs = max(abs(min(valid_values)), abs(max(valid_values)))
-        norm = TwoSlopeNorm(vmin=-max_abs, vcenter=0, vmax=max_abs)
-    else:
-        norm = None
+    if norm is None:
+        if valid_values:
+            max_abs = max(abs(min(valid_values)), abs(max(valid_values)))
+            norm = TwoSlopeNorm(vmin=-max_abs, vcenter=0, vmax=max_abs)
 
     GRAY_FILL = "#cccccc"
 
@@ -341,7 +347,7 @@ def plot_regions_on_china_map(
     _plot_china_boundaries(ax, china_geojson)
 
     # 2. Colorbar
-    if valid_values and norm is not None:
+    if draw_colorbar and norm is not None:
         sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
         sm.set_array([])
         cbar = plt.colorbar(sm, ax=ax, shrink=0.7, pad=0.02)
@@ -351,15 +357,16 @@ def plot_regions_on_china_map(
         )
 
     # 3. Gray legend patch for unstudied regions
-    from matplotlib.patches import Patch
-    ax.legend(
-        handles=[Patch(facecolor=GRAY_FILL, edgecolor="none", label="Unstudied regions")],
-        loc="lower left",
-        fontsize=12,
-        framealpha=0.8,
-        handlelength=1.5,
-        handleheight=1.2,
-    )
+    if draw_legend:
+        from matplotlib.patches import Patch
+        ax.legend(
+            handles=[Patch(facecolor=GRAY_FILL, edgecolor="none", label="Unstudied regions")],
+            loc="lower left",
+            fontsize=12,
+            framealpha=0.8,
+            handlelength=1.5,
+            handleheight=1.2,
+        )
 
     print(
         f"Plotted {plotted_total} areas ({plotted_colored} colored by reduction, "

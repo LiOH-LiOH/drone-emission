@@ -19,7 +19,8 @@ Available figures:
     regions_map,
     scatter_detour_ratio_vs_reduction_by_gef,
     regions_map_and_gef_scatter,
-    regions_map_city_province_ranks
+    regions_map_city_province_ranks,
+    regions_map_kappa_panels
 """
 
 import argparse
@@ -197,7 +198,7 @@ def _render_distance_comparison(data_dir, out, for_latex, plot_title, plot_fn):
 
 
 def render_all(data_dir: str, figures_dir: str, for_latex: bool = False, plot_title: bool = False, only: set = None):
-    from visualization.analysis import plot_province_orders_emission, plot_province_orders_both_emissions, plot_province_total_ebike_lifecycle, plot_city_ebike_rank_top10, plot_city_ebike_rank_bottom10, plot_city_reduction_rank_top10, plot_grouped_scatter, plot_regions_map_and_gef_scatter, plot_regions_map_city_province_ranks
+    from visualization.analysis import plot_province_orders_emission, plot_province_orders_both_emissions, plot_province_total_ebike_lifecycle, plot_city_ebike_rank_top10, plot_city_ebike_rank_bottom10, plot_city_reduction_rank_top10, plot_grouped_scatter, plot_regions_map_and_gef_scatter, plot_regions_map_city_province_ranks, plot_regions_map_kappa_panels
     from visualization.concepts import (
         plot_detour_and_lifecycle, plot_detour_lifecycle_distance, plot_emission_model_flowchart,
     )
@@ -310,7 +311,7 @@ def render_all(data_dir: str, figures_dir: str, for_latex: bool = False, plot_ti
         )
 
     # --- Cross-region stats figures ---
-    stats_figures = {"province_orders_emission", "province_orders_both_emissions", "province_total_ebike_lifecycle", "city_ebike_rank_top10", "city_ebike_rank_bottom10", "city_reduction_rank_top10", "regions_map", "scatter_detour_ratio_vs_reduction_by_gef", "regions_map_and_gef_scatter", "regions_map_and_gef_scatter_2030", "regions_map_and_gef_scatter_2060", "regions_map_city_province_ranks"}
+    stats_figures = {"province_orders_emission", "province_orders_both_emissions", "province_total_ebike_lifecycle", "city_ebike_rank_top10", "city_ebike_rank_bottom10", "city_reduction_rank_top10", "regions_map", "scatter_detour_ratio_vs_reduction_by_gef", "regions_map_and_gef_scatter", "regions_map_and_gef_scatter_2030", "regions_map_and_gef_scatter_2060", "regions_map_city_province_ranks", "regions_map_kappa_panels"}
     if only is None or only & stats_figures:
         stats_path = os.path.join(data_dir, "all_region_stats.csv")
         if not os.path.exists(stats_path):
@@ -382,6 +383,19 @@ def render_all(data_dir: str, figures_dir: str, for_latex: bool = False, plot_ti
                     for_latex=for_latex,
                     plot_title=plot_title,
                 )
+
+            if _want("regions_map_kappa_panels"):
+                oat_path = os.path.join(data_dir, "all_sensitivity_oat.csv")
+                if not os.path.exists(oat_path):
+                    print(f"regions_map_kappa_panels skipped — missing {oat_path}; run sensitivity first")
+                else:
+                    plot_regions_map_kappa_panels(
+                        oat_csv_path=oat_path,
+                        stats_csv_path=stats_path,
+                        save_path=os.path.join(out, "regions_map_kappa_panels.png"),
+                        for_latex=for_latex,
+                        plot_title=plot_title,
+                    )
 
             future_gef_figures = ("regions_map_and_gef_scatter_2030", "regions_map_and_gef_scatter_2060")
             if (

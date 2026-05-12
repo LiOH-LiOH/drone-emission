@@ -495,6 +495,127 @@ def plot_regions_map_and_gef_scatter(
     plt.close(fig)
 
 
+def plot_regions_map_kappa_panels(
+    oat_csv_path: str,
+    stats_csv_path: str,
+    kappas: tuple = (0.9, 0.8, 0.7, 0.6),
+    save_path: str = None,
+    figsize: tuple = (16, 12),
+    for_latex: bool = False,
+    plot_title: bool = False,
+):
+    """2x2 panel grid: China region choropleth of drone-vs-ebike reduction across kappa.
+
+    Reduction values come from `all_sensitivity_oat.csv` rows where
+    `feature_varied == "kappa"`, using `reduction_vs_scenario_ebike_pct` —
+    i.e. the optimal mix vs all-ebike at the SAME kappa. This isolates the
+    drone-substitution benefit from the e-bike bundling benefit. All four
+    panels share a single diverging colour scale and one figure-level
+    colorbar so the maps are directly comparable.
+
+    Args:
+        oat_csv_path: Path to all_sensitivity_oat.csv.
+        stats_csv_path: Path to all_region_stats.csv (provides region_name_cn lookup).
+        kappas: Four kappa values to render (one per panel, row-major order).
+        save_path: Path to save figure. Shows plot if None.
+        figsize: Figure size tuple.
+        for_latex: If True, save as PDF.
+        plot_title: If True, show figure-level title.
+    """
+    from matplotlib.colors import LinearSegmentedColormap, TwoSlopeNorm
+    from matplotlib.patches import Patch
+
+    from visualization.regions import plot_regions_on_china_map
+
+    if len(kappas) != 4:
+        raise ValueError(f"plot_regions_map_kappa_panels expects 4 kappa values, got {len(kappas)}")
+
+    oat = pd.read_csv(oat_csv_path)
+    base = pd.read_csv(stats_csv_path)
+
+    reduction_col = "reduction_vs_scenario_ebike_pct"
+    kappa_dfs = {}
+    drone_share_median = {}
+    all_values = []
+    for k in kappas:
+        kappa_rows = oat[(oat["feature_varied"] == "kappa") & (np.isclose(oat["kappa"], k))]
+        sub = kappa_rows[["region_key", reduction_col]].rename(
+            columns={reduction_col: "max_lifecycle_reduction_pct"}
+        )
+        merged = base.drop(columns=["max_lifecycle_reduction_pct"], errors="ignore").merge(
+            sub, on="region_key", how="left"
+        )
+        kappa_dfs[k] = merged
+        all_values.extend(merged["max_lifecycle_reduction_pct"].dropna().tolist())
+        drone_share_median[k] = float(kappa_rows["optimal_drone_ratio_pct"].median())
+
+    if not all_values:
+        print("plot_regions_map_kappa_panels: no kappa OAT values matched any region in stats — "
+              "rendering empty maps. Run sensitivity across all regions to populate.")
+        max_abs = 1.0
+    else:
+        max_abs = max(abs(min(all_values)), abs(max(all_values)))
+    shared_norm = TwoSlopeNorm(vmin=-max_abs, vcenter=0, vmax=max_abs)
+    shared_cmap = LinearSegmentedColormap.from_list("green_diverging", [
+        "#d7191c", "#fdae61", "#ffffbf", "#a6d96a", "#1a9641",
+    ])
+
+    fig, axes = plt.subplots(2, 2, figsize=figsize)
+    panel_labels = ("a", "b", "c", "d")
+
+    for ax, k, label in zip(axes.flat, kappas, panel_labels):
+        plot_regions_on_china_map(
+            df=kappa_dfs[k],
+            color_by="max_lifecycle_reduction_pct",
+            ax=ax,
+            plot_title=False,
+            norm=shared_norm,
+            draw_colorbar=False,
+            draw_legend=False,
+        )
+        ax.set_title(f"$\\kappa = {k}$", fontsize=13)
+        ax.text(-0.02, 1.02, label, transform=ax.transAxes,
+                fontsize=14, fontweight="bold", va="bottom", ha="right")
+        ax.text(
+            0.02, 0.98,
+            f"Median drone share: {drone_share_median[k]:.0f}%",
+            transform=ax.transAxes,
+            fontsize=10, va="top", ha="left",
+            bbox=dict(facecolor="white", edgecolor="gray", alpha=0.85,
+                      boxstyle="round,pad=0.3"),
+        )
+
+    fig.tight_layout(rect=(0, 0.06, 0.92, 1.0))
+
+    sm = plt.cm.ScalarMappable(cmap=shared_cmap, norm=shared_norm)
+    sm.set_array([])
+    cbar_ax = fig.add_axes((0.93, 0.20, 0.015, 0.6))
+    cbar = fig.colorbar(sm, cax=cbar_ax)
+    cbar.set_label(r"Reduction vs same-$\kappa$ all-ebike (%)", fontsize=11)
+
+    fig.legend(
+        handles=[Patch(facecolor="#cccccc", edgecolor="none", label="Unstudied regions")],
+        loc="lower center", fontsize=11, framealpha=0.8, ncol=1,
+        bbox_to_anchor=(0.46, 0.02),
+    )
+
+    if plot_title:
+        fig.suptitle("Lifecycle reduction across drone-share $\\kappa$", fontsize=14, fontweight="bold")
+
+    if save_path:
+        if for_latex and not save_path.endswith(".pdf"):
+            save_path = save_path.rsplit(".", 1)[0] + ".pdf"
+        if plot_title:
+            save_path = _add_title_suffix(save_path)
+        os.makedirs(os.path.dirname(save_path), exist_ok=True)
+        plt.savefig(save_path, dpi=300, bbox_inches="tight")
+        print(f"Regions map kappa panels saved to {save_path}")
+    else:
+        plt.show()
+
+    plt.close(fig)
+
+
 def plot_regions_map_city_province_ranks(
     df_stats: "pd.DataFrame",
     stats_csv_path: str,
