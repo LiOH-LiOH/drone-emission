@@ -750,7 +750,7 @@ def plot_detour_lifecycle_distance(
 
     fig = plt.figure(figsize=figsize, constrained_layout=True)
     fig.set_constrained_layout_pads(hspace=0.02, h_pad=0.02, wspace=0.04, w_pad=0.04)
-    fig.patch.set_facecolor(_COLORS["background"])
+    fig.patch.set_facecolor("white")
 
     gs = fig.add_gridspec(2, 3, width_ratios=[1, 0.03, 0.55])
     ax_a   = fig.add_subplot(gs[0, 0:2])   # concept: spans data + colorbar columns
