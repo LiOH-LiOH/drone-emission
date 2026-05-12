@@ -6,9 +6,9 @@ Six strategies × 2 anchor kappa values = 12 rows per city. Strategies are:
 2. ``all_drone`` — threshold = 0
 3. ``optimal_mixed`` — best of the 12-point threshold sweep, current GEF
 4. ``conservative_2km`` — fixed threshold = 2.0 km, current GEF
-5. ``optimal_mixed_2030`` — best threshold under GEF × 0.65 (TODO confirm
+5. ``optimal_mixed_2030`` — best threshold under GEF × 0.5 (TODO confirm
    IEA WEO 2024 STEPS multiplier)
-6. ``optimal_mixed_2060`` — best threshold under GEF × 0.10 (TODO same)
+6. ``optimal_mixed_2060`` — best threshold under GEF × 0.2 (TODO same)
 
 Reductions are reported against:
 
@@ -35,8 +35,8 @@ from .vectorized_lca import (
 )
 
 KAPPA_ANCHORS = (0.7, 1.0)
-GEF_MULT_2030 = 0.65  # TODO replace with IEA WEO 2024 STEPS China power-sector multiplier
-GEF_MULT_2060 = 0.10  # TODO same
+GEF_MULT_2030 = 0.5  # TODO replace with IEA WEO 2024 STEPS China power-sector multiplier
+GEF_MULT_2060 = 0.2  # TODO same
 
 
 def _threshold_sweep(road_distances_km: np.ndarray) -> np.ndarray:
