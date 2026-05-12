@@ -393,6 +393,8 @@ def plot_regions_map_and_gef_scatter(
     figsize: tuple = (18, 7),
     for_latex: bool = False,
     plot_title: bool = False,
+    gef_scenario: str = "current",
+    named_csv_path: str = None,
 ):
     """Two-panel figure: (a) China choropleth map of reduction, (b) detour ratio vs reduction by GEF.
 
@@ -404,21 +406,73 @@ def plot_regions_map_and_gef_scatter(
         figsize: Figure size tuple.
         for_latex: If True, save as PDF.
         plot_title: If True, show title.
+        gef_scenario: "current" (default), "2030", or "2060". Future scenarios pull
+            reductions from the `optimal_mixed_<year>` strategy at kappa=1.0 in the
+            named-sensitivity CSV.
+        named_csv_path: Path to all_sensitivity_named.csv. Required when
+            gef_scenario != "current".
     """
     from visualization.regions import plot_regions_on_china_map
 
+    valid_scenarios = ("current", "2030", "2060")
+    if gef_scenario not in valid_scenarios:
+        raise ValueError(f"gef_scenario must be one of {valid_scenarios}, got {gef_scenario!r}")
+
+    if gef_scenario == "current":
+        map_df = None
+        map_color_by = "max_lifecycle_reduction_pct"
+        scatter_df = df_enriched
+        scatter_result_var = "max_lifecycle_reduction_pct"
+        cbar_label = None
+        y_label_override = None
+        scatter_group_labels = None
+    else:
+        if named_csv_path is None:
+            raise ValueError("named_csv_path is required when gef_scenario != 'current'")
+        named = pd.read_csv(named_csv_path)
+        scen_strategy = f"optimal_mixed_{gef_scenario}"
+        reductions = (
+            named[(named["strategy"] == scen_strategy) & (named["kappa"] == 1.0)]
+            [["region_key", "reduction_vs_anchor_ebike_pct"]]
+            .rename(columns={"reduction_vs_anchor_ebike_pct": "max_lifecycle_reduction_pct"})
+        )
+        map_df = df_stats.drop(columns=["max_lifecycle_reduction_pct"], errors="ignore").merge(
+            reductions, on="region_key", how="left"
+        )
+        scatter_df = df_enriched.drop(columns=["max_lifecycle_reduction_pct"], errors="ignore").merge(
+            reductions, on="region_key", how="left"
+        )
+        map_color_by = "max_lifecycle_reduction_pct"
+        scatter_result_var = "max_lifecycle_reduction_pct"
+        cbar_label = f"Max Lifecycle Reduction under {gef_scenario} GEF (%)"
+        y_label_override = cbar_label
+        scatter_group_labels = (
+            "Low current GEF ($\\leq$ 0.3)",
+            "High current GEF (> 0.3)",
+        )
+
     fig, (ax_a, ax_b) = plt.subplots(1, 2, figsize=figsize, gridspec_kw={"width_ratios": [1.6, 1]})
 
-    plot_regions_on_china_map(csv_path=stats_csv_path, ax=ax_a, plot_title=plot_title)
+    plot_regions_on_china_map(
+        csv_path=stats_csv_path if map_df is None else None,
+        df=map_df,
+        color_by=map_color_by,
+        colorbar_label=cbar_label,
+        ax=ax_a,
+        plot_title=plot_title,
+    )
     plot_grouped_scatter(
-        df_enriched,
+        scatter_df,
         feature_var="detour_ratio",
-        result_var="max_lifecycle_reduction_pct",
+        result_var=scatter_result_var,
         group_var="grid_emission_factor",
         threshold=0.3,
         ax=ax_b,
         plot_title=plot_title,
+        group_labels=scatter_group_labels,
     )
+    if y_label_override is not None:
+        ax_b.set_ylabel(y_label_override, fontsize=12)
 
     ax_a.text(-0.02, 1.02, "a", transform=ax_a.transAxes,
               fontsize=14, fontweight="bold", va="bottom", ha="right")

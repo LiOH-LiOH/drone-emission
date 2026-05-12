@@ -217,6 +217,8 @@ def plot_regions_on_china_map(
     plot_title: bool = False,
     color_by: str = "max_lifecycle_reduction_pct",
     ax: "plt.Axes" = None,
+    df: "pd.DataFrame" = None,
+    colorbar_label: str = None,
 ):
     """Plot a full city-boundary choropleth map of China.
 
@@ -232,11 +234,20 @@ def plot_regions_on_china_map(
         figsize: Figure size tuple (width, height).
         for_latex: If True, skip title for LaTeX export and save as PDF.
         plot_title: If True, show title.
-        color_by: Column name to color-code regions by (only used with csv_path).
+        color_by: Column name to color-code regions by.
         ax: External axes to draw into. When provided, skips figure creation and save.
+        df: Optional pre-built DataFrame (takes precedence over csv_path). Must contain
+            `region_name_cn` and the `color_by` column.
+        colorbar_label: Override label for the colorbar / legend (defaults to
+            VARIABLE_LABELS[color_by]).
     """
     # --- Load study-city data ---------------------------------------------------
-    if csv_path is not None:
+    if df is not None:
+        if region_keys is not None:
+            df = df[df["region_key"].isin(region_keys)]
+        region_names_cn = df["region_name_cn"].values
+        color_values = df[color_by].values if color_by in df.columns else None
+    elif csv_path is not None:
         df = pd.read_csv(csv_path)
         if region_keys is not None:
             df = df[df["region_key"].isin(region_keys)]
@@ -334,7 +345,10 @@ def plot_regions_on_china_map(
         sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
         sm.set_array([])
         cbar = plt.colorbar(sm, ax=ax, shrink=0.7, pad=0.02)
-        cbar.set_label(VARIABLE_LABELS.get(color_by, color_by), fontsize=10)
+        cbar.set_label(
+            colorbar_label if colorbar_label is not None else VARIABLE_LABELS.get(color_by, color_by),
+            fontsize=10,
+        )
 
     # 3. Gray legend patch for unstudied regions
     from matplotlib.patches import Patch

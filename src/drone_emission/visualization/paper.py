@@ -310,7 +310,7 @@ def render_all(data_dir: str, figures_dir: str, for_latex: bool = False, plot_ti
         )
 
     # --- Cross-region stats figures ---
-    stats_figures = {"province_orders_emission", "province_orders_both_emissions", "province_total_ebike_lifecycle", "city_ebike_rank_top10", "city_ebike_rank_bottom10", "city_reduction_rank_top10", "regions_map", "scatter_detour_ratio_vs_reduction_by_gef", "regions_map_and_gef_scatter", "regions_map_city_province_ranks"}
+    stats_figures = {"province_orders_emission", "province_orders_both_emissions", "province_total_ebike_lifecycle", "city_ebike_rank_top10", "city_ebike_rank_bottom10", "city_reduction_rank_top10", "regions_map", "scatter_detour_ratio_vs_reduction_by_gef", "regions_map_and_gef_scatter", "regions_map_and_gef_scatter_2030", "regions_map_and_gef_scatter_2060", "regions_map_city_province_ranks"}
     if only is None or only & stats_figures:
         stats_path = os.path.join(data_dir, "all_region_stats.csv")
         if not os.path.exists(stats_path):
@@ -383,7 +383,12 @@ def render_all(data_dir: str, figures_dir: str, for_latex: bool = False, plot_ti
                     plot_title=plot_title,
                 )
 
-            if _want("scatter_detour_ratio_vs_reduction_by_gef") or _want("regions_map_and_gef_scatter"):
+            future_gef_figures = ("regions_map_and_gef_scatter_2030", "regions_map_and_gef_scatter_2060")
+            if (
+                _want("scatter_detour_ratio_vs_reduction_by_gef")
+                or _want("regions_map_and_gef_scatter")
+                or any(_want(f) for f in future_gef_figures)
+            ):
                 enriched_path = os.path.join(data_dir, "all_region_stats_enriched.csv")
                 if not os.path.exists(enriched_path):
                     print(f"GEF figures skipped — missing {enriched_path}; run tools.enrich_stats first")
@@ -408,6 +413,24 @@ def render_all(data_dir: str, figures_dir: str, for_latex: bool = False, plot_ti
                             save_path=os.path.join(out, "regions_map_and_gef_scatter.png"),
                             for_latex=for_latex,
                             plot_title=plot_title,
+                        )
+                    named_path = os.path.join(data_dir, "all_sensitivity_named.csv")
+                    for year in ("2030", "2060"):
+                        fig_name = f"regions_map_and_gef_scatter_{year}"
+                        if not _want(fig_name):
+                            continue
+                        if not os.path.exists(named_path):
+                            print(f"{fig_name} skipped — missing {named_path}; run sensitivity first")
+                            continue
+                        plot_regions_map_and_gef_scatter(
+                            df_stats=df,
+                            df_enriched=df_enriched,
+                            stats_csv_path=stats_path,
+                            save_path=os.path.join(out, f"{fig_name}.png"),
+                            for_latex=for_latex,
+                            plot_title=plot_title,
+                            gef_scenario=year,
+                            named_csv_path=named_path,
                         )
 
 
