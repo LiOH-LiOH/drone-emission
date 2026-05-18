@@ -12,6 +12,7 @@ pandas
 pypinyin
 pyproj
 requests
+SALib
 scikit-learn
 scipy
 shapely

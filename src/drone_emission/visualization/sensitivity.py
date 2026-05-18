@@ -27,6 +27,7 @@ from typing import Dict, Iterable
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from matplotlib.patches import Patch
 
 from ._utils import _add_title_suffix
 
@@ -511,6 +512,150 @@ def plot_shapley_dominance_scatter(
 
 
 # ---------------------------------------------------------------------------
+# Sobol + Monte Carlo plots (global SA, replaces Shapley in main text)
+# ---------------------------------------------------------------------------
+
+def plot_sobol_indices(
+    sobol: pd.DataFrame,
+    save_path: str | None = None,
+    figsize: tuple = (8, 5.5),
+    dpi: int = 150,
+    for_latex: bool = False,
+    plot_title: bool = False,
+):
+    """Sobol S1 and ST per feature, median across cities with IQR whiskers.
+
+    Bars colored by the same Shapley-mechanism palette as the OAT tornado so
+    the Fig. 5a (OAT) and Fig. 5f (Sobol) read jointly. S1 plotted as light
+    bar inset over the darker ST outline so interaction share is visually
+    the gap between the two.
+
+    Args:
+        sobol: Long-format Sobol DataFrame from ``all_sensitivity_sobol.csv``.
+    """
+    si = sobol[sobol["row_kind"] == "sobol_index"].copy()
+    if si.empty:
+        print("  plot_sobol_indices: no sobol_index rows; skipping")
+        return None
+
+    # Per-feature aggregates across cities
+    grouped = si.groupby("feature")
+    feature_medians = grouped["ST"].median().sort_values(ascending=True)
+    features = list(feature_medians.index)
+    st_median = feature_medians.values
+    st_p25 = grouped["ST"].quantile(0.25).reindex(features).values
+    st_p75 = grouped["ST"].quantile(0.75).reindex(features).values
+    s1_median = grouped["S1"].median().reindex(features).values
+
+    bar_colors = [
+        OAT_MECHANISM_COLORS[OAT_FEATURE_MECHANISM.get(f, "operation")]
+        for f in features
+    ]
+
+    fig, ax = plt.subplots(figsize=figsize)
+    y = np.arange(len(features))
+    ax.barh(y, st_median, color=bar_colors, alpha=0.45, edgecolor="black",
+            linewidth=1.0, label="Total-order $S_T$ (incl. interactions)")
+    ax.barh(y, s1_median, color=bar_colors, alpha=0.95, edgecolor="black",
+            linewidth=1.0, label="First-order $S_1$")
+    err_lower = np.clip(st_median - st_p25, 0, None)
+    err_upper = np.clip(st_p75 - st_median, 0, None)
+    ax.errorbar(st_median, y, xerr=[err_lower, err_upper], fmt="none",
+                ecolor="black", capsize=3, linewidth=1.0)
+    ax.set_yticks(y)
+    ax.set_yticklabels([OAT_FEATURE_LABELS.get(f, f) for f in features])
+    ax.set_xlabel("Sobol index (variance share of city-level reduction)")
+    ax.axvline(0, color="black", linewidth=0.5)
+    ax.set_xlim(left=min(0, np.nanmin(s1_median) - 0.02))
+
+    legend_handles = [
+        Patch(facecolor=OAT_MECHANISM_COLORS[m], edgecolor="black",
+              label=OAT_MECHANISM_LABELS[m])
+        for m in ("grid", "production", "bundling", "operation")
+    ]
+    legend_handles.append(Patch(facecolor="lightgray", edgecolor="black", alpha=0.45,
+                                 label="$S_T$ (interactions)"))
+    legend_handles.append(Patch(facecolor="lightgray", edgecolor="black", alpha=0.95,
+                                 label="$S_1$ (main effect)"))
+    ax.legend(handles=legend_handles, loc="lower right", fontsize=8, frameon=True)
+
+    if plot_title:
+        n_cities = si["region_key"].nunique()
+        ax.set_title(f"Sobol global SA: 9-feature variance decomposition "
+                     f"(n={n_cities} cities, median ± IQR)")
+    return _finalize(save_path, dpi, for_latex, plot_title)
+
+
+def plot_mc_uncertainty(
+    sobol: pd.DataFrame,
+    save_path: str | None = None,
+    figsize: tuple = (8, 5.0),
+    dpi: int = 150,
+    for_latex: bool = False,
+    plot_title: bool = False,
+    headline_pct: float = 29.2,
+):
+    """City-level MC distribution of optimal-mix reduction %.
+
+    Two panels: (left) CDF of per-city MC medians with 95% ribbon from the
+    p2.5/p97.5 rows, (right) histogram of per-city anchor (κ=1.0) reductions
+    with a vertical line at the §2 headline so the reader sees that the
+    Sobol/MC summary reconciles with the headline value.
+    """
+    mc = sobol[sobol["row_kind"] == "mc_summary"].copy()
+    if mc.empty:
+        print("  plot_mc_uncertainty: no mc_summary rows; skipping")
+        return None
+
+    wide = mc.pivot_table(index="region_key", columns="feature", values="value")
+    needed = ["mc_median_reduction_pct", "mc_p2.5", "mc_p97.5", "anchor_kappa1_reduction_pct"]
+    missing = [c for c in needed if c not in wide.columns]
+    if missing:
+        print(f"  plot_mc_uncertainty: missing columns {missing}; skipping")
+        return None
+
+    wide = wide.sort_values("mc_median_reduction_pct").reset_index(drop=True)
+    n = len(wide)
+    rank = np.arange(1, n + 1) / n * 100.0
+
+    fig, (ax_l, ax_r) = plt.subplots(1, 2, figsize=figsize)
+
+    # Left: CDF of MC medians with shaded 2.5/97.5 ribbon (per-city).
+    ax_l.fill_betweenx(rank, wide["mc_p2.5"], wide["mc_p97.5"],
+                       color=OAT_MECHANISM_COLORS["grid"], alpha=0.15,
+                       label="Per-city 95% MC band")
+    ax_l.plot(wide["mc_median_reduction_pct"], rank,
+              color=OAT_MECHANISM_COLORS["grid"], linewidth=1.6,
+              label="MC median (ordered)")
+    ax_l.axvline(headline_pct, color="black", linestyle="--", linewidth=1.0,
+                 label=f"§2 headline ({headline_pct:.1f}%)")
+    ax_l.set_xlabel("Reduction vs e-bike-only (%)")
+    ax_l.set_ylabel("City percentile")
+    ax_l.set_xlim(left=min(-5, float(wide["mc_p2.5"].min()) - 2))
+    ax_l.legend(loc="lower right", fontsize=8, frameon=True)
+
+    # Right: histogram of anchor κ=1.0 reductions; the headline lives in this
+    # distribution.
+    ax_r.hist(wide["anchor_kappa1_reduction_pct"].dropna(), bins=40,
+              color=OAT_MECHANISM_COLORS["grid"], alpha=0.8, edgecolor="black",
+              linewidth=0.4)
+    ax_r.axvline(headline_pct, color="black", linestyle="--", linewidth=1.0,
+                 label=f"§2 headline ({headline_pct:.1f}%)")
+    anchor_mean = float(wide["anchor_kappa1_reduction_pct"].mean())
+    ax_r.axvline(anchor_mean, color=OAT_MECHANISM_COLORS["bundling"],
+                 linestyle=":", linewidth=1.2,
+                 label=f"Anchor mean ({anchor_mean:.1f}%)")
+    ax_r.set_xlabel("Anchor reduction at κ=1.0 (%)")
+    ax_r.set_ylabel("Number of cities")
+    ax_r.legend(loc="upper left", fontsize=8, frameon=True)
+
+    if plot_title:
+        fig.suptitle(f"Sobol/MC uncertainty across {n} cities", y=1.02)
+    fig.tight_layout()
+    return _finalize(save_path, dpi, for_latex, plot_title)
+
+
+# ---------------------------------------------------------------------------
 # Named-scenario plots
 # ---------------------------------------------------------------------------
 
@@ -620,6 +765,7 @@ def render_all(data_dir: str, figures_dir: str,
     oat_path = os.path.join(data_dir, "all_sensitivity_oat.csv")
     sh_path = os.path.join(data_dir, "all_sensitivity_shapley.csv")
     nm_path = os.path.join(data_dir, "all_sensitivity_named.csv")
+    sb_path = os.path.join(data_dir, "all_sensitivity_sobol.csv")
 
     if os.path.exists(oat_path):
         oat = pd.read_csv(oat_path)
@@ -661,6 +807,16 @@ def render_all(data_dir: str, figures_dir: str,
                                         dpi=dpi, for_latex=for_latex, plot_title=plot_title)
     else:
         print(f"  missing {sh_path}; skipping Shapley plots")
+
+    if os.path.exists(sb_path):
+        sb = pd.read_csv(sb_path)
+        print(f"Sobol: {len(sb)} rows from {sb_path}")
+        plot_sobol_indices(sb, save_path=_resolve_path(out, "sobol_indices", for_latex),
+                            dpi=dpi, for_latex=for_latex, plot_title=plot_title)
+        plot_mc_uncertainty(sb, save_path=_resolve_path(out, "mc_uncertainty", for_latex),
+                             dpi=dpi, for_latex=for_latex, plot_title=plot_title)
+    else:
+        print(f"  missing {sb_path}; skipping Sobol/MC plots")
 
     if os.path.exists(nm_path):
         nm = pd.read_csv(nm_path)

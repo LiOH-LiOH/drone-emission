@@ -43,6 +43,8 @@ from .vectorized_lca import (
     EbikeScenario,
     compute_drone_per_order_g,
     compute_ebike_per_order_g,
+    optimal_reduction_metrics,
+    threshold_sweep_km,
 )
 
 # Baseline values (the OAT anchor).
@@ -84,56 +86,6 @@ FEATURE_LEVELS = {
     "drone_battery_lifespan_yr": [1, 3],
     "headwind_mps": [3.5, 7.0],
 }
-
-
-def _threshold_sweep(road_distances_km: np.ndarray) -> np.ndarray:
-    """12-point threshold list matching emission/api.py:206-216."""
-    middle = np.linspace(
-        max(0.3, np.percentile(road_distances_km, 5)),
-        np.percentile(road_distances_km, 95),
-        10,
-    )
-    return np.concatenate([[-0.01], middle, [np.inf]])
-
-
-def _best_threshold_metrics(
-    road_distances_km: np.ndarray,
-    ebike_g: np.ndarray,
-    drone_g: np.ndarray,
-    thresholds: np.ndarray,
-) -> dict:
-    """Iterate the threshold sweep, return optimal threshold + reduction metrics.
-
-    Reduction here is *vs the e-bike-only total under the same per-OD emissions*
-    (i.e. the scenario-specific baseline). The "vs anchor" comparison is done
-    by the caller using a fixed anchor total.
-    """
-    n = len(road_distances_km)
-    ebike_only_total_g = ebike_g.sum()
-    drone_only_total_g = drone_g.sum()
-
-    best = {
-        "best_threshold_km": float("nan"),
-        "best_drone_ratio_pct": float("nan"),
-        "best_mixed_total_g": float("nan"),
-        "best_reduction_vs_scenario_pct": float("-inf"),
-    }
-    for t in thresholds:
-        use_drone = road_distances_km >= t
-        mixed = float(np.where(use_drone, drone_g, ebike_g).sum())
-        drone_ratio = float(use_drone.sum()) / n * 100.0
-        if ebike_only_total_g > 0:
-            reduction = (ebike_only_total_g - mixed) / ebike_only_total_g * 100.0
-        else:
-            reduction = 0.0
-        if reduction > best["best_reduction_vs_scenario_pct"]:
-            best["best_threshold_km"] = float(t)
-            best["best_drone_ratio_pct"] = drone_ratio
-            best["best_mixed_total_g"] = mixed
-            best["best_reduction_vs_scenario_pct"] = reduction
-    best["ebike_only_total_g"] = float(ebike_only_total_g)
-    best["drone_only_total_g"] = float(drone_only_total_g)
-    return best
 
 
 def _emissions_for_scenario(
@@ -225,7 +177,7 @@ def _row_for_scenario(
         drone_battery_lifespan_yr=drone_battery_lifespan_yr,
         headwind_mps=headwind_mps,
     )
-    metrics = _best_threshold_metrics(road_distances_km, ebike_g, drone_g, thresholds)
+    metrics = optimal_reduction_metrics(road_distances_km, ebike_g, drone_g, thresholds)
     if anchor_ebike_only_total_g > 0:
         reduction_vs_anchor = (
             (anchor_ebike_only_total_g - metrics["best_mixed_total_g"])
@@ -296,7 +248,7 @@ def run_oat_for_region(
     ebike_pp = replace(ebike_params, e_use=province_gef_kwh)
     drone_pp = replace(drone_params, e_use=province_gef_kwh)
 
-    thresholds = _threshold_sweep(road_distances_km)
+    thresholds = threshold_sweep_km(road_distances_km)
 
     def _kwargs_for(level_overrides: dict) -> dict:
         """Build the full feature kwargs dict for _row_for_scenario."""

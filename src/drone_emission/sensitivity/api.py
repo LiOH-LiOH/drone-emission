@@ -23,6 +23,7 @@ from utils.province import get_province_from_district
 from .named_scenarios import run_named_scenarios_for_region
 from .oat import run_oat_for_region
 from .shapley import run_shapley_for_region
+from .sobol_mc import run_sobol_for_region
 
 SANITY_TOL_PCT = 0.1  # max % deviation from cached baseline before aborting
 
@@ -80,7 +81,7 @@ def _baseline_sanity_check(region_info, oat_df: pd.DataFrame) -> None:
 
 
 def _outputs_exist(out_dir: str, region_name_en: str) -> bool:
-    suffixes = ("_oat.csv", "_shapley.csv", "_named.csv")
+    suffixes = ("_oat.csv", "_shapley.csv", "_named.csv", "_sobol.csv")
     return all(
         os.path.exists(os.path.join(out_dir, f"{region_name_en}{s}"))
         for s in suffixes
@@ -157,13 +158,26 @@ def run_sensitivity(region_info, exp_config) -> None:
         rider_weight=rider_weight, payload_kg=payload_kg,
     )
 
+    sobol_n = int(sens_cfg.get("sobol_n", 512))
+    sobol_seed = int(sens_cfg.get("sobol_seed", 42))
+    sobol_df = run_sobol_for_region(
+        od_df, region_key=region_key, province=province,
+        province_gef_kwh=province_gef,
+        ebike_params=ebike_params, drone_params=drone_params,
+        rider_weight=rider_weight, payload_kg=payload_kg,
+        n=sobol_n, seed=sobol_seed,
+    )
+
     os.makedirs(out_dir, exist_ok=True)
     oat_path = os.path.join(out_dir, f"{region_name_en}_oat.csv")
     shapley_path = os.path.join(out_dir, f"{region_name_en}_shapley.csv")
     named_path = os.path.join(out_dir, f"{region_name_en}_named.csv")
+    sobol_path = os.path.join(out_dir, f"{region_name_en}_sobol.csv")
     oat_df.to_csv(oat_path, index=False)
     shapley_df.to_csv(shapley_path, index=False)
     named_df.to_csv(named_path, index=False)
+    sobol_df.to_csv(sobol_path, index=False)
     print(f"  [sensitivity] wrote {len(oat_df)} OAT rows -> {oat_path}")
     print(f"  [sensitivity] wrote {len(shapley_df)} shapley rows -> {shapley_path}")
     print(f"  [sensitivity] wrote {len(named_df)} named rows -> {named_path}")
+    print(f"  [sensitivity] wrote {len(sobol_df)} sobol rows -> {sobol_path}")

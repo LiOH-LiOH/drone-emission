@@ -1,11 +1,12 @@
 """Consolidate per-region sensitivity outputs into cross-region tables.
 
 Reads each region's ``{region}_oat.csv``, ``{region}_shapley.csv``,
-``{region}_named.csv`` and concatenates them into:
+``{region}_named.csv``, ``{region}_sobol.csv`` and concatenates them into:
 
   data/all_sensitivity_oat.csv
   data/all_sensitivity_shapley.csv
   data/all_sensitivity_named.csv
+  data/all_sensitivity_sobol.csv
 
 Usage:
     cd src/drone_emission
@@ -32,6 +33,7 @@ SUFFIXES = (
     ("_oat.csv", "all_sensitivity_oat.csv"),
     ("_shapley.csv", "all_sensitivity_shapley.csv"),
     ("_named.csv", "all_sensitivity_named.csv"),
+    ("_sobol.csv", "all_sensitivity_sobol.csv"),
 )
 
 
