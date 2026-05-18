@@ -1,7 +1,7 @@
 """Standalone sensitivity-stage runner.
 
 Iterates over all regions in ``regions.json`` (plus any districts present
-under ``data/district/``), skips regions whose 3 sensitivity CSVs already
+under ``data/district/``), skips regions whose 4 sensitivity CSVs already
 exist, and calls ``sensitivity.api.run_sensitivity`` for the rest. Designed
 to be invoked once cal_emission has populated the per-region OD CSV.
 
@@ -29,7 +29,7 @@ PROJECT_ROOT = os.path.dirname(
 )
 sys.path.insert(0, os.path.join(PROJECT_ROOT, "src", "drone_emission"))
 
-from sensitivity.api import run_sensitivity  # noqa: E402
+from sensitivity.api import _OUTPUT_SUFFIXES, run_sensitivity  # noqa: E402
 from utils import load_config  # noqa: E402
 from utils.region_config import RegionConfig, init_registry  # noqa: E402
 
@@ -37,9 +37,9 @@ REGIONS_JSON = os.path.join(PROJECT_ROOT, "regions.json")
 
 
 def _outputs_exist(out_dir: str, region_name_en: str) -> bool:
-    suffixes = ("_oat.csv", "_shapley.csv", "_named.csv")
     return all(
-        os.path.exists(os.path.join(out_dir, f"{region_name_en}{s}")) for s in suffixes
+        os.path.exists(os.path.join(out_dir, f"{region_name_en}{s}"))
+        for s in _OUTPUT_SUFFIXES
     )
 
 
