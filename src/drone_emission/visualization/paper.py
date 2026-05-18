@@ -20,7 +20,8 @@ Available figures:
     scatter_detour_ratio_vs_reduction_by_gef,
     regions_map_and_gef_scatter,
     regions_map_city_province_ranks,
-    regions_map_kappa_panels
+    regions_map_kappa_panels,
+    oat_tornado_story, oat_tornado_full
 """
 
 import argparse
@@ -396,6 +397,34 @@ def render_all(data_dir: str, figures_dir: str, for_latex: bool = False, plot_ti
                         for_latex=for_latex,
                         plot_title=plot_title,
                     )
+
+    # OAT tornado figures (Fig. 5a story + SI full): independent of
+    # all_region_stats.csv; only need all_sensitivity_oat.csv. Kept outside
+    # the stats-gated block so --only oat_tornado_* works standalone.
+    if _want("oat_tornado_story") or _want("oat_tornado_full"):
+        from visualization.sensitivity import OAT_FEATURES_STORY, plot_oat_tornado
+        oat_path = os.path.join(data_dir, "all_sensitivity_oat.csv")
+        if not os.path.exists(oat_path):
+            print(f"oat_tornado skipped — missing {oat_path}; run sensitivity first")
+        else:
+            oat_df = pd.read_csv(oat_path)
+            if _want("oat_tornado_story"):
+                plot_oat_tornado(
+                    oat_df,
+                    save_path=os.path.join(out, "oat_tornado_story.png"),
+                    figsize=(8, 5.5),
+                    for_latex=for_latex,
+                    plot_title=plot_title,
+                    feature_whitelist=OAT_FEATURES_STORY,
+                )
+            if _want("oat_tornado_full"):
+                plot_oat_tornado(
+                    oat_df,
+                    save_path=os.path.join(out, "oat_tornado_full.png"),
+                    figsize=(8, 6.5),
+                    for_latex=for_latex,
+                    plot_title=plot_title,
+                )
 
             future_gef_figures = ("regions_map_and_gef_scatter_2030", "regions_map_and_gef_scatter_2060")
             if (

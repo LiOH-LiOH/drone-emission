@@ -30,10 +30,63 @@ import pandas as pd
 
 from ._utils import _add_title_suffix
 
-OAT_FEATURES = ("kappa", "gef_mult", "drone_energy_mult", "payload_kg",
-                "drone_lifespan_yr", "ebike_lifespan_yr")
-OAT_BASELINE = {"kappa": 1.0, "gef_mult": 1.0, "drone_energy_mult": 1.0,
-                "payload_kg": 1.0, "drone_lifespan_yr": 4, "ebike_lifespan_yr": 4}
+OAT_FEATURES = (
+    "kappa", "gef_mult", "drone_energy_mult", "payload_kg",
+    "drone_lifespan_yr", "ebike_lifespan_yr",
+    "drone_cruise_kmh", "drone_body_kg", "drone_hover_s",
+    "drone_battery_lifespan_yr", "headwind_mps",
+)
+
+# Curated subset for the §4 story tornado: rule = median city-level swing
+# exceeds 1 pp, plus kappa regardless (narrative continuity with §1). Five
+# features are excluded by this rule: payload_kg, drone_lifespan_yr,
+# ebike_lifespan_yr (below 1 pp) — the remaining nine carry the story.
+OAT_FEATURES_STORY = (
+    "gef_mult", "drone_energy_mult", "drone_body_kg",
+    "kappa", "drone_hover_s", "headwind_mps",
+    "drone_cruise_kmh", "drone_battery_lifespan_yr", "payload_kg",
+)
+
+OAT_FEATURE_LABELS = {
+    "kappa": "Bundling factor (κ)",
+    "gef_mult": "Grid emission factor",
+    "drone_energy_mult": "Drone energy use",
+    "payload_kg": "Payload mass",
+    "drone_lifespan_yr": "Drone frame lifespan",
+    "ebike_lifespan_yr": "E-bike lifespan",
+    "drone_cruise_kmh": "Drone cruise speed",
+    "drone_body_kg": "Drone empty mass",
+    "drone_hover_s": "Hover time",
+    "drone_battery_lifespan_yr": "Drone battery lifespan",
+    "headwind_mps": "Headwind speed",
+}
+
+# Mechanism-aware colors for the 6→4 mapping (Shapley alignment).
+OAT_FEATURE_MECHANISM = {
+    "kappa": "bundling",
+    "gef_mult": "grid",
+    "drone_energy_mult": "grid",
+    "payload_kg": "production",
+    "drone_lifespan_yr": "production",
+    "ebike_lifespan_yr": "production",
+    "drone_body_kg": "production",
+    "drone_battery_lifespan_yr": "production",
+    "drone_cruise_kmh": "operation",
+    "drone_hover_s": "operation",
+    "headwind_mps": "operation",
+}
+OAT_MECHANISM_COLORS = {
+    "bundling": "#DD8452",
+    "grid": "#C44E52",
+    "production": "#55A467",
+    "operation": "#4C72B0",
+}
+OAT_MECHANISM_LABELS = {
+    "bundling": "Trip bundling",
+    "grid": "Grid carbon",
+    "production": "Production amortization",
+    "operation": "Operation / environment",
+}
 
 MECHANISM_ORDER = ("M1_routing", "M2_bundling", "M3_production", "M4_gef")
 MECHANISM_LABELS = {
@@ -61,8 +114,8 @@ NAMED_STRATEGY_ORDER = (
 # Save-time conventions: matches the rest of visualization/*.py
 # ---------------------------------------------------------------------------
 
-def _finalize(save_path: str | None, dpi: int, for_latex: bool, plot_title: bool):
-    """Standard save logic shared with the other visualization modules."""
+def _finalize(save_path: str | None, dpi: int = 300, for_latex: bool = False, plot_title: bool = False):
+    """Standard save logic. dpi defaults to 300 per viz-conventions."""
     if save_path is None:
         plt.show()
         return None
@@ -89,15 +142,41 @@ def _resolve_path(out_dir: str, basename: str, for_latex: bool) -> str:
 def plot_oat_tornado(
     oat: pd.DataFrame,
     save_path: str | None = None,
-    dpi: int = 150,
+    figsize: tuple = (8, 5.5),
     for_latex: bool = False,
     plot_title: bool = False,
+    feature_whitelist: Iterable[str] | None = None,
 ):
+    """OAT tornado: median absolute swing per feature with IQR whiskers.
+
+    Bars are coloured by the Shapley mechanism each feature maps to, so the
+    Fig. 5 tornado and the Fig. 5 Shapley stacked bar read jointly without
+    re-explanation. ``feature_whitelist`` restricts the bars to a named
+    subset (in any order; bars are still sorted by descending median swing).
+    If ``None``, every feature present in ``oat`` is plotted.
+
+    Args:
+        oat: Long-format OAT DataFrame from ``all_sensitivity_oat.csv``.
+        save_path: Path to save figure. Shows plot if None.
+        figsize: Figure size tuple. Defaults to (8, 5.5); pass a taller size
+            for the full 11-feature tornado.
+        for_latex: If True, save as PDF.
+        plot_title: If True, show title.
+        feature_whitelist: Optional ordered iterable of feature names to
+            include. Use ``OAT_FEATURES_STORY`` for the main-text figure.
+    """
+    features = (
+        list(feature_whitelist)
+        if feature_whitelist is not None
+        else list(OAT_FEATURES)
+    )
     base = oat[oat["scenario_id"] == "baseline"][["region_key", "reduction_vs_anchor_ebike_pct"]]
     base = base.rename(columns={"reduction_vs_anchor_ebike_pct": "baseline_red"})
     diffs: Dict[str, list[float]] = {}
-    for feature in OAT_FEATURES:
+    for feature in features:
         sub = oat[oat["feature_varied"] == feature]
+        if sub.empty:
+            continue
         merged = sub.merge(base, on="region_key", how="inner")
         merged["delta"] = merged["reduction_vs_anchor_ebike_pct"] - merged["baseline_red"]
         per_city_max = merged.groupby("region_key")["delta"].agg(lambda s: s.abs().max())
@@ -107,23 +186,44 @@ def plot_oat_tornado(
     medians = [np.median(diffs[f]) for f in sorted_features]
     p25 = [np.percentile(diffs[f], 25) for f in sorted_features]
     p75 = [np.percentile(diffs[f], 75) for f in sorted_features]
+    bar_colors = [
+        OAT_MECHANISM_COLORS[OAT_FEATURE_MECHANISM.get(f, "operation")]
+        for f in sorted_features
+    ]
 
-    fig, ax = plt.subplots(figsize=(8, 4.5))
+    # Honour caller's figsize. Default (8, 5.5) suits the 9-feature story
+    # tornado; for the 11-feature full tornado pass figsize=(8, 6.5).
+    fig, ax = plt.subplots(figsize=figsize)
     y = np.arange(len(sorted_features))
-    ax.barh(y, medians, height=0.6, color="#4C72B0", alpha=0.85)
+    ax.barh(y, medians, height=0.65, color=bar_colors, alpha=0.9, edgecolor="white")
     ax.errorbar(medians, y, xerr=[
         np.array(medians) - np.array(p25),
         np.array(p75) - np.array(medians),
-    ], fmt="none", color="black", capsize=3)
+    ], fmt="none", color="black", capsize=3, alpha=0.6)
     ax.set_yticks(y)
-    ax.set_yticklabels(sorted_features)
+    ax.set_yticklabels([OAT_FEATURE_LABELS.get(f, f) for f in sorted_features])
     ax.invert_yaxis()
-    ax.set_xlabel("Max |Δ reduction-pct| across levels (median across cities, IQR)")
+    ax.set_xlabel("Median absolute swing in reduction (pp), with IQR across cities")
+
+    # Mechanism legend (only show mechanisms actually present)
+    present_mechs = []
+    for f in sorted_features:
+        m = OAT_FEATURE_MECHANISM.get(f, "operation")
+        if m not in present_mechs:
+            present_mechs.append(m)
+    handles = [
+        plt.Rectangle((0, 0), 1, 1, color=OAT_MECHANISM_COLORS[m], alpha=0.9)
+        for m in present_mechs
+    ]
+    labels = [OAT_MECHANISM_LABELS[m] for m in present_mechs]
+    ax.legend(handles, labels, loc="lower right", frameon=False, fontsize=9,
+              title="Shapley mechanism", title_fontsize=9)
+
     if plot_title:
         ax.set_title("OAT sensitivity tornado")
     ax.grid(axis="x", linestyle=":", alpha=0.5)
     plt.tight_layout()
-    return _finalize(save_path, dpi, for_latex, plot_title)
+    return _finalize(save_path, for_latex=for_latex, plot_title=plot_title)
 
 
 def _oat_panels(
@@ -134,14 +234,23 @@ def _oat_panels(
     dpi: int,
     for_latex: bool,
     plot_title: bool,
+    features: Iterable[str] | None = None,
 ):
-    fig, axes = plt.subplots(2, 3, figsize=(13, 7), sharey=True)
-    axes = axes.flatten()
-    for ax, feature in zip(axes, OAT_FEATURES):
+    feature_list = list(features) if features is not None else list(OAT_FEATURES)
+    n = len(feature_list)
+    ncols = 3
+    nrows = int(np.ceil(n / ncols))
+    fig, axes = plt.subplots(nrows, ncols, figsize=(13, 2.8 * nrows), sharey=True)
+    axes = np.atleast_2d(axes).flatten()
+
+    # Effective baseline values per feature: read from the CSV's baseline rows
+    # (which carry the experiment.toml-resolved value, not a hardcoded default).
+    base_row = oat[oat["scenario_id"] == "baseline"].iloc[0]
+
+    for ax, feature in zip(axes, feature_list):
         sub_dev = oat[oat["feature_varied"] == feature]
         sub_base = oat[oat["scenario_id"] == "baseline"].copy()
-        sub_base[feature] = OAT_BASELINE[feature]
-        sub_base["feature_varied"] = feature
+        sub_base["feature_varied"] = feature  # so it joins under this panel
         sub = pd.concat([sub_dev, sub_base], ignore_index=True)
         levels = sorted(sub[feature].unique())
         med = [sub[sub[feature] == lv][value_col].median() for lv in levels]
@@ -149,13 +258,18 @@ def _oat_panels(
         p75 = [sub[sub[feature] == lv][value_col].quantile(0.75) for lv in levels]
         ax.plot(levels, med, marker="o", color="#4C72B0", label="median")
         ax.fill_between(levels, p25, p75, color="#4C72B0", alpha=0.2, label="IQR")
-        ax.axvline(OAT_BASELINE[feature], linestyle="--", color="grey", alpha=0.6)
+        ax.axvline(base_row[feature], linestyle="--", color="grey", alpha=0.6)
         if plot_title:
-            ax.set_title(feature)
-        ax.set_xlabel(feature)
+            ax.set_title(OAT_FEATURE_LABELS.get(feature, feature))
+        ax.set_xlabel(OAT_FEATURE_LABELS.get(feature, feature))
         ax.grid(linestyle=":", alpha=0.5)
-    axes[0].set_ylabel(ylabel)
-    axes[3].set_ylabel(ylabel)
+    # Hide unused axes
+    for ax in axes[n:]:
+        ax.axis("off")
+    # Y-label only on left column
+    for i, ax in enumerate(axes):
+        if i % ncols == 0 and i < n:
+            ax.set_ylabel(ylabel)
     if plot_title:
         fig.suptitle(ylabel + " — OAT response (median ± IQR across cities)")
     fig.tight_layout()
@@ -185,26 +299,34 @@ def plot_oat_beneficial_share_panels(
     dpi: int = 150,
     for_latex: bool = False,
     plot_title: bool = False,
+    features: Iterable[str] | None = None,
 ):
-    fig, axes = plt.subplots(2, 3, figsize=(13, 7), sharey=True)
-    axes = axes.flatten()
-    for ax, feature in zip(axes, OAT_FEATURES):
+    feature_list = list(features) if features is not None else list(OAT_FEATURES)
+    n = len(feature_list)
+    ncols = 3
+    nrows = int(np.ceil(n / ncols))
+    fig, axes = plt.subplots(nrows, ncols, figsize=(13, 2.8 * nrows), sharey=True)
+    axes = np.atleast_2d(axes).flatten()
+    base_row = oat[oat["scenario_id"] == "baseline"].iloc[0]
+    for ax, feature in zip(axes, feature_list):
         sub_dev = oat[oat["feature_varied"] == feature]
         sub_base = oat[oat["scenario_id"] == "baseline"].copy()
-        sub_base[feature] = OAT_BASELINE[feature]
         sub_base["feature_varied"] = feature
         sub = pd.concat([sub_dev, sub_base], ignore_index=True)
         levels = sorted(sub[feature].unique())
         share = [sub[sub[feature] == lv]["beneficial"].mean() * 100 for lv in levels]
         ax.plot(levels, share, marker="o", color="#55A467")
-        ax.axvline(OAT_BASELINE[feature], linestyle="--", color="grey", alpha=0.6)
+        ax.axvline(base_row[feature], linestyle="--", color="grey", alpha=0.6)
         ax.set_ylim(0, 105)
         if plot_title:
-            ax.set_title(feature)
-        ax.set_xlabel(feature)
+            ax.set_title(OAT_FEATURE_LABELS.get(feature, feature))
+        ax.set_xlabel(OAT_FEATURE_LABELS.get(feature, feature))
         ax.grid(linestyle=":", alpha=0.5)
-    axes[0].set_ylabel("% of cities with reduction > 0")
-    axes[3].set_ylabel("% of cities with reduction > 0")
+    for ax in axes[n:]:
+        ax.axis("off")
+    for i, ax in enumerate(axes):
+        if i % ncols == 0 and i < n:
+            ax.set_ylabel("% of cities with reduction > 0")
     if plot_title:
         fig.suptitle("Beneficial-city share — OAT response")
     fig.tight_layout()
@@ -218,17 +340,20 @@ def plot_oat_gef_kappa_heatmap(
     for_latex: bool = False,
     plot_title: bool = False,
 ):
-    kappa_levels = sorted(set(oat[oat["feature_varied"] == "kappa"]["kappa"].unique().tolist() + [OAT_BASELINE["kappa"]]))
-    gef_levels = sorted(set(oat[oat["feature_varied"] == "gef_mult"]["gef_mult"].unique().tolist() + [OAT_BASELINE["gef_mult"]]))
+    base_row = oat[oat["scenario_id"] == "baseline"].iloc[0]
+    kappa_base = float(base_row["kappa"])
+    gef_base = float(base_row["gef_mult"])
+    kappa_levels = sorted(set(oat[oat["feature_varied"] == "kappa"]["kappa"].unique().tolist() + [kappa_base]))
+    gef_levels = sorted(set(oat[oat["feature_varied"] == "gef_mult"]["gef_mult"].unique().tolist() + [gef_base]))
 
     M = np.full((len(kappa_levels), len(gef_levels)), np.nan)
     for i, k in enumerate(kappa_levels):
         for j, g in enumerate(gef_levels):
-            if k == OAT_BASELINE["kappa"] and g == OAT_BASELINE["gef_mult"]:
+            if k == kappa_base and g == gef_base:
                 vals = oat[oat["scenario_id"] == "baseline"]["reduction_vs_anchor_ebike_pct"]
-            elif g == OAT_BASELINE["gef_mult"] and k != OAT_BASELINE["kappa"]:
+            elif g == gef_base and k != kappa_base:
                 vals = oat[(oat["feature_varied"] == "kappa") & (oat["kappa"] == k)]["reduction_vs_anchor_ebike_pct"]
-            elif k == OAT_BASELINE["kappa"] and g != OAT_BASELINE["gef_mult"]:
+            elif k == kappa_base and g != gef_base:
                 vals = oat[(oat["feature_varied"] == "gef_mult") & (oat["gef_mult"] == g)]["reduction_vs_anchor_ebike_pct"]
             else:
                 vals = pd.Series([], dtype=float)
@@ -499,8 +624,13 @@ def render_all(data_dir: str, figures_dir: str,
     if os.path.exists(oat_path):
         oat = pd.read_csv(oat_path)
         print(f"OAT: {len(oat)} rows from {oat_path}")
-        plot_oat_tornado(oat, save_path=_resolve_path(out, "oat_tornado", for_latex),
-                         dpi=dpi, for_latex=for_latex, plot_title=plot_title)
+        # Full tornado (all 11 features) — for supplementary material.
+        plot_oat_tornado(oat, save_path=_resolve_path(out, "oat_tornado_full", for_latex),
+                         figsize=(8, 6.5), for_latex=for_latex, plot_title=plot_title)
+        # Story tornado (curated subset) — for main-text Fig. 5a.
+        plot_oat_tornado(oat, save_path=_resolve_path(out, "oat_tornado_story", for_latex),
+                         figsize=(8, 5.5), for_latex=for_latex, plot_title=plot_title,
+                         feature_whitelist=OAT_FEATURES_STORY)
         plot_oat_reduction_panels(oat, save_path=_resolve_path(out, "oat_reduction_panels", for_latex),
                                    dpi=dpi, for_latex=for_latex, plot_title=plot_title)
         plot_oat_threshold_panels(oat, save_path=_resolve_path(out, "oat_threshold_panels", for_latex),
