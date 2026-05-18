@@ -80,11 +80,14 @@ def _baseline_sanity_check(region_info, oat_df: pd.DataFrame) -> None:
         )
 
 
-def _outputs_exist(out_dir: str, region_name_en: str) -> bool:
-    suffixes = ("_oat.csv", "_shapley.csv", "_named.csv", "_sobol.csv")
-    return all(
-        os.path.exists(os.path.join(out_dir, f"{region_name_en}{s}"))
-        for s in suffixes
+_OUTPUT_SUFFIXES = ("_oat.csv", "_shapley.csv", "_named.csv", "_sobol.csv")
+
+
+def _missing_outputs(out_dir: str, region_name_en: str) -> tuple[str, ...]:
+    """Return the suffixes whose CSV is not yet on disk for this region."""
+    return tuple(
+        s for s in _OUTPUT_SUFFIXES
+        if not os.path.exists(os.path.join(out_dir, f"{region_name_en}{s}"))
     )
 
 
@@ -106,7 +109,9 @@ def run_sensitivity(region_info, exp_config) -> None:
         return
 
     out_dir = os.path.join(exp_config["data_dir"], region_level, region_name_en)
-    if sens_cfg.get("skip_if_done", True) and _outputs_exist(out_dir, region_name_en):
+    skip_if_done = sens_cfg.get("skip_if_done", True)
+    missing = _missing_outputs(out_dir, region_name_en) if skip_if_done else _OUTPUT_SUFFIXES
+    if skip_if_done and not missing:
         print(f"Sensitivity outputs already exist for {region_name_en}; skipping.")
         return
 
@@ -134,50 +139,54 @@ def run_sensitivity(region_info, exp_config) -> None:
     payload_kg = emission_cfg["payload_kg"]
 
     print(f"Sensitivity for {region_name_en} ({province}, GEF={province_gef:.4f}): "
-          f"{len(od_df)} OD pairs")
-
-    oat_df = run_oat_for_region(
-        od_df, region_key=region_key, province=province,
-        province_gef_kwh=province_gef,
-        ebike_params=ebike_params, drone_params=drone_params,
-        rider_weight=rider_weight,
-    )
-    _baseline_sanity_check(region_info, oat_df)
-
-    shapley_df = run_shapley_for_region(
-        od_df, region_key=region_key, province=province,
-        province_gef_kwh=province_gef,
-        ebike_params=ebike_params, drone_params=drone_params,
-        rider_weight=rider_weight, payload_kg=payload_kg,
-    )
-
-    named_df = run_named_scenarios_for_region(
-        od_df, region_key=region_key, province=province,
-        province_gef_kwh=province_gef,
-        ebike_params=ebike_params, drone_params=drone_params,
-        rider_weight=rider_weight, payload_kg=payload_kg,
-    )
-
-    sobol_n = int(sens_cfg.get("sobol_n", 512))
-    sobol_seed = int(sens_cfg.get("sobol_seed", 42))
-    sobol_df = run_sobol_for_region(
-        od_df, region_key=region_key, province=province,
-        province_gef_kwh=province_gef,
-        ebike_params=ebike_params, drone_params=drone_params,
-        rider_weight=rider_weight, payload_kg=payload_kg,
-        n=sobol_n, seed=sobol_seed,
-    )
+          f"{len(od_df)} OD pairs; missing={list(missing)}")
 
     os.makedirs(out_dir, exist_ok=True)
-    oat_path = os.path.join(out_dir, f"{region_name_en}_oat.csv")
-    shapley_path = os.path.join(out_dir, f"{region_name_en}_shapley.csv")
-    named_path = os.path.join(out_dir, f"{region_name_en}_named.csv")
-    sobol_path = os.path.join(out_dir, f"{region_name_en}_sobol.csv")
-    oat_df.to_csv(oat_path, index=False)
-    shapley_df.to_csv(shapley_path, index=False)
-    named_df.to_csv(named_path, index=False)
-    sobol_df.to_csv(sobol_path, index=False)
-    print(f"  [sensitivity] wrote {len(oat_df)} OAT rows -> {oat_path}")
-    print(f"  [sensitivity] wrote {len(shapley_df)} shapley rows -> {shapley_path}")
-    print(f"  [sensitivity] wrote {len(named_df)} named rows -> {named_path}")
-    print(f"  [sensitivity] wrote {len(sobol_df)} sobol rows -> {sobol_path}")
+
+    if "_oat.csv" in missing:
+        oat_df = run_oat_for_region(
+            od_df, region_key=region_key, province=province,
+            province_gef_kwh=province_gef,
+            ebike_params=ebike_params, drone_params=drone_params,
+            rider_weight=rider_weight,
+        )
+        _baseline_sanity_check(region_info, oat_df)
+        oat_path = os.path.join(out_dir, f"{region_name_en}_oat.csv")
+        oat_df.to_csv(oat_path, index=False)
+        print(f"  [sensitivity] wrote {len(oat_df)} OAT rows -> {oat_path}")
+
+    if "_shapley.csv" in missing:
+        shapley_df = run_shapley_for_region(
+            od_df, region_key=region_key, province=province,
+            province_gef_kwh=province_gef,
+            ebike_params=ebike_params, drone_params=drone_params,
+            rider_weight=rider_weight, payload_kg=payload_kg,
+        )
+        shapley_path = os.path.join(out_dir, f"{region_name_en}_shapley.csv")
+        shapley_df.to_csv(shapley_path, index=False)
+        print(f"  [sensitivity] wrote {len(shapley_df)} shapley rows -> {shapley_path}")
+
+    if "_named.csv" in missing:
+        named_df = run_named_scenarios_for_region(
+            od_df, region_key=region_key, province=province,
+            province_gef_kwh=province_gef,
+            ebike_params=ebike_params, drone_params=drone_params,
+            rider_weight=rider_weight, payload_kg=payload_kg,
+        )
+        named_path = os.path.join(out_dir, f"{region_name_en}_named.csv")
+        named_df.to_csv(named_path, index=False)
+        print(f"  [sensitivity] wrote {len(named_df)} named rows -> {named_path}")
+
+    if "_sobol.csv" in missing:
+        sobol_n = int(sens_cfg.get("sobol_n", 512))
+        sobol_seed = int(sens_cfg.get("sobol_seed", 42))
+        sobol_df = run_sobol_for_region(
+            od_df, region_key=region_key, province=province,
+            province_gef_kwh=province_gef,
+            ebike_params=ebike_params, drone_params=drone_params,
+            rider_weight=rider_weight, payload_kg=payload_kg,
+            n=sobol_n, seed=sobol_seed,
+        )
+        sobol_path = os.path.join(out_dir, f"{region_name_en}_sobol.csv")
+        sobol_df.to_csv(sobol_path, index=False)
+        print(f"  [sensitivity] wrote {len(sobol_df)} sobol rows -> {sobol_path}")
