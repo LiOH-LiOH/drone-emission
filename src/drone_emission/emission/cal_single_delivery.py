@@ -99,6 +99,9 @@ class DroneParams:
     P_aux: float = 0.01  # 辅助设备功率 (kW)
     hover_time: float = 30  # 每次飞行悬停时间 (秒)
 
+    # 环境条件
+    headwind_speed_mps: float = 0.0  # 巡航段平均逆风风速 (m/s); affects body drag only at flight_angle≈0
+
 
 @dataclass
 class EcarParams:
@@ -527,7 +530,14 @@ class DroneEnergyModel:
         P_climb = m_kg * g * v_ms * math.sin(flight_angle_rad)
 
         # 机身阻力 (N)
-        D_body = 0.5 * rho * self.p.C_d * self.p.A * v_ms**2
+        # Headwind only applies to forward cruise (flight_angle≈0). For takeoff,
+        # landing, hover the relative airspeed in the body-drag direction is v_ms.
+        v_air = (
+            v_ms + self.p.headwind_speed_mps
+            if abs(flight_angle_deg) < 1e-3
+            else v_ms
+        )
+        D_body = 0.5 * rho * self.p.C_d * self.p.A * v_air**2
 
         # 推力 (N)
         T = (

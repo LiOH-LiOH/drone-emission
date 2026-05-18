@@ -1,7 +1,7 @@
 """One-at-a-time (OAT) sensitivity sweep, per region.
 
-Produces one row per (region, scenario_id) for ~17 scenarios — a baseline plus
-deviations on each of 6 features:
+Produces one row per (region, scenario_id) — a baseline plus deviations on
+each of 11 features:
 
 * kappa (e-bike bundling)               levels: 0.6, 0.7, 0.8, 0.9 (baseline 1.0)
 * gef_mult                              levels: 0.5, 0.8, 1.2 (baseline 1.0)
@@ -9,14 +9,19 @@ deviations on each of 6 features:
 * payload_kg                            levels: 0.5, 2.0 (baseline 1.0)
 * drone_lifespan_yr                     levels: 2, 6 (baseline 4)
 * ebike_lifespan_yr                     levels: 2, 6 (baseline 4)
+* drone_cruise_kmh                      levels: 40, 80 (baseline 60)
+* drone_body_kg                         levels: 6.0, 14.0 (baseline 10.1)
+* drone_hover_s                         levels: 15, 60 (baseline 30)
+* drone_battery_lifespan_yr             levels: 1, 3 (baseline 2)
+* headwind_mps (cruise-leg constant)    levels: 3.5, 7.0 (baseline 0.0)
 
 For each scenario the threshold sweep matches ``emission/api.py``: 12 points
 (-0.01, p5..p95 of road distances, +inf). Reductions are reported against:
 
 * the e-bike-only total under the SAME scenario (`reduction_vs_scenario_pct`)
-* the e-bike-only total under the ANCHOR scenario (kappa=1, gef_mult=1,
-  drone_e=1, payload=1, lifespans=4) — `reduction_vs_anchor_pct`. The anchor
-  uses the city's actual provincial GEF; only the multiplier is fixed at 1.
+* the e-bike-only total under the ANCHOR scenario (all features at baseline) —
+  `reduction_vs_anchor_pct`. The anchor uses the city's actual provincial GEF;
+  only the multiplier is fixed at 1.
 
 Aggregation matches the existing emission stage: each OD pair contributes
 once, unweighted by ``annual_sales`` (the reduction ratio is invariant under
@@ -40,7 +45,8 @@ from .vectorized_lca import (
     compute_ebike_per_order_g,
 )
 
-# Baseline values (the OAT anchor)
+# Baseline values (the OAT anchor). Defaults reflect DroneParams / EbikeParams
+# defaults so the anchor exactly matches the main pipeline's headline scenario.
 BASELINE = {
     "kappa": 1.0,
     "gef_mult": 1.0,
@@ -48,6 +54,11 @@ BASELINE = {
     "payload_kg": 1.0,
     "drone_lifespan_yr": 4,
     "ebike_lifespan_yr": 4,
+    "drone_cruise_kmh": 60.0,             # = DroneParams.v_level
+    "drone_body_kg": 10.1,                # = DroneParams.w_body
+    "drone_hover_s": 30.0,                # = DroneParams.hover_time
+    "drone_battery_lifespan_yr": 2,       # = DroneParams.battery_lifespan
+    "headwind_mps": 0.0,                  # = DroneParams.headwind_speed_mps
 }
 
 # Deviating levels per feature (baseline value omitted)
@@ -58,6 +69,11 @@ FEATURE_LEVELS = {
     "payload_kg": [0.5, 2.0],
     "drone_lifespan_yr": [2, 6],
     "ebike_lifespan_yr": [2, 6],
+    "drone_cruise_kmh": [40.0, 80.0],
+    "drone_body_kg": [6.0, 14.0],
+    "drone_hover_s": [15.0, 60.0],
+    "drone_battery_lifespan_yr": [1, 3],
+    "headwind_mps": [3.5, 7.0],
 }
 
 
@@ -123,7 +139,22 @@ def _emissions_for_scenario(
     payload_kg: float,
     ebike_lifespan_yr: float,
     drone_lifespan_yr: float,
+    drone_cruise_kmh: float,
+    drone_body_kg: float,
+    drone_hover_s: float,
+    drone_battery_lifespan_yr: float,
+    headwind_mps: float,
 ) -> tuple[np.ndarray, np.ndarray]:
+    # Per-scenario drone params: cruise speed, body mass, hover time, and
+    # headwind enter the physics directly; battery lifespan is passed through
+    # the DroneScenario override field instead.
+    drone_params_eff = replace(
+        drone_params,
+        v_level=drone_cruise_kmh,
+        w_body=drone_body_kg,
+        hover_time=drone_hover_s,
+        headwind_speed_mps=headwind_mps,
+    )
     e_scen = EbikeScenario(
         kappa=kappa,
         gef_mult=gef_mult,
@@ -137,9 +168,10 @@ def _emissions_for_scenario(
         energy_mult=drone_energy_mult,
         payload_kg=payload_kg,
         lifespan_yr=drone_lifespan_yr,
+        battery_lifespan_yr=drone_battery_lifespan_yr,
     )
     ebike_g = compute_ebike_per_order_g(road_distances_km, ebike_params, e_scen)
-    drone_g = compute_drone_per_order_g(straight_distances_km, drone_params, d_scen)
+    drone_g = compute_drone_per_order_g(straight_distances_km, drone_params_eff, d_scen)
     return ebike_g, drone_g
 
 
@@ -151,6 +183,11 @@ def _row_for_scenario(
     payload_kg: float,
     drone_lifespan_yr: float,
     ebike_lifespan_yr: float,
+    drone_cruise_kmh: float,
+    drone_body_kg: float,
+    drone_hover_s: float,
+    drone_battery_lifespan_yr: float,
+    headwind_mps: float,
     road_distances_km: np.ndarray,
     straight_distances_km: np.ndarray,
     thresholds: np.ndarray,
@@ -168,6 +205,11 @@ def _row_for_scenario(
         kappa=kappa, gef_mult=gef_mult, drone_energy_mult=drone_energy_mult,
         payload_kg=payload_kg, ebike_lifespan_yr=ebike_lifespan_yr,
         drone_lifespan_yr=drone_lifespan_yr,
+        drone_cruise_kmh=drone_cruise_kmh,
+        drone_body_kg=drone_body_kg,
+        drone_hover_s=drone_hover_s,
+        drone_battery_lifespan_yr=drone_battery_lifespan_yr,
+        headwind_mps=headwind_mps,
     )
     metrics = _best_threshold_metrics(road_distances_km, ebike_g, drone_g, thresholds)
     if anchor_ebike_only_total_g > 0:
@@ -188,6 +230,11 @@ def _row_for_scenario(
         "payload_kg": payload_kg,
         "drone_lifespan_yr": drone_lifespan_yr,
         "ebike_lifespan_yr": ebike_lifespan_yr,
+        "drone_cruise_kmh": drone_cruise_kmh,
+        "drone_body_kg": drone_body_kg,
+        "drone_hover_s": drone_hover_s,
+        "drone_battery_lifespan_yr": drone_battery_lifespan_yr,
+        "headwind_mps": headwind_mps,
         "optimal_threshold_km": metrics["best_threshold_km"],
         "optimal_drone_ratio_pct": metrics["best_drone_ratio_pct"],
         "mixed_lifecycle_kg": metrics["best_mixed_total_g"] / 1000.0,
@@ -226,6 +273,12 @@ def run_oat_for_region(
 
     thresholds = _threshold_sweep(road_distances_km)
 
+    def _kwargs_for(level_overrides: dict) -> dict:
+        """Build the full feature kwargs dict for _row_for_scenario."""
+        merged = dict(BASELINE)
+        merged.update(level_overrides)
+        return merged
+
     # Anchor reference: ebike-only total at all-baseline values.
     anchor_ebike_g, _ = _emissions_for_scenario(
         road_distances_km, straight_distances_km,
@@ -235,50 +288,45 @@ def run_oat_for_region(
         payload_kg=BASELINE["payload_kg"],
         ebike_lifespan_yr=BASELINE["ebike_lifespan_yr"],
         drone_lifespan_yr=BASELINE["drone_lifespan_yr"],
+        drone_cruise_kmh=BASELINE["drone_cruise_kmh"],
+        drone_body_kg=BASELINE["drone_body_kg"],
+        drone_hover_s=BASELINE["drone_hover_s"],
+        drone_battery_lifespan_yr=BASELINE["drone_battery_lifespan_yr"],
+        headwind_mps=BASELINE["headwind_mps"],
     )
     anchor_ebike_only_total_g = float(anchor_ebike_g.sum())
 
     rows = []
 
+    def _append_row(feature_varied: str, scenario_id: str, kwargs: dict) -> None:
+        rows.append(_row_for_scenario(
+            feature_varied=feature_varied,
+            kappa=kwargs["kappa"], gef_mult=kwargs["gef_mult"],
+            drone_energy_mult=kwargs["drone_energy_mult"],
+            payload_kg=kwargs["payload_kg"],
+            drone_lifespan_yr=kwargs["drone_lifespan_yr"],
+            ebike_lifespan_yr=kwargs["ebike_lifespan_yr"],
+            drone_cruise_kmh=kwargs["drone_cruise_kmh"],
+            drone_body_kg=kwargs["drone_body_kg"],
+            drone_hover_s=kwargs["drone_hover_s"],
+            drone_battery_lifespan_yr=kwargs["drone_battery_lifespan_yr"],
+            headwind_mps=kwargs["headwind_mps"],
+            road_distances_km=road_distances_km,
+            straight_distances_km=straight_distances_km,
+            thresholds=thresholds,
+            ebike_params_provincial=ebike_pp, drone_params_provincial=drone_pp,
+            rider_weight=rider_weight,
+            anchor_ebike_only_total_g=anchor_ebike_only_total_g,
+            region_key=region_key, province=province,
+            scenario_id=scenario_id,
+        ))
+
     # Baseline row
-    rows.append(_row_for_scenario(
-        feature_varied="baseline",
-        kappa=BASELINE["kappa"], gef_mult=BASELINE["gef_mult"],
-        drone_energy_mult=BASELINE["drone_energy_mult"],
-        payload_kg=BASELINE["payload_kg"],
-        drone_lifespan_yr=BASELINE["drone_lifespan_yr"],
-        ebike_lifespan_yr=BASELINE["ebike_lifespan_yr"],
-        road_distances_km=road_distances_km,
-        straight_distances_km=straight_distances_km,
-        thresholds=thresholds,
-        ebike_params_provincial=ebike_pp, drone_params_provincial=drone_pp,
-        rider_weight=rider_weight,
-        anchor_ebike_only_total_g=anchor_ebike_only_total_g,
-        region_key=region_key, province=province,
-        scenario_id="baseline",
-    ))
+    _append_row("baseline", "baseline", _kwargs_for({}))
 
     # Per-feature deviations
     for feature, levels in FEATURE_LEVELS.items():
         for level in levels:
-            kwargs = dict(BASELINE)
-            kwargs[feature] = level
-            scen_id = f"{feature}={level}"
-            rows.append(_row_for_scenario(
-                feature_varied=feature,
-                kappa=kwargs["kappa"], gef_mult=kwargs["gef_mult"],
-                drone_energy_mult=kwargs["drone_energy_mult"],
-                payload_kg=kwargs["payload_kg"],
-                drone_lifespan_yr=kwargs["drone_lifespan_yr"],
-                ebike_lifespan_yr=kwargs["ebike_lifespan_yr"],
-                road_distances_km=road_distances_km,
-                straight_distances_km=straight_distances_km,
-                thresholds=thresholds,
-                ebike_params_provincial=ebike_pp, drone_params_provincial=drone_pp,
-                rider_weight=rider_weight,
-                anchor_ebike_only_total_g=anchor_ebike_only_total_g,
-                region_key=region_key, province=province,
-                scenario_id=scen_id,
-            ))
+            _append_row(feature, f"{feature}={level}", _kwargs_for({feature: level}))
 
     return pd.DataFrame(rows)

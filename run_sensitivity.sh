@@ -13,7 +13,7 @@
 #
 # Logs go to ./logs/sensitivity_TIMESTAMP.log
 
-MEMORY_MAX="64G"
+MEMORY_MAX="16G"
 SESSION_NAME="drone-sensitivity"
 
 # ---- If not inside tmux, wrap ourselves in a tmux session ----
