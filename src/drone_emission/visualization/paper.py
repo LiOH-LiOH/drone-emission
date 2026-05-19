@@ -476,6 +476,65 @@ def render_all(data_dir: str, figures_dir: str, for_latex: bool = False, plot_ti
                             named_csv_path=named_path,
                         )
 
+    # Sobol + Monte Carlo figures (global SA, replaces Shapley in main text).
+    # Independent of all_region_stats.csv; only need all_sensitivity_sobol.csv.
+    sobol_figures = {
+        "sobol_indices", "sobol_by_mechanism", "sobol_strip",
+        "mc_uncertainty", "mc_anchor_forest", "mc_anchor_scatter",
+    }
+    if only is None or only & sobol_figures:
+        from visualization.sensitivity import (
+            plot_mc_anchor_forest, plot_mc_anchor_scatter, plot_mc_uncertainty,
+            plot_sobol_by_mechanism, plot_sobol_indices, plot_sobol_strip,
+        )
+        sobol_path = os.path.join(data_dir, "all_sensitivity_sobol.csv")
+        if not os.path.exists(sobol_path):
+            print(f"Sobol/MC figures skipped — missing {sobol_path}; run sensitivity + consolidate_sensitivity first")
+        else:
+            sobol_df = pd.read_csv(sobol_path)
+            if _want("sobol_indices"):
+                plot_sobol_indices(
+                    sobol_df,
+                    save_path=os.path.join(out, "sobol_indices.png"),
+                    for_latex=for_latex,
+                    plot_title=plot_title,
+                )
+            if _want("sobol_by_mechanism"):
+                plot_sobol_by_mechanism(
+                    sobol_df,
+                    save_path=os.path.join(out, "sobol_by_mechanism.png"),
+                    for_latex=for_latex,
+                    plot_title=plot_title,
+                )
+            if _want("sobol_strip"):
+                plot_sobol_strip(
+                    sobol_df,
+                    save_path=os.path.join(out, "sobol_strip.png"),
+                    for_latex=for_latex,
+                    plot_title=plot_title,
+                )
+            if _want("mc_uncertainty"):
+                plot_mc_uncertainty(
+                    sobol_df,
+                    save_path=os.path.join(out, "mc_uncertainty.png"),
+                    for_latex=for_latex,
+                    plot_title=plot_title,
+                )
+            if _want("mc_anchor_forest"):
+                plot_mc_anchor_forest(
+                    sobol_df,
+                    save_path=os.path.join(out, "mc_anchor_forest.png"),
+                    for_latex=for_latex,
+                    plot_title=plot_title,
+                )
+            if _want("mc_anchor_scatter"):
+                plot_mc_anchor_scatter(
+                    sobol_df,
+                    save_path=os.path.join(out, "mc_anchor_scatter.png"),
+                    for_latex=for_latex,
+                    plot_title=plot_title,
+                )
+
 
 def _bootstrap_paths():
     here = os.path.dirname(os.path.abspath(__file__))

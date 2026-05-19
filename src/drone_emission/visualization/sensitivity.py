@@ -515,6 +515,31 @@ def plot_shapley_dominance_scatter(
 # Sobol + Monte Carlo plots (global SA, replaces Shapley in main text)
 # ---------------------------------------------------------------------------
 
+# Feature → 4-mechanism mapping for the Sobol↔Shapley bridge.
+# Re-uses OAT_FEATURE_MECHANISM but enumerated here for clarity.
+SOBOL_MECHANISM_GROUPS = {
+    "grid":       ("gef_mult", "drone_energy_mult"),
+    "production": ("drone_body_kg", "drone_battery_lifespan_yr"),
+    "bundling":   ("kappa",),
+    "operation":  ("drone_cruise_kmh", "drone_hover_s", "headwind_mps", "payload_kg"),
+}
+
+
+def _pivot_mc_summary(sobol: pd.DataFrame) -> pd.DataFrame | None:
+    """Pivot the long-form mc_summary rows to one row per region."""
+    mc = sobol[sobol["row_kind"] == "mc_summary"]
+    if mc.empty:
+        return None
+    wide = mc.pivot_table(index="region_key", columns="feature", values="value")
+    needed = ["mc_median_reduction_pct", "mc_p2.5", "mc_p97.5",
+              "anchor_kappa1_reduction_pct", "mc_mean_reduction_pct"]
+    missing = [c for c in needed if c not in wide.columns]
+    if missing:
+        print(f"  _pivot_mc_summary: missing columns {missing}")
+        return None
+    return wide
+
+
 def plot_sobol_indices(
     sobol: pd.DataFrame,
     save_path: str | None = None,
@@ -526,26 +551,31 @@ def plot_sobol_indices(
     """Sobol S1 and ST per feature, median across cities with IQR whiskers.
 
     Bars colored by the same Shapley-mechanism palette as the OAT tornado so
-    the Fig. 5a (OAT) and Fig. 5f (Sobol) read jointly. S1 plotted as light
-    bar inset over the darker ST outline so interaction share is visually
-    the gap between the two.
+    the OAT tornado and the Sobol decomposition read jointly. S1 plotted as
+    dark bar inset over the lighter ST so the interaction share is visually
+    the gap between the two. Numeric ST median is annotated to the right of
+    each bar.
 
     Args:
         sobol: Long-format Sobol DataFrame from ``all_sensitivity_sobol.csv``.
+        save_path: Path to save figure. Shows plot if None.
+        figsize: Figure size tuple.
+        for_latex: If True, save as PDF.
+        plot_title: If True, show title.
     """
     si = sobol[sobol["row_kind"] == "sobol_index"].copy()
     if si.empty:
         print("  plot_sobol_indices: no sobol_index rows; skipping")
         return None
 
-    # Per-feature aggregates across cities
     grouped = si.groupby("feature")
     feature_medians = grouped["ST"].median().sort_values(ascending=True)
     features = list(feature_medians.index)
     st_median = feature_medians.values
     st_p25 = grouped["ST"].quantile(0.25).reindex(features).values
     st_p75 = grouped["ST"].quantile(0.75).reindex(features).values
-    s1_median = grouped["S1"].median().reindex(features).values
+    # Negative S1 is a finite-N estimator artifact; clamp at 0 for display.
+    s1_median = np.clip(grouped["S1"].median().reindex(features).values, 0, None)
 
     bar_colors = [
         OAT_MECHANISM_COLORS[OAT_FEATURE_MECHANISM.get(f, "operation")]
@@ -555,18 +585,24 @@ def plot_sobol_indices(
     fig, ax = plt.subplots(figsize=figsize)
     y = np.arange(len(features))
     ax.barh(y, st_median, color=bar_colors, alpha=0.45, edgecolor="black",
-            linewidth=1.0, label="Total-order $S_T$ (incl. interactions)")
+            linewidth=1.0)
     ax.barh(y, s1_median, color=bar_colors, alpha=0.95, edgecolor="black",
-            linewidth=1.0, label="First-order $S_1$")
+            linewidth=1.0)
     err_lower = np.clip(st_median - st_p25, 0, None)
     err_upper = np.clip(st_p75 - st_median, 0, None)
     ax.errorbar(st_median, y, xerr=[err_lower, err_upper], fmt="none",
                 ecolor="black", capsize=3, linewidth=1.0)
+    # Numeric ST labels to the right of each bar
+    x_max = float(np.max(st_p75)) if len(st_p75) else 1.0
+    label_pad = x_max * 0.015
+    for yi, st in zip(y, st_median):
+        ax.text(st + err_upper[yi] + label_pad, yi, f"{st:.2f}",
+                va="center", ha="left", fontsize=8)
     ax.set_yticks(y)
     ax.set_yticklabels([OAT_FEATURE_LABELS.get(f, f) for f in features])
     ax.set_xlabel("Sobol index (variance share of city-level reduction)")
     ax.axvline(0, color="black", linewidth=0.5)
-    ax.set_xlim(left=min(0, np.nanmin(s1_median) - 0.02))
+    ax.set_xlim(0, x_max * 1.18)
 
     legend_handles = [
         Patch(facecolor=OAT_MECHANISM_COLORS[m], edgecolor="black",
@@ -574,7 +610,7 @@ def plot_sobol_indices(
         for m in ("grid", "production", "bundling", "operation")
     ]
     legend_handles.append(Patch(facecolor="lightgray", edgecolor="black", alpha=0.45,
-                                 label="$S_T$ (interactions)"))
+                                 label="$S_T$ (incl. interactions)"))
     legend_handles.append(Patch(facecolor="lightgray", edgecolor="black", alpha=0.95,
                                  label="$S_1$ (main effect)"))
     ax.legend(handles=legend_handles, loc="lower right", fontsize=8, frameon=True)
@@ -583,74 +619,318 @@ def plot_sobol_indices(
         n_cities = si["region_key"].nunique()
         ax.set_title(f"Sobol global SA: 9-feature variance decomposition "
                      f"(n={n_cities} cities, median ± IQR)")
+    fig.tight_layout()
+    return _finalize(save_path, dpi, for_latex, plot_title)
+
+
+def plot_sobol_by_mechanism(
+    sobol: pd.DataFrame,
+    save_path: str | None = None,
+    figsize: tuple = (7, 3.5),
+    dpi: int = 150,
+    for_latex: bool = False,
+    plot_title: bool = False,
+):
+    """Sobol total-order indices aggregated to the 4 Shapley mechanisms.
+
+    Sums ST across features within each mechanism per city, then plots median
+    + IQR across cities. Provides the direct Sobol↔Shapley bridge §4 needs to
+    compare the new global SA to the old 4-mechanism decomposition.
+
+    Args:
+        sobol: Long-format Sobol DataFrame from ``all_sensitivity_sobol.csv``.
+        save_path: Path to save figure. Shows plot if None.
+        figsize: Figure size tuple.
+        for_latex: If True, save as PDF.
+        plot_title: If True, show title.
+    """
+    si = sobol[sobol["row_kind"] == "sobol_index"].copy()
+    if si.empty:
+        print("  plot_sobol_by_mechanism: no sobol_index rows; skipping")
+        return None
+
+    feature_to_mech = {f: m for m, feats in SOBOL_MECHANISM_GROUPS.items() for f in feats}
+    si["mechanism"] = si["feature"].map(feature_to_mech)
+    si = si.dropna(subset=["mechanism"])
+    # Sum ST per (region, mechanism), then aggregate across regions.
+    per_city = si.groupby(["region_key", "mechanism"])["ST"].sum().reset_index()
+    grouped = per_city.groupby("mechanism")["ST"]
+    medians = grouped.median()
+    p25 = grouped.quantile(0.25)
+    p75 = grouped.quantile(0.75)
+    order = ("grid", "production", "bundling", "operation")
+    medians = medians.reindex(order)
+    p25 = p25.reindex(order)
+    p75 = p75.reindex(order)
+
+    fig, ax = plt.subplots(figsize=figsize)
+    y = np.arange(len(order))
+    colors = [OAT_MECHANISM_COLORS[m] for m in order]
+    ax.barh(y, medians.values, color=colors, edgecolor="black", linewidth=1.0)
+    err_lower = np.clip(medians.values - p25.values, 0, None)
+    err_upper = np.clip(p75.values - medians.values, 0, None)
+    ax.errorbar(medians.values, y, xerr=[err_lower, err_upper], fmt="none",
+                ecolor="black", capsize=3, linewidth=1.0)
+    for yi, m in zip(y, medians.values):
+        ax.text(m + err_upper[yi] + 0.01, yi, f"{m:.2f}",
+                va="center", ha="left", fontsize=9)
+    ax.set_yticks(y)
+    ax.set_yticklabels([OAT_MECHANISM_LABELS[m] for m in order])
+    ax.set_xlabel("Aggregated total-order Sobol index $\\sum S_T$")
+    ax.axvline(0, color="black", linewidth=0.5)
+    ax.set_xlim(0, float(p75.max()) * 1.25)
+
+    if plot_title:
+        n_cities = si["region_key"].nunique()
+        ax.set_title(f"Sobol aggregated to 4 Shapley mechanisms "
+                     f"(n={n_cities} cities, median ± IQR)")
+    fig.tight_layout()
+    return _finalize(save_path, dpi, for_latex, plot_title)
+
+
+def plot_sobol_strip(
+    sobol: pd.DataFrame,
+    save_path: str | None = None,
+    figsize: tuple = (7.5, 3.5),
+    dpi: int = 150,
+    for_latex: bool = False,
+    plot_title: bool = False,
+    top_n: int = 3,
+):
+    """Per-city ST strip plot for the top-N features by median ST.
+
+    Each dot is one city's ST for that feature. Shows whether the dominant
+    parameters are universal across cities or driven by outliers.
+
+    Args:
+        sobol: Long-format Sobol DataFrame from ``all_sensitivity_sobol.csv``.
+        save_path: Path to save figure. Shows plot if None.
+        figsize: Figure size tuple.
+        for_latex: If True, save as PDF.
+        plot_title: If True, show title.
+        top_n: Number of top-ranked features (by median ST) to display.
+    """
+    si = sobol[sobol["row_kind"] == "sobol_index"].copy()
+    if si.empty:
+        print("  plot_sobol_strip: no sobol_index rows; skipping")
+        return None
+
+    medians = si.groupby("feature")["ST"].median().sort_values(ascending=False)
+    top_features = list(medians.head(top_n).index)
+    fig, ax = plt.subplots(figsize=figsize)
+    rng = np.random.default_rng(42)
+    for i, f in enumerate(top_features):
+        vals = si[si["feature"] == f]["ST"].to_numpy()
+        jitter = rng.uniform(-0.18, 0.18, size=len(vals))
+        color = OAT_MECHANISM_COLORS[OAT_FEATURE_MECHANISM.get(f, "operation")]
+        ax.scatter(vals, np.full_like(vals, i) + jitter, color=color, alpha=0.45,
+                   s=14, edgecolor="none")
+        med = np.median(vals)
+        ax.plot([med, med], [i - 0.32, i + 0.32], color="black", linewidth=2.0)
+        ax.text(med, i + 0.42, f"median {med:.2f}", ha="center", fontsize=8)
+    ax.set_yticks(np.arange(len(top_features)))
+    ax.set_yticklabels([OAT_FEATURE_LABELS.get(f, f) for f in top_features])
+    ax.set_xlabel("Per-city total-order Sobol index $S_T$")
+    ax.set_xlim(left=0)
+    ax.invert_yaxis()
+
+    if plot_title:
+        n_cities = si["region_key"].nunique()
+        ax.set_title(f"Per-city ST for top-{top_n} features (n={n_cities} cities)")
+    fig.tight_layout()
     return _finalize(save_path, dpi, for_latex, plot_title)
 
 
 def plot_mc_uncertainty(
     sobol: pd.DataFrame,
     save_path: str | None = None,
-    figsize: tuple = (8, 5.0),
+    figsize: tuple = (9, 4.5),
     dpi: int = 150,
     for_latex: bool = False,
     plot_title: bool = False,
-    headline_pct: float = 29.2,
 ):
-    """City-level MC distribution of optimal-mix reduction %.
+    """Cross-city distribution of MC reduction% vs the κ=1.0 anchor.
 
-    Two panels: (left) CDF of per-city MC medians with 95% ribbon from the
-    p2.5/p97.5 rows, (right) histogram of per-city anchor (κ=1.0) reductions
-    with a vertical line at the §2 headline so the reader sees that the
-    Sobol/MC summary reconciles with the headline value.
+    Two panels framing the headline robustness finding: the Saltelli uniform
+    sample (which includes drone-uncompetitive corners) gives a much lower
+    median reduction than the policy-relevant κ=1.0 anchor.
+
+    Left: CDF of per-city MC medians with the 95% MC band as a ribbon, and
+    the CDF of per-city anchor reductions overlaid for direct comparison.
+
+    Right: paired histogram of MC median (skewed left) and anchor (centered
+    on ~27%) with their cross-city means annotated.
+
+    Args:
+        sobol: Long-format Sobol DataFrame from ``all_sensitivity_sobol.csv``.
+        save_path: Path to save figure. Shows plot if None.
+        figsize: Figure size tuple.
+        for_latex: If True, save as PDF.
+        plot_title: If True, show title.
     """
-    mc = sobol[sobol["row_kind"] == "mc_summary"].copy()
-    if mc.empty:
-        print("  plot_mc_uncertainty: no mc_summary rows; skipping")
+    wide = _pivot_mc_summary(sobol)
+    if wide is None:
+        print("  plot_mc_uncertainty: skipping (missing mc_summary)")
         return None
 
-    wide = mc.pivot_table(index="region_key", columns="feature", values="value")
-    needed = ["mc_median_reduction_pct", "mc_p2.5", "mc_p97.5", "anchor_kappa1_reduction_pct"]
-    missing = [c for c in needed if c not in wide.columns]
-    if missing:
-        print(f"  plot_mc_uncertainty: missing columns {missing}; skipping")
-        return None
-
-    wide = wide.sort_values("mc_median_reduction_pct").reset_index(drop=True)
     n = len(wide)
+    by_mc = wide.sort_values("mc_median_reduction_pct").reset_index(drop=True)
+    by_anchor = wide.sort_values("anchor_kappa1_reduction_pct").reset_index(drop=True)
     rank = np.arange(1, n + 1) / n * 100.0
+    mc_color = OAT_MECHANISM_COLORS["grid"]
+    anchor_color = OAT_MECHANISM_COLORS["bundling"]
+    anchor_mean = float(wide["anchor_kappa1_reduction_pct"].mean())
+    anchor_median = float(wide["anchor_kappa1_reduction_pct"].median())
+    mc_median_overall = float(wide["mc_median_reduction_pct"].median())
 
     fig, (ax_l, ax_r) = plt.subplots(1, 2, figsize=figsize)
 
-    # Left: CDF of MC medians with shaded 2.5/97.5 ribbon (per-city).
-    ax_l.fill_betweenx(rank, wide["mc_p2.5"], wide["mc_p97.5"],
-                       color=OAT_MECHANISM_COLORS["grid"], alpha=0.15,
+    # Left: CDFs of MC median and anchor, with per-city MC band as ribbon
+    ax_l.fill_betweenx(rank, by_mc["mc_p2.5"], by_mc["mc_p97.5"],
+                       color=mc_color, alpha=0.12,
                        label="Per-city 95% MC band")
-    ax_l.plot(wide["mc_median_reduction_pct"], rank,
-              color=OAT_MECHANISM_COLORS["grid"], linewidth=1.6,
-              label="MC median (ordered)")
-    ax_l.axvline(headline_pct, color="black", linestyle="--", linewidth=1.0,
-                 label=f"§2 headline ({headline_pct:.1f}%)")
+    ax_l.plot(by_mc["mc_median_reduction_pct"], rank,
+              color=mc_color, linewidth=1.8,
+              label=f"MC median (cross-city median {mc_median_overall:.1f}%)")
+    ax_l.plot(by_anchor["anchor_kappa1_reduction_pct"], rank,
+              color=anchor_color, linewidth=1.8, linestyle="--",
+              label=f"Anchor κ=1.0 (cross-city median {anchor_median:.1f}%)")
     ax_l.set_xlabel("Reduction vs e-bike-only (%)")
     ax_l.set_ylabel("City percentile")
-    ax_l.set_xlim(left=min(-5, float(wide["mc_p2.5"].min()) - 2))
+    ax_l.set_xlim(left=min(-5, float(by_mc["mc_p2.5"].min()) - 2))
     ax_l.legend(loc="lower right", fontsize=8, frameon=True)
 
-    # Right: histogram of anchor κ=1.0 reductions; the headline lives in this
-    # distribution.
-    ax_r.hist(wide["anchor_kappa1_reduction_pct"].dropna(), bins=40,
-              color=OAT_MECHANISM_COLORS["grid"], alpha=0.8, edgecolor="black",
-              linewidth=0.4)
-    ax_r.axvline(headline_pct, color="black", linestyle="--", linewidth=1.0,
-                 label=f"§2 headline ({headline_pct:.1f}%)")
-    anchor_mean = float(wide["anchor_kappa1_reduction_pct"].mean())
-    ax_r.axvline(anchor_mean, color=OAT_MECHANISM_COLORS["bundling"],
-                 linestyle=":", linewidth=1.2,
-                 label=f"Anchor mean ({anchor_mean:.1f}%)")
-    ax_r.set_xlabel("Anchor reduction at κ=1.0 (%)")
+    # Right: paired histogram of MC median (left-skewed) and anchor
+    bins = np.linspace(0, max(float(wide["anchor_kappa1_reduction_pct"].max()),
+                              float(wide["mc_p97.5"].max())) + 2, 40)
+    ax_r.hist(wide["mc_median_reduction_pct"].dropna(), bins=bins,
+              color=mc_color, alpha=0.55, edgecolor="black", linewidth=0.4,
+              label=f"MC median (mean {wide['mc_median_reduction_pct'].mean():.1f}%)")
+    ax_r.hist(wide["anchor_kappa1_reduction_pct"].dropna(), bins=bins,
+              color=anchor_color, alpha=0.55, edgecolor="black", linewidth=0.4,
+              label=f"Anchor κ=1.0 (mean {anchor_mean:.1f}%)")
+    ax_r.axvline(anchor_mean, color=anchor_color, linestyle=":", linewidth=1.2)
+    ax_r.set_xlabel("Reduction vs e-bike-only (%)")
     ax_r.set_ylabel("Number of cities")
-    ax_r.legend(loc="upper left", fontsize=8, frameon=True)
+    ax_r.legend(loc="upper right", fontsize=8, frameon=True)
 
     if plot_title:
         fig.suptitle(f"Sobol/MC uncertainty across {n} cities", y=1.02)
+    fig.tight_layout()
+    return _finalize(save_path, dpi, for_latex, plot_title)
+
+
+def plot_mc_anchor_forest(
+    sobol: pd.DataFrame,
+    save_path: str | None = None,
+    figsize: tuple = (9, 5.0),
+    dpi: int = 150,
+    for_latex: bool = False,
+    plot_title: bool = False,
+    show_every: int = 1,
+):
+    """Per-city anchor reduction with the MC 95% band as vertical whiskers.
+
+    Cities ordered along x by anchor reduction. Each city gets a dot for the
+    anchor (κ=1.0) reduction and a vertical [p2.5, p97.5] MC whisker. The
+    line plot of the MC median across the same ordering is overlaid so the
+    reader sees whether the policy-relevant anchor sits inside the naive MC
+    band for every city.
+
+    Args:
+        sobol: Long-format Sobol DataFrame from ``all_sensitivity_sobol.csv``.
+        save_path: Path to save figure. Shows plot if None.
+        figsize: Figure size tuple.
+        for_latex: If True, save as PDF.
+        plot_title: If True, show title.
+        show_every: Plot every Nth city (after sorting by anchor) to thin a
+            dense forest. Default 1 keeps every city.
+    """
+    wide = _pivot_mc_summary(sobol)
+    if wide is None:
+        return None
+    wide = wide.sort_values("anchor_kappa1_reduction_pct").reset_index(drop=True)
+    if show_every > 1:
+        wide = wide.iloc[::show_every].reset_index(drop=True)
+    n = len(wide)
+    x = np.arange(n)
+
+    fig, ax = plt.subplots(figsize=figsize)
+    anchor_color = OAT_MECHANISM_COLORS["bundling"]
+    mc_color = OAT_MECHANISM_COLORS["grid"]
+    ax.vlines(x, wide["mc_p2.5"], wide["mc_p97.5"],
+              color=mc_color, alpha=0.30, linewidth=0.9,
+              label="95% MC band")
+    ax.plot(x, wide["mc_median_reduction_pct"], color=mc_color,
+            linewidth=1.4, alpha=0.85, label="MC median")
+    ax.scatter(x, wide["anchor_kappa1_reduction_pct"],
+               color=anchor_color, s=10, zorder=4,
+               label="Anchor κ=1.0")
+    ax.set_xlabel("City (ordered by anchor reduction)")
+    ax.set_ylabel("Reduction vs e-bike-only (%)")
+    ax.set_xlim(-1, n)
+    ax.axhline(0, color="black", linewidth=0.5)
+    ax.legend(loc="upper left", fontsize=8, frameon=True)
+
+    if plot_title:
+        ax.set_title(f"Per-city MC band vs κ=1.0 anchor (n={n} cities)")
+    fig.tight_layout()
+    return _finalize(save_path, dpi, for_latex, plot_title)
+
+
+def plot_mc_anchor_scatter(
+    sobol: pd.DataFrame,
+    save_path: str | None = None,
+    figsize: tuple = (5.5, 5.5),
+    dpi: int = 150,
+    for_latex: bool = False,
+    plot_title: bool = False,
+):
+    """Scatter of anchor reduction (x) vs MC median reduction (y), per city.
+
+    y = x diagonal drawn for reference. Cities above the diagonal: MC sample
+    happens to land above the κ=1.0 anchor (rare). Cities below: the naive
+    uniform MC understates the policy-relevant reduction.
+
+    Args:
+        sobol: Long-format Sobol DataFrame from ``all_sensitivity_sobol.csv``.
+        save_path: Path to save figure. Shows plot if None.
+        figsize: Figure size tuple.
+        for_latex: If True, save as PDF.
+        plot_title: If True, show title.
+    """
+    wide = _pivot_mc_summary(sobol)
+    if wide is None:
+        return None
+
+    anchor = wide["anchor_kappa1_reduction_pct"].to_numpy()
+    mc_med = wide["mc_median_reduction_pct"].to_numpy()
+    lo = float(min(np.nanmin(anchor), np.nanmin(mc_med)))
+    hi = float(max(np.nanmax(anchor), np.nanmax(mc_med)))
+    pad = (hi - lo) * 0.05
+
+    fig, ax = plt.subplots(figsize=figsize)
+    mc_color = OAT_MECHANISM_COLORS["grid"]
+    ax.plot([lo - pad, hi + pad], [lo - pad, hi + pad], color="black",
+            linewidth=0.8, linestyle="--", alpha=0.7, label="$y = x$")
+    ax.scatter(anchor, mc_med, color=mc_color, alpha=0.55, s=18,
+               edgecolor="none")
+    ax.set_xlabel("Anchor κ=1.0 reduction (%)")
+    ax.set_ylabel("MC median reduction (%)")
+    ax.set_xlim(lo - pad, hi + pad)
+    ax.set_ylim(lo - pad, hi + pad)
+    ax.set_aspect("equal", adjustable="box")
+    ax.legend(loc="upper left", fontsize=9, frameon=True)
+
+    # Quick fit / annotation: median gap
+    gap = float(np.nanmedian(anchor - mc_med))
+    ax.text(0.03, 0.85,
+            f"n = {len(wide)} cities\nMedian gap = {gap:.1f} pp",
+            transform=ax.transAxes, fontsize=9,
+            bbox=dict(facecolor="white", edgecolor="black", alpha=0.85, pad=4))
+
+    if plot_title:
+        ax.set_title("MC median vs κ=1.0 anchor per city")
     fig.tight_layout()
     return _finalize(save_path, dpi, for_latex, plot_title)
 
@@ -813,8 +1093,16 @@ def render_all(data_dir: str, figures_dir: str,
         print(f"Sobol: {len(sb)} rows from {sb_path}")
         plot_sobol_indices(sb, save_path=_resolve_path(out, "sobol_indices", for_latex),
                             dpi=dpi, for_latex=for_latex, plot_title=plot_title)
+        plot_sobol_by_mechanism(sb, save_path=_resolve_path(out, "sobol_by_mechanism", for_latex),
+                                 dpi=dpi, for_latex=for_latex, plot_title=plot_title)
+        plot_sobol_strip(sb, save_path=_resolve_path(out, "sobol_strip", for_latex),
+                          dpi=dpi, for_latex=for_latex, plot_title=plot_title)
         plot_mc_uncertainty(sb, save_path=_resolve_path(out, "mc_uncertainty", for_latex),
                              dpi=dpi, for_latex=for_latex, plot_title=plot_title)
+        plot_mc_anchor_forest(sb, save_path=_resolve_path(out, "mc_anchor_forest", for_latex),
+                               dpi=dpi, for_latex=for_latex, plot_title=plot_title)
+        plot_mc_anchor_scatter(sb, save_path=_resolve_path(out, "mc_anchor_scatter", for_latex),
+                                dpi=dpi, for_latex=for_latex, plot_title=plot_title)
     else:
         print(f"  missing {sb_path}; skipping Sobol/MC plots")
 
