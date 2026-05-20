@@ -74,38 +74,49 @@ OAT_FEATURE_LABELS = {
     "drone_utilization_rate": "Drone utilization rate",
 }
 
-# Mechanism-aware colors for the 6→4 mapping (Shapley alignment).
-# 2026-05-20: the four new drone-tech features all map to production (they
-# affect either the embodied carbon directly — body/battery mass and CO₂
-# intensities — or the amortization denominator — utilization).
+# Feature → mechanism mapping for the §4 LCA-stage tornado (2026-05-20).
+# Five mechanisms aligned with the LCA-stage classification:
+#
+#   - anchor:               e-bike-side bundling assumption (κ)
+#   - production_mass:      embodied carbon driven by drone mass
+#   - production_intensity: embodied carbon intensity (per-kg / per-kWh)
+#   - use:                  in-flight energy + operating environment
+#   - lifespan:             production amortization denominator
+#
+# Splitting production into mass vs intensity is justified by the Sobol
+# finding that ΣST(mass) ≈ 0.155 while ΣST(intensity) ≈ 0.006 — they
+# behave very differently and deserve separate bars/colors.
+#
+# gef_mult and ebike_lifespan_yr are dropped: gef moves to §5 (forward
+# pathway), ebike_lifespan is a mature-tech parameter held at baseline.
 OAT_FEATURE_MECHANISM = {
-    "kappa": "bundling",
-    "gef_mult": "grid",
-    "drone_energy_mult": "grid",
-    "payload_kg": "production",
-    "drone_lifespan_yr": "production",
-    "ebike_lifespan_yr": "production",
-    "drone_body_kg": "production",
-    "drone_battery_lifespan_yr": "production",
-    "drone_cruise_kmh": "operation",
-    "drone_hover_s": "operation",
-    "headwind_mps": "operation",
-    "drone_battery_mass": "production",
-    "drone_production_co2_per_kg": "production",
-    "drone_battery_co2_per_kwh": "production",
-    "drone_utilization_rate": "production",
+    "kappa":                       "anchor",
+    "drone_body_kg":               "production_mass",
+    "drone_battery_mass":          "production_mass",
+    "drone_production_co2_per_kg": "production_intensity",
+    "drone_battery_co2_per_kwh":   "production_intensity",
+    "drone_energy_mult":           "use",
+    "drone_cruise_kmh":            "use",
+    "drone_hover_s":               "use",
+    "headwind_mps":                "use",
+    "payload_kg":                  "use",
+    "drone_lifespan_yr":           "lifespan",
+    "drone_battery_lifespan_yr":   "lifespan",
+    "drone_utilization_rate":      "lifespan",
 }
 OAT_MECHANISM_COLORS = {
-    "bundling": "#DD8452",
-    "grid": "#C44E52",
-    "production": "#55A467",
-    "operation": "#4C72B0",
+    "production_mass":      "#55A467",   # green
+    "production_intensity": "#94C490",   # light green (same hue, less saturated)
+    "use":                  "#4C72B0",   # blue
+    "lifespan":             "#8172B2",   # purple
+    "anchor":               "#DD8452",   # orange (kept from old bundling color)
 }
 OAT_MECHANISM_LABELS = {
-    "bundling": "Trip bundling",
-    "grid": "Grid carbon",
-    "production": "Production amortization",
-    "operation": "Operation / environment",
+    "production_mass":      "Production (mass)",
+    "production_intensity": "Production (intensity)",
+    "use":                  "Use phase",
+    "lifespan":             "Lifespan / amortization",
+    "anchor":               "Anchor assumption (κ)",
 }
 
 MECHANISM_ORDER = ("M1_routing", "M2_bundling", "M3_production", "M4_gef")
@@ -217,7 +228,7 @@ def plot_oat_tornado(
     p25 = [np.percentile(diffs[f], 25) for f in sorted_features]
     p75 = [np.percentile(diffs[f], 75) for f in sorted_features]
     bar_colors = [
-        OAT_MECHANISM_COLORS[OAT_FEATURE_MECHANISM.get(f, "operation")]
+        OAT_MECHANISM_COLORS[OAT_FEATURE_MECHANISM.get(f, "use")]
         for f in sorted_features
     ]
 
@@ -238,7 +249,7 @@ def plot_oat_tornado(
     # Mechanism legend (only show mechanisms actually present)
     present_mechs = []
     for f in sorted_features:
-        m = OAT_FEATURE_MECHANISM.get(f, "operation")
+        m = OAT_FEATURE_MECHANISM.get(f, "use")
         if m not in present_mechs:
             present_mechs.append(m)
     handles = [
@@ -544,13 +555,16 @@ def plot_shapley_dominance_scatter(
 # Sobol + Monte Carlo plots (global SA, replaces Shapley in main text)
 # ---------------------------------------------------------------------------
 
-# Feature → 4-mechanism mapping for the Sobol↔Shapley bridge.
-# Re-uses OAT_FEATURE_MECHANISM but enumerated here for clarity.
+# Feature → 5-mechanism mapping for the Sobol aggregation figure.
+# Mirrors OAT_FEATURE_MECHANISM exactly (LCA-stage classification, 2026-05-20).
 SOBOL_MECHANISM_GROUPS = {
-    "grid":       ("gef_mult", "drone_energy_mult"),
-    "production": ("drone_body_kg", "drone_battery_lifespan_yr"),
-    "bundling":   ("kappa",),
-    "operation":  ("drone_cruise_kmh", "drone_hover_s", "headwind_mps", "payload_kg"),
+    "production_mass":      ("drone_body_kg", "drone_battery_mass"),
+    "production_intensity": ("drone_production_co2_per_kg", "drone_battery_co2_per_kwh"),
+    "use":                  ("drone_energy_mult", "drone_cruise_kmh", "drone_hover_s",
+                             "headwind_mps", "payload_kg"),
+    "lifespan":             ("drone_lifespan_yr", "drone_battery_lifespan_yr",
+                             "drone_utilization_rate"),
+    "anchor":               ("kappa",),
 }
 
 
@@ -607,7 +621,7 @@ def plot_sobol_indices(
     s1_median = np.clip(grouped["S1"].median().reindex(features).values, 0, None)
 
     bar_colors = [
-        OAT_MECHANISM_COLORS[OAT_FEATURE_MECHANISM.get(f, "operation")]
+        OAT_MECHANISM_COLORS[OAT_FEATURE_MECHANISM.get(f, "use")]
         for f in features
     ]
 
@@ -636,7 +650,7 @@ def plot_sobol_indices(
     legend_handles = [
         Patch(facecolor=OAT_MECHANISM_COLORS[m], edgecolor="black",
               label=OAT_MECHANISM_LABELS[m])
-        for m in ("grid", "production", "bundling", "operation")
+        for m in ("production_mass", "production_intensity", "use", "lifespan", "anchor")
     ]
     legend_handles.append(Patch(facecolor="lightgray", edgecolor="black", alpha=0.45,
                                  label="$S_T$ (incl. interactions)"))
@@ -687,7 +701,7 @@ def plot_sobol_by_mechanism(
     medians = grouped.median()
     p25 = grouped.quantile(0.25)
     p75 = grouped.quantile(0.75)
-    order = ("grid", "production", "bundling", "operation")
+    order = ("production_mass", "production_intensity", "use", "lifespan", "anchor")
     medians = medians.reindex(order)
     p25 = p25.reindex(order)
     p75 = p75.reindex(order)
@@ -751,7 +765,7 @@ def plot_sobol_strip(
     for i, f in enumerate(top_features):
         vals = si[si["feature"] == f]["ST"].to_numpy()
         jitter = rng.uniform(-0.18, 0.18, size=len(vals))
-        color = OAT_MECHANISM_COLORS[OAT_FEATURE_MECHANISM.get(f, "operation")]
+        color = OAT_MECHANISM_COLORS[OAT_FEATURE_MECHANISM.get(f, "use")]
         ax.scatter(vals, np.full_like(vals, i) + jitter, color=color, alpha=0.45,
                    s=14, edgecolor="none")
         med = np.median(vals)
@@ -806,8 +820,8 @@ def plot_mc_uncertainty(
     by_mc = wide.sort_values("mc_median_reduction_pct").reset_index(drop=True)
     by_anchor = wide.sort_values("anchor_kappa1_reduction_pct").reset_index(drop=True)
     rank = np.arange(1, n + 1) / n * 100.0
-    mc_color = OAT_MECHANISM_COLORS["grid"]
-    anchor_color = OAT_MECHANISM_COLORS["bundling"]
+    mc_color = "#C44E52"  # fixed red for MC distribution (was OAT_MECHANISM_COLORS["grid"])
+    anchor_color = OAT_MECHANISM_COLORS["anchor"]
     anchor_mean = float(wide["anchor_kappa1_reduction_pct"].mean())
     anchor_median = float(wide["anchor_kappa1_reduction_pct"].median())
     mc_median_overall = float(wide["mc_median_reduction_pct"].median())
@@ -885,8 +899,8 @@ def plot_mc_anchor_forest(
     x = np.arange(n)
 
     fig, ax = plt.subplots(figsize=figsize)
-    anchor_color = OAT_MECHANISM_COLORS["bundling"]
-    mc_color = OAT_MECHANISM_COLORS["grid"]
+    anchor_color = OAT_MECHANISM_COLORS["anchor"]
+    mc_color = "#C44E52"  # fixed red for MC distribution (was OAT_MECHANISM_COLORS["grid"])
     ax.vlines(x, wide["mc_p2.5"], wide["mc_p97.5"],
               color=mc_color, alpha=0.30, linewidth=0.9,
               label="95% MC band")
@@ -939,7 +953,7 @@ def plot_mc_anchor_scatter(
     pad = (hi - lo) * 0.05
 
     fig, ax = plt.subplots(figsize=figsize)
-    mc_color = OAT_MECHANISM_COLORS["grid"]
+    mc_color = "#C44E52"  # fixed red for MC distribution (was OAT_MECHANISM_COLORS["grid"])
     ax.plot([lo - pad, hi + pad], [lo - pad, hi + pad], color="black",
             linewidth=0.8, linestyle="--", alpha=0.7, label="$y = x$")
     ax.scatter(anchor, mc_med, color=mc_color, alpha=0.55, s=18,
