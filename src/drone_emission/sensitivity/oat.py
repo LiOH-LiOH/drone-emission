@@ -22,7 +22,7 @@ Lifespan / amortization:
 * drone_utilization_rate                levels: 0.5, 1.2 (baseline 1.0; multiplier on annual deliveries)
 
 Anchor assumption (separate from drone-tech):
-* kappa (e-bike bundling)               levels: 0.6, 0.7, 0.8, 0.9 (baseline 1.0)
+* kappa (e-bike bundling)               levels: 0.7, 0.8, 0.9 (baseline 1.0)
 
 The gef_mult and ebike_lifespan_yr keys remain in BASELINE (anchor still uses
 them at gef_mult=1.0, ebike_lifespan_yr=4) but are no longer perturbed in
@@ -92,8 +92,12 @@ BASELINE = {
 
 # Deviating levels per feature (baseline value omitted)
 FEATURE_LEVELS = {
-    # Anchor-assumption (e-bike side, unchanged)
-    "kappa": [0.6, 0.7, 0.8, 0.9],
+    # Anchor-assumption (e-bike side). κ=0.6 dropped 2026-05-20 — that level
+    # corresponded to "aggressive bundling" (40% discount) which is at the
+    # extreme tail of the Eleme empirical range, not a realistic operating
+    # point. Remaining levels [0.7, 0.8, 0.9] cover the empirically plausible
+    # bundling range; baseline κ=1.0 (no bundling) is the upper bound.
+    "kappa": [0.7, 0.8, 0.9],
 
     # Tightened 2026-05-20: ±15% physics-model validation envelope, NOT the
     # ad-hoc ±25/+50% from the pre-pivot version. Multirotor energy models
