@@ -4,17 +4,17 @@ Produces one row per (region, scenario_id) — a baseline plus deviations on
 13 drone-tech features plus κ (e-bike bundling anchor-assumption):
 
 Production:
-* drone_body_kg                         levels: 6.0, 14.0 (baseline 10.1)
-* drone_battery_mass                    levels: 2.0, 5.0 (baseline 3.0)
+* drone_body_kg                         levels: 9.0, 11.5 (baseline 10.1; ±10% MD4-3000 spec)
+* drone_battery_mass                    levels: 2.7, 3.3 (baseline 3.0; ±10% MD4-3000 spec)
 * drone_production_co2_per_kg           levels: 7.0, 11.6 (baseline 9.3)
 * drone_battery_co2_per_kwh             levels: 100, 180 (baseline 141)
 
 Use:
-* drone_energy_mult                     levels: 0.75, 1.25, 1.5 (baseline 1.0)
-* drone_cruise_kmh                      levels: 40, 80 (baseline 60)
-* drone_hover_s                         levels: 15, 60 (baseline 10 from experiment.toml)
+* drone_energy_mult                     levels: 0.85, 1.15 (baseline 1.0; ±15% physics-model validation envelope)
+* drone_cruise_kmh                      levels: 50, 70 (baseline 60; ±17% operational drift)
+* drone_hover_s                         levels: 30, 60 (baseline 10; moderate→congested ops)
 * headwind_mps (cruise-leg constant)    levels: 3.5, 7.0 (baseline 0.0)
-* payload_kg                            levels: 0.5, 2.0 (baseline 1.0)
+* payload_kg                            levels: 0.7, 1.3 (baseline 1.0; ±30% food-delivery parcel distribution)
 
 Lifespan / amortization:
 * drone_lifespan_yr                     levels: 2, 6 (baseline 4)
@@ -92,21 +92,46 @@ BASELINE = {
 
 # Deviating levels per feature (baseline value omitted)
 FEATURE_LEVELS = {
+    # Anchor-assumption (e-bike side, unchanged)
     "kappa": [0.6, 0.7, 0.8, 0.9],
-    "drone_energy_mult": [0.75, 1.25, 1.5],
-    "payload_kg": [0.5, 2.0],
+
+    # Tightened 2026-05-20: ±15% physics-model validation envelope, NOT the
+    # ad-hoc ±25/+50% from the pre-pivot version. Multirotor energy models
+    # (Stolaroff 2018, D'Andrea 2014, Doole 2023) typically validate within
+    # ±15% against measured data.
+    "drone_energy_mult": [0.85, 1.15],
+
+    # Tightened: median food-delivery parcel ±30% (was [0.5, 2.0] spanning
+    # small parcel to 2 kg, two operational regimes mixed).
+    "payload_kg": [0.7, 1.3],
+
+    # Unchanged: future maturity / wear ranges
     "drone_lifespan_yr": [2, 6],
-    "drone_cruise_kmh": [40.0, 80.0],
-    "drone_body_kg": [6.0, 14.0],
-    "drone_hover_s": [15.0, 60.0],
     "drone_battery_lifespan_yr": [1, 3],
     "headwind_mps": [3.5, 7.0],
-    # NEW (production)
-    "drone_battery_mass": [2.0, 5.0],
+
+    # Tightened: MD4-3000 spec ±17% (operational cruise drift, not cross-class)
+    "drone_cruise_kmh": [50.0, 70.0],
+
+    # Tightened: MD4-3000 ±10% spec tolerance (was [6, 14] cross-class)
+    "drone_body_kg": [9.0, 11.5],
+
+    # Hover: baseline 10s; levels cover moderate (30s) and congested/queued
+    # (60s) operations. Lower edge of range = baseline (no separate level
+    # needed — baseline row already covers it). Fixes prior [15, 60] which
+    # did not include baseline 10s.
+    "drone_hover_s": [30.0, 60.0],
+
+    # NEW (production-mass): MD4-3000 ±10% spec tolerance (was [2, 5])
+    "drone_battery_mass": [2.7, 3.3],
+
+    # NEW (production-intensity): unchanged ranges (genuine literature spread)
     "drone_production_co2_per_kg": [7.0, 11.6],
     "drone_battery_co2_per_kwh": [100.0, 180.0],
-    # NEW (lifespan / amortization)
+
+    # NEW (lifespan / amortization): unchanged
     "drone_utilization_rate": [0.5, 1.2],
+
     # DROPPED: gef_mult (measured, §5 lever), ebike_lifespan_yr (mature, < 1 pp)
 }
 
