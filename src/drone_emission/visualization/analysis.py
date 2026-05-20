@@ -664,9 +664,19 @@ def plot_regions_map_pathway_scenarios(
     ]
 
     reduction_col = "reduction_vs_anchor_ebike_pct"
+    has_annual = "annual_lifecycle_kg" in named.columns
+    if has_annual:
+        anchor_rows = named[
+            np.isclose(named["kappa"], 1.0)
+            & np.isclose(named["gef_mult"], 1.0)
+            & (named["strategy"] == "all_ebike")
+        ][["region_key", "annual_lifecycle_kg"]].rename(
+            columns={"annual_lifecycle_kg": "anchor_annual_kg"}
+        )
     panel_dfs = {}
     panel_named = {}
     drone_share_median = {}
+    annual_saved_total_kg = {}
     all_values = []
     for label, _title, k, g, strat in panels:
         rows = named[
@@ -685,6 +695,9 @@ def plot_regions_map_pathway_scenarios(
         panel_dfs[label] = merged
         all_values.extend(merged["max_lifecycle_reduction_pct"].dropna().tolist())
         drone_share_median[label] = float(rows["drone_ratio_pct"].median()) if len(rows) else float("nan")
+        if has_annual:
+            joined = rows[["region_key", "annual_lifecycle_kg"]].merge(anchor_rows, on="region_key", how="inner")
+            annual_saved_total_kg[label] = float((joined["anchor_annual_kg"] - joined["annual_lifecycle_kg"]).sum())
 
     if not all_values:
         print("plot_regions_map_pathway_scenarios: no scenario rows matched any region in stats — "
@@ -726,9 +739,13 @@ def plot_regions_map_pathway_scenarios(
         ax_map.set_title(title, fontsize=12)
         ax_map.text(-0.02, 1.02, label, transform=ax_map.transAxes,
                     fontsize=14, fontweight="bold", va="bottom", ha="right")
+        annotation_lines = [f"Median drone share: {drone_share_median[label]:.0f}%"]
+        if label in annual_saved_total_kg:
+            saved_kt = annual_saved_total_kg[label] / 1e6  # kg -> kt
+            annotation_lines.append(f"Total CO$_2$ saved: {saved_kt:.0f} kt/yr")
         ax_map.text(
             0.02, 0.98,
-            f"Median drone share: {drone_share_median[label]:.0f}%",
+            "\n".join(annotation_lines),
             transform=ax_map.transAxes,
             fontsize=10, va="top", ha="left",
             bbox=dict(facecolor="white", edgecolor="gray", alpha=0.85,
