@@ -220,6 +220,7 @@ def plot_regions_on_china_map(
     df: "pd.DataFrame" = None,
     colorbar_label: str = None,
     norm: "TwoSlopeNorm" = None,
+    cmap: "LinearSegmentedColormap" = None,
     draw_colorbar: bool = True,
     draw_legend: bool = True,
 ):
@@ -294,13 +295,14 @@ def plot_regions_on_china_map(
     # --- Colour mapping ---------------------------------------------------------
     from analysis.constants import VARIABLE_LABELS
 
-    cmap = LinearSegmentedColormap.from_list("green_diverging", [
-        "#d7191c",
-        "#fdae61",
-        "#ffffbf",
-        "#a6d96a",
-        "#1a9641",
-    ])
+    if cmap is None:
+        cmap = LinearSegmentedColormap.from_list("green_diverging", [
+            "#d7191c",
+            "#fdae61",
+            "#ffffbf",
+            "#a6d96a",
+            "#1a9641",
+        ])
 
     valid_values = [v for v in study_adcode_to_val.values() if not np.isnan(v)]
     if norm is None:

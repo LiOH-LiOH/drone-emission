@@ -81,8 +81,16 @@ def _evaluate_strategy(
     ebike_g: np.ndarray,
     drone_g: np.ndarray,
     thresholds: np.ndarray,
+    annual_sales: np.ndarray = None,
 ) -> dict:
-    """Apply the strategy decision rule, return total mixed kg + threshold + drone ratio."""
+    """Apply the strategy decision rule, return total mixed kg + threshold + drone ratio.
+
+    If ``annual_sales`` is provided, ``annual_lifecycle_kg`` is also returned
+    (sum over OD pairs of per_delivery_g x annual_sales / 1000). Note: threshold
+    selection for ``optimal_mixed*`` is driven by the unweighted per-delivery
+    sum to keep the optimization scale-free; annual weighting is applied only
+    to the final reporting.
+    """
     n = len(road_distances_km)
     if strategy == "all_ebike":
         chosen_threshold = float("inf")
@@ -109,14 +117,18 @@ def _evaluate_strategy(
     else:
         raise ValueError(f"Unknown strategy: {strategy}")
 
-    mixed_total_g = float(np.where(use_drone, drone_g, ebike_g).sum())
+    per_od_g = np.where(use_drone, drone_g, ebike_g)
+    mixed_total_g = float(per_od_g.sum())
     drone_ratio_pct = float(use_drone.sum()) / n * 100.0
-    return {
+    result = {
         "threshold_km": chosen_threshold,
         "drone_ratio_pct": drone_ratio_pct,
         "total_lifecycle_kg": mixed_total_g / 1000.0,
         "_total_g": mixed_total_g,
     }
+    if annual_sales is not None:
+        result["annual_lifecycle_kg"] = float((per_od_g * annual_sales).sum()) / 1000.0
+    return result
 
 
 def run_named_scenarios_for_region(
@@ -135,6 +147,10 @@ def run_named_scenarios_for_region(
     if len(road_distances_km) == 0:
         return pd.DataFrame()
     thresholds = _threshold_sweep(road_distances_km)
+    if "annual_sales" in od_df.columns:
+        annual_sales = od_df["annual_sales"].to_numpy(dtype=float)
+    else:
+        annual_sales = None
 
     # Anchor reference: all-ebike total at kappa=1.0, current GEF.
     anchor_ebike_g, _ = _per_od_emissions(
@@ -176,7 +192,10 @@ def run_named_scenarios_for_region(
         ]
         for strategy, gef_label, gef_mult in strategies:
             ebike_g, drone_g = emissions_by_gef[gef_label]
-            res = _evaluate_strategy(strategy, road_distances_km, ebike_g, drone_g, thresholds)
+            res = _evaluate_strategy(
+                strategy, road_distances_km, ebike_g, drone_g, thresholds,
+                annual_sales=annual_sales,
+            )
             mixed_g = res["_total_g"]
             red_anchor = (
                 (anchor_total_g - mixed_g) / anchor_total_g * 100.0
@@ -186,7 +205,7 @@ def run_named_scenarios_for_region(
                 (same_kappa_ebike_total_g - mixed_g) / same_kappa_ebike_total_g * 100.0
                 if same_kappa_ebike_total_g > 0 else 0.0
             )
-            rows.append({
+            row = {
                 "region_key": region_key,
                 "province": province,
                 "kappa": kappa,
@@ -197,6 +216,9 @@ def run_named_scenarios_for_region(
                 "total_lifecycle_kg": res["total_lifecycle_kg"],
                 "reduction_vs_anchor_ebike_pct": float(red_anchor),
                 "reduction_vs_all_ebike_same_kappa_pct": float(red_same_kappa),
-            })
+            }
+            if "annual_lifecycle_kg" in res:
+                row["annual_lifecycle_kg"] = res["annual_lifecycle_kg"]
+            rows.append(row)
 
     return pd.DataFrame(rows)

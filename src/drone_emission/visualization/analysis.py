@@ -616,6 +616,176 @@ def plot_regions_map_kappa_panels(
     plt.close(fig)
 
 
+def plot_regions_map_pathway_scenarios(
+    named_csv_path: str,
+    stats_csv_path: str,
+    save_path: str = None,
+    figsize: tuple = (16, 18),
+    for_latex: bool = False,
+    plot_title: bool = False,
+):
+    """2x2 panel grid: China region choropleth + per-province drone-share boxplot.
+
+    Each of four scenarios occupies a (map, boxplot) pair, with the boxplot
+    directly under its map. The boxplot has one box per province (drone-share
+    distribution across cities within that province). Provinces ordered by the
+    today-baseline median drone share, consistent across all four panels.
+
+    Panels (all from `all_sensitivity_named.csv`):
+        (a) today                 kappa=1.0, gef_mult=1.0, optimal_mixed
+        (b) NDC 2030 grid         kappa=1.0, gef_mult=0.5, optimal_mixed_2030
+        (c) operator bundling     kappa=0.7, gef_mult=1.0, optimal_mixed
+        (d) 2030 grid + bundling  kappa=0.7, gef_mult=0.5, optimal_mixed_2030
+
+    Reduction values (map fill) use `reduction_vs_anchor_ebike_pct` (vs today's
+    no-bundling all-ebike anchor). Boxplot y-axis is drone_ratio_pct in 0..100.
+
+    Args:
+        named_csv_path: Path to all_sensitivity_named.csv.
+        stats_csv_path: Path to all_region_stats.csv (provides region_name_cn lookup).
+        save_path: Path to save figure. Shows plot if None.
+        figsize: Figure size tuple.
+        for_latex: If True, save as PDF.
+        plot_title: If True, show figure-level title.
+    """
+    from matplotlib.colors import LinearSegmentedColormap, TwoSlopeNorm
+    from matplotlib.patches import Patch
+
+    from visualization.regions import plot_regions_on_china_map
+
+    named = pd.read_csv(named_csv_path)
+    base = pd.read_csv(stats_csv_path)
+
+    panels = [
+        ("a", "Today\n($\\kappa{=}1.0,\\ \\mathrm{gef}{=}1.0$)",                    1.0, 1.0, "optimal_mixed"),
+        ("b", "NDC 2030 grid\n($\\kappa{=}1.0,\\ \\mathrm{gef}{=}0.5$)",            1.0, 0.5, "optimal_mixed_2030"),
+        ("c", "Operator bundling\n($\\kappa{=}0.7,\\ \\mathrm{gef}{=}1.0$)",        0.7, 1.0, "optimal_mixed"),
+        ("d", "2030 grid + bundling\n($\\kappa{=}0.7,\\ \\mathrm{gef}{=}0.5$)",     0.7, 0.5, "optimal_mixed_2030"),
+    ]
+
+    reduction_col = "reduction_vs_anchor_ebike_pct"
+    panel_dfs = {}
+    panel_named = {}
+    drone_share_median = {}
+    all_values = []
+    for label, _title, k, g, strat in panels:
+        rows = named[
+            np.isclose(named["kappa"], k)
+            & np.isclose(named["gef_mult"], g)
+            & (named["strategy"] == strat)
+        ].copy()
+        rows["province_en"] = rows["province"].map(PROVINCE_NAME_EN).fillna(rows["province"])
+        panel_named[label] = rows
+        sub = rows[["region_key", reduction_col]].rename(
+            columns={reduction_col: "max_lifecycle_reduction_pct"}
+        )
+        merged = base.drop(columns=["max_lifecycle_reduction_pct"], errors="ignore").merge(
+            sub, on="region_key", how="left"
+        )
+        panel_dfs[label] = merged
+        all_values.extend(merged["max_lifecycle_reduction_pct"].dropna().tolist())
+        drone_share_median[label] = float(rows["drone_ratio_pct"].median()) if len(rows) else float("nan")
+
+    if not all_values:
+        print("plot_regions_map_pathway_scenarios: no scenario rows matched any region in stats — "
+              "rendering empty maps. Run sensitivity --stages named first.")
+        v_max = 1.0
+    else:
+        v_max = max(max(all_values), 0.0)
+    from matplotlib.colors import Normalize as _Normalize
+    shared_norm = _Normalize(vmin=0, vmax=v_max)
+    shared_cmap = LinearSegmentedColormap.from_list("green_seq", [
+        "#ffffe0", "#d9f0a3", "#a6d96a", "#41ab5d", "#1a9641",
+    ])
+
+    # Province order from today-baseline ascending median drone share
+    today_rows = panel_named["a"]
+    province_order = (
+        today_rows.groupby("province_en")["drone_ratio_pct"].median().sort_values().index.tolist()
+    )
+
+    fig = plt.figure(figsize=figsize)
+    gs = fig.add_gridspec(4, 2, height_ratios=[5, 2.2, 5, 2.2], hspace=0.55, wspace=0.12)
+    pos = {"a": (0, 0), "b": (0, 1), "c": (2, 0), "d": (2, 1)}
+
+    for label, title, _k, _g, _s in panels:
+        r, c = pos[label]
+        ax_map = fig.add_subplot(gs[r, c])
+        ax_box = fig.add_subplot(gs[r + 1, c])
+
+        plot_regions_on_china_map(
+            df=panel_dfs[label],
+            color_by="max_lifecycle_reduction_pct",
+            ax=ax_map,
+            plot_title=False,
+            norm=shared_norm,
+            cmap=shared_cmap,
+            draw_colorbar=False,
+            draw_legend=False,
+        )
+        ax_map.set_title(title, fontsize=12)
+        ax_map.text(-0.02, 1.02, label, transform=ax_map.transAxes,
+                    fontsize=14, fontweight="bold", va="bottom", ha="right")
+        ax_map.text(
+            0.02, 0.98,
+            f"Median drone share: {drone_share_median[label]:.0f}%",
+            transform=ax_map.transAxes,
+            fontsize=10, va="top", ha="left",
+            bbox=dict(facecolor="white", edgecolor="gray", alpha=0.85,
+                      boxstyle="round,pad=0.3"),
+        )
+
+        rows = panel_named[label]
+        data = [rows.loc[rows["province_en"] == p, "drone_ratio_pct"].values for p in province_order]
+        bp = ax_box.boxplot(
+            data, positions=range(len(province_order)), widths=0.65,
+            patch_artist=True, showfliers=False,
+            medianprops=dict(color="black", linewidth=1.2),
+            boxprops=dict(facecolor="#a6d96a", edgecolor="#1a9641", linewidth=0.6),
+            whiskerprops=dict(color="#1a9641", linewidth=0.6),
+            capprops=dict(color="#1a9641", linewidth=0.6),
+        )
+        ax_box.set_ylim(0, 102)
+        ax_box.set_xlim(-0.7, len(province_order) - 0.3)
+        ax_box.set_xticks(range(len(province_order)))
+        ax_box.set_xticklabels(province_order, rotation=90, fontsize=7)
+        ax_box.set_ylabel("Drone share (%)", fontsize=9)
+        ax_box.tick_params(axis="y", labelsize=8)
+        ax_box.grid(axis="y", linestyle=":", alpha=0.4)
+        ax_box.axhline(drone_share_median[label], color="#1a9641", linestyle="--", linewidth=0.7, alpha=0.8)
+
+    sm = plt.cm.ScalarMappable(cmap=shared_cmap, norm=shared_norm)
+    sm.set_array([])
+    cbar_ax = fig.add_axes((0.93, 0.30, 0.015, 0.4))
+    cbar = fig.colorbar(sm, cax=cbar_ax)
+    cbar.set_label(r"Reduction vs today's all-ebike anchor (%)", fontsize=11)
+
+    fig.legend(
+        handles=[Patch(facecolor="#cccccc", edgecolor="none", label="Unstudied regions")],
+        loc="lower center", fontsize=11, framealpha=0.8, ncol=1,
+        bbox_to_anchor=(0.46, 0.005),
+    )
+
+    if plot_title:
+        fig.suptitle("Forward-pathway scenarios: per-delivery reduction across 314 cities",
+                     fontsize=14, fontweight="bold")
+
+    fig.tight_layout(rect=(0, 0.03, 0.92, 0.98))
+
+    if save_path:
+        if for_latex and not save_path.endswith(".pdf"):
+            save_path = save_path.rsplit(".", 1)[0] + ".pdf"
+        if plot_title:
+            save_path = _add_title_suffix(save_path)
+        os.makedirs(os.path.dirname(save_path), exist_ok=True)
+        plt.savefig(save_path, dpi=300, bbox_inches="tight")
+        print(f"Regions map pathway scenarios saved to {save_path}")
+    else:
+        plt.show()
+
+    plt.close(fig)
+
+
 def plot_regions_map_city_province_ranks(
     df_stats: "pd.DataFrame",
     stats_csv_path: str,
