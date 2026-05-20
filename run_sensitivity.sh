@@ -50,10 +50,10 @@ EXTRA_FLAGS=()
 POSITIONAL=()
 for arg in "$@"; do
     case "$arg" in
-        --include-districts|--level=*|--region=*)
+        --include-districts|--level=*|--region=*|--stages=*)
             EXTRA_FLAGS+=("$arg")
             ;;
-        --level|--region)
+        --level|--region|--stages)
             EXTRA_FLAGS+=("$arg")
             ;;
         *)
@@ -101,11 +101,28 @@ REGION_COUNT=$(wc -l < "$REGION_LIST_TMP" | tr -d ' ')
 echo "Total regions to process: ${REGION_COUNT}"
 
 # ---- Run ----
+# Forward EXTRA_FLAGS (other than --region, which is set per-region in the
+# xargs loop) so flags like --stages reach each parallel invocation.
+PROPAGATE_FLAGS=()
+skip_next=0
+for f in "${EXTRA_FLAGS[@]}"; do
+    if [ $skip_next -eq 1 ]; then
+        skip_next=0
+        continue
+    fi
+    case "$f" in
+        --region) skip_next=1; continue ;;
+        --region=*) continue ;;
+        *) PROPAGATE_FLAGS+=("$f") ;;
+    esac
+done
+PROPAGATE_STR="${PROPAGATE_FLAGS[*]}"
+
 if [ "$PARALLEL" -gt 1 ]; then
-    echo "Running in parallel ($PARALLEL jobs)..."
+    echo "Running in parallel ($PARALLEL jobs) with flags: $PROPAGATE_STR"
     cat "$REGION_LIST_TMP" \
         | xargs -P "$PARALLEL" -I {} \
-        bash -c 'systemd-run --user --scope -p MemoryMax='"${MEMORY_MAX}"' python -u -m tools.run_sensitivity_all --env '"$ENV"' --region "$1" || echo "FAILED: $1"' _ {}
+        bash -c 'systemd-run --user --scope -p MemoryMax='"${MEMORY_MAX}"' python -u -m tools.run_sensitivity_all --env '"$ENV"' --region "$1" '"$PROPAGATE_STR"' || echo "FAILED: $1"' _ {}
 else
     echo "Running sequentially..."
     python -u -m tools.run_sensitivity_all --env "$ENV" "${EXTRA_FLAGS[@]}"

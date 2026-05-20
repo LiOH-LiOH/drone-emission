@@ -78,6 +78,7 @@ class DroneScenario:
     n_orders_per_delivery: int = 1
     include_production: bool = True
     include_use: bool = True
+    utilization_mult: float = 1.0
 
 
 def _ebike_production_lifetime_kg(p: EbikeParams, lifespan: float, battery_lifespan: float) -> float:
@@ -212,7 +213,7 @@ def compute_drone_per_order_g(
     delivery_time_min = 2.0 * d / p.v_level * 60.0 + p.loading_time_min
     deliveries_per_day = p.working_hours_per_day * 60.0 / delivery_time_min
     annual_prod_kg = _drone_production_lifetime_kg(p, lifespan, battery_lifespan)
-    prod_per_delivery_kg = annual_prod_kg / (deliveries_per_day * p.working_days_per_year)
+    prod_per_delivery_kg = annual_prod_kg / (deliveries_per_day * p.working_days_per_year * s.utilization_mult)
     prod_g = prod_per_delivery_kg * 1000.0
     if not s.include_production:
         prod_g = np.zeros_like(d)

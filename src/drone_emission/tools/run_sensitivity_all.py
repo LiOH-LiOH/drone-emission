@@ -72,7 +72,7 @@ def _scan_districts(data_dir: str) -> list[RegionConfig]:
     return out
 
 
-def _process_region(region_info, config: dict) -> tuple[str, str, float]:
+def _process_region(region_info, config: dict, stages=None) -> tuple[str, str, float]:
     """Return (region_key, status, elapsed_seconds). status ∈ {ok, skipped, missing_od, error}."""
     region_dict = region_info.to_dict()
     region_name_en = region_dict["region_name_en"].lower()
@@ -80,14 +80,17 @@ def _process_region(region_info, config: dict) -> tuple[str, str, float]:
     region_key = region_dict.get("region_key") or region_name_en
     out_dir = os.path.join(config["data_dir"], region_level, region_name_en)
 
-    if _outputs_exist(out_dir, region_name_en):
+    # When restricting to a subset of stages, the "all outputs exist" early
+    # exit must check only the requested stages — otherwise a stale full set
+    # would skip a forced rerun of a single stage.
+    if stages is None and _outputs_exist(out_dir, region_name_en):
         return region_key, "skipped", 0.0
     if not _od_csv_exists(out_dir, region_name_en):
         return region_key, "missing_od", 0.0
 
     t0 = time.time()
     try:
-        run_sensitivity(region_info=region_info, exp_config=config)
+        run_sensitivity(region_info=region_info, exp_config=config, stages=stages)
         return region_key, "ok", time.time() - t0
     except Exception as e:
         print(f"  [error] {region_key}: {e}")
@@ -104,7 +107,14 @@ def main():
                          help="Also process districts found in data/district/")
     parser.add_argument("--level", type=str, default=None,
                          help="Only process regions at this level (city/district)")
+    parser.add_argument("--stages", type=str, default=None,
+                         help="Comma-separated subset of stages to run: oat,shapley,sobol,named. "
+                              "Default is all stages. Use 'oat' to run OAT-only.")
     args = parser.parse_args()
+
+    stages = None
+    if args.stages:
+        stages = [s.strip().lower() for s in args.stages.split(",") if s.strip()]
 
     config = load_config(os.path.join(PROJECT_ROOT, "experiment.toml"), env=args.env)
     registry = init_registry(REGIONS_JSON, data_dir=config["data_dir"])
@@ -138,7 +148,7 @@ def main():
     elapsed_total = 0.0
 
     for i, (region_key, region_info) in enumerate(regions, 1):
-        rk, status, elapsed = _process_region(region_info, config)
+        rk, status, elapsed = _process_region(region_info, config, stages=stages)
         counts[status] += 1
         elapsed_total += elapsed
         print(f"[{i}/{n}] {rk}: {status} ({elapsed:.1f}s)", flush=True)

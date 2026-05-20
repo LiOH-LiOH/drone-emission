@@ -36,6 +36,14 @@ OAT_FEATURES = (
     "drone_lifespan_yr", "ebike_lifespan_yr",
     "drone_cruise_kmh", "drone_body_kg", "drone_hover_s",
     "drone_battery_lifespan_yr", "headwind_mps",
+    # Added 2026-05-20: drone-tech expansion for §4 LCA-stage tornado
+    # (production-intensity + utilization). gef_mult and ebike_lifespan_yr
+    # are still in the list for backwards-compat but no longer perturbed by
+    # oat.py:FEATURE_LEVELS, so they appear as empty subs in plot_oat_tornado.
+    "drone_battery_mass",
+    "drone_production_co2_per_kg",
+    "drone_battery_co2_per_kwh",
+    "drone_utilization_rate",
 )
 
 # Curated subset for the §4 story tornado: rule = median city-level swing
@@ -60,9 +68,16 @@ OAT_FEATURE_LABELS = {
     "drone_hover_s": "Hover time",
     "drone_battery_lifespan_yr": "Drone battery lifespan",
     "headwind_mps": "Headwind speed",
+    "drone_battery_mass": "Drone battery mass",
+    "drone_production_co2_per_kg": "Drone body production CO₂/kg",
+    "drone_battery_co2_per_kwh": "Drone battery production CO₂/kWh",
+    "drone_utilization_rate": "Drone utilization rate",
 }
 
 # Mechanism-aware colors for the 6→4 mapping (Shapley alignment).
+# 2026-05-20: the four new drone-tech features all map to production (they
+# affect either the embodied carbon directly — body/battery mass and CO₂
+# intensities — or the amortization denominator — utilization).
 OAT_FEATURE_MECHANISM = {
     "kappa": "bundling",
     "gef_mult": "grid",
@@ -75,6 +90,10 @@ OAT_FEATURE_MECHANISM = {
     "drone_cruise_kmh": "operation",
     "drone_hover_s": "operation",
     "headwind_mps": "operation",
+    "drone_battery_mass": "production",
+    "drone_production_co2_per_kg": "production",
+    "drone_battery_co2_per_kwh": "production",
+    "drone_utilization_rate": "production",
 }
 OAT_MECHANISM_COLORS = {
     "bundling": "#DD8452",
@@ -147,6 +166,7 @@ def plot_oat_tornado(
     for_latex: bool = False,
     plot_title: bool = False,
     feature_whitelist: Iterable[str] | None = None,
+    metric: str = "vs_scenario",
 ):
     """OAT tornado: median absolute swing per feature with IQR whiskers.
 
@@ -165,21 +185,30 @@ def plot_oat_tornado(
         plot_title: If True, show title.
         feature_whitelist: Optional ordered iterable of feature names to
             include. Use ``OAT_FEATURES_STORY`` for the main-text figure.
+        metric: Which reduction column to compute swings against. Use
+            ``"vs_scenario"`` (default, §4 substitution-efficiency reading)
+            or ``"vs_anchor"`` (§5 headline-reduction reading, kept for
+            cross-reference).
     """
+    metric_col = {
+        "vs_scenario": "reduction_vs_scenario_ebike_pct",
+        "vs_anchor":   "reduction_vs_anchor_ebike_pct",
+    }[metric]
+
     features = (
         list(feature_whitelist)
         if feature_whitelist is not None
         else list(OAT_FEATURES)
     )
-    base = oat[oat["scenario_id"] == "baseline"][["region_key", "reduction_vs_anchor_ebike_pct"]]
-    base = base.rename(columns={"reduction_vs_anchor_ebike_pct": "baseline_red"})
+    base = oat[oat["scenario_id"] == "baseline"][["region_key", metric_col]]
+    base = base.rename(columns={metric_col: "baseline_red"})
     diffs: Dict[str, list[float]] = {}
     for feature in features:
         sub = oat[oat["feature_varied"] == feature]
         if sub.empty:
             continue
         merged = sub.merge(base, on="region_key", how="inner")
-        merged["delta"] = merged["reduction_vs_anchor_ebike_pct"] - merged["baseline_red"]
+        merged["delta"] = merged[metric_col] - merged["baseline_red"]
         per_city_max = merged.groupby("region_key")["delta"].agg(lambda s: s.abs().max())
         diffs[feature] = per_city_max.tolist()
 

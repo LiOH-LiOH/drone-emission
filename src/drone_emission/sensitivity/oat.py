@@ -1,19 +1,33 @@
 """One-at-a-time (OAT) sensitivity sweep, per region.
 
 Produces one row per (region, scenario_id) — a baseline plus deviations on
-each of 11 features:
+13 drone-tech features plus κ (e-bike bundling anchor-assumption):
 
-* kappa (e-bike bundling)               levels: 0.6, 0.7, 0.8, 0.9 (baseline 1.0)
-* gef_mult                              levels: 0.5, 0.8, 1.2 (baseline 1.0)
-* drone_energy_mult                     levels: 0.75, 1.25, 1.5 (baseline 1.0)
-* payload_kg                            levels: 0.5, 2.0 (baseline 1.0)
-* drone_lifespan_yr                     levels: 2, 6 (baseline 4)
-* ebike_lifespan_yr                     levels: 2, 6 (baseline 4)
-* drone_cruise_kmh                      levels: 40, 80 (baseline 60)
+Production:
 * drone_body_kg                         levels: 6.0, 14.0 (baseline 10.1)
-* drone_hover_s                         levels: 15, 60 (baseline 30)
-* drone_battery_lifespan_yr             levels: 1, 3 (baseline 2)
+* drone_battery_mass                    levels: 2.0, 5.0 (baseline 3.0)
+* drone_production_co2_per_kg           levels: 7.0, 11.6 (baseline 9.3)
+* drone_battery_co2_per_kwh             levels: 100, 180 (baseline 141)
+
+Use:
+* drone_energy_mult                     levels: 0.75, 1.25, 1.5 (baseline 1.0)
+* drone_cruise_kmh                      levels: 40, 80 (baseline 60)
+* drone_hover_s                         levels: 15, 60 (baseline 10 from experiment.toml)
 * headwind_mps (cruise-leg constant)    levels: 3.5, 7.0 (baseline 0.0)
+* payload_kg                            levels: 0.5, 2.0 (baseline 1.0)
+
+Lifespan / amortization:
+* drone_lifespan_yr                     levels: 2, 6 (baseline 4)
+* drone_battery_lifespan_yr             levels: 1, 3 (baseline 2)
+* drone_utilization_rate                levels: 0.5, 1.2 (baseline 1.0; multiplier on annual deliveries)
+
+Anchor assumption (separate from drone-tech):
+* kappa (e-bike bundling)               levels: 0.6, 0.7, 0.8, 0.9 (baseline 1.0)
+
+The gef_mult and ebike_lifespan_yr keys remain in BASELINE (anchor still uses
+them at gef_mult=1.0, ebike_lifespan_yr=4) but are no longer perturbed in
+FEATURE_LEVELS — GEF is measured (not new-tech uncertainty, moves to §5) and
+e-bike lifespan is mature tech (< 1 pp swing).
 
 For each scenario the threshold sweep matches ``emission/api.py``: 12 points
 (-0.01, p5..p95 of road distances, +inf). Reductions are reported against:
@@ -60,31 +74,40 @@ from .vectorized_lca import (
 # user's experimental configuration.
 BASELINE = {
     "kappa": 1.0,
-    "gef_mult": 1.0,
+    "gef_mult": 1.0,                          # anchor still uses 1.0 (Sobol reads this); not in FEATURE_LEVELS
     "drone_energy_mult": 1.0,
     "payload_kg": 1.0,
     "drone_lifespan_yr": 4,
-    "ebike_lifespan_yr": 4,
-    "drone_cruise_kmh": None,             # inherit drone_params.v_level
-    "drone_body_kg": None,                # inherit drone_params.w_body
-    "drone_hover_s": None,                # inherit drone_params.hover_time
-    "drone_battery_lifespan_yr": None,    # inherit drone_params.battery_lifespan
-    "headwind_mps": None,                 # inherit drone_params.headwind_speed_mps
+    "ebike_lifespan_yr": 4,                   # anchor still uses 4 (Sobol reads this); not in FEATURE_LEVELS
+    "drone_cruise_kmh": None,                 # inherit drone_params.v_level
+    "drone_body_kg": None,                    # inherit drone_params.w_body
+    "drone_hover_s": None,                    # inherit drone_params.hover_time
+    "drone_battery_lifespan_yr": None,        # inherit drone_params.battery_lifespan
+    "headwind_mps": None,                     # inherit drone_params.headwind_speed_mps
+    "drone_battery_mass": None,               # inherit drone_params.w_battery (kg)
+    "drone_production_co2_per_kg": None,      # inherit drone_params.e_body (kg CO2 / kg)
+    "drone_battery_co2_per_kwh": None,        # inherit drone_params.e_battery (kg CO2 / kWh)
+    "drone_utilization_rate": 1.0,            # multiplier on annual deliveries (baseline 1× = current model)
 }
 
 # Deviating levels per feature (baseline value omitted)
 FEATURE_LEVELS = {
     "kappa": [0.6, 0.7, 0.8, 0.9],
-    "gef_mult": [0.5, 0.8, 1.2],
     "drone_energy_mult": [0.75, 1.25, 1.5],
     "payload_kg": [0.5, 2.0],
     "drone_lifespan_yr": [2, 6],
-    "ebike_lifespan_yr": [2, 6],
     "drone_cruise_kmh": [40.0, 80.0],
     "drone_body_kg": [6.0, 14.0],
     "drone_hover_s": [15.0, 60.0],
     "drone_battery_lifespan_yr": [1, 3],
     "headwind_mps": [3.5, 7.0],
+    # NEW (production)
+    "drone_battery_mass": [2.0, 5.0],
+    "drone_production_co2_per_kg": [7.0, 11.6],
+    "drone_battery_co2_per_kwh": [100.0, 180.0],
+    # NEW (lifespan / amortization)
+    "drone_utilization_rate": [0.5, 1.2],
+    # DROPPED: gef_mult (measured, §5 lever), ebike_lifespan_yr (mature, < 1 pp)
 }
 
 
@@ -105,11 +128,17 @@ def _emissions_for_scenario(
     drone_hover_s: Optional[float] = None,
     drone_battery_lifespan_yr: Optional[float] = None,
     headwind_mps: Optional[float] = None,
+    drone_battery_mass: Optional[float] = None,
+    drone_production_co2_per_kg: Optional[float] = None,
+    drone_battery_co2_per_kwh: Optional[float] = None,
+    drone_utilization_rate: float = 1.0,
 ) -> tuple[np.ndarray, np.ndarray]:
-    # Per-scenario drone params: cruise speed, body mass, hover time, and
-    # headwind enter the physics through DroneParams; battery lifespan goes
-    # through the DroneScenario override field. None means "use the value
-    # already on drone_params" so the baseline anchor honors experiment.toml.
+    # Per-scenario drone params: cruise speed, body mass, hover time, headwind,
+    # battery mass, body production-CO2 intensity, and battery production-CO2
+    # intensity all enter the physics through DroneParams (replace pattern).
+    # Battery lifespan and utilization multiplier go through the DroneScenario
+    # override fields. None means "use the value already on drone_params" so
+    # the baseline anchor honors experiment.toml.
     overrides = {}
     if drone_cruise_kmh is not None:
         overrides["v_level"] = drone_cruise_kmh
@@ -119,6 +148,12 @@ def _emissions_for_scenario(
         overrides["hover_time"] = drone_hover_s
     if headwind_mps is not None:
         overrides["headwind_speed_mps"] = headwind_mps
+    if drone_battery_mass is not None:
+        overrides["w_battery"] = drone_battery_mass
+    if drone_production_co2_per_kg is not None:
+        overrides["e_body"] = drone_production_co2_per_kg
+    if drone_battery_co2_per_kwh is not None:
+        overrides["e_battery"] = drone_battery_co2_per_kwh
     drone_params_eff = replace(drone_params, **overrides) if overrides else drone_params
 
     e_scen = EbikeScenario(
@@ -135,6 +170,7 @@ def _emissions_for_scenario(
         payload_kg=payload_kg,
         lifespan_yr=drone_lifespan_yr,
         battery_lifespan_yr=drone_battery_lifespan_yr,
+        utilization_mult=drone_utilization_rate,
     )
     ebike_g = compute_ebike_per_order_g(road_distances_km, ebike_params, e_scen)
     drone_g = compute_drone_per_order_g(straight_distances_km, drone_params_eff, d_scen)
@@ -154,6 +190,10 @@ def _row_for_scenario(
     drone_hover_s: Optional[float],
     drone_battery_lifespan_yr: Optional[float],
     headwind_mps: Optional[float],
+    drone_battery_mass: Optional[float],
+    drone_production_co2_per_kg: Optional[float],
+    drone_battery_co2_per_kwh: Optional[float],
+    drone_utilization_rate: float,
     road_distances_km: np.ndarray,
     straight_distances_km: np.ndarray,
     thresholds: np.ndarray,
@@ -176,6 +216,10 @@ def _row_for_scenario(
         drone_hover_s=drone_hover_s,
         drone_battery_lifespan_yr=drone_battery_lifespan_yr,
         headwind_mps=headwind_mps,
+        drone_battery_mass=drone_battery_mass,
+        drone_production_co2_per_kg=drone_production_co2_per_kg,
+        drone_battery_co2_per_kwh=drone_battery_co2_per_kwh,
+        drone_utilization_rate=drone_utilization_rate,
     )
     metrics = optimal_reduction_metrics(road_distances_km, ebike_g, drone_g, thresholds)
     if anchor_ebike_only_total_g > 0:
@@ -196,6 +240,19 @@ def _row_for_scenario(
         else drone_params_provincial.battery_lifespan
     )
     eff_wind = headwind_mps if headwind_mps is not None else drone_params_provincial.headwind_speed_mps
+    eff_batt_mass = (
+        drone_battery_mass if drone_battery_mass is not None else drone_params_provincial.w_battery
+    )
+    eff_prod_co2 = (
+        drone_production_co2_per_kg
+        if drone_production_co2_per_kg is not None
+        else drone_params_provincial.e_body
+    )
+    eff_batt_co2 = (
+        drone_battery_co2_per_kwh
+        if drone_battery_co2_per_kwh is not None
+        else drone_params_provincial.e_battery
+    )
     return {
         "region_key": region_key,
         "province": province,
@@ -212,6 +269,10 @@ def _row_for_scenario(
         "drone_hover_s": eff_hover,
         "drone_battery_lifespan_yr": eff_batt_life,
         "headwind_mps": eff_wind,
+        "drone_battery_mass": eff_batt_mass,
+        "drone_production_co2_per_kg": eff_prod_co2,
+        "drone_battery_co2_per_kwh": eff_batt_co2,
+        "drone_utilization_rate": drone_utilization_rate,
         "optimal_threshold_km": metrics["best_threshold_km"],
         "optimal_drone_ratio_pct": metrics["best_drone_ratio_pct"],
         "mixed_lifecycle_kg": metrics["best_mixed_total_g"] / 1000.0,
@@ -270,6 +331,10 @@ def run_oat_for_region(
         drone_hover_s=BASELINE["drone_hover_s"],
         drone_battery_lifespan_yr=BASELINE["drone_battery_lifespan_yr"],
         headwind_mps=BASELINE["headwind_mps"],
+        drone_battery_mass=BASELINE["drone_battery_mass"],
+        drone_production_co2_per_kg=BASELINE["drone_production_co2_per_kg"],
+        drone_battery_co2_per_kwh=BASELINE["drone_battery_co2_per_kwh"],
+        drone_utilization_rate=BASELINE["drone_utilization_rate"],
     )
     anchor_ebike_only_total_g = float(anchor_ebike_g.sum())
 
@@ -288,6 +353,10 @@ def run_oat_for_region(
             drone_hover_s=kwargs["drone_hover_s"],
             drone_battery_lifespan_yr=kwargs["drone_battery_lifespan_yr"],
             headwind_mps=kwargs["headwind_mps"],
+            drone_battery_mass=kwargs["drone_battery_mass"],
+            drone_production_co2_per_kg=kwargs["drone_production_co2_per_kg"],
+            drone_battery_co2_per_kwh=kwargs["drone_battery_co2_per_kwh"],
+            drone_utilization_rate=kwargs["drone_utilization_rate"],
             road_distances_km=road_distances_km,
             straight_distances_km=straight_distances_km,
             thresholds=thresholds,

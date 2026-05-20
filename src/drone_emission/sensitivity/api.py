@@ -82,6 +82,14 @@ def _baseline_sanity_check(region_info, oat_df: pd.DataFrame) -> None:
 
 _OUTPUT_SUFFIXES = ("_oat.csv", "_shapley.csv", "_named.csv", "_sobol.csv")
 
+# Mapping from short stage names (CLI-friendly) to CSV suffixes.
+_STAGE_SUFFIX = {
+    "oat":     "_oat.csv",
+    "shapley": "_shapley.csv",
+    "named":   "_named.csv",
+    "sobol":   "_sobol.csv",
+}
+
 
 def _missing_outputs(out_dir: str, region_name_en: str) -> tuple[str, ...]:
     """Return the suffixes whose CSV is not yet on disk for this region."""
@@ -91,7 +99,7 @@ def _missing_outputs(out_dir: str, region_name_en: str) -> tuple[str, ...]:
     )
 
 
-def run_sensitivity(region_info, exp_config) -> None:
+def run_sensitivity(region_info, exp_config, stages=None) -> None:
     """Compute OAT + Shapley + named-scenarios for a single region.
 
     Reads the region's OD CSV produced by ``cal_emission`` and writes three
@@ -111,6 +119,14 @@ def run_sensitivity(region_info, exp_config) -> None:
     out_dir = os.path.join(exp_config["data_dir"], region_level, region_name_en)
     skip_if_done = sens_cfg.get("skip_if_done", True)
     missing = _missing_outputs(out_dir, region_name_en) if skip_if_done else _OUTPUT_SUFFIXES
+
+    # If a `stages` filter is supplied (CLI --stages), restrict the work to
+    # those stages. Other stages are treated as already done for this run, so
+    # the per-stage `if "_xxx.csv" in missing` checks below naturally skip them.
+    if stages is not None:
+        allowed_suffixes = {_STAGE_SUFFIX[s] for s in stages if s in _STAGE_SUFFIX}
+        missing = tuple(m for m in missing if m in allowed_suffixes)
+
     if skip_if_done and not missing:
         print(f"Sensitivity outputs already exist for {region_name_en}; skipping.")
         return
