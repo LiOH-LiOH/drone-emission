@@ -116,7 +116,7 @@ OAT_MECHANISM_LABELS = {
     "production_intensity": "Production (intensity)",
     "use":                  "Use phase",
     "lifespan":             "Lifespan / amortization",
-    "anchor":               "Anchor assumption (κ)",
+    "anchor":               "E-bike bundling",
 }
 
 MECHANISM_ORDER = ("M1_routing", "M2_bundling", "M3_production", "M4_gef")
@@ -727,6 +727,155 @@ def plot_sobol_by_mechanism(
         n_cities = si["region_key"].nunique()
         ax.set_title(f"Sobol aggregated to 4 Shapley mechanisms "
                      f"(n={n_cities} cities, median ± IQR)")
+    fig.tight_layout()
+    return _finalize(save_path, dpi, for_latex, plot_title)
+
+
+def plot_sobol_grouped(
+    sobol: pd.DataFrame,
+    save_path: str | None = None,
+    figsize: tuple = (10.5, 5.2),
+    dpi: int = 150,
+    for_latex: bool = False,
+    plot_title: bool = False,
+):
+    """Sobol indices grouped by mechanism, with a mechanism-total overlay.
+
+    Vertical bar chart, one bar per feature. Features are arranged in
+    mechanism groups; mechanisms are ordered by descending ΣS_T (sum within
+    mechanism, median across cities). Within each group, features are sorted
+    by descending median S_T. A polyline overlays the mechanism totals at
+    the center x-position of each group, so the reader sees both the per-
+    feature breakdown and the per-mechanism aggregate in one panel.
+
+    Args:
+        sobol: Long-format Sobol DataFrame from ``all_sensitivity_sobol.csv``.
+        save_path: Path to save figure. Shows plot if None.
+        figsize: Figure size tuple.
+        for_latex: If True, save as PDF.
+        plot_title: If True, show title.
+    """
+    si = sobol[sobol["row_kind"] == "sobol_index"].copy()
+    if si.empty:
+        print("  plot_sobol_grouped: no sobol_index rows; skipping")
+        return None
+
+    feature_to_mech = {f: m for m, feats in SOBOL_MECHANISM_GROUPS.items() for f in feats}
+    si["mechanism"] = si["feature"].map(feature_to_mech)
+    si = si.dropna(subset=["mechanism"])
+
+    # Per-feature median ST + median S1 across cities.
+    feat_st = si.groupby("feature")["ST"].median()
+    feat_s1 = np.clip(si.groupby("feature")["S1"].median(), 0, None)
+    feat_st_p25 = si.groupby("feature")["ST"].quantile(0.25)
+    feat_st_p75 = si.groupby("feature")["ST"].quantile(0.75)
+
+    # Per-mechanism aggregate ST (sum per city, then median across cities).
+    per_city_mech = si.groupby(["region_key", "mechanism"])["ST"].sum().reset_index()
+    mech_total = per_city_mech.groupby("mechanism")["ST"].median().sort_values(ascending=False)
+    mech_order = mech_total.index.tolist()
+
+    # Feature ordering: by mechanism (sorted by total), within mechanism by ST desc.
+    feature_order: list[str] = []
+    mech_x_centers: list[float] = []
+    group_boundaries: list[float] = [0.0]
+    for m in mech_order:
+        feats = [f for f in feat_st.index if feature_to_mech.get(f) == m]
+        feats.sort(key=lambda f: -feat_st[f])
+        start = len(feature_order)
+        feature_order.extend(feats)
+        end = len(feature_order)
+        if end > start:
+            mech_x_centers.append((start + end - 1) / 2.0)
+        group_boundaries.append(float(end))
+
+    x = np.arange(len(feature_order))
+    st_vals = np.array([feat_st[f] for f in feature_order])
+    s1_vals = np.array([feat_s1[f] for f in feature_order])
+    p25_vals = np.array([feat_st_p25[f] for f in feature_order])
+    p75_vals = np.array([feat_st_p75[f] for f in feature_order])
+    colors = [OAT_MECHANISM_COLORS[feature_to_mech[f]] for f in feature_order]
+
+    fig, ax = plt.subplots(figsize=figsize)
+
+    # ST bars (light shade) and S1 bars (dark shade, inset).
+    ax.bar(x, st_vals, color=colors, alpha=0.45, edgecolor="black",
+           linewidth=0.8, label="_nolegend_", zorder=2)
+    ax.bar(x, s1_vals, color=colors, alpha=0.95, edgecolor="black",
+           linewidth=0.8, label="_nolegend_", zorder=3)
+
+    # IQR error bars on ST
+    err_lower = np.clip(st_vals - p25_vals, 0, None)
+    err_upper = np.clip(p75_vals - st_vals, 0, None)
+    ax.errorbar(x, st_vals, yerr=[err_lower, err_upper], fmt="none",
+                ecolor="black", capsize=3, linewidth=0.8, zorder=4)
+
+    # Numeric ST annotation above each bar (rounded to 3 dp; show "<0.01" for tiny)
+    y_max = max(float(np.max(p75_vals)) if len(p75_vals) else 0.0,
+                float(mech_total.max()))
+    label_pad = y_max * 0.015
+    for xi, v in zip(x, st_vals):
+        label = f"{v:.2f}" if v >= 0.005 else "<.01"
+        ax.text(xi, v + label_pad, label, ha="center", va="bottom", fontsize=7.5)
+
+    # Mechanism-total polyline overlay.
+    line_y = [float(mech_total[m]) for m in mech_order]
+    ax.plot(mech_x_centers, line_y, "-o", color="black", linewidth=1.6,
+            markersize=7, markerfacecolor="white", markeredgewidth=1.6,
+            zorder=5, label=r"Mechanism total $\sum S_T$")
+
+    # Annotate each mechanism-total point
+    for xc, yv in zip(mech_x_centers, line_y):
+        ax.annotate(f"{yv:.2f}", xy=(xc, yv), xytext=(0, 11),
+                    textcoords="offset points", ha="center", fontsize=9,
+                    fontweight="bold")
+
+    # Vertical separators between mechanism groups
+    for b in group_boundaries[1:-1]:
+        ax.axvline(b - 0.5, color="gray", linestyle=":", alpha=0.55, zorder=1)
+
+    # Mechanism labels on a second header row above the plot
+    ax_top = ax.twiny()
+    ax_top.set_xlim(ax.get_xlim())
+    ax_top.set_xticks(mech_x_centers)
+    ax_top.set_xticklabels(
+        [OAT_MECHANISM_LABELS[m] for m in mech_order],
+        fontsize=9,
+    )
+    ax_top.tick_params(axis="x", which="both", length=0, pad=4)
+    ax_top.spines["top"].set_visible(False)
+
+    # Feature labels on the bottom x-axis (rotated)
+    ax.set_xticks(x)
+    ax.set_xticklabels(
+        [OAT_FEATURE_LABELS.get(f, f) for f in feature_order],
+        rotation=35, ha="right", fontsize=8,
+    )
+    ax.set_xlim(-0.7, len(feature_order) - 0.3)
+    ax.set_ylim(0, y_max * 1.30)
+    ax.set_ylabel("Sobol total-order index $S_T$ (variance share)")
+
+    # Full legend: 5 mechanism color patches + S1/ST shading + mechanism-total marker.
+    legend_handles = [
+        Patch(facecolor=OAT_MECHANISM_COLORS[m], edgecolor="black",
+              label=OAT_MECHANISM_LABELS[m])
+        for m in mech_order
+    ]
+    legend_handles.append(Patch(facecolor="lightgray", edgecolor="black",
+                                 alpha=0.45, label="$S_T$ (incl. interactions)"))
+    legend_handles.append(Patch(facecolor="lightgray", edgecolor="black",
+                                 alpha=0.95, label="$S_1$ (main effect)"))
+    legend_handles.append(plt.Line2D([], [], color="black", marker="o",
+                                      markerfacecolor="white", markersize=7,
+                                      linewidth=1.6,
+                                      label=r"Mechanism total $\sum S_T$"))
+    ax.legend(handles=legend_handles, loc="upper right", fontsize=8,
+              frameon=True, ncol=1)
+
+    if plot_title:
+        n_cities = si["region_key"].nunique()
+        ax.set_title(f"Sobol global SA: per-feature S_T grouped by LCA mechanism, "
+                     f"with mechanism aggregates (n={n_cities} cities)")
     fig.tight_layout()
     return _finalize(save_path, dpi, for_latex, plot_title)
 
