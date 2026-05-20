@@ -632,10 +632,10 @@ def plot_regions_map_pathway_scenarios(
     today-baseline median drone share, consistent across all four panels.
 
     Panels (all from `all_sensitivity_named.csv`):
-        (a) today                 kappa=1.0, gef_mult=1.0, optimal_mixed
-        (b) NDC 2030 grid         kappa=1.0, gef_mult=0.5, optimal_mixed_2030
-        (c) operator bundling     kappa=0.7, gef_mult=1.0, optimal_mixed
-        (d) 2030 grid + bundling  kappa=0.7, gef_mult=0.5, optimal_mixed_2030
+        (a) today                    kappa=1.0, gef_mult=1.0, optimal_mixed
+        (b) halved GEF               kappa=1.0, gef_mult=0.5, optimal_mixed_2030
+        (c) operator bundling        kappa=0.7, gef_mult=1.0, optimal_mixed
+        (d) halved GEF + bundling    kappa=0.7, gef_mult=0.5, optimal_mixed_2030
 
     Reduction values (map fill) use `reduction_vs_anchor_ebike_pct` (vs today's
     no-bundling all-ebike anchor). Boxplot y-axis is drone_ratio_pct in 0..100.
@@ -658,9 +658,9 @@ def plot_regions_map_pathway_scenarios(
 
     panels = [
         ("a", "Today\n($\\kappa{=}1.0,\\ \\mathrm{gef}{=}1.0$)",                    1.0, 1.0, "optimal_mixed"),
-        ("b", "NDC 2030 grid\n($\\kappa{=}1.0,\\ \\mathrm{gef}{=}0.5$)",            1.0, 0.5, "optimal_mixed_2030"),
+        ("b", "Halved GEF\n($\\kappa{=}1.0,\\ \\mathrm{gef}{=}0.5$)",               1.0, 0.5, "optimal_mixed_2030"),
         ("c", "Operator bundling\n($\\kappa{=}0.7,\\ \\mathrm{gef}{=}1.0$)",        0.7, 1.0, "optimal_mixed"),
-        ("d", "2030 grid + bundling\n($\\kappa{=}0.7,\\ \\mathrm{gef}{=}0.5$)",     0.7, 0.5, "optimal_mixed_2030"),
+        ("d", "Halved GEF + bundling\n($\\kappa{=}0.7,\\ \\mathrm{gef}{=}0.5$)",    0.7, 0.5, "optimal_mixed_2030"),
     ]
 
     reduction_col = "reduction_vs_anchor_ebike_pct"
