@@ -13,6 +13,63 @@ from visualization._utils import _add_title_suffix
 from analysis.constants import PROVINCE_NAME_EN, VARIABLE_LABELS
 
 
+def _build_reduction_cmap(v_max: float):
+    """Discrete green sequential cmap with gray 'Unstudied' band below 0.
+
+    Returns (cmap, norm, bin_edges, reduction_edges). Use with
+    `BoundaryNorm`-compatible plotters; place a vertical "Unstudied" label
+    next to the gray band when drawing the colorbar.
+    """
+    from matplotlib.colors import BoundaryNorm, ListedColormap
+
+    step = 5 if v_max <= 25 else (10 if v_max <= 80 else 15)
+    top = max(int(np.ceil(v_max / step) * step), step * 5)
+    reduction_edges = np.arange(0, top + step, step, dtype=float)
+    bin_edges = np.concatenate([[-step], reduction_edges])
+    palette = ["#ffffe0", "#f7fcb9", "#d9f0a3", "#addd8e",
+               "#78c679", "#41ab5d", "#238443", "#005a32"]
+    cmap_colors = ["#cccccc"] + palette[:len(reduction_edges) - 1]
+    cmap = ListedColormap(cmap_colors)
+    norm = BoundaryNorm(bin_edges, ncolors=cmap.N, clip=True)
+    return cmap, norm, bin_edges, reduction_edges
+
+
+def _draw_discrete_reduction_colorbar(fig, cbar_ax, cmap, norm, bin_edges,
+                                      reduction_edges, label_text):
+    """Draw the discrete reduction colorbar with a vertical 'Unstudied'
+    label aligned with the numeric tick labels. Returns (cbar, n_bands).
+    Call AFTER fig.tight_layout / final layout so positions are settled.
+    """
+    sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
+    sm.set_array([])
+    cbar = fig.colorbar(
+        sm, cax=cbar_ax,
+        boundaries=bin_edges, ticks=reduction_edges,
+        spacing="uniform",
+    )
+    cbar.ax.set_yticklabels([f"{int(b)}" for b in reduction_edges])
+    plt.setp(cbar.ax.get_yticklabels(), rotation=0)
+    cbar.outline.set_linewidth(0.6)
+    cbar.ax.tick_params(labelsize=9, length=2)
+    cbar.set_label(label_text, fontsize=11)
+    return cbar, len(bin_edges) - 1
+
+
+def _annotate_unstudied(fig, cbar, cbar_ax, n_bands):
+    """Add a vertical 'Unstudied' label next to the gray band on a discrete
+    colorbar, x-anchored to the existing numeric tick label positions."""
+    fig.canvas.draw()
+    cbar_pos = cbar_ax.get_position()
+    gray_y_fig = cbar_pos.y0 + cbar_pos.height * (0.5 / n_bands)
+    ref_label = cbar.ax.yaxis.get_majorticklabels()[0]
+    ref_disp_x = ref_label.get_window_extent().x0
+    ref_x_fig = fig.transFigure.inverted().transform((ref_disp_x, 0))[0]
+    fig.text(
+        ref_x_fig, gray_y_fig, "Unstudied",
+        ha="left", va="center", fontsize=9, rotation=90,
+    )
+
+
 def plot_correlation_heatmap(
     corr_df: pd.DataFrame,
     save_path: str = None,
@@ -648,19 +705,16 @@ def plot_regions_map_pathway_scenarios(
         for_latex: If True, save as PDF.
         plot_title: If True, show figure-level title.
     """
-    from matplotlib.colors import LinearSegmentedColormap, TwoSlopeNorm
-    from matplotlib.patches import Patch
-
     from visualization.regions import plot_regions_on_china_map
 
     named = pd.read_csv(named_csv_path)
     base = pd.read_csv(stats_csv_path)
 
     panels = [
-        ("a", "Today\n($\\kappa{=}1.0,\\ \\mathrm{gef}{=}1.0$)",                    1.0, 1.0, "optimal_mixed"),
-        ("b", "Halved GEF\n($\\kappa{=}1.0,\\ \\mathrm{gef}{=}0.5$)",               1.0, 0.5, "optimal_mixed_2030"),
-        ("c", "Operator bundling\n($\\kappa{=}0.7,\\ \\mathrm{gef}{=}1.0$)",        0.7, 1.0, "optimal_mixed"),
-        ("d", "Halved GEF + bundling\n($\\kappa{=}0.7,\\ \\mathrm{gef}{=}0.5$)",    0.7, 0.5, "optimal_mixed_2030"),
+        ("a", "Today",                    1.0, 1.0, "optimal_mixed"),
+        ("b", "Halved GEF",               1.0, 0.5, "optimal_mixed_2030"),
+        ("c", "Operator bundling",        0.7, 1.0, "optimal_mixed"),
+        ("d", "Halved GEF + bundling",    0.7, 0.5, "optimal_mixed_2030"),
     ]
 
     reduction_col = "reduction_vs_anchor_ebike_pct"
@@ -705,26 +759,43 @@ def plot_regions_map_pathway_scenarios(
         v_max = 1.0
     else:
         v_max = max(max(all_values), 0.0)
-    from matplotlib.colors import Normalize as _Normalize
-    shared_norm = _Normalize(vmin=0, vmax=v_max)
-    shared_cmap = LinearSegmentedColormap.from_list("green_seq", [
-        "#ffffe0", "#d9f0a3", "#a6d96a", "#41ab5d", "#1a9641",
-    ])
 
-    # Province order from today-baseline ascending median drone share
-    today_rows = panel_named["a"]
-    province_order = (
-        today_rows.groupby("province_en")["drone_ratio_pct"].median().sort_values().index.tolist()
+    shared_cmap, shared_norm, bin_edges, reduction_edges = _build_reduction_cmap(v_max)
+
+    # Province order: total annual lifecycle emission under today's all-ebike
+    # baseline (kappa=1, gef=1, strategy=all_ebike). Largest emitters on the left.
+    anchor_named = named[
+        np.isclose(named["kappa"], 1.0)
+        & np.isclose(named["gef_mult"], 1.0)
+        & (named["strategy"] == "all_ebike")
+    ].copy()
+    anchor_named["province_en"] = anchor_named["province"].map(PROVINCE_NAME_EN).fillna(anchor_named["province"])
+    province_emission_baseline_kt = (
+        anchor_named.groupby("province_en")["annual_lifecycle_kg"].sum() / 1e6
     )
+    province_order = province_emission_baseline_kt.sort_values(ascending=False).index.tolist()
+
+    # Per-panel province totals (kt CO2/yr) for the overlay line.
+    panel_province_emission_kt = {
+        lbl: panel_named[lbl].groupby("province_en")["annual_lifecycle_kg"].sum() / 1e6
+        for lbl in panel_named
+    }
+    line_y_max = max(
+        float(s.max()) if len(s) else 0.0 for s in panel_province_emission_kt.values()
+    ) if panel_province_emission_kt else 0.0
+    line_y_max = max(line_y_max, 1.0) * 1.05
 
     fig = plt.figure(figsize=figsize)
-    gs = fig.add_gridspec(4, 2, height_ratios=[5, 2.2, 5, 2.2], hspace=0.55, wspace=0.12)
+    gs = fig.add_gridspec(4, 2, height_ratios=[5, 2.2, 5, 2.2], hspace=0.25, wspace=0.20)
     pos = {"a": (0, 0), "b": (0, 1), "c": (2, 0), "d": (2, 1)}
+    ax_pairs = []
 
-    for label, title, _k, _g, _s in panels:
+    box_lines = []  # parallel list of twin axes for line overlay
+    for label, title, k, g, _s in panels:
         r, c = pos[label]
         ax_map = fig.add_subplot(gs[r, c])
         ax_box = fig.add_subplot(gs[r + 1, c])
+        ax_pairs.append((ax_map, ax_box))
 
         plot_regions_on_china_map(
             df=panel_dfs[label],
@@ -736,21 +807,57 @@ def plot_regions_map_pathway_scenarios(
             draw_colorbar=False,
             draw_legend=False,
         )
+        ax_map.set_xlabel("")
+        ax_map.set_ylabel("")
+        ax_map.set_xticks([])
+        ax_map.set_yticks([])
+        for spine in ax_map.spines.values():
+            spine.set_visible(False)
         ax_map.set_title(title, fontsize=12)
         ax_map.text(-0.02, 1.02, label, transform=ax_map.transAxes,
                     fontsize=14, fontweight="bold", va="bottom", ha="right")
-        annotation_lines = [f"Median drone share: {drone_share_median[label]:.0f}%"]
+
+        from matplotlib.patches import Rectangle
+        table_rows = [
+            (r"$\kappa$", f"{k:.1f}"),
+            ("gef", f"{g:.1f}"),
+            ("Drone share", f"{drone_share_median[label]:.0f}%"),
+        ]
         if label in annual_saved_total_kg:
             saved_kt = annual_saved_total_kg[label] / 1e6  # kg -> kt
-            annotation_lines.append(f"Total CO$_2$ saved: {saved_kt:.0f} kt/yr")
-        ax_map.text(
-            0.02, 0.98,
-            "\n".join(annotation_lines),
-            transform=ax_map.transAxes,
-            fontsize=10, va="top", ha="left",
-            bbox=dict(facecolor="white", edgecolor="gray", alpha=0.85,
-                      boxstyle="round,pad=0.3"),
-        )
+            table_rows.append((r"CO$_2$ saved", f"{saved_kt:.0f} kt/yr"))
+
+        n_rows = len(table_rows)
+        t_w, t_h = 0.34, 0.045 * n_rows
+        t_x = (1.0 - t_w) / 2  # centered, sits under the title
+        t_y = 0.98
+        col_split = 0.55  # fraction of table width for col 1
+        # Background + outer border
+        ax_map.add_patch(Rectangle(
+            (t_x, t_y - t_h), t_w, t_h,
+            transform=ax_map.transAxes, facecolor="white", edgecolor="gray",
+            linewidth=0.4, alpha=0.9, zorder=3,
+        ))
+        # Row separators + cell text
+        for i, (lbl, val) in enumerate(table_rows):
+            row_y_top = t_y - (i / n_rows) * t_h
+            row_y_mid = t_y - ((i + 0.5) / n_rows) * t_h
+            if i > 0:
+                ax_map.plot(
+                    [t_x, t_x + t_w], [row_y_top, row_y_top],
+                    transform=ax_map.transAxes, color="gray",
+                    linewidth=0.3, zorder=4,
+                )
+            ax_map.text(
+                t_x + 0.01, row_y_mid, lbl,
+                transform=ax_map.transAxes, fontsize=9,
+                ha="left", va="center", zorder=5,
+            )
+            ax_map.text(
+                t_x + col_split * t_w + 0.005, row_y_mid, val,
+                transform=ax_map.transAxes, fontsize=9,
+                ha="left", va="center", zorder=5,
+            )
 
         rows = panel_named[label]
         data = [rows.loc[rows["province_en"] == p, "drone_ratio_pct"].values for p in province_order]
@@ -771,16 +878,24 @@ def plot_regions_map_pathway_scenarios(
         ax_box.grid(axis="y", linestyle=":", alpha=0.4)
         ax_box.axhline(drone_share_median[label], color="#1a9641", linestyle="--", linewidth=0.7, alpha=0.8)
 
-    sm = plt.cm.ScalarMappable(cmap=shared_cmap, norm=shared_norm)
-    sm.set_array([])
-    cbar_ax = fig.add_axes((0.93, 0.30, 0.015, 0.4))
-    cbar = fig.colorbar(sm, cax=cbar_ax)
-    cbar.set_label(r"Reduction vs today's all-ebike anchor (%)", fontsize=11)
+        # Overlay: total annual lifecycle emission per province (gray line, right axis).
+        emission_series = panel_province_emission_kt[label]
+        emission_y = [float(emission_series.get(p, 0.0)) for p in province_order]
+        ax_line = ax_box.twinx()
+        ax_line.plot(
+            range(len(province_order)), emission_y,
+            color="dimgray", linewidth=1.0, marker="o", markersize=2.5,
+            alpha=0.85, zorder=5,
+        )
+        ax_line.set_ylim(0, line_y_max)
+        ax_line.set_ylabel("Annual lifecycle (kt CO$_2$)", fontsize=9, color="dimgray")
+        ax_line.tick_params(axis="y", labelsize=8, colors="dimgray")
+        box_lines.append(ax_line)
 
-    fig.legend(
-        handles=[Patch(facecolor="#cccccc", edgecolor="none", label="Unstudied regions")],
-        loc="lower center", fontsize=11, framealpha=0.8, ncol=1,
-        bbox_to_anchor=(0.46, 0.005),
+    cbar_ax = fig.add_axes((0.93, 0.28, 0.015, 0.44))
+    cbar, n_bands = _draw_discrete_reduction_colorbar(
+        fig, cbar_ax, shared_cmap, shared_norm, bin_edges, reduction_edges,
+        r"Reduction vs today's all-ebike anchor (%)",
     )
 
     if plot_title:
@@ -788,6 +903,21 @@ def plot_regions_map_pathway_scenarios(
                      fontsize=14, fontweight="bold")
 
     fig.tight_layout(rect=(0, 0.03, 0.92, 0.98))
+
+    # Align each boxplot's width with its map (the map shrinks horizontally due to
+    # its enforced geographic aspect ratio; gridspec leaves the boxplot wider).
+    # Also pull the boxplot up to sit right under the map.
+    fig.canvas.draw()
+    vgap = 0.015
+    for (ax_map, ax_box), ax_line in zip(ax_pairs, box_lines):
+        map_box = ax_map.get_position()
+        box_box = ax_box.get_position()
+        new_y0 = map_box.y0 - vgap - box_box.height
+        new_pos = [map_box.x0, new_y0, map_box.width, box_box.height]
+        ax_box.set_position(new_pos)
+        ax_line.set_position(new_pos)
+
+    _annotate_unstudied(fig, cbar, cbar_ax, n_bands)
 
     if save_path:
         if for_latex and not save_path.endswith(".pdf"):
@@ -826,24 +956,52 @@ def plot_regions_map_city_province_ranks(
     """
     from visualization.regions import plot_regions_on_china_map
 
+    map_df = pd.read_csv(stats_csv_path)
+    v_max = max(float(map_df["max_lifecycle_reduction_pct"].max(skipna=True)), 0.0)
+    shared_cmap, shared_norm, bin_edges, reduction_edges = _build_reduction_cmap(v_max)
+
     fig = plt.figure(figsize=figsize)
     gs = fig.add_gridspec(
         2, 2,
-        height_ratios=[0.6, 0.55],
+        height_ratios=[0.7, 0.35],
         width_ratios=[1.6, 1.0],
-        hspace=0.25, wspace=0.18,
+        hspace=0.25, wspace=0.30,
     )
     ax_a = fig.add_subplot(gs[0, 0])
     ax_b = fig.add_subplot(gs[0, 1])
     ax_c = fig.add_subplot(gs[1, :])
 
-    plot_regions_on_china_map(csv_path=stats_csv_path, ax=ax_a, plot_title=plot_title)
+    plot_regions_on_china_map(
+        df=map_df, color_by="max_lifecycle_reduction_pct",
+        ax=ax_a, plot_title=plot_title,
+        cmap=shared_cmap, norm=shared_norm,
+        draw_colorbar=False, draw_legend=False,
+    )
+    ax_a.set_xlabel("")
+    ax_a.set_ylabel("")
+    ax_a.set_xticks([])
+    ax_a.set_yticks([])
+    for spine in ax_a.spines.values():
+        spine.set_visible(False)
     plot_city_ebike_rank_top10(df_stats, ax=ax_b, plot_title=plot_title)
     plot_province_total_ebike_lifecycle(df_stats, ax=ax_c, plot_title=plot_title)
 
     for ax_panel, label in ((ax_a, "a"), (ax_b, "b"), (ax_c, "c")):
         ax_panel.text(-0.05, 1.02, label, transform=ax_panel.transAxes,
                       fontsize=16, fontweight="bold", va="bottom", ha="right")
+
+    fig.tight_layout()
+
+    # Place colorbar to the right of ax_a, aligned with its vertical extent.
+    fig.canvas.draw()
+    a_pos = ax_a.get_position()
+    cbar_ax = fig.add_axes((a_pos.x1 + 0.005, a_pos.y0,
+                            0.012, a_pos.height))
+    cbar, n_bands = _draw_discrete_reduction_colorbar(
+        fig, cbar_ax, shared_cmap, shared_norm, bin_edges, reduction_edges,
+        r"Reduction vs today's all-ebike anchor (%)",
+    )
+    _annotate_unstudied(fig, cbar, cbar_ax, n_bands)
 
     if save_path:
         if for_latex and not save_path.endswith(".pdf"):
