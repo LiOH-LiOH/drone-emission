@@ -161,18 +161,23 @@ def _compute_distance_samples(od_df, router, n_samples=2):
     return sample_paths
 
 
-def _compute_distance_samples_extreme(od_df, router, n_samples, extreme):
+def _compute_distance_samples_extreme(od_df, router, n_samples, extreme,
+                                       air_km_min=None, air_km_max=None):
     """Sample OD pairs from the extreme tail of the detour-ratio distribution.
 
     ``extreme="high"`` draws from the deep upper tail (top ~1% up to the max);
-    ``extreme="low"`` from the lower tail among geometrically valid rows
-    (detour >= 1.0). ``n_samples`` evenly spaced quantiles inside the band
-    are picked, each matched to its closest OD row.
+    ``extreme="low"`` from the impossible (< 1.0) detour tail for debugging.
+    Optional ``air_km_min`` / ``air_km_max`` restrict the candidate pool to a
+    specific straight-line distance band before quantile sampling.
     """
     valid_df = od_df[
         (od_df["road_distance_m"] >= 0) & (od_df["road_distance_m"] > 100) &
         (od_df["distance_km"] > 0)
     ].copy()
+    if air_km_min is not None:
+        valid_df = valid_df[valid_df["distance_km"] >= air_km_min]
+    if air_km_max is not None:
+        valid_df = valid_df[valid_df["distance_km"] <= air_km_max]
     if len(valid_df) == 0:
         return []
 
@@ -384,6 +389,8 @@ def plot_distance_comparison_grid(
     n_rows: int = 3,
     n_cols: int = 3,
     extreme: str = "high",
+    air_km_min: Optional[float] = None,
+    air_km_max: Optional[float] = None,
 ) -> None:
     """Grid of OD samples drawn from the extreme high or low detour-ratio tail.
 
@@ -404,7 +411,10 @@ def plot_distance_comparison_grid(
         extreme: ``"high"`` samples the top tail of detour ratio, ``"low"`` the bottom.
     """
     n_samples = n_rows * n_cols
-    sample_paths = _compute_distance_samples_extreme(od_df, router, n_samples, extreme)
+    sample_paths = _compute_distance_samples_extreme(
+        od_df, router, n_samples, extreme,
+        air_km_min=air_km_min, air_km_max=air_km_max,
+    )
     if not sample_paths:
         print(f"No valid samples for extreme={extreme} distance comparison grid")
         return

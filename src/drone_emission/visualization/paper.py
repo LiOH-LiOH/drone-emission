@@ -246,6 +246,10 @@ def _render_distance_comparison_grid(data_dir, out, for_latex, plot_title, extre
     graph = SparseGraph.from_graphml(graphml_path)
     router = TileRouter(graph)
 
+    # Debug: restrict low-extreme to the 4.5-5 km air-distance band so we see
+    # impossible detours at a consistent scale.
+    extra = {"air_km_min": 4.5, "air_km_max": 5.0} if extreme == "low" else {}
+
     plot_distance_comparison_grid(
         od_df=od_df,
         graph=graph,
@@ -256,6 +260,7 @@ def _render_distance_comparison_grid(data_dir, out, for_latex, plot_title, extre
         n_rows=3,
         n_cols=3,
         extreme=extreme,
+        **extra,
     )
 
 
