@@ -2320,3 +2320,130 @@ def plot_city_reduction_rank_top10(
         plt.show()
 
     plt.close(fig)
+
+
+def _bin_reduction_and_detour(od_df: pd.DataFrame, bin_width_km: float):
+    """Bin OD rows by road distance; return (centres, reduction%, detour-per-bin, max_km)."""
+    valid = od_df[(od_df["road_distance_m"] >= 0) & (od_df["distance_km"] > 0)].copy()
+    road_km = valid["road_distance_m"].values / 1000.0
+    air_km = valid["distance_km"].values
+    detour = road_km / air_km
+    drone_lc = valid["drone_lifecycle_g"].values
+    ebike_lc = valid["ebike_lifecycle_g"].values
+    sales = valid["annual_sales"].values
+
+    max_km = float(np.ceil(road_km.max() / bin_width_km) * bin_width_km)
+    edges = np.arange(0.0, max_km + bin_width_km / 2, bin_width_km)
+    n_bins = len(edges) - 1
+    centres = (edges[:-1] + edges[1:]) / 2
+
+    optimal_lc = np.minimum(drone_lc, ebike_lc)
+    bin_idx = np.clip(np.digitize(road_km, edges) - 1, 0, n_bins - 1)
+    reduction_pct = np.full(n_bins, np.nan)
+    detour_by_bin = []
+    for k in range(n_bins):
+        m = bin_idx == k
+        if not m.any():
+            detour_by_bin.append(np.array([]))
+            continue
+        ebike_tot = (ebike_lc[m] * sales[m]).sum()
+        optimal_tot = (optimal_lc[m] * sales[m]).sum()
+        if ebike_tot > 0:
+            reduction_pct[k] = (ebike_tot - optimal_tot) / ebike_tot * 100
+        detour_by_bin.append(detour[m])
+    return centres, reduction_pct, detour_by_bin, max_km
+
+
+def plot_reduction_detour_grid(
+    od_dfs: dict,
+    city_labels: dict = None,
+    save_path: str = None,
+    figsize: tuple = (12, 14),
+    for_latex: bool = False,
+    plot_title: bool = False,
+    bin_width_km: float = 0.5,
+    n_cols: int = 2,
+):
+    """Multi-city grid of detour-ratio boxplot + emission-reduction bars per road-distance bin.
+
+    Args:
+        od_dfs: Mapping ``{city_key: od_dataframe}``. Each frame needs
+                ``road_distance_m``, ``distance_km``, ``drone_lifecycle_g``,
+                ``ebike_lifecycle_g``, ``annual_sales``. Insertion order
+                determines panel order.
+        city_labels: Optional ``{city_key: display_name}``. Defaults to key.
+        save_path: Path to save figure (with extension). Shows plot if None.
+        figsize: Figure size tuple.
+        for_latex: If True, save as PDF.
+        plot_title: If True, show suptitle.
+        bin_width_km: Width of each road-distance bin in km.
+        n_cols: Number of city columns in the grid.
+    """
+    keys = list(od_dfs.keys())
+    n_cities = len(keys)
+    n_rows = int(np.ceil(n_cities / n_cols))
+    city_labels = city_labels or {}
+
+    fig = plt.figure(figsize=figsize)
+    outer = fig.add_gridspec(n_rows, n_cols, hspace=0.45, wspace=0.22)
+
+    for i, key in enumerate(keys):
+        r, c = divmod(i, n_cols)
+        inner = outer[r, c].subgridspec(2, 1, hspace=0.08, height_ratios=[1, 1])
+        ax_top = fig.add_subplot(inner[0])
+        ax_bot = fig.add_subplot(inner[1], sharex=ax_top)
+
+        centres, reduction_pct, detour_by_bin, max_km = _bin_reduction_and_detour(
+            od_dfs[key], bin_width_km
+        )
+
+        nonempty = [(c_, d_) for c_, d_ in zip(centres, detour_by_bin) if d_.size > 0]
+        if nonempty:
+            box_positions = [c_ for c_, _ in nonempty]
+            box_data = [d_ for _, d_ in nonempty]
+            ax_top.boxplot(
+                box_data, positions=box_positions, widths=bin_width_km * 0.8,
+                showfliers=False, patch_artist=True,
+                boxprops=dict(facecolor="#cfe2f3", edgecolor="#1f4e79", linewidth=0.5),
+                medianprops=dict(color="#1f4e79", linewidth=1.0),
+                whiskerprops=dict(color="#1f4e79", linewidth=0.5),
+                capprops=dict(color="#1f4e79", linewidth=0.5),
+            )
+        ax_top.axhline(1.0, color="gray", linestyle="--", linewidth=0.7, alpha=0.6)
+        ax_top.set_ylabel("Detour (road / air)", fontsize=9)
+        ax_top.tick_params(axis="x", labelbottom=False)
+        ax_top.tick_params(axis="both", labelsize=8)
+        ax_top.grid(axis="y", alpha=0.3)
+        ax_top.set_title(city_labels.get(key, key), fontsize=11, fontweight="bold")
+
+        ax_bot.bar(
+            centres, reduction_pct, width=bin_width_km,
+            color="#2ca02c", edgecolor="white", linewidth=0.2, align="center",
+        )
+        ax_bot.axhline(0, color="gray", linewidth=0.5)
+        ax_bot.set_xlabel("Road Distance (km)", fontsize=9)
+        ax_bot.set_ylabel("Reduction (%)", fontsize=9)
+        ax_bot.set_xlim(0, max_km)
+        ax_bot.tick_params(axis="both", labelsize=8)
+        ax_bot.grid(axis="y", alpha=0.3)
+
+    # Hide any unused outer slots (when n_cities < n_rows * n_cols)
+    for j in range(n_cities, n_rows * n_cols):
+        r, c = divmod(j, n_cols)
+        ax_empty = fig.add_subplot(outer[r, c])
+        ax_empty.set_axis_off()
+
+    if plot_title:
+        fig.suptitle("Detour Ratio and Emission Reduction by Road Distance", fontsize=14)
+
+    if save_path:
+        if for_latex and not save_path.endswith(".pdf"):
+            save_path = save_path.rsplit(".", 1)[0] + ".pdf"
+        if plot_title:
+            save_path = _add_title_suffix(save_path)
+        os.makedirs(os.path.dirname(save_path), exist_ok=True)
+        plt.savefig(save_path, dpi=300, bbox_inches="tight")
+        print(f"Reduction detour grid saved to {save_path}")
+    else:
+        plt.show()
+    plt.close(fig)

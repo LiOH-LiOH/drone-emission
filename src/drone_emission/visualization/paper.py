@@ -13,6 +13,7 @@ Available figures:
     shanghai_heatmap, shanghai_road_air_distance, shanghai_road_detour,
     shanghai_air_detour, shanghai_air_road_joint, shanghai_emission_reduction,
     shanghai_emission_by_distance, shanghai_reduction_detour_by_distance,
+    top6_reduction_detour_grid,
     province_orders_emission, province_orders_both_emissions,
     province_total_ebike_lifecycle,
     city_ebike_rank_top10, city_ebike_rank_bottom10,
@@ -384,7 +385,7 @@ def render_all(data_dir: str, figures_dir: str, for_latex: bool = False, plot_ti
         )
 
     # --- Cross-region stats figures ---
-    stats_figures = {"province_orders_emission", "province_orders_both_emissions", "province_total_ebike_lifecycle", "city_ebike_rank_top10", "city_ebike_rank_bottom10", "city_reduction_rank_top10", "regions_map", "scatter_detour_ratio_vs_reduction_by_gef", "regions_map_and_gef_scatter", "regions_map_and_gef_scatter_2030", "regions_map_and_gef_scatter_2060", "regions_map_city_province_ranks", "regions_map_kappa_panels", "regions_map_pathway_scenarios"}
+    stats_figures = {"province_orders_emission", "province_orders_both_emissions", "province_total_ebike_lifecycle", "city_ebike_rank_top10", "city_ebike_rank_bottom10", "city_reduction_rank_top10", "regions_map", "scatter_detour_ratio_vs_reduction_by_gef", "regions_map_and_gef_scatter", "regions_map_and_gef_scatter_2030", "regions_map_and_gef_scatter_2060", "regions_map_city_province_ranks", "regions_map_kappa_panels", "regions_map_pathway_scenarios", "top6_reduction_detour_grid"}
     if only is None or only & stats_figures:
         stats_path = os.path.join(data_dir, "all_region_stats.csv")
         if not os.path.exists(stats_path):
@@ -439,6 +440,40 @@ def render_all(data_dir: str, figures_dir: str, for_latex: bool = False, plot_ti
                     for_latex=for_latex,
                     plot_title=plot_title,
                 )
+
+            if _want("top6_reduction_detour_grid"):
+                from visualization.analysis import plot_reduction_detour_grid
+
+                city_df = df[df["region_level"] == "city"].sort_values(
+                    "total_odpair_annual_sales", ascending=False
+                )
+                top_keys = city_df["region_key"].head(6).tolist()
+                label_map = dict(zip(city_df["region_key"], city_df["region_name_en"]))
+                od_dfs = {}
+                labels = {}
+                required = {"road_distance_m", "distance_km", "drone_lifecycle_g",
+                            "ebike_lifecycle_g", "annual_sales"}
+                for key in top_keys:
+                    od_path = os.path.join(data_dir, "city", key, f"{key}_od_pairs.csv")
+                    if not os.path.exists(od_path):
+                        print(f"top6_reduction_detour_grid: missing {od_path} — skipping {key}")
+                        continue
+                    od_df = pd.read_csv(od_path)
+                    if not required.issubset(od_df.columns):
+                        print(f"top6_reduction_detour_grid: {key} missing columns — skipping")
+                        continue
+                    od_dfs[key] = od_df
+                    labels[key] = label_map.get(key, key)
+                if od_dfs:
+                    plot_reduction_detour_grid(
+                        od_dfs=od_dfs,
+                        city_labels=labels,
+                        save_path=os.path.join(out, "top6_reduction_detour_grid.png"),
+                        for_latex=for_latex,
+                        plot_title=plot_title,
+                    )
+                else:
+                    print("top6_reduction_detour_grid: no city OD data available")
 
             if _want("regions_map"):
                 plot_regions_on_china_map(
