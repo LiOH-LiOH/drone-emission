@@ -138,14 +138,13 @@ def plot_emission_by_road_distance_bar(
     for_latex: bool = False,
     plot_title: bool = False,
     bin_width_km: float = 0.5,
-    max_km: float = None,
 ):
-    """Grouped bar chart: annual lifecycle emission per road-distance bin.
+    """Stacked histogram: annual lifecycle emission per road-distance bin.
 
-    Two bars per bin:
-      - ebike origin: every OD served by e-bike
-      - optimal: per OD, choose whichever mode (drone or e-bike) has the
-        lower lifecycle emission
+    Each bin holds two stacked segments:
+      - bottom: optimal emission (per OD, the lower of drone vs e-bike)
+      - top:    reduction (e-bike origin minus optimal)
+    Total bar height = e-bike origin emission for that bin.
 
     Per-OD totals are weighted by ``annual_sales`` and reported in
     tonnes CO2e per year.
@@ -157,10 +156,8 @@ def plot_emission_by_road_distance_bar(
         figsize: Figure size tuple.
         for_latex: If True, save as PDF.
         plot_title: If True, show title.
-        bin_width_km: Width of each road-distance bin in km.
-        max_km: Upper edge of last finite bin (km). Defaults to the 95th
-                percentile of road distance, rounded up to ``bin_width_km``.
-                Orders beyond this go into a ``≥max_km`` overflow bin.
+        bin_width_km: Width of each road-distance bin in km. Bins span 0 to
+                      the observed max road distance — no overflow bin.
     """
     valid = od_df[od_df["road_distance_m"] >= 0].copy()
     road_km = valid["road_distance_m"].values / 1000.0
@@ -168,45 +165,39 @@ def plot_emission_by_road_distance_bar(
     ebike_lc = valid["ebike_lifecycle_g"].values
     sales = valid["annual_sales"].values
 
-    if max_km is None:
-        max_km = float(np.ceil(np.percentile(road_km, 95) / bin_width_km) * bin_width_km)
-
+    max_km = float(np.ceil(road_km.max() / bin_width_km) * bin_width_km)
     edges = np.arange(0.0, max_km + bin_width_km / 2, bin_width_km)
-    n_finite = len(edges) - 1
+    n_bins = len(edges) - 1
+    centers = (edges[:-1] + edges[1:]) / 2
 
     optimal_lc = np.minimum(drone_lc, ebike_lc)
     ebike_per_od = ebike_lc * sales / 1e6  # g → tonnes
     optimal_per_od = optimal_lc * sales / 1e6
 
-    bin_idx = np.digitize(road_km, edges) - 1  # 0..n_finite-1, n_finite for overflow
-    bin_idx = np.clip(bin_idx, 0, n_finite)
-
-    ebike_bin = np.zeros(n_finite + 1)
-    optimal_bin = np.zeros(n_finite + 1)
-    for k in range(n_finite + 1):
+    bin_idx = np.clip(np.digitize(road_km, edges) - 1, 0, n_bins - 1)
+    ebike_bin = np.zeros(n_bins)
+    optimal_bin = np.zeros(n_bins)
+    for k in range(n_bins):
         m = bin_idx == k
         ebike_bin[k] = ebike_per_od[m].sum()
         optimal_bin[k] = optimal_per_od[m].sum()
-
-    labels = [f"{edges[k]:.1f}–{edges[k + 1]:.1f}" for k in range(n_finite)]
-    labels.append(f"≥{max_km:.1f}")
-    x = np.arange(len(labels))
-    width = 0.4
+    reduction_bin = ebike_bin - optimal_bin
 
     fig, ax = plt.subplots(figsize=figsize)
-    ax.bar(x - width / 2, ebike_bin, width, color="#ff7f0e", edgecolor="black",
-           linewidth=0.6, label="E-bike origin")
-    ax.bar(x + width / 2, optimal_bin, width, color="#2ca02c", edgecolor="black",
-           linewidth=0.6, label="Optimal (drone+e-bike)")
+    ax.bar(centers, optimal_bin, width=bin_width_km, color="#2ca02c",
+           edgecolor="white", linewidth=0.3, label="Optimal (drone+e-bike)",
+           align="center")
+    ax.bar(centers, reduction_bin, width=bin_width_km, bottom=optimal_bin,
+           color="#ff7f0e", edgecolor="white", linewidth=0.3,
+           label="Emission reduction", align="center")
 
     ax.set_xlabel("Road Distance (km)", fontsize=12)
     ax.set_ylabel("Annual Lifecycle Emission (t CO2e)", fontsize=12)
-    ax.set_xticks(x)
-    ax.set_xticklabels(labels, rotation=45, ha="right", fontsize=9)
+    ax.set_xlim(0, max_km)
     ax.grid(axis="y", alpha=0.3)
     ax.legend(loc="best", fontsize=10)
     if plot_title:
-        ax.set_title("Annual Emission by Road Distance: E-bike vs Optimal", fontsize=14)
+        ax.set_title("Annual Emission by Road Distance: Optimal + Reduction", fontsize=14)
 
     plt.tight_layout()
 
