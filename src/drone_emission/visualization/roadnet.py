@@ -164,9 +164,10 @@ def _compute_distance_samples(od_df, router, n_samples=2):
 def _compute_distance_samples_extreme(od_df, router, n_samples, extreme):
     """Sample OD pairs from the extreme tail of the detour-ratio distribution.
 
-    ``extreme="high"`` draws from the 90th–99th percentile band; ``extreme="low"``
-    from the 1st–10th. ``n_samples`` evenly spaced quantiles inside the band are
-    picked, each matched to its closest OD row.
+    ``extreme="high"`` draws from the deep upper tail (top ~1% up to the max);
+    ``extreme="low"`` from the lower tail among geometrically valid rows
+    (detour >= 1.0). ``n_samples`` evenly spaced quantiles inside the band
+    are picked, each matched to its closest OD row.
     """
     valid_df = od_df[
         (od_df["road_distance_m"] >= 0) & (od_df["road_distance_m"] > 100) &
@@ -178,9 +179,15 @@ def _compute_distance_samples_extreme(od_df, router, n_samples, extreme):
     valid_df["detour_ratio"] = valid_df["road_distance_m"] / (valid_df["distance_km"] * 1000)
 
     if extreme == "high":
-        qs = np.linspace(0.90, 0.99, n_samples)
+        # Span the deep upper tail; 1.0 picks the absolute maximum.
+        qs = np.linspace(0.99, 1.0, n_samples)
     elif extreme == "low":
-        qs = np.linspace(0.01, 0.10, n_samples)
+        # Drop rows with impossible detour (< 1.0 implies bad coords); sample
+        # the lower tail of the remaining valid distribution.
+        valid_df = valid_df[valid_df["detour_ratio"] >= 1.0]
+        if len(valid_df) == 0:
+            return []
+        qs = np.linspace(0.001, 0.05, n_samples)
     else:
         raise ValueError(f"extreme must be 'high' or 'low', got {extreme!r}")
 
