@@ -214,6 +214,107 @@ def plot_emission_by_road_distance_bar(
     plt.close(fig)
 
 
+def plot_reduction_pct_and_detour_by_distance(
+    od_df: pd.DataFrame,
+    save_path: str = None,
+    figsize: tuple = (10, 8),
+    for_latex: bool = False,
+    plot_title: bool = False,
+    bin_width_km: float = 0.5,
+):
+    """Two-panel figure binned by road distance.
+
+    Top panel: boxplot of per-OD detour ratio (road / air) per bin.
+    Bottom panel: sales-weighted emission reduction (%) per bin, defined as
+    ``(sum(ebike_lc * sales) - sum(min(drone_lc, ebike_lc) * sales)) / sum(ebike_lc * sales)``.
+
+    Args:
+        od_df: OD pairs DataFrame with ``road_distance_m``, ``distance_km``,
+               ``drone_lifecycle_g``, ``ebike_lifecycle_g``, ``annual_sales``.
+        save_path: Path to save figure (with extension). Shows plot if None.
+        figsize: Figure size tuple.
+        for_latex: If True, save as PDF.
+        plot_title: If True, show title.
+        bin_width_km: Width of each road-distance bin in km. Bins span 0 to
+                      the observed max road distance — no overflow bin.
+    """
+    valid = od_df[(od_df["road_distance_m"] >= 0) & (od_df["distance_km"] > 0)].copy()
+    road_km = valid["road_distance_m"].values / 1000.0
+    air_km = valid["distance_km"].values
+    detour = road_km / air_km
+    drone_lc = valid["drone_lifecycle_g"].values
+    ebike_lc = valid["ebike_lifecycle_g"].values
+    sales = valid["annual_sales"].values
+
+    max_km = float(np.ceil(road_km.max() / bin_width_km) * bin_width_km)
+    edges = np.arange(0.0, max_km + bin_width_km / 2, bin_width_km)
+    n_bins = len(edges) - 1
+    centers = (edges[:-1] + edges[1:]) / 2
+
+    optimal_lc = np.minimum(drone_lc, ebike_lc)
+    bin_idx = np.clip(np.digitize(road_km, edges) - 1, 0, n_bins - 1)
+
+    reduction_pct = np.full(n_bins, np.nan)
+    detour_by_bin = []
+    for k in range(n_bins):
+        m = bin_idx == k
+        if not m.any():
+            detour_by_bin.append(np.array([]))
+            continue
+        ebike_tot = (ebike_lc[m] * sales[m]).sum()
+        optimal_tot = (optimal_lc[m] * sales[m]).sum()
+        if ebike_tot > 0:
+            reduction_pct[k] = (ebike_tot - optimal_tot) / ebike_tot * 100
+        detour_by_bin.append(detour[m])
+
+    fig, (ax_top, ax_bot) = plt.subplots(
+        2, 1, figsize=figsize, sharex=True,
+        gridspec_kw={"height_ratios": [1, 1], "hspace": 0.08},
+    )
+
+    nonempty = [(c, d) for c, d in zip(centers, detour_by_bin) if d.size > 0]
+    box_positions = [c for c, _ in nonempty]
+    box_data = [d for _, d in nonempty]
+    ax_top.boxplot(
+        box_data, positions=box_positions, widths=bin_width_km * 0.8,
+        showfliers=False, patch_artist=True,
+        boxprops=dict(facecolor="#cfe2f3", edgecolor="#1f4e79", linewidth=0.6),
+        medianprops=dict(color="#1f4e79", linewidth=1.2),
+        whiskerprops=dict(color="#1f4e79", linewidth=0.6),
+        capprops=dict(color="#1f4e79", linewidth=0.6),
+    )
+    ax_top.axhline(1.0, color="gray", linestyle="--", linewidth=0.8, alpha=0.6)
+    ax_top.set_ylabel("Detour Ratio (road / air)", fontsize=12)
+    ax_top.grid(axis="y", alpha=0.3)
+
+    ax_bot.bar(
+        centers, reduction_pct, width=bin_width_km,
+        color="#2ca02c", edgecolor="white", linewidth=0.3, align="center",
+    )
+    ax_bot.axhline(0, color="gray", linewidth=0.6)
+    ax_bot.set_xlabel("Road Distance (km)", fontsize=12)
+    ax_bot.set_ylabel("Emission Reduction (%)", fontsize=12)
+    ax_bot.set_xlim(0, max_km)
+    ax_bot.grid(axis="y", alpha=0.3)
+
+    if plot_title:
+        fig.suptitle("Detour Ratio and Emission Reduction by Road Distance", fontsize=14)
+
+    plt.tight_layout()
+
+    if save_path:
+        if for_latex and not save_path.endswith(".pdf"):
+            save_path = save_path.rsplit(".", 1)[0] + ".pdf"
+        if plot_title:
+            save_path = _add_title_suffix(save_path)
+        os.makedirs(os.path.dirname(save_path), exist_ok=True)
+        plt.savefig(save_path, dpi=300, bbox_inches="tight")
+        print(f"Reduction pct and detour by distance saved to {save_path}")
+    else:
+        plt.show()
+    plt.close(fig)
+
+
 def plot_emission_reduction_analysis(
     results_df: pd.DataFrame,
     bundle_results: dict = None,

@@ -12,7 +12,7 @@ Available figures:
     detour_and_lifecycle, distance_comparison,
     shanghai_heatmap, shanghai_road_air_distance, shanghai_road_detour,
     shanghai_air_detour, shanghai_air_road_joint, shanghai_emission_reduction,
-    shanghai_emission_by_distance,
+    shanghai_emission_by_distance, shanghai_reduction_detour_by_distance,
     province_orders_emission, province_orders_both_emissions,
     province_total_ebike_lifecycle,
     city_ebike_rank_top10, city_ebike_rank_bottom10,
@@ -175,6 +175,34 @@ def _render_shanghai_emission_by_distance(data_dir, out, for_latex, plot_title):
     )
 
 
+def _render_shanghai_reduction_detour_by_distance(data_dir, out, for_latex, plot_title):
+    """Render Shanghai reduction % bars with detour-ratio boxplots per road-distance bin."""
+    region_key = "shanghai"
+    region_level = "city"
+    od_path = os.path.join(data_dir, region_level, region_key, f"{region_key}_od_pairs.csv")
+
+    if not os.path.exists(od_path):
+        print(f"Reduction detour by distance skipped — missing {od_path}")
+        return
+
+    from visualization.emission import plot_reduction_pct_and_detour_by_distance
+
+    df = pd.read_csv(od_path)
+    required = {"road_distance_m", "distance_km", "drone_lifecycle_g",
+                "ebike_lifecycle_g", "annual_sales"}
+    if not required.issubset(df.columns):
+        missing = required - set(df.columns)
+        print(f"Reduction detour by distance skipped — {od_path} missing columns {missing}")
+        return
+
+    plot_reduction_pct_and_detour_by_distance(
+        df,
+        save_path=os.path.join(out, "shanghai_reduction_detour_by_distance.png"),
+        for_latex=for_latex,
+        plot_title=plot_title,
+    )
+
+
 def _render_shanghai_air_road_joint(data_dir, out, for_latex, plot_title):
     """Load Shanghai OD pairs and render the air vs road joint distribution figure."""
     region_key = "shanghai"
@@ -324,6 +352,14 @@ def render_all(data_dir: str, figures_dir: str, for_latex: bool = False, plot_ti
 
     if _want("shanghai_emission_by_distance"):
         _render_shanghai_emission_by_distance(
+            data_dir=data_dir,
+            out=out,
+            for_latex=for_latex,
+            plot_title=plot_title,
+        )
+
+    if _want("shanghai_reduction_detour_by_distance"):
+        _render_shanghai_reduction_detour_by_distance(
             data_dir=data_dir,
             out=out,
             for_latex=for_latex,
