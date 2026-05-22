@@ -131,6 +131,98 @@ def plot_emission_reduction_vs_drone_ratio(
     plt.close(fig)
 
 
+def plot_emission_by_road_distance_bar(
+    od_df: pd.DataFrame,
+    save_path: str = None,
+    figsize: tuple = (10, 6),
+    for_latex: bool = False,
+    plot_title: bool = False,
+    bin_width_km: float = 0.5,
+    max_km: float = None,
+):
+    """Grouped bar chart: annual lifecycle emission per road-distance bin.
+
+    Two bars per bin:
+      - ebike origin: every OD served by e-bike
+      - optimal: per OD, choose whichever mode (drone or e-bike) has the
+        lower lifecycle emission
+
+    Per-OD totals are weighted by ``annual_sales`` and reported in
+    tonnes CO2e per year.
+
+    Args:
+        od_df: OD pairs DataFrame with ``road_distance_m``,
+               ``drone_lifecycle_g``, ``ebike_lifecycle_g``, ``annual_sales``.
+        save_path: Path to save figure (with extension). Shows plot if None.
+        figsize: Figure size tuple.
+        for_latex: If True, save as PDF.
+        plot_title: If True, show title.
+        bin_width_km: Width of each road-distance bin in km.
+        max_km: Upper edge of last finite bin (km). Defaults to the 95th
+                percentile of road distance, rounded up to ``bin_width_km``.
+                Orders beyond this go into a ``≥max_km`` overflow bin.
+    """
+    valid = od_df[od_df["road_distance_m"] >= 0].copy()
+    road_km = valid["road_distance_m"].values / 1000.0
+    drone_lc = valid["drone_lifecycle_g"].values
+    ebike_lc = valid["ebike_lifecycle_g"].values
+    sales = valid["annual_sales"].values
+
+    if max_km is None:
+        max_km = float(np.ceil(np.percentile(road_km, 95) / bin_width_km) * bin_width_km)
+
+    edges = np.arange(0.0, max_km + bin_width_km / 2, bin_width_km)
+    n_finite = len(edges) - 1
+
+    optimal_lc = np.minimum(drone_lc, ebike_lc)
+    ebike_per_od = ebike_lc * sales / 1e6  # g → tonnes
+    optimal_per_od = optimal_lc * sales / 1e6
+
+    bin_idx = np.digitize(road_km, edges) - 1  # 0..n_finite-1, n_finite for overflow
+    bin_idx = np.clip(bin_idx, 0, n_finite)
+
+    ebike_bin = np.zeros(n_finite + 1)
+    optimal_bin = np.zeros(n_finite + 1)
+    for k in range(n_finite + 1):
+        m = bin_idx == k
+        ebike_bin[k] = ebike_per_od[m].sum()
+        optimal_bin[k] = optimal_per_od[m].sum()
+
+    labels = [f"{edges[k]:.1f}–{edges[k + 1]:.1f}" for k in range(n_finite)]
+    labels.append(f"≥{max_km:.1f}")
+    x = np.arange(len(labels))
+    width = 0.4
+
+    fig, ax = plt.subplots(figsize=figsize)
+    ax.bar(x - width / 2, ebike_bin, width, color="#ff7f0e", edgecolor="black",
+           linewidth=0.6, label="E-bike origin")
+    ax.bar(x + width / 2, optimal_bin, width, color="#2ca02c", edgecolor="black",
+           linewidth=0.6, label="Optimal (drone+e-bike)")
+
+    ax.set_xlabel("Road Distance (km)", fontsize=12)
+    ax.set_ylabel("Annual Lifecycle Emission (t CO2e)", fontsize=12)
+    ax.set_xticks(x)
+    ax.set_xticklabels(labels, rotation=45, ha="right", fontsize=9)
+    ax.grid(axis="y", alpha=0.3)
+    ax.legend(loc="best", fontsize=10)
+    if plot_title:
+        ax.set_title("Annual Emission by Road Distance: E-bike vs Optimal", fontsize=14)
+
+    plt.tight_layout()
+
+    if save_path:
+        if for_latex and not save_path.endswith(".pdf"):
+            save_path = save_path.rsplit(".", 1)[0] + ".pdf"
+        if plot_title:
+            save_path = _add_title_suffix(save_path)
+        os.makedirs(os.path.dirname(save_path), exist_ok=True)
+        plt.savefig(save_path, dpi=300, bbox_inches="tight")
+        print(f"Emission by road distance bar saved to {save_path}")
+    else:
+        plt.show()
+    plt.close(fig)
+
+
 def plot_emission_reduction_analysis(
     results_df: pd.DataFrame,
     bundle_results: dict = None,
