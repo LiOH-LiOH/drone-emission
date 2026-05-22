@@ -269,6 +269,7 @@ def plot_reduction_pct_and_detour_by_distance(
             reduction_pct[k] = (ebike_tot - optimal_tot) / ebike_tot * 100
         detour_by_bin.append(detour[m])
     x_ticks = np.arange(0, max_km + 1e-6, 1.0)
+    x_tick_labels = [f"{int(t)}" for t in x_ticks]
 
     fig, (ax_top, ax_bot) = plt.subplots(
         2, 1, figsize=figsize, sharex=True,
@@ -288,7 +289,8 @@ def plot_reduction_pct_and_detour_by_distance(
     )
     ax_top.axhline(1.0, color="gray", linestyle="--", linewidth=0.8, alpha=0.6)
     ax_top.set_ylabel("Detour Ratio (road / air)", fontsize=12)
-    ax_top.set_xticks(x_ticks)
+    ax_top.set_xticks(x_ticks, labels=x_tick_labels)
+    ax_top.set_xlim(0, max_km)
     ax_top.grid(axis="y", alpha=0.3)
 
     ax_bot.bar(
@@ -300,7 +302,7 @@ def plot_reduction_pct_and_detour_by_distance(
     ax_bot.set_xlabel("Road Distance (km)", fontsize=12)
     ax_bot.set_ylabel("Emission Reduction (%)", fontsize=12, color="#2ca02c")
     ax_bot.set_xlim(0, max_km)
-    ax_bot.set_xticks(x_ticks)
+    ax_bot.set_xticks(x_ticks, labels=x_tick_labels)
     ax_bot.tick_params(axis="y", labelcolor="#2ca02c")
     ax_bot.grid(axis="y", alpha=0.3)
 

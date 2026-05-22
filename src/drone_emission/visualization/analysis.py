@@ -2404,6 +2404,7 @@ def plot_reduction_detour_grid(
             od_dfs[key], bin_width_km
         )
         x_ticks = np.arange(0, max_km + 1e-6, 1.0)
+        x_tick_labels = [f"{int(t)}" for t in x_ticks]
 
         nonempty = [(c_, d_) for c_, d_ in zip(centres, detour_by_bin) if d_.size > 0]
         if nonempty:
@@ -2419,7 +2420,8 @@ def plot_reduction_detour_grid(
             )
         ax_top.axhline(1.0, color="gray", linestyle="--", linewidth=0.7, alpha=0.6)
         ax_top.set_ylabel("Detour (road / air)", fontsize=9)
-        ax_top.set_xticks(x_ticks)
+        ax_top.set_xticks(x_ticks, labels=x_tick_labels)
+        ax_top.set_xlim(0, max_km)
         ax_top.tick_params(axis="x", labelbottom=False)
         ax_top.tick_params(axis="both", labelsize=8)
         ax_top.grid(axis="y", alpha=0.3)
@@ -2434,7 +2436,7 @@ def plot_reduction_detour_grid(
         ax_bot.set_xlabel("Road Distance (km)", fontsize=9)
         ax_bot.set_ylabel("Reduction (%)", fontsize=9, color="#2ca02c")
         ax_bot.set_xlim(0, max_km)
-        ax_bot.set_xticks(x_ticks)
+        ax_bot.set_xticks(x_ticks, labels=x_tick_labels)
         ax_bot.tick_params(axis="x", labelsize=8)
         ax_bot.tick_params(axis="y", labelsize=8, labelcolor="#2ca02c")
         ax_bot.grid(axis="y", alpha=0.3)
