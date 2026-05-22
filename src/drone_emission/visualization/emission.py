@@ -255,7 +255,7 @@ def plot_reduction_pct_and_detour_by_distance(
     bin_idx = np.clip(np.digitize(road_km, edges) - 1, 0, n_bins - 1)
 
     reduction_pct = np.full(n_bins, np.nan)
-    reduction_abs_t = np.zeros(n_bins)
+    ebike_total_t = np.zeros(n_bins)
     detour_by_bin = []
     for k in range(n_bins):
         m = bin_idx == k
@@ -264,10 +264,11 @@ def plot_reduction_pct_and_detour_by_distance(
             continue
         ebike_tot = (ebike_lc[m] * sales[m]).sum()
         optimal_tot = (optimal_lc[m] * sales[m]).sum()
-        reduction_abs_t[k] = (ebike_tot - optimal_tot) / 1e6
+        ebike_total_t[k] = ebike_tot / 1e6
         if ebike_tot > 0:
             reduction_pct[k] = (ebike_tot - optimal_tot) / ebike_tot * 100
         detour_by_bin.append(detour[m])
+    x_ticks = np.arange(0, max_km + 1e-6, 1.0)
 
     fig, (ax_top, ax_bot) = plt.subplots(
         2, 1, figsize=figsize, sharex=True,
@@ -287,6 +288,7 @@ def plot_reduction_pct_and_detour_by_distance(
     )
     ax_top.axhline(1.0, color="gray", linestyle="--", linewidth=0.8, alpha=0.6)
     ax_top.set_ylabel("Detour Ratio (road / air)", fontsize=12)
+    ax_top.set_xticks(x_ticks)
     ax_top.grid(axis="y", alpha=0.3)
 
     ax_bot.bar(
@@ -298,17 +300,18 @@ def plot_reduction_pct_and_detour_by_distance(
     ax_bot.set_xlabel("Road Distance (km)", fontsize=12)
     ax_bot.set_ylabel("Emission Reduction (%)", fontsize=12, color="#2ca02c")
     ax_bot.set_xlim(0, max_km)
+    ax_bot.set_xticks(x_ticks)
     ax_bot.tick_params(axis="y", labelcolor="#2ca02c")
     ax_bot.grid(axis="y", alpha=0.3)
 
     ax_abs = ax_bot.twinx()
     ax_abs.plot(
-        centers, reduction_abs_t,
-        color="#d62728", linewidth=1.6, marker="o", markersize=4,
-        label="Reduction (t CO2e/yr)",
+        centers, ebike_total_t,
+        color="#555555", alpha=0.5, linewidth=1.6, marker="o", markersize=4,
+        label="E-bike total (t CO2e/yr)",
     )
-    ax_abs.set_ylabel("Reduction (t CO2e/yr)", fontsize=12, color="#d62728")
-    ax_abs.tick_params(axis="y", labelcolor="#d62728")
+    ax_abs.set_ylabel("E-bike total (t CO2e/yr)", fontsize=12, color="#555555")
+    ax_abs.tick_params(axis="y", labelcolor="#555555")
     ax_abs.set_ylim(bottom=0)
 
     if plot_title:
