@@ -2368,7 +2368,7 @@ def plot_reduction_detour_grid(
     figsize: tuple = (12, 14),
     for_latex: bool = False,
     plot_title: bool = False,
-    bin_width_km: float = 0.5,
+    bin_width_km: float = 0.25,
     n_cols: int = 2,
 ):
     """Multi-city grid of detour-ratio boxplot + emission-reduction bars per road-distance bin.
