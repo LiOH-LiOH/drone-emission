@@ -2325,9 +2325,9 @@ def plot_city_reduction_rank_top10(
 def _bin_reduction_and_detour(od_df: pd.DataFrame, bin_width_km: float):
     """Bin OD rows by air distance.
 
-    Returns (centres, diff_t, ebike_total_t, detour_by_bin, max_km).
-    ``diff_t`` is (e-bike − drone) annual lifecycle emission per bin in tonnes
-    CO2e, negative when the drone exceeds e-bike for the bin's OD pairs.
+    Returns (centres, reduction_pct, ebike_total_t, detour_by_bin, max_km).
+    ``reduction_pct`` is (e-bike − drone) / e-bike per bin in percent,
+    negative when the drone exceeds e-bike for the bin's OD pairs.
     ``ebike_total_t`` is annual e-bike (origin) lifecycle emission per bin
     in tonnes CO2e.
     """
@@ -2345,7 +2345,7 @@ def _bin_reduction_and_detour(od_df: pd.DataFrame, bin_width_km: float):
     centres = (edges[:-1] + edges[1:]) / 2
 
     bin_idx = np.clip(np.digitize(air_km, edges) - 1, 0, n_bins - 1)
-    diff_t = np.zeros(n_bins)
+    reduction_pct = np.full(n_bins, np.nan)
     ebike_total_t = np.zeros(n_bins)
     detour_by_bin = []
     for k in range(n_bins):
@@ -2356,9 +2356,10 @@ def _bin_reduction_and_detour(od_df: pd.DataFrame, bin_width_km: float):
         ebike_tot = (ebike_lc[m] * sales[m]).sum()
         drone_tot = (drone_lc[m] * sales[m]).sum()
         ebike_total_t[k] = ebike_tot / 1e6  # g → tonnes
-        diff_t[k] = (ebike_tot - drone_tot) / 1e6
+        if ebike_tot > 0:
+            reduction_pct[k] = (ebike_tot - drone_tot) / ebike_tot * 100
         detour_by_bin.append(detour[m])
-    return centres, diff_t, ebike_total_t, detour_by_bin, max_km
+    return centres, reduction_pct, ebike_total_t, detour_by_bin, max_km
 
 
 def plot_reduction_detour_grid(
@@ -2400,7 +2401,7 @@ def plot_reduction_detour_grid(
         ax_top = fig.add_subplot(inner[0])
         ax_bot = fig.add_subplot(inner[1], sharex=ax_top)
 
-        centres, diff_t, ebike_total_t, detour_by_bin, max_km = _bin_reduction_and_detour(
+        centres, reduction_pct, ebike_total_t, detour_by_bin, max_km = _bin_reduction_and_detour(
             od_dfs[key], bin_width_km
         )
         x_ticks = np.arange(0, max_km + 1e-6, 1.0)
@@ -2427,15 +2428,17 @@ def plot_reduction_detour_grid(
         ax_top.grid(axis="y", alpha=0.3)
         ax_top.set_title(city_labels.get(key, key), fontsize=11, fontweight="bold")
 
-        bar_colors = ["#2ca02c" if v >= 0 else "#d62728" for v in diff_t]
+        bar_colors = [
+            "#2ca02c" if (np.isfinite(v) and v >= 0) else "#d62728" for v in reduction_pct
+        ]
         ax_bot.bar(
-            centres, diff_t, width=bin_width_km,
+            centres, reduction_pct, width=bin_width_km,
             color=bar_colors, edgecolor="white", linewidth=0.2, align="center",
-            label="E-bike − Drone",
+            label="(E-bike − Drone) / E-bike",
         )
         ax_bot.axhline(0, color="gray", linewidth=0.5)
         ax_bot.set_xlabel("Air Distance (km)", fontsize=9)
-        ax_bot.set_ylabel("E-bike − Drone (t CO$_2$e/yr)", fontsize=9, color="#2ca02c")
+        ax_bot.set_ylabel("(E-bike − Drone) / E-bike (%)", fontsize=9, color="#2ca02c")
         ax_bot.set_xlim(0, max_km)
         ax_bot.set_xticks(x_ticks, labels=x_tick_labels)
         ax_bot.tick_params(axis="x", labelsize=8)
@@ -2459,7 +2462,7 @@ def plot_reduction_detour_grid(
         ax_empty.set_axis_off()
 
     if plot_title:
-        fig.suptitle("Detour Ratio and Emission Difference by Air Distance", fontsize=14)
+        fig.suptitle("Detour Ratio and Relative Emission Reduction by Air Distance", fontsize=14)
 
     if save_path:
         if for_latex and not save_path.endswith(".pdf"):
