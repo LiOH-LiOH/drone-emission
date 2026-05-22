@@ -161,6 +161,56 @@ def _compute_distance_samples(od_df, router, n_samples=2):
     return sample_paths
 
 
+def _compute_distance_samples_extreme(od_df, router, n_samples, extreme):
+    """Sample OD pairs from the extreme tail of the detour-ratio distribution.
+
+    ``extreme="high"`` draws from the 90th–99th percentile band; ``extreme="low"``
+    from the 1st–10th. ``n_samples`` evenly spaced quantiles inside the band are
+    picked, each matched to its closest OD row.
+    """
+    valid_df = od_df[
+        (od_df["road_distance_m"] >= 0) & (od_df["road_distance_m"] > 100) &
+        (od_df["distance_km"] > 0)
+    ].copy()
+    if len(valid_df) == 0:
+        return []
+
+    valid_df["detour_ratio"] = valid_df["road_distance_m"] / (valid_df["distance_km"] * 1000)
+
+    if extreme == "high":
+        qs = np.linspace(0.90, 0.99, n_samples)
+    elif extreme == "low":
+        qs = np.linspace(0.01, 0.10, n_samples)
+    else:
+        raise ValueError(f"extreme must be 'high' or 'low', got {extreme!r}")
+
+    picked = []
+    used = set()
+    for q in qs:
+        qval = valid_df["detour_ratio"].quantile(q)
+        order = (valid_df["detour_ratio"] - qval).abs().sort_values().index
+        for idx in order:
+            if idx not in used:
+                picked.append(idx)
+                used.add(idx)
+                break
+    sample_df = valid_df.loc[picked]
+
+    sample_paths = []
+    for _, row in sample_df.iterrows():
+        origin = (row["from_lat"], row["from_lng"])
+        destination = (row["to_lat"], row["to_lng"])
+        path_result = router.find_shortest_path(origin, destination)
+        sample_paths.append({
+            "origin": origin,
+            "destination": destination,
+            "straight_distance": row["distance_km"] * 1000,
+            "road_distance": row["road_distance_m"],
+            "path_result": path_result,
+        })
+    return sample_paths
+
+
 def _draw_distance_panel(ax, sample, graph, show_legend=False, padding=0.003):
     """Draw one distance comparison sample onto *ax*."""
     from matplotlib.collections import LineCollection
@@ -306,6 +356,76 @@ def plot_distance_comparison(
         os.makedirs(os.path.dirname(save_path), exist_ok=True)
         plt.savefig(save_path, dpi=200, bbox_inches="tight")
         print(f"Distance comparison saved to {save_path}")
+    else:
+        plt.show()
+
+    plt.close(fig)
+
+
+def plot_distance_comparison_grid(
+    od_df,
+    graph,
+    router,
+    save_path: Optional[str] = None,
+    figsize: Optional[tuple] = None,
+    for_latex: bool = False,
+    plot_title: bool = False,
+    n_rows: int = 3,
+    n_cols: int = 3,
+    extreme: str = "high",
+) -> None:
+    """Grid of OD samples drawn from the extreme high or low detour-ratio tail.
+
+    Each panel shows the e-bike road path and straight-line drone path for one
+    OD pair, with a small text box listing straight/road distance and detour.
+
+    Args:
+        od_df: OD DataFrame with from_lat/from_lng/to_lat/to_lng/distance_km/
+               road_distance_m columns.
+        graph: SparseGraph for the region.
+        router: TileRouter wrapping the SparseGraph.
+        save_path: Path to save figure (with .png extension). Shows plot if None.
+        figsize: Total figure size. Defaults to (4 * n_cols, 4 * n_rows).
+        for_latex: If True, save as PDF.
+        plot_title: If True, show suptitle.
+        n_rows: Grid rows.
+        n_cols: Grid cols.
+        extreme: ``"high"`` samples the top tail of detour ratio, ``"low"`` the bottom.
+    """
+    n_samples = n_rows * n_cols
+    sample_paths = _compute_distance_samples_extreme(od_df, router, n_samples, extreme)
+    if not sample_paths:
+        print(f"No valid samples for extreme={extreme} distance comparison grid")
+        return
+
+    fig, axes = plt.subplots(n_rows, n_cols, figsize=figsize or (4 * n_cols, 4 * n_rows))
+    axes = np.array(axes).flatten()
+
+    for idx, sample in enumerate(sample_paths):
+        _draw_distance_panel(axes[idx], sample, graph, show_legend=(idx == 0))
+    for idx in range(len(sample_paths), len(axes)):
+        axes[idx].set_visible(False)
+
+    if plot_title:
+        tail = "high" if extreme == "high" else "low"
+        plt.suptitle(
+            f"Distance comparison — extreme {tail} detour ratio",
+            fontsize=14, fontweight="bold", y=1.02,
+        )
+
+    plt.tight_layout()
+
+    if save_path:
+        if for_latex and not save_path.endswith(".pdf"):
+            save_path = save_path.rsplit(".", 1)[0] + ".pdf"
+        if plot_title:
+            save_path = _add_title_suffix(save_path)
+        if save_path.endswith(".pdf"):
+            for ax in axes[:len(sample_paths)]:
+                ax.set_rasterization_zorder(12)
+        os.makedirs(os.path.dirname(save_path), exist_ok=True)
+        plt.savefig(save_path, dpi=200, bbox_inches="tight")
+        print(f"Distance comparison grid ({extreme}) saved to {save_path}")
     else:
         plt.show()
 

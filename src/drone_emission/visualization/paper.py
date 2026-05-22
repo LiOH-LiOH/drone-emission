@@ -10,6 +10,7 @@ Run:
 Available figures:
     detour_lifecycle_distance, emission_model_flowchart,
     detour_and_lifecycle, distance_comparison,
+    distance_comparison_high_3x3, distance_comparison_low_3x3,
     shanghai_heatmap, shanghai_road_air_distance, shanghai_road_detour,
     shanghai_air_detour, shanghai_air_road_joint, shanghai_emission_reduction,
     shanghai_emission_by_distance, shanghai_reduction_detour_by_distance,
@@ -226,6 +227,38 @@ def _render_shanghai_air_road_joint(data_dir, out, for_latex, plot_title):
     )
 
 
+def _render_distance_comparison_grid(data_dir, out, for_latex, plot_title, extreme):
+    """Load Shanghai roadnet data and render a 3x3 distance-comparison grid for one tail."""
+    region_key = "shanghai"
+    region_level = "city"
+    od_path = os.path.join(data_dir, region_level, region_key, f"{region_key}_od_pairs.csv")
+    graphml_path = os.path.join(data_dir, region_level, region_key, f"{region_key}_roadnet.graphml")
+
+    if not os.path.exists(od_path) or not os.path.exists(graphml_path):
+        print(f"Distance comparison grid ({extreme}) skipped — missing data for {region_key}")
+        return
+
+    from roadnet.sparse_graph import SparseGraph
+    from roadnet.tile_router import TileRouter
+    from visualization.roadnet import plot_distance_comparison_grid
+
+    od_df = pd.read_csv(od_path)
+    graph = SparseGraph.from_graphml(graphml_path)
+    router = TileRouter(graph)
+
+    plot_distance_comparison_grid(
+        od_df=od_df,
+        graph=graph,
+        router=router,
+        save_path=os.path.join(out, f"distance_comparison_{extreme}_3x3.png"),
+        for_latex=for_latex,
+        plot_title=plot_title,
+        n_rows=3,
+        n_cols=3,
+        extreme=extreme,
+    )
+
+
 def _render_distance_comparison(data_dir, out, for_latex, plot_title, plot_fn):
     """Load Shanghai roadnet data and render the distance comparison figure."""
     region_key = "shanghai"
@@ -382,6 +415,24 @@ def render_all(data_dir: str, figures_dir: str, for_latex: bool = False, plot_ti
             for_latex=for_latex,
             plot_title=plot_title,
             plot_fn=plot_distance_comparison,
+        )
+
+    if _want("distance_comparison_high_3x3"):
+        _render_distance_comparison_grid(
+            data_dir=data_dir,
+            out=out,
+            for_latex=for_latex,
+            plot_title=plot_title,
+            extreme="high",
+        )
+
+    if _want("distance_comparison_low_3x3"):
+        _render_distance_comparison_grid(
+            data_dir=data_dir,
+            out=out,
+            for_latex=for_latex,
+            plot_title=plot_title,
+            extreme="low",
         )
 
     # --- Cross-region stats figures ---
