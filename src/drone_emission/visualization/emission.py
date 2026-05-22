@@ -255,6 +255,7 @@ def plot_reduction_pct_and_detour_by_distance(
     bin_idx = np.clip(np.digitize(road_km, edges) - 1, 0, n_bins - 1)
 
     reduction_pct = np.full(n_bins, np.nan)
+    reduction_abs_t = np.zeros(n_bins)
     detour_by_bin = []
     for k in range(n_bins):
         m = bin_idx == k
@@ -263,6 +264,7 @@ def plot_reduction_pct_and_detour_by_distance(
             continue
         ebike_tot = (ebike_lc[m] * sales[m]).sum()
         optimal_tot = (optimal_lc[m] * sales[m]).sum()
+        reduction_abs_t[k] = (ebike_tot - optimal_tot) / 1e6
         if ebike_tot > 0:
             reduction_pct[k] = (ebike_tot - optimal_tot) / ebike_tot * 100
         detour_by_bin.append(detour[m])
@@ -290,12 +292,24 @@ def plot_reduction_pct_and_detour_by_distance(
     ax_bot.bar(
         centers, reduction_pct, width=bin_width_km,
         color="#2ca02c", edgecolor="white", linewidth=0.3, align="center",
+        label="Reduction %",
     )
     ax_bot.axhline(0, color="gray", linewidth=0.6)
     ax_bot.set_xlabel("Road Distance (km)", fontsize=12)
-    ax_bot.set_ylabel("Emission Reduction (%)", fontsize=12)
+    ax_bot.set_ylabel("Emission Reduction (%)", fontsize=12, color="#2ca02c")
     ax_bot.set_xlim(0, max_km)
+    ax_bot.tick_params(axis="y", labelcolor="#2ca02c")
     ax_bot.grid(axis="y", alpha=0.3)
+
+    ax_abs = ax_bot.twinx()
+    ax_abs.plot(
+        centers, reduction_abs_t,
+        color="#d62728", linewidth=1.6, marker="o", markersize=4,
+        label="Reduction (t CO2e/yr)",
+    )
+    ax_abs.set_ylabel("Reduction (t CO2e/yr)", fontsize=12, color="#d62728")
+    ax_abs.tick_params(axis="y", labelcolor="#d62728")
+    ax_abs.set_ylim(bottom=0)
 
     if plot_title:
         fig.suptitle("Detour Ratio and Emission Reduction by Road Distance", fontsize=14)

@@ -444,11 +444,24 @@ def render_all(data_dir: str, figures_dir: str, for_latex: bool = False, plot_ti
             if _want("top6_reduction_detour_grid"):
                 from visualization.analysis import plot_reduction_detour_grid
 
-                city_df = df[df["region_level"] == "city"].sort_values(
-                    "total_odpair_annual_sales", ascending=False
-                )
-                top_keys = city_df["region_key"].head(6).tolist()
-                label_map = dict(zip(city_df["region_key"], city_df["region_name_en"]))
+                city_df = df[df["region_level"] == "city"].copy()
+                gef_path = os.path.join(data_dir, "gef_china.csv")
+                gef_df = pd.read_csv(gef_path, encoding="gbk")
+                gef_df.columns = ["province", "gef"]
+                city_df = city_df.merge(gef_df, on="province", how="left")
+
+                # Top 4 by annual sales
+                top4 = city_df.nlargest(4, "total_odpair_annual_sales")
+                # Top 2 by sales among the 3 lowest-GEF provinces, excluding top4
+                lowest_provinces = gef_df.nsmallest(3, "gef")["province"].tolist()
+                low_gef_cand = city_df[
+                    city_df["province"].isin(lowest_provinces)
+                    & ~city_df["region_key"].isin(top4["region_key"])
+                ]
+                top2_low = low_gef_cand.nlargest(2, "total_odpair_annual_sales")
+                selected = pd.concat([top4, top2_low])
+                top_keys = selected["region_key"].tolist()
+                label_map = dict(zip(selected["region_key"], selected["region_name_en"]))
                 od_dfs = {}
                 labels = {}
                 required = {"road_distance_m", "distance_km", "drone_lifecycle_g",

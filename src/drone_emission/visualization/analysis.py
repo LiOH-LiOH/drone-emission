@@ -2323,7 +2323,11 @@ def plot_city_reduction_rank_top10(
 
 
 def _bin_reduction_and_detour(od_df: pd.DataFrame, bin_width_km: float):
-    """Bin OD rows by road distance; return (centres, reduction%, detour-per-bin, max_km)."""
+    """Bin OD rows by road distance.
+
+    Returns (centres, reduction_pct, reduction_abs_t, detour_by_bin, max_km).
+    ``reduction_abs_t`` is annual saved emission per bin in tonnes CO2e.
+    """
     valid = od_df[(od_df["road_distance_m"] >= 0) & (od_df["distance_km"] > 0)].copy()
     road_km = valid["road_distance_m"].values / 1000.0
     air_km = valid["distance_km"].values
@@ -2340,6 +2344,7 @@ def _bin_reduction_and_detour(od_df: pd.DataFrame, bin_width_km: float):
     optimal_lc = np.minimum(drone_lc, ebike_lc)
     bin_idx = np.clip(np.digitize(road_km, edges) - 1, 0, n_bins - 1)
     reduction_pct = np.full(n_bins, np.nan)
+    reduction_abs_t = np.zeros(n_bins)
     detour_by_bin = []
     for k in range(n_bins):
         m = bin_idx == k
@@ -2348,10 +2353,11 @@ def _bin_reduction_and_detour(od_df: pd.DataFrame, bin_width_km: float):
             continue
         ebike_tot = (ebike_lc[m] * sales[m]).sum()
         optimal_tot = (optimal_lc[m] * sales[m]).sum()
+        reduction_abs_t[k] = (ebike_tot - optimal_tot) / 1e6  # g → tonnes
         if ebike_tot > 0:
             reduction_pct[k] = (ebike_tot - optimal_tot) / ebike_tot * 100
         detour_by_bin.append(detour[m])
-    return centres, reduction_pct, detour_by_bin, max_km
+    return centres, reduction_pct, reduction_abs_t, detour_by_bin, max_km
 
 
 def plot_reduction_detour_grid(
@@ -2393,7 +2399,7 @@ def plot_reduction_detour_grid(
         ax_top = fig.add_subplot(inner[0])
         ax_bot = fig.add_subplot(inner[1], sharex=ax_top)
 
-        centres, reduction_pct, detour_by_bin, max_km = _bin_reduction_and_detour(
+        centres, reduction_pct, reduction_abs_t, detour_by_bin, max_km = _bin_reduction_and_detour(
             od_dfs[key], bin_width_km
         )
 
@@ -2419,13 +2425,25 @@ def plot_reduction_detour_grid(
         ax_bot.bar(
             centres, reduction_pct, width=bin_width_km,
             color="#2ca02c", edgecolor="white", linewidth=0.2, align="center",
+            label="Reduction %",
         )
         ax_bot.axhline(0, color="gray", linewidth=0.5)
         ax_bot.set_xlabel("Road Distance (km)", fontsize=9)
-        ax_bot.set_ylabel("Reduction (%)", fontsize=9)
+        ax_bot.set_ylabel("Reduction (%)", fontsize=9, color="#2ca02c")
         ax_bot.set_xlim(0, max_km)
-        ax_bot.tick_params(axis="both", labelsize=8)
+        ax_bot.tick_params(axis="x", labelsize=8)
+        ax_bot.tick_params(axis="y", labelsize=8, labelcolor="#2ca02c")
         ax_bot.grid(axis="y", alpha=0.3)
+
+        ax_abs = ax_bot.twinx()
+        ax_abs.plot(
+            centres, reduction_abs_t,
+            color="#d62728", linewidth=1.4, marker="o", markersize=2.5,
+            label="Reduction (t CO2e)",
+        )
+        ax_abs.set_ylabel("Reduction (t CO2e/yr)", fontsize=9, color="#d62728")
+        ax_abs.tick_params(axis="y", labelsize=8, labelcolor="#d62728")
+        ax_abs.set_ylim(bottom=0)
 
     # Hide any unused outer slots (when n_cities < n_rows * n_cols)
     for j in range(n_cities, n_rows * n_cols):
