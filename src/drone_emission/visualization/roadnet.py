@@ -182,12 +182,11 @@ def _compute_distance_samples_extreme(od_df, router, n_samples, extreme):
         # Span the deep upper tail; 1.0 picks the absolute maximum.
         qs = np.linspace(0.99, 1.0, n_samples)
     elif extreme == "low":
-        # Drop rows with impossible detour (< 1.0 implies bad coords); sample
-        # the lower tail of the remaining valid distribution.
-        valid_df = valid_df[valid_df["detour_ratio"] >= 1.0]
+        # Inspect the impossible-detour tail (< 1.0) for debugging coord issues.
+        valid_df = valid_df[valid_df["detour_ratio"] < 1.0]
         if len(valid_df) == 0:
             return []
-        qs = np.linspace(0.001, 0.05, n_samples)
+        qs = np.linspace(0.0, 0.99, n_samples)
     else:
         raise ValueError(f"extreme must be 'high' or 'low', got {extreme!r}")
 
@@ -230,11 +229,16 @@ def _draw_distance_panel(ax, sample, graph, show_legend=False, padding=0.003):
     road_dist = sample["road_distance"]
     detour = road_dist / straight_dist if straight_dist > 0 else 0
 
+    lats = [origin[0], destination[0]]
+    lngs = [origin[1], destination[1]]
+    if path_result.get("success") and len(path_result.get("path_coordinates", [])) > 1:
+        lats.extend(c[0] for c in path_result["path_coordinates"])
+        lngs.extend(c[1] for c in path_result["path_coordinates"])
     local_bounds = {
-        "min_lat": min(origin[0], destination[0]) - padding,
-        "max_lat": max(origin[0], destination[0]) + padding,
-        "min_lng": min(origin[1], destination[1]) - padding,
-        "max_lng": max(origin[1], destination[1]) + padding,
+        "min_lat": min(lats) - padding,
+        "max_lat": max(lats) + padding,
+        "min_lng": min(lngs) - padding,
+        "max_lng": max(lngs) + padding,
     }
 
     edge_coords = graph.get_local_edges(local_bounds)
