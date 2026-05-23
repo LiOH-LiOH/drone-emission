@@ -2061,7 +2061,8 @@ def plot_lifecycle_distance_detour_boxplot(
     distance_min, distance_max = 0.0, 5.0
     heatmap_distance_min = 0.5
     detour_min, detour_max = 1.0, 1.8
-    x_edges = np.arange(distance_min, distance_max + bin_width_km, bin_width_km)
+    mask_bin_width_km = min(bin_width_km, 0.10)
+    x_edges = np.arange(distance_min, distance_max + mask_bin_width_km, mask_bin_width_km)
     x_centers = (x_edges[:-1] + x_edges[1:]) / 2
     distances = np.linspace(heatmap_distance_min, distance_max, 140)
     detour_ratios = np.linspace(detour_min, detour_max, 90)
@@ -2115,7 +2116,7 @@ def plot_lifecycle_distance_detour_boxplot(
     valid = valid[np.isfinite(valid["detour"])]
 
     if len(valid) > 0:
-        y_edges = np.linspace(detour_min, detour_max, 220)
+        y_edges = np.linspace(detour_min, detour_max, 600)
         y_centers = (y_edges[:-1] + y_edges[1:]) / 2
         max_mask_alpha = 0.66
         mask_alpha = np.full((len(y_centers), len(x_centers)), max_mask_alpha)
@@ -2150,7 +2151,7 @@ def plot_lifecycle_distance_detour_boxplot(
             aspect="auto",
             origin="lower",
             extent=[distance_min, distance_max, detour_min, detour_max],
-            interpolation="nearest",
+            interpolation="bilinear",
             zorder=5,
         )
 
