@@ -2089,8 +2089,8 @@ def plot_lifecycle_distance_detour_boxplot(
 
     fig, ax = plt.subplots(figsize=figsize)
     cmap = LinearSegmentedColormap.from_list(
-        "orange_yellow_teal",
-        ["#df3b20", "#f0a33a", "#e5dfb6", "#48c4b2", "#006b6b"],
+        "teal_yellow_orange",
+        ["#006b6b", "#48c4b2", "#e5dfb6", "#f0a33a", "#df3b20"],
     )
     norm = TwoSlopeNorm(
         vmin=float(original_emission_diff_matrix.min()),
@@ -2124,8 +2124,9 @@ def plot_lifecycle_distance_detour_boxplot(
 
         y_edges = np.linspace(detour_min, detour_max, 600)
         y_centers = (y_edges[:-1] + y_edges[1:]) / 2
+        mask_x_centers = np.linspace(distance_min, distance_max, 700)
         max_mask_alpha = 0.66
-        mask_alpha = np.full((len(y_centers), len(x_centers)), max_mask_alpha)
+        mask_alpha = np.full((len(y_centers), len(mask_x_centers)), max_mask_alpha)
         quantile_levels = np.array([0.05, 0.10, 0.25, 0.40, 0.60, 0.75, 0.90, 0.95])
         quantile_curves = np.full((len(quantile_levels), len(x_centers)), np.nan)
         quantile_bands = [
@@ -2150,15 +2151,17 @@ def plot_lifecycle_distance_detour_boxplot(
 
         observed = np.flatnonzero(np.isfinite(quantile_curves[0]))
         if observed.size > 1:
+            smooth_curves = np.full((len(quantile_levels), len(mask_x_centers)), np.nan)
             for q_i in range(len(quantile_levels)):
                 curve = quantile_curves[q_i]
                 curve = np.interp(x_centers, x_centers[observed], curve[observed])
-                quantile_curves[q_i] = gaussian_filter1d(curve, sigma=1.2, mode="nearest")
+                curve = gaussian_filter1d(curve, sigma=1.2, mode="nearest")
+                smooth_curves[q_i] = np.interp(mask_x_centers, x_centers, curve)
 
-            for x_i in range(len(x_centers)):
+            for x_i in range(len(mask_x_centers)):
                 for low_i, high_i, alpha in quantile_bands:
-                    y_low = quantile_curves[low_i, x_i]
-                    y_high = quantile_curves[high_i, x_i]
+                    y_low = smooth_curves[low_i, x_i]
+                    y_high = smooth_curves[high_i, x_i]
                     band = (y_centers >= y_low) & (y_centers <= y_high)
                     mask_alpha[band, x_i] = np.minimum(mask_alpha[band, x_i], alpha)
 
