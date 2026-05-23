@@ -2059,24 +2059,31 @@ def plot_lifecycle_distance_detour_boxplot(
     lca = LifeCycleEmissions()
 
     distance_min, distance_max = 0.0, 5.0
+    heatmap_distance_min = 0.5
     detour_min, detour_max = 1.0, 1.8
-    distances = np.linspace(distance_min, distance_max, 40)
-    detour_ratios = np.linspace(detour_min, detour_max, 24)
+    distances = np.linspace(heatmap_distance_min, distance_max, 30)
+    detour_ratios = np.linspace(detour_min, detour_max, 20)
 
-    emission_diff_matrix = np.zeros((len(detour_ratios), len(distances)))
-    for i, r in enumerate(detour_ratios):
-        for j, d in enumerate(distances):
-            ebike_result = lca.calculate_lifecycle_emissions_per_order_simple(
-                d * r, n_orders_per_delivery=1, vehicle_type="ebike"
-            )
-            drone_result = lca.calculate_lifecycle_emissions_per_order_simple(
-                d, n_orders_per_delivery=1, vehicle_type="drone"
-            )
-            diff = (drone_result["total_per_order_g"] / ebike_result["total_per_order_g"] - 1) * 100
-            emission_diff_matrix[i, j] = diff
+    def _emission_diff_matrix(distance_grid):
+        matrix = np.zeros((len(detour_ratios), len(distance_grid)))
+        for i, r in enumerate(detour_ratios):
+            for j, d in enumerate(distance_grid):
+                ebike_result = lca.calculate_lifecycle_emissions_per_order_simple(
+                    d * r, n_orders_per_delivery=1, vehicle_type="ebike"
+                )
+                drone_result = lca.calculate_lifecycle_emissions_per_order_simple(
+                    d, n_orders_per_delivery=1, vehicle_type="drone"
+                )
+                diff = (drone_result["total_per_order_g"] / ebike_result["total_per_order_g"] - 1) * 100
+                matrix[i, j] = diff
+        return matrix
+
+    emission_diff_matrix = _emission_diff_matrix(distances)
+    original_distances = np.linspace(0.5, 4, 30)
+    original_emission_diff_matrix = _emission_diff_matrix(original_distances)
 
     fig, ax = plt.subplots(figsize=figsize)
-    abs_max = max(abs(emission_diff_matrix.min()), abs(emission_diff_matrix.max()))
+    abs_max = max(abs(original_emission_diff_matrix.min()), abs(original_emission_diff_matrix.max()))
     im = ax.imshow(
         emission_diff_matrix,
         cmap="RdYlGn_r",
@@ -2125,7 +2132,7 @@ def plot_lifecycle_distance_detour_boxplot(
             zorder=5,
         )
         for box in bp["boxes"]:
-            box.set(facecolor="white", edgecolor="black", linewidth=0.9, alpha=0.45)
+            box.set(facecolor="none", edgecolor="black", linewidth=0.9, alpha=1.0)
         for median in bp["medians"]:
             median.set(color="black", linewidth=1.2)
         for key in ("whiskers", "caps"):
