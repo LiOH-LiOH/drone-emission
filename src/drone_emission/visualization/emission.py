@@ -2116,18 +2116,22 @@ def plot_lifecycle_distance_detour_boxplot(
     valid = valid[np.isfinite(valid["detour"])]
 
     if len(valid) > 0:
+        from scipy.ndimage import gaussian_filter1d
+
         y_edges = np.linspace(detour_min, detour_max, 600)
         y_centers = (y_edges[:-1] + y_edges[1:]) / 2
         max_mask_alpha = 0.66
         mask_alpha = np.full((len(y_centers), len(x_centers)), max_mask_alpha)
+        quantile_levels = np.array([0.05, 0.10, 0.25, 0.40, 0.60, 0.75, 0.90, 0.95])
+        quantile_curves = np.full((len(quantile_levels), len(x_centers)), np.nan)
         quantile_bands = [
-            (0.05, 0.10, 0.54),
-            (0.10, 0.25, 0.42),
-            (0.25, 0.40, 0.24),
-            (0.40, 0.60, 0.00),
-            (0.60, 0.75, 0.24),
-            (0.75, 0.90, 0.42),
-            (0.90, 0.95, 0.54),
+            (0, 1, 0.54),
+            (1, 2, 0.42),
+            (2, 3, 0.24),
+            (3, 4, 0.00),
+            (4, 5, 0.24),
+            (5, 6, 0.42),
+            (6, 7, 0.54),
         ]
         for x_i, (left, right) in enumerate(zip(x_edges[:-1], x_edges[1:])):
             if right >= distance_max:
@@ -2138,10 +2142,21 @@ def plot_lifecycle_distance_detour_boxplot(
             values = values[np.isfinite(values)]
             if values.size == 0:
                 continue
-            for q_low, q_high, alpha in quantile_bands:
-                y_low, y_high = np.quantile(values, [q_low, q_high])
-                band = (y_centers >= y_low) & (y_centers <= y_high)
-                mask_alpha[band, x_i] = np.minimum(mask_alpha[band, x_i], alpha)
+            quantile_curves[:, x_i] = np.quantile(values, quantile_levels)
+
+        observed = np.flatnonzero(np.isfinite(quantile_curves[0]))
+        if observed.size > 1:
+            for q_i in range(len(quantile_levels)):
+                curve = quantile_curves[q_i]
+                curve = np.interp(x_centers, x_centers[observed], curve[observed])
+                quantile_curves[q_i] = gaussian_filter1d(curve, sigma=1.2, mode="nearest")
+
+            for x_i in range(len(x_centers)):
+                for low_i, high_i, alpha in quantile_bands:
+                    y_low = quantile_curves[low_i, x_i]
+                    y_high = quantile_curves[high_i, x_i]
+                    band = (y_centers >= y_low) & (y_centers <= y_high)
+                    mask_alpha[band, x_i] = np.minimum(mask_alpha[band, x_i], alpha)
 
         mask_rgba = np.ones((*mask_alpha.shape, 4))
         mask_rgba[..., :3] = 1.0
