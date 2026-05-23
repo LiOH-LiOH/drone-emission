@@ -2063,8 +2063,8 @@ def plot_lifecycle_distance_detour_boxplot(
     detour_min, detour_max = 1.0, 1.8
     x_edges = np.arange(distance_min, distance_max + bin_width_km, bin_width_km)
     x_centers = (x_edges[:-1] + x_edges[1:]) / 2
-    distances = np.maximum(x_centers, heatmap_distance_min)
-    detour_ratios = np.linspace(detour_min, detour_max, 20)
+    distances = np.linspace(heatmap_distance_min, distance_max, 140)
+    detour_ratios = np.linspace(detour_min, detour_max, 90)
 
     def _emission_diff_matrix(distance_grid):
         matrix = np.zeros((len(detour_ratios), len(distance_grid)))
@@ -2099,6 +2099,7 @@ def plot_lifecycle_distance_detour_boxplot(
         origin="lower",
         extent=[distance_min, distance_max, detour_min, detour_max],
         norm=norm,
+        interpolation="bilinear",
     )
 
     cbar = fig.colorbar(im, ax=ax)
