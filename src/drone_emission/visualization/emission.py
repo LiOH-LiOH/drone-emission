@@ -2044,7 +2044,7 @@ def plot_lifecycle_distance_detour_boxplot(
     plot_title: bool = False,
     bin_width_km: float = 0.25,
 ):
-    """Heatmap of lifecycle emission difference with a detour-density alpha mask.
+    """Heatmap of lifecycle emission difference with detour quantile ticks.
 
     Args:
         od_df: OD pairs DataFrame with distance_km and road_distance_m columns.
@@ -2052,7 +2052,7 @@ def plot_lifecycle_distance_detour_boxplot(
         figsize: Figure size tuple.
         for_latex: If True, save as PDF.
         plot_title: If True, show title.
-        bin_width_km: Width of each air-distance density bin in km.
+        bin_width_km: Width of each shared air-distance bin in km.
     """
     from emission.cal_single_delivery import LifeCycleEmissions
 
@@ -2061,7 +2061,9 @@ def plot_lifecycle_distance_detour_boxplot(
     distance_min, distance_max = 0.0, 5.0
     heatmap_distance_min = 0.5
     detour_min, detour_max = 1.0, 1.8
-    distances = np.linspace(heatmap_distance_min, distance_max, 30)
+    x_edges = np.arange(distance_min, distance_max + bin_width_km, bin_width_km)
+    x_centers = (x_edges[:-1] + x_edges[1:]) / 2
+    distances = np.maximum(x_centers, heatmap_distance_min)
     detour_ratios = np.linspace(detour_min, detour_max, 20)
 
     def _emission_diff_matrix(distance_grid):
@@ -2111,36 +2113,33 @@ def plot_lifecycle_distance_detour_boxplot(
     valid["detour"] = valid["road_distance_m"] / (valid["distance_km"] * 1000)
     valid = valid[np.isfinite(valid["detour"])]
 
-    valid = valid[(valid["detour"] >= detour_min) & (valid["detour"] <= detour_max)]
     if len(valid) > 0:
-        from scipy.ndimage import gaussian_filter
-
-        x_edges = np.arange(distance_min, distance_max + bin_width_km, bin_width_km)
-        y_edges = np.linspace(detour_min, detour_max, 80)
-        weights = valid["annual_sales"].values if "annual_sales" in valid.columns else None
-        hist, _, _ = np.histogram2d(
-            valid["distance_km"].values,
-            valid["detour"].values,
-            bins=[x_edges, y_edges],
-            weights=weights,
-        )
-        density = gaussian_filter(hist.T, sigma=(1.2, 0.8))
-        if density.max() > 0:
-            density = density / density.max()
-            density = np.power(density, 0.55)
-            max_mask_alpha = 0.62
-            alpha = max_mask_alpha * (1 - density)
-            mask_rgba = np.ones((*density.shape, 4))
-            mask_rgba[..., :3] = 1.0
-            mask_rgba[..., 3] = alpha
-            ax.imshow(
-                mask_rgba,
-                aspect="auto",
-                origin="lower",
-                extent=[distance_min, distance_max, detour_min, detour_max],
-                interpolation="bilinear",
-                zorder=5,
-            )
+        quantiles = [(0.10, 0.90), (0.25, 0.50), (0.50, 0.0), (0.75, 0.50), (0.90, 0.90)]
+        tick_half_width = bin_width_km * 0.33
+        for left, right, center in zip(x_edges[:-1], x_edges[1:], x_centers):
+            if right >= distance_max:
+                mask = (valid["distance_km"] >= left) & (valid["distance_km"] <= right)
+            else:
+                mask = (valid["distance_km"] >= left) & (valid["distance_km"] < right)
+            values = valid.loc[mask, "detour"].to_numpy()
+            values = values[np.isfinite(values)]
+            if values.size == 0:
+                continue
+            for q, alpha in quantiles:
+                if alpha <= 0:
+                    continue
+                y = float(np.quantile(values, q))
+                if y < detour_min or y > detour_max:
+                    continue
+                ax.hlines(
+                    y,
+                    center - tick_half_width,
+                    center + tick_half_width,
+                    color="black",
+                    linewidth=1.0,
+                    alpha=alpha,
+                    zorder=5,
+                )
 
     ax.set_xlim(distance_min, distance_max)
     ax.set_ylim(detour_min, detour_max)
@@ -2159,6 +2158,6 @@ def plot_lifecycle_distance_detour_boxplot(
         os.makedirs(os.path.dirname(save_path), exist_ok=True)
         plt.savefig(save_path, dpi=300, bbox_inches="tight")
         plt.close(fig)
-        print(f"Lifecycle distance detour density heatmap saved to {save_path}")
+        print(f"Lifecycle distance detour quantile heatmap saved to {save_path}")
     else:
         plt.show()
