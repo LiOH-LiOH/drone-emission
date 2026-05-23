@@ -2044,7 +2044,7 @@ def plot_lifecycle_distance_detour_boxplot(
     plot_title: bool = False,
     bin_width_km: float = 0.25,
 ):
-    """Heatmap of lifecycle emission difference with detour quantile ticks.
+    """Heatmap of lifecycle emission difference with detour quantile mask bands.
 
     Args:
         od_df: OD pairs DataFrame with distance_km and road_distance_m columns.
@@ -2114,9 +2114,20 @@ def plot_lifecycle_distance_detour_boxplot(
     valid = valid[np.isfinite(valid["detour"])]
 
     if len(valid) > 0:
-        quantiles = [(0.10, 0.90), (0.25, 0.50), (0.50, 0.0), (0.75, 0.50), (0.90, 0.90)]
-        tick_half_width = bin_width_km * 0.33
-        for left, right, center in zip(x_edges[:-1], x_edges[1:], x_centers):
+        y_edges = np.linspace(detour_min, detour_max, 220)
+        y_centers = (y_edges[:-1] + y_edges[1:]) / 2
+        max_mask_alpha = 0.66
+        mask_alpha = np.full((len(y_centers), len(x_centers)), max_mask_alpha)
+        quantile_bands = [
+            (0.05, 0.10, 0.54),
+            (0.10, 0.25, 0.42),
+            (0.25, 0.40, 0.24),
+            (0.40, 0.60, 0.00),
+            (0.60, 0.75, 0.24),
+            (0.75, 0.90, 0.42),
+            (0.90, 0.95, 0.54),
+        ]
+        for x_i, (left, right) in enumerate(zip(x_edges[:-1], x_edges[1:])):
             if right >= distance_max:
                 mask = (valid["distance_km"] >= left) & (valid["distance_km"] <= right)
             else:
@@ -2125,21 +2136,22 @@ def plot_lifecycle_distance_detour_boxplot(
             values = values[np.isfinite(values)]
             if values.size == 0:
                 continue
-            for q, alpha in quantiles:
-                if alpha <= 0:
-                    continue
-                y = float(np.quantile(values, q))
-                if y < detour_min or y > detour_max:
-                    continue
-                ax.hlines(
-                    y,
-                    center - tick_half_width,
-                    center + tick_half_width,
-                    color="black",
-                    linewidth=1.0,
-                    alpha=alpha,
-                    zorder=5,
-                )
+            for q_low, q_high, alpha in quantile_bands:
+                y_low, y_high = np.quantile(values, [q_low, q_high])
+                band = (y_centers >= y_low) & (y_centers <= y_high)
+                mask_alpha[band, x_i] = np.minimum(mask_alpha[band, x_i], alpha)
+
+        mask_rgba = np.ones((*mask_alpha.shape, 4))
+        mask_rgba[..., :3] = 1.0
+        mask_rgba[..., 3] = mask_alpha
+        ax.imshow(
+            mask_rgba,
+            aspect="auto",
+            origin="lower",
+            extent=[distance_min, distance_max, detour_min, detour_max],
+            interpolation="nearest",
+            zorder=5,
+        )
 
     ax.set_xlim(distance_min, distance_max)
     ax.set_ylim(detour_min, detour_max)
@@ -2158,6 +2170,6 @@ def plot_lifecycle_distance_detour_boxplot(
         os.makedirs(os.path.dirname(save_path), exist_ok=True)
         plt.savefig(save_path, dpi=300, bbox_inches="tight")
         plt.close(fig)
-        print(f"Lifecycle distance detour quantile heatmap saved to {save_path}")
+        print(f"Lifecycle distance detour quantile mask heatmap saved to {save_path}")
     else:
         plt.show()
