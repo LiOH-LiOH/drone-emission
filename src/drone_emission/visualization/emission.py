@@ -2059,7 +2059,7 @@ def plot_lifecycle_distance_detour_boxplot(
     lca = LifeCycleEmissions()
 
     distance_min, distance_max = 0.0, 5.0
-    heatmap_distance_min = 0.5
+    heatmap_distance_min = 0.1
     detour_min, detour_max = 1.0, 1.8
     x_edges = np.arange(distance_min, distance_max + bin_width_km, bin_width_km)
     x_centers = (x_edges[:-1] + x_edges[1:]) / 2
@@ -2081,7 +2081,7 @@ def plot_lifecycle_distance_detour_boxplot(
         return matrix
 
     emission_diff_matrix = _emission_diff_matrix(distances)
-    original_distances = np.linspace(0.5, 4, 30)
+    original_distances = np.linspace(heatmap_distance_min, 4, 30)
     original_emission_diff_matrix = _emission_diff_matrix(original_distances)
 
     from matplotlib.colors import LinearSegmentedColormap, TwoSlopeNorm
