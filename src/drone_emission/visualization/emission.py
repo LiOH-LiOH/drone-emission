@@ -2034,3 +2034,121 @@ def plot_lifecycle_distance_route_factor(
         print(f"Lifecycle distance route factor heatmap saved to {save_path}")
     else:
         plt.show()
+
+
+def plot_lifecycle_distance_detour_boxplot(
+    od_df: pd.DataFrame,
+    save_path: str = None,
+    figsize: tuple = (10, 6),
+    for_latex: bool = False,
+    plot_title: bool = False,
+    bin_width_km: float = 0.25,
+):
+    """Heatmap of lifecycle emission difference with detour-ratio boxplots by air distance.
+
+    Args:
+        od_df: OD pairs DataFrame with distance_km and road_distance_m columns.
+        save_path: Path to save figure. Shows plot if None.
+        figsize: Figure size tuple.
+        for_latex: If True, save as PDF.
+        plot_title: If True, show title.
+        bin_width_km: Width of each air-distance bin in km.
+    """
+    from emission.cal_single_delivery import LifeCycleEmissions
+
+    lca = LifeCycleEmissions()
+
+    distance_min, distance_max = 0.0, 5.0
+    detour_min, detour_max = 1.0, 1.8
+    distances = np.linspace(distance_min, distance_max, 40)
+    detour_ratios = np.linspace(detour_min, detour_max, 24)
+
+    emission_diff_matrix = np.zeros((len(detour_ratios), len(distances)))
+    for i, r in enumerate(detour_ratios):
+        for j, d in enumerate(distances):
+            ebike_result = lca.calculate_lifecycle_emissions_per_order_simple(
+                d * r, n_orders_per_delivery=1, vehicle_type="ebike"
+            )
+            drone_result = lca.calculate_lifecycle_emissions_per_order_simple(
+                d, n_orders_per_delivery=1, vehicle_type="drone"
+            )
+            diff = (drone_result["total_per_order_g"] / ebike_result["total_per_order_g"] - 1) * 100
+            emission_diff_matrix[i, j] = diff
+
+    fig, ax = plt.subplots(figsize=figsize)
+    abs_max = max(abs(emission_diff_matrix.min()), abs(emission_diff_matrix.max()))
+    im = ax.imshow(
+        emission_diff_matrix,
+        cmap="RdYlGn_r",
+        aspect="auto",
+        origin="lower",
+        extent=[distance_min, distance_max, detour_min, detour_max],
+        vmin=-abs_max,
+        vmax=abs_max,
+    )
+
+    cbar = fig.colorbar(im, ax=ax)
+    cbar.set_label("Drone emissions relative to e-bike (%)", fontsize=12)
+
+    valid = od_df.dropna(subset=["distance_km", "road_distance_m"]).copy()
+    valid = valid[
+        (valid["distance_km"] > distance_min)
+        & (valid["distance_km"] <= distance_max)
+        & (valid["road_distance_m"] >= 0)
+    ]
+    valid["detour"] = valid["road_distance_m"] / (valid["distance_km"] * 1000)
+    valid = valid[np.isfinite(valid["detour"])]
+
+    bin_edges = np.arange(distance_min, distance_max + bin_width_km, bin_width_km)
+    bin_centers = (bin_edges[:-1] + bin_edges[1:]) / 2
+    box_data = []
+    box_positions = []
+    for left, right, center in zip(bin_edges[:-1], bin_edges[1:], bin_centers):
+        if right >= distance_max:
+            mask = (valid["distance_km"] >= left) & (valid["distance_km"] <= right)
+        else:
+            mask = (valid["distance_km"] >= left) & (valid["distance_km"] < right)
+        values = valid.loc[mask, "detour"].to_numpy()
+        if values.size:
+            box_data.append(values)
+            box_positions.append(center)
+
+    if box_data:
+        bp = ax.boxplot(
+            box_data,
+            positions=box_positions,
+            widths=bin_width_km * 0.7,
+            patch_artist=True,
+            manage_ticks=False,
+            showfliers=False,
+            whis=(5, 95),
+            zorder=5,
+        )
+        for box in bp["boxes"]:
+            box.set(facecolor="white", edgecolor="black", linewidth=0.9, alpha=0.45)
+        for median in bp["medians"]:
+            median.set(color="black", linewidth=1.2)
+        for key in ("whiskers", "caps"):
+            for line in bp[key]:
+                line.set(color="black", linewidth=0.8, alpha=0.9)
+
+    ax.set_xlim(distance_min, distance_max)
+    ax.set_ylim(detour_min, detour_max)
+    ax.set_xlabel("Air distance (km)", fontsize=12)
+    ax.set_ylabel("Detour ratio (road / air distance)", fontsize=12)
+    if plot_title:
+        ax.set_title("Emission comparison with observed detour distribution", fontsize=14)
+
+    plt.tight_layout()
+
+    if save_path:
+        if for_latex and not save_path.endswith(".pdf"):
+            save_path = save_path.rsplit(".", 1)[0] + ".pdf"
+        if plot_title:
+            save_path = _add_title_suffix(save_path)
+        os.makedirs(os.path.dirname(save_path), exist_ok=True)
+        plt.savefig(save_path, dpi=300, bbox_inches="tight")
+        plt.close(fig)
+        print(f"Lifecycle distance detour boxplot heatmap saved to {save_path}")
+    else:
+        plt.show()
