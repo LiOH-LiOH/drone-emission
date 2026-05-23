@@ -2061,8 +2061,7 @@ def plot_lifecycle_distance_detour_boxplot(
     distance_min, distance_max = 0.0, 5.0
     heatmap_distance_min = 0.5
     detour_min, detour_max = 1.0, 1.8
-    mask_bin_width_km = min(bin_width_km, 0.10)
-    x_edges = np.arange(distance_min, distance_max + mask_bin_width_km, mask_bin_width_km)
+    x_edges = np.arange(distance_min, distance_max + bin_width_km, bin_width_km)
     x_centers = (x_edges[:-1] + x_edges[1:]) / 2
     distances = np.linspace(heatmap_distance_min, distance_max, 140)
     detour_ratios = np.linspace(detour_min, detour_max, 90)
@@ -2110,6 +2109,21 @@ def plot_lifecycle_distance_detour_boxplot(
     cbar = fig.colorbar(im, ax=ax)
     cbar.set_label("Drone emissions relative to e-bike (%)", fontsize=12)
 
+    X, Y = np.meshgrid(distances, detour_ratios)
+    contour_levels = [-40, -20, 0, 20, 40]
+    contour = ax.contour(
+        X,
+        Y,
+        emission_diff_matrix,
+        levels=contour_levels,
+        colors="black",
+        linewidths=[1.0, 1.0, 1.5, 1.0, 1.0],
+        linestyles=["--", "--", "-", "--", "--"],
+        alpha=0.65,
+        zorder=4,
+    )
+    ax.clabel(contour, inline=True, fontsize=8, fmt=lambda x: f"{x:+.0f}%")
+
     valid = od_df.dropna(subset=["distance_km", "road_distance_m"]).copy()
     valid = valid[
         (valid["distance_km"] > distance_min)
@@ -2122,14 +2136,11 @@ def plot_lifecycle_distance_detour_boxplot(
     if len(valid) > 0:
         from scipy.ndimage import gaussian_filter1d
 
-        y_edges = np.linspace(detour_min, detour_max, 600)
-        y_centers = (y_edges[:-1] + y_edges[1:]) / 2
-        mask_x_centers = np.linspace(distance_min, distance_max, 700)
-        max_mask_alpha = 0.66
-        mask_alpha = np.full((len(y_centers), len(mask_x_centers)), max_mask_alpha)
+        mask_x = np.linspace(distance_min, distance_max, 700)
         quantile_levels = np.array([0.05, 0.10, 0.25, 0.40, 0.60, 0.75, 0.90, 0.95])
         quantile_curves = np.full((len(quantile_levels), len(x_centers)), np.nan)
         quantile_bands = [
+            (None, 0, 0.66),
             (0, 1, 0.54),
             (1, 2, 0.42),
             (2, 3, 0.24),
@@ -2137,6 +2148,7 @@ def plot_lifecycle_distance_detour_boxplot(
             (4, 5, 0.24),
             (5, 6, 0.42),
             (6, 7, 0.54),
+            (7, None, 0.66),
         ]
         for x_i, (left, right) in enumerate(zip(x_edges[:-1], x_edges[1:])):
             if right >= distance_max:
@@ -2151,31 +2163,27 @@ def plot_lifecycle_distance_detour_boxplot(
 
         observed = np.flatnonzero(np.isfinite(quantile_curves[0]))
         if observed.size > 1:
-            smooth_curves = np.full((len(quantile_levels), len(mask_x_centers)), np.nan)
+            smooth_curves = np.full((len(quantile_levels), len(mask_x)), np.nan)
             for q_i in range(len(quantile_levels)):
                 curve = quantile_curves[q_i]
                 curve = np.interp(x_centers, x_centers[observed], curve[observed])
-                curve = gaussian_filter1d(curve, sigma=1.2, mode="nearest")
-                smooth_curves[q_i] = np.interp(mask_x_centers, x_centers, curve)
+                curve = gaussian_filter1d(curve, sigma=1.0, mode="nearest")
+                smooth_curves[q_i] = np.interp(mask_x, x_centers, curve)
 
-            for x_i in range(len(mask_x_centers)):
-                for low_i, high_i, alpha in quantile_bands:
-                    y_low = smooth_curves[low_i, x_i]
-                    y_high = smooth_curves[high_i, x_i]
-                    band = (y_centers >= y_low) & (y_centers <= y_high)
-                    mask_alpha[band, x_i] = np.minimum(mask_alpha[band, x_i], alpha)
-
-        mask_rgba = np.ones((*mask_alpha.shape, 4))
-        mask_rgba[..., :3] = 1.0
-        mask_rgba[..., 3] = mask_alpha
-        ax.imshow(
-            mask_rgba,
-            aspect="auto",
-            origin="lower",
-            extent=[distance_min, distance_max, detour_min, detour_max],
-            interpolation="bilinear",
-            zorder=5,
-        )
+            for low_i, high_i, alpha in quantile_bands:
+                if alpha <= 0:
+                    continue
+                y_low = np.full_like(mask_x, detour_min) if low_i is None else smooth_curves[low_i]
+                y_high = np.full_like(mask_x, detour_max) if high_i is None else smooth_curves[high_i]
+                ax.fill_between(
+                    mask_x,
+                    y_low,
+                    y_high,
+                    color="white",
+                    alpha=alpha,
+                    linewidth=0,
+                    zorder=5,
+                )
 
     ax.set_xlim(distance_min, distance_max)
     ax.set_ylim(detour_min, detour_max)
