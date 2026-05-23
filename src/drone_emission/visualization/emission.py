@@ -2058,8 +2058,8 @@ def plot_lifecycle_distance_detour_boxplot(
 
     lca = LifeCycleEmissions()
 
-    distance_min, distance_max = 0.0, 5.0
-    heatmap_distance_min = 0.1
+    distance_min, distance_max = 0.2, 5.0
+    heatmap_distance_min = 0.2
     detour_min, detour_max = 1.0, 1.8
     x_edges = np.arange(distance_min, distance_max + bin_width_km, bin_width_km)
     x_centers = (x_edges[:-1] + x_edges[1:]) / 2
@@ -2110,15 +2110,17 @@ def plot_lifecycle_distance_detour_boxplot(
     cbar.set_label("Drone emissions relative to e-bike (%)", fontsize=12)
 
     X, Y = np.meshgrid(distances, detour_ratios)
-    contour_levels = [-40, -20, 0, 20, 40]
+    data_min = np.floor(emission_diff_matrix.min() / 10) * 10
+    negative_levels = np.arange(data_min, -9, 10)
+    contour_levels = [*negative_levels, 0, 40, 80]
     contour = ax.contour(
         X,
         Y,
         emission_diff_matrix,
         levels=contour_levels,
         colors="black",
-        linewidths=[1.0, 1.0, 1.5, 1.0, 1.0],
-        linestyles=["--", "--", "-", "--", "--"],
+        linewidths=[1.5 if lvl == 0 else 1.0 for lvl in contour_levels],
+        linestyles=["-" if lvl == 0 else "--" for lvl in contour_levels],
         alpha=0.65,
         zorder=4,
     )
