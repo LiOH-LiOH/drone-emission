@@ -2044,7 +2044,7 @@ def plot_lifecycle_distance_detour_boxplot(
     plot_title: bool = False,
     bin_width_km: float = 0.25,
 ):
-    """Heatmap of lifecycle emission difference with detour-ratio boxplots by air distance.
+    """Heatmap of lifecycle emission difference with a detour-density alpha mask.
 
     Args:
         od_df: OD pairs DataFrame with distance_km and road_distance_m columns.
@@ -2052,7 +2052,7 @@ def plot_lifecycle_distance_detour_boxplot(
         figsize: Figure size tuple.
         for_latex: If True, save as PDF.
         plot_title: If True, show title.
-        bin_width_km: Width of each air-distance bin in km.
+        bin_width_km: Width of each air-distance density bin in km.
     """
     from emission.cal_single_delivery import LifeCycleEmissions
 
@@ -2082,16 +2082,21 @@ def plot_lifecycle_distance_detour_boxplot(
     original_distances = np.linspace(0.5, 4, 30)
     original_emission_diff_matrix = _emission_diff_matrix(original_distances)
 
+    from matplotlib.colors import TwoSlopeNorm
+
     fig, ax = plt.subplots(figsize=figsize)
-    abs_max = max(abs(original_emission_diff_matrix.min()), abs(original_emission_diff_matrix.max()))
+    norm = TwoSlopeNorm(
+        vmin=float(original_emission_diff_matrix.min()),
+        vcenter=0.0,
+        vmax=float(original_emission_diff_matrix.max()),
+    )
     im = ax.imshow(
         emission_diff_matrix,
         cmap="RdYlGn_r",
         aspect="auto",
         origin="lower",
         extent=[distance_min, distance_max, detour_min, detour_max],
-        vmin=-abs_max,
-        vmax=abs_max,
+        norm=norm,
     )
 
     cbar = fig.colorbar(im, ax=ax)
@@ -2106,38 +2111,36 @@ def plot_lifecycle_distance_detour_boxplot(
     valid["detour"] = valid["road_distance_m"] / (valid["distance_km"] * 1000)
     valid = valid[np.isfinite(valid["detour"])]
 
-    bin_edges = np.arange(distance_min, distance_max + bin_width_km, bin_width_km)
-    bin_centers = (bin_edges[:-1] + bin_edges[1:]) / 2
-    box_data = []
-    box_positions = []
-    for left, right, center in zip(bin_edges[:-1], bin_edges[1:], bin_centers):
-        if right >= distance_max:
-            mask = (valid["distance_km"] >= left) & (valid["distance_km"] <= right)
-        else:
-            mask = (valid["distance_km"] >= left) & (valid["distance_km"] < right)
-        values = valid.loc[mask, "detour"].to_numpy()
-        if values.size:
-            box_data.append(values)
-            box_positions.append(center)
+    valid = valid[(valid["detour"] >= detour_min) & (valid["detour"] <= detour_max)]
+    if len(valid) > 0:
+        from scipy.ndimage import gaussian_filter
 
-    if box_data:
-        bp = ax.boxplot(
-            box_data,
-            positions=box_positions,
-            widths=bin_width_km * 0.7,
-            patch_artist=True,
-            manage_ticks=False,
-            showfliers=False,
-            whis=(5, 95),
-            zorder=5,
+        x_edges = np.arange(distance_min, distance_max + bin_width_km, bin_width_km)
+        y_edges = np.linspace(detour_min, detour_max, 80)
+        weights = valid["annual_sales"].values if "annual_sales" in valid.columns else None
+        hist, _, _ = np.histogram2d(
+            valid["distance_km"].values,
+            valid["detour"].values,
+            bins=[x_edges, y_edges],
+            weights=weights,
         )
-        for box in bp["boxes"]:
-            box.set(facecolor="none", edgecolor="black", linewidth=0.9, alpha=1.0)
-        for median in bp["medians"]:
-            median.set(color="black", linewidth=1.2)
-        for key in ("whiskers", "caps"):
-            for line in bp[key]:
-                line.set(color="black", linewidth=0.8, alpha=0.9)
+        density = gaussian_filter(hist.T, sigma=(1.2, 0.8))
+        if density.max() > 0:
+            density = density / density.max()
+            density = np.power(density, 0.55)
+            max_mask_alpha = 0.62
+            alpha = max_mask_alpha * (1 - density)
+            mask_rgba = np.ones((*density.shape, 4))
+            mask_rgba[..., :3] = 1.0
+            mask_rgba[..., 3] = alpha
+            ax.imshow(
+                mask_rgba,
+                aspect="auto",
+                origin="lower",
+                extent=[distance_min, distance_max, detour_min, detour_max],
+                interpolation="bilinear",
+                zorder=5,
+            )
 
     ax.set_xlim(distance_min, distance_max)
     ax.set_ylim(detour_min, detour_max)
@@ -2156,6 +2159,6 @@ def plot_lifecycle_distance_detour_boxplot(
         os.makedirs(os.path.dirname(save_path), exist_ok=True)
         plt.savefig(save_path, dpi=300, bbox_inches="tight")
         plt.close(fig)
-        print(f"Lifecycle distance detour boxplot heatmap saved to {save_path}")
+        print(f"Lifecycle distance detour density heatmap saved to {save_path}")
     else:
         plt.show()
