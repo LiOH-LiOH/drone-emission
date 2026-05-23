@@ -2085,9 +2085,13 @@ def plot_lifecycle_distance_detour_boxplot(
     original_distances = np.linspace(0.5, 4, 30)
     original_emission_diff_matrix = _emission_diff_matrix(original_distances)
 
-    from matplotlib.colors import TwoSlopeNorm
+    from matplotlib.colors import LinearSegmentedColormap, TwoSlopeNorm
 
     fig, ax = plt.subplots(figsize=figsize)
+    cmap = LinearSegmentedColormap.from_list(
+        "orange_yellow_teal",
+        ["#df3b20", "#f0a33a", "#e5dfb6", "#48c4b2", "#006b6b"],
+    )
     norm = TwoSlopeNorm(
         vmin=float(original_emission_diff_matrix.min()),
         vcenter=0.0,
@@ -2095,7 +2099,7 @@ def plot_lifecycle_distance_detour_boxplot(
     )
     im = ax.imshow(
         emission_diff_matrix,
-        cmap="RdYlGn_r",
+        cmap=cmap,
         aspect="auto",
         origin="lower",
         extent=[distance_min, distance_max, detour_min, detour_max],
