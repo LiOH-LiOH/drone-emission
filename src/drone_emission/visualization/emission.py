@@ -2101,7 +2101,7 @@ def plot_lifecycle_distance_detour_boxplot(
         cmap=cmap,
         aspect="auto",
         origin="lower",
-        extent=[distance_min, distance_max, detour_min, detour_max],
+        extent=[heatmap_distance_min, distance_max, detour_min, detour_max],
         norm=norm,
         interpolation="bilinear",
     )
