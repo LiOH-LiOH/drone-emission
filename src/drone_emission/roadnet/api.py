@@ -2,6 +2,7 @@ import os
 
 import numpy as np
 import pandas as pd
+from utils.boundaries import graphml_covers_bbox, resolve_enlarged_boundaries
 from visualization.roadnet import plot_distance_comparison, visualize_roadnet
 
 from ._compat import load_networkx_graph
@@ -20,7 +21,7 @@ def load_roadnet(region_info, exp_config):
     region_name_cn = region_config.get("region_name_cn")
     region_level = region_config["region_level"]
     boundaries_dict = region_config.get("boundaries_dict")
-    large_bounds_dict = region_info.get_stat("enlarged_boundaries")
+    large_bounds_dict = resolve_enlarged_boundaries(region_info, exp_config)
 
     # Setup data directory and file path
     data_dir = os.path.join(
@@ -33,8 +34,26 @@ def load_roadnet(region_info, exp_config):
         data_dir, f"{region_name_en.lower()}_roadnet.graphml"
     )
 
-    # Fetch road network if requested or file doesn't exist
-    if exp_config.get("fetch_roadnet", False) or not os.path.exists(roadnet_data_path):
+    # Fetch road network if requested, file missing, or existing file's
+    # bbox doesn't cover the expected enlarged boundaries (a stale graphml
+    # from an earlier run with a smaller boundaries_dict).
+    needs_fetch = (
+        exp_config.get("fetch_roadnet", False)
+        or not os.path.exists(roadnet_data_path)
+    )
+    if not needs_fetch and large_bounds_dict is not None:
+        try:
+            if not graphml_covers_bbox(roadnet_data_path, large_bounds_dict):
+                print(
+                    f"Existing roadnet bbox does not cover expected bounds; "
+                    f"refetching for {region_name_en}."
+                )
+                needs_fetch = True
+        except Exception as e:
+            print(f"Could not verify existing roadnet bbox ({e}); refetching.")
+            needs_fetch = True
+
+    if needs_fetch:
         fetch_bikeable_roadnet(
             bbox_4326=large_bounds_dict,
             save_path=roadnet_data_path,

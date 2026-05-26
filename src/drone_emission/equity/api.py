@@ -9,6 +9,7 @@ import os
 import geopandas as gpd
 import networkx as nx
 import pandas as pd
+from utils.boundaries import resolve_enlarged_boundaries
 
 from visualization.equity import (
     plot_emission_vs_features_scatter,
@@ -85,8 +86,8 @@ def analyze_equity(region_info, exp_config) -> pd.DataFrame:
     min_deliveries = equity_params.get("min_deliveries_per_zone", 10)
     exclude_outliers = equity_params.get("exclude_outliers", True)
 
-    # Get boundaries
-    boundaries_dict = region_info.get_stat("enlarged_boundaries")
+    # Get boundaries (always recomputed from regions.json + delivery_radius_km)
+    boundaries_dict = resolve_enlarged_boundaries(region_info, exp_config)
     if not boundaries_dict:
         boundaries_dict = region_config.get("boundaries_dict")
     if not boundaries_dict:

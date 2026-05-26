@@ -4,30 +4,10 @@ import subprocess
 
 import geopandas as gpd
 import numpy as np
+from utils.boundaries import resolve_enlarged_boundaries
 from visualization.buildings import visualize_building_heights, visualize_buildings
 
 from .load_gba import get_gba_tile_infos, load_buildings_from_gba
-
-# Earth radius in kilometers
-EARTH_RADIUS_KM = 6371.0
-
-
-def enlarge_boundaries(boundaries_dict, enlarge_km):
-    center_lat = (boundaries_dict["min_lat"] + boundaries_dict["max_lat"]) / 2
-    km_per_deg_lat = EARTH_RADIUS_KM * np.pi / 180
-    km_per_deg_lng = km_per_deg_lat * np.cos(np.radians(center_lat))
-
-    enlarge_lat = enlarge_km / km_per_deg_lat
-    enlarge_lng = enlarge_km / km_per_deg_lng
-
-    large_bounds_dict = {
-        "min_lat": boundaries_dict["min_lat"] - enlarge_lat,
-        "max_lat": boundaries_dict["max_lat"] + enlarge_lat,
-        "min_lng": boundaries_dict["min_lng"] - enlarge_lng,
-        "max_lng": boundaries_dict["max_lng"] + enlarge_lng,
-    }
-
-    return large_bounds_dict
 
 
 def _convert_geojson_to_gpkg(geojson_path: str) -> str:
@@ -157,12 +137,7 @@ def load_buildings(region_info, exp_config):
         )
         return
 
-    large_bounds_dict = region_info.get_stat("enlarged_boundaries")
-
-    if not large_bounds_dict:
-        enlarge_km = exp_config.get("delivery_radius_km", 5.0)
-        large_bounds_dict = enlarge_boundaries(boundaries_dict, enlarge_km)
-        region_info.set_stat("enlarged_boundaries", large_bounds_dict)
+    large_bounds_dict = resolve_enlarged_boundaries(region_info, exp_config)
 
     # Enlarge bbox slightly to ensure full coverage
     bbox_4326 = (

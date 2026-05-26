@@ -5,6 +5,7 @@ import numpy as np
 import pandas as pd
 from haversine import Unit, haversine, haversine_vector
 from sklearn.neighbors import BallTree
+from utils.boundaries import resolve_enlarged_boundaries
 from utils.coordinates import gcj02_to_wgs84, haversine_distance
 from utils.tools import get_epsg_from_bounds
 from visualization.buildings import visualize_store_coverage
@@ -154,7 +155,7 @@ def generate_od_pairs(region_info, exp_config):
         store_coords[example_idx][0],
     )  # (lng, lat)
 
-    large_bounds_dict = region_info.get_stat("enlarged_boundaries")
+    large_bounds_dict = resolve_enlarged_boundaries(region_info, exp_config)
 
     for_latex = exp_config.get("for_latex", False)
     plot_title = exp_config.get("plot_title", False)
