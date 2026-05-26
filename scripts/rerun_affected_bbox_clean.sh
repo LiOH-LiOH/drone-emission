@@ -1,7 +1,13 @@
 #!/bin/bash
 
-# Step 1: Identify cities whose loaded road network was fetched with a smaller
-# bbox than the current regions.json + delivery_radius_km. For each such city:
+# Step 1: Identify cities whose loaded roadnet bbox actually excludes some of
+# their merchants. A city is flagged only when at least one merchant in
+# <region>_sales.csv (after GCJ02 -> WGS84 conversion) falls outside the
+# existing graphml's bbox. Cities whose stores all happen to cluster within
+# the smaller cached bbox are NOT flagged — refetching them would not change
+# any OD pair, building, or emission.
+#
+# For each flagged city:
 #   - Delete the stale roadnet, buildings, and all derived per-region data
 #   - Clear computed stats in region_stats.json (preserve raw preprocessing info)
 #   - Add the city key to affected_cities.txt
@@ -9,13 +15,15 @@
 # Run this BEFORE scripts/rerun_affected_run.sh.
 #
 # Usage:
-#   bash scripts/rerun_affected_bbox_clean.sh [env]
-#   bash scripts/rerun_affected_bbox_clean.sh remote   # (default)
+#   bash scripts/rerun_affected_bbox_clean.sh [env] [min_outside_count]
+#   bash scripts/rerun_affected_bbox_clean.sh remote        # min_outside_count = 1
+#   bash scripts/rerun_affected_bbox_clean.sh remote 100    # skip cities with < 100 outside stores
 
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
 ENV=${1:-remote}
+MIN_OUTSIDE=${2:-1}
 
 if [ -d ".venv" ]; then
     source .venv/bin/activate
@@ -23,23 +31,28 @@ fi
 
 cd src/drone_emission
 
-python -u -c "
+MIN_OUTSIDE=$MIN_OUTSIDE python -u -c "
 import json, os, sys, glob
+import numpy as np
+import pandas as pd
 
 sys.path.insert(0, '.')
 from utils import load_config
 from utils.region_config import init_registry
-from utils.boundaries import enlarge_boundaries, graphml_covers_bbox
+from utils.boundaries import bbox_from_graphml
+from utils.coordinates import gcj02_to_wgs84
 
 config = load_config('../../experiment.toml', env='$ENV')
 registry = init_registry('../../regions.json', data_dir=config.get('data_dir'))
 data_dir = config['data_dir']
-delivery_radius_km = config.get('delivery_radius_km', 5.0)
+min_outside = int(os.environ['MIN_OUTSIDE'])
 
 affected = []
-ok = []
+clean = []
 no_graphml = []
+no_sales = []
 no_boundaries = []
+errors = []
 
 # Files to remove for each affected city (all are derived from buildings/roadnet bbox)
 DERIVED_PATTERNS = [
@@ -56,7 +69,8 @@ DERIVED_PATTERNS = [
 KEEP_STAT_KEYS = ('province', 'total_merchants', 'total_monthly_sales', 'mean_monthly_sales')
 
 regions = sorted(registry.list_by_level('city').items())
-print(f'Checking {len(regions)} cities for stale roadnet bbox...', file=sys.stderr)
+print(f'Checking {len(regions)} cities for merchants outside current roadnet bbox '
+      f'(min_outside={min_outside})...', file=sys.stderr)
 
 for i, (key, region) in enumerate(regions, 1):
     if not region.boundaries_dict:
@@ -64,23 +78,39 @@ for i, (key, region) in enumerate(regions, 1):
         continue
     city_dir = os.path.join(data_dir, 'city', key)
     graphml = os.path.join(city_dir, f'{key}_roadnet.graphml')
+    sales_csv = os.path.join(city_dir, f'{key}_sales.csv')
     if not os.path.exists(graphml):
         no_graphml.append(key)
         continue
-
-    expected = enlarge_boundaries(region.boundaries_dict, delivery_radius_km)
-    try:
-        covers = graphml_covers_bbox(graphml, expected)
-    except Exception as e:
-        print(f'  [{i:>3}/{len(regions)}] {key}: bbox check failed ({e}); marking affected', file=sys.stderr)
-        covers = False
-
-    if covers:
-        ok.append(key)
+    if not os.path.exists(sales_csv):
+        no_sales.append(key)
         continue
 
+    try:
+        lat_min, lat_max, lng_min, lng_max = bbox_from_graphml(graphml)
+        df = pd.read_csv(sales_csv)
+        gcj_lat = df['lat'].to_numpy(dtype=float)
+        gcj_lng = df['lng'].to_numpy(dtype=float)
+        wgs = np.array([gcj02_to_wgs84(float(lng), float(lat))
+                        for lat, lng in zip(gcj_lat, gcj_lng)])
+        wgs_lng = wgs[:, 0]; wgs_lat = wgs[:, 1]
+        out_mask = ((wgs_lat < lat_min) | (wgs_lat > lat_max) |
+                    (wgs_lng < lng_min) | (wgs_lng > lng_max))
+        n_out = int(out_mask.sum())
+        n_total = len(df)
+    except Exception as e:
+        errors.append((key, str(e)))
+        print(f'  [{i:>3}/{len(regions)}] {key}: error ({e})', file=sys.stderr)
+        continue
+
+    if n_out < min_outside:
+        clean.append(key)
+        continue
+
+    pct = 100.0 * n_out / max(n_total, 1)
     affected.append(key)
-    print(f'  [{i:>3}/{len(regions)}] {key}: stale roadnet, cleaning...', file=sys.stderr)
+    print(f'  [{i:>3}/{len(regions)}] {key}: {n_out:,} / {n_total:,} merchants outside '
+          f'({pct:.1f}%) - cleaning...', file=sys.stderr)
 
     # Delete derived files
     for pat in DERIVED_PATTERNS:
@@ -103,10 +133,13 @@ for i, (key, region) in enumerate(regions, 1):
 
 print(file=sys.stderr)
 print(f'=== Summary ===', file=sys.stderr)
-print(f'  Affected (stale roadnet):     {len(affected)}', file=sys.stderr)
-print(f'  OK (graphml covers bbox):     {len(ok)}', file=sys.stderr)
-print(f'  No graphml on disk (skipped): {len(no_graphml)}', file=sys.stderr)
-print(f'  No boundaries_dict (skipped): {len(no_boundaries)}', file=sys.stderr)
+print(f'  Affected (>= {min_outside} merchants outside bbox): {len(affected)}', file=sys.stderr)
+print(f'  Clean (all merchants inside):                       {len(clean)}', file=sys.stderr)
+print(f'  No graphml on disk (skipped):                       {len(no_graphml)}', file=sys.stderr)
+print(f'  No sales CSV (skipped):                             {len(no_sales)}', file=sys.stderr)
+print(f'  No boundaries_dict (skipped):                       {len(no_boundaries)}', file=sys.stderr)
+if errors:
+    print(f'  Errors:                                             {len(errors)}', file=sys.stderr)
 
 with open('../../affected_cities.txt', 'w') as f:
     for key in affected:
