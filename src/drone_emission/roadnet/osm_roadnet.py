@@ -18,6 +18,10 @@ ox.settings.overpass_url = _os.environ.get(
     "OSMNX_OVERPASS_URL",
     "https://overpass.openstreetmap.fr/api",
 )
+# OSM-France blocks the default "OSMnx Python package..." User-Agent and any UA
+# containing "python-requests". "OverpassQL" identifies us as a direct Overpass
+# client and is on their allow list. Override with OSMNX_USER_AGENT.
+ox.settings.http_user_agent = _os.environ.get("OSMNX_USER_AGENT", "OverpassQL")
 
 
 def fetch_bikeable_roadnet(bbox_4326: Dict[str, float], save_path: str) -> None:
