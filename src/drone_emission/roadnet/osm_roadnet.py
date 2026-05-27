@@ -12,10 +12,11 @@ ox.settings.requests_timeout = 60  # HTTP connect/read timeout (seconds)
 ox.settings.overpass_settings = '[out:json][timeout:180]'  # Overpass server-side query timeout
 # Default overpass-api.de is unreachable from some remotes (e.g. hku-sto behind GFW).
 # Use the French OSM mirror which routes more reliably; can be overridden via env var.
+# osmnx 2.x uses settings.overpass_url and appends "/interpreter" itself.
 import os as _os
-ox.settings.overpass_endpoint = _os.environ.get(
-    "OSMNX_OVERPASS_ENDPOINT",
-    "https://overpass.openstreetmap.fr/api/interpreter",
+ox.settings.overpass_url = _os.environ.get(
+    "OSMNX_OVERPASS_URL",
+    "https://overpass.openstreetmap.fr/api",
 )
 
 
