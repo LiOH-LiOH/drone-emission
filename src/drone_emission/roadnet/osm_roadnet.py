@@ -8,8 +8,15 @@ import osmnx as ox
 # Cache folder is set by utils.config.configure_cache() at startup
 ox.settings.use_cache = True
 ox.settings.log_console = False
-ox.settings.requests_timeout = 30  # HTTP connect/read timeout (seconds)
+ox.settings.requests_timeout = 60  # HTTP connect/read timeout (seconds)
 ox.settings.overpass_settings = '[out:json][timeout:180]'  # Overpass server-side query timeout
+# Default overpass-api.de is unreachable from some remotes (e.g. hku-sto behind GFW).
+# Use the French OSM mirror which routes more reliably; can be overridden via env var.
+import os as _os
+ox.settings.overpass_endpoint = _os.environ.get(
+    "OSMNX_OVERPASS_ENDPOINT",
+    "https://overpass.openstreetmap.fr/api/interpreter",
+)
 
 
 def fetch_bikeable_roadnet(bbox_4326: Dict[str, float], save_path: str) -> None:
