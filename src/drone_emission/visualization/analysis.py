@@ -2369,7 +2369,7 @@ def plot_reduction_detour_grid(
     figsize: tuple = (12, 14),
     for_latex: bool = False,
     plot_title: bool = False,
-    bin_width_km: float = 0.25,
+    bin_width_km: float = 0.1,
     n_cols: int = 2,
     max_air_km: float = 5.0,
 ):
@@ -2435,7 +2435,7 @@ def plot_reduction_detour_grid(
             "#2ca02c" if (np.isfinite(v) and v >= 0) else "#d62728" for v in reduction_pct
         ]
         ax_bot.bar(
-            centres, reduction_pct, width=0.1,
+            centres, reduction_pct, width=bin_width_km,
             color=bar_colors, edgecolor="white", linewidth=0.2, align="center",
             label="(E-bike − Drone) / E-bike",
         )
