@@ -2325,11 +2325,11 @@ def plot_city_reduction_rank_top10(
 def _bin_reduction_and_detour(od_df: pd.DataFrame, bin_width_km: float):
     """Bin OD rows by air distance.
 
-    Returns (centres, reduction_pct, ebike_total_t, detour_by_bin, max_km).
+    Returns (centres, reduction_pct, reduction_total_t, detour_by_bin, max_km).
     ``reduction_pct`` is (e-bike − drone) / e-bike per bin in percent,
     negative when the drone exceeds e-bike for the bin's OD pairs.
-    ``ebike_total_t`` is annual e-bike (origin) lifecycle emission per bin
-    in tonnes CO2e.
+    ``reduction_total_t`` is annual absolute emission reduction per bin in
+    tonnes CO2e, defined as all e-bike minus all drone.
     """
     valid = od_df[(od_df["road_distance_m"] >= 0) & (od_df["distance_km"] > 0)].copy()
     road_km = valid["road_distance_m"].values / 1000.0
@@ -2346,7 +2346,7 @@ def _bin_reduction_and_detour(od_df: pd.DataFrame, bin_width_km: float):
 
     bin_idx = np.clip(np.digitize(air_km, edges) - 1, 0, n_bins - 1)
     reduction_pct = np.full(n_bins, np.nan)
-    ebike_total_t = np.zeros(n_bins)
+    reduction_total_t = np.zeros(n_bins)
     detour_by_bin = []
     for k in range(n_bins):
         m = bin_idx == k
@@ -2355,11 +2355,11 @@ def _bin_reduction_and_detour(od_df: pd.DataFrame, bin_width_km: float):
             continue
         ebike_tot = (ebike_lc[m] * sales[m]).sum()
         drone_tot = (drone_lc[m] * sales[m]).sum()
-        ebike_total_t[k] = ebike_tot / 1e6  # g → tonnes
+        reduction_total_t[k] = (ebike_tot - drone_tot) / 1e6  # g -> tonnes
         if ebike_tot > 0:
             reduction_pct[k] = (ebike_tot - drone_tot) / ebike_tot * 100
         detour_by_bin.append(detour[m])
-    return centres, reduction_pct, ebike_total_t, detour_by_bin, max_km
+    return centres, reduction_pct, reduction_total_t, detour_by_bin, max_km
 
 
 def plot_reduction_detour_grid(
@@ -2372,7 +2372,7 @@ def plot_reduction_detour_grid(
     bin_width_km: float = 0.25,
     n_cols: int = 2,
 ):
-    """Multi-city grid of detour-ratio boxplot + emission-reduction bars per road-distance bin.
+    """Multi-city grid of detour-ratio boxplot + emission-reduction bars per air-distance bin.
 
     Args:
         od_dfs: Mapping ``{city_key: od_dataframe}``. Each frame needs
@@ -2401,7 +2401,7 @@ def plot_reduction_detour_grid(
         ax_top = fig.add_subplot(inner[0])
         ax_bot = fig.add_subplot(inner[1], sharex=ax_top)
 
-        centres, reduction_pct, ebike_total_t, detour_by_bin, max_km = _bin_reduction_and_detour(
+        centres, reduction_pct, reduction_total_t, detour_by_bin, max_km = _bin_reduction_and_detour(
             od_dfs[key], bin_width_km
         )
         x_ticks = np.arange(0, max_km + 1e-6, 1.0)
@@ -2447,13 +2447,13 @@ def plot_reduction_detour_grid(
 
         ax_abs = ax_bot.twinx()
         ax_abs.plot(
-            centres, ebike_total_t,
+            centres, reduction_total_t,
             color="#555555", alpha=0.5, linewidth=1.2, marker="o", markersize=2.5,
-            label="E-bike total (t CO2e)",
+            label="E-bike - drone (t CO2e)",
         )
-        ax_abs.set_ylabel("E-bike total (t CO2e/yr)", fontsize=9, color="#555555")
+        ax_abs.axhline(0, color="#555555", linewidth=0.5, alpha=0.35)
+        ax_abs.set_ylabel("E-bike - Drone (t CO2e/yr)", fontsize=9, color="#555555")
         ax_abs.tick_params(axis="y", labelsize=8, labelcolor="#555555")
-        ax_abs.set_ylim(bottom=0)
 
     # Hide any unused outer slots (when n_cities < n_rows * n_cols)
     for j in range(n_cities, n_rows * n_cols):
