@@ -2371,6 +2371,7 @@ def plot_reduction_detour_grid(
     plot_title: bool = False,
     bin_width_km: float = 0.25,
     n_cols: int = 2,
+    max_air_km: float = 5.0,
 ):
     """Multi-city grid of detour-ratio boxplot + emission-reduction bars per air-distance bin.
 
@@ -2386,6 +2387,7 @@ def plot_reduction_detour_grid(
         plot_title: If True, show suptitle.
         bin_width_km: Width of each road-distance bin in km.
         n_cols: Number of city columns in the grid.
+        max_air_km: Maximum air distance shown on the x-axis.
     """
     keys = list(od_dfs.keys())
     n_cities = len(keys)
@@ -2404,7 +2406,8 @@ def plot_reduction_detour_grid(
         centres, reduction_pct, reduction_total_t, detour_by_bin, max_km = _bin_reduction_and_detour(
             od_dfs[key], bin_width_km
         )
-        x_ticks = np.arange(0, max_km + 1e-6, 1.0)
+        x_max = min(max_air_km, max_km)
+        x_ticks = np.arange(0, x_max + 1e-6, 1.0)
         x_tick_labels = [f"{int(t)}" for t in x_ticks]
 
         nonempty = [(c_, d_) for c_, d_ in zip(centres, detour_by_bin) if d_.size > 0]
@@ -2422,7 +2425,7 @@ def plot_reduction_detour_grid(
         ax_top.axhline(1.0, color="gray", linestyle="--", linewidth=0.7, alpha=0.6)
         ax_top.set_ylabel("Detour (road / air)", fontsize=9)
         ax_top.set_xticks(x_ticks, labels=x_tick_labels)
-        ax_top.set_xlim(0, max_km)
+        ax_top.set_xlim(0, x_max)
         ax_top.tick_params(axis="x", labelbottom=False)
         ax_top.tick_params(axis="both", labelsize=8)
         ax_top.grid(axis="y", alpha=0.3)
@@ -2439,7 +2442,7 @@ def plot_reduction_detour_grid(
         ax_bot.axhline(0, color="gray", linewidth=0.5)
         ax_bot.set_xlabel("Air Distance (km)", fontsize=9)
         ax_bot.set_ylabel("(E-bike − Drone) / E-bike (%)", fontsize=9, color="#2ca02c")
-        ax_bot.set_xlim(0, max_km)
+        ax_bot.set_xlim(0, x_max)
         ax_bot.set_xticks(x_ticks, labels=x_tick_labels)
         ax_bot.tick_params(axis="x", labelsize=8)
         ax_bot.tick_params(axis="y", labelsize=8, labelcolor="#2ca02c")
