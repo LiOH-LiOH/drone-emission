@@ -128,17 +128,19 @@ def _select_top6_reduction_detour_variants(city_df, gef_df):
     big = city_df.nlargest(6, "total_odpair_annual_sales")
     big_keys = set(big["region_key"])
 
-    low_gef_provinces = gef_df.nsmallest(8, "gef")["province"].tolist()
+    sales_median = city_df["total_odpair_annual_sales"].median()
     low_gef = (
         city_df[
-            city_df["province"].isin(low_gef_provinces)
+            (city_df["total_odpair_annual_sales"] >= sales_median)
             & ~city_df["region_key"].isin(big_keys)
         ]
-        .nlargest(6, "total_odpair_annual_sales")
+        .sort_values(["gef", "total_odpair_annual_sales"], ascending=[True, False])
+        .head(6)
     )
 
     big_cutoff = city_df["total_odpair_annual_sales"].quantile(0.75)
     small_floor = city_df["total_odpair_annual_sales"].quantile(0.25)
+    low_gef_provinces = gef_df.nsmallest(8, "gef")["province"].tolist()
     non_low_gef = ~city_df["province"].isin(low_gef_provinces)
     mid_candidates = city_df[
         non_low_gef
