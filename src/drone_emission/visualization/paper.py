@@ -41,6 +41,12 @@ TOP6_REDUCTION_DETOUR_FIGURES = {
     "top6_reduction_detour_grid_random",
 }
 
+# Bundling factor used as the all-ebike baseline in the reduction-detour grids.
+# Recomputes ``ebike_lifecycle_g`` per OD via the vectorized LCA so the
+# (e-bike − drone) / e-bike comparison is against realistically-bundled ebike,
+# not the kappa=1.0 value stored in the OD CSV.
+REDUCTION_DETOUR_KAPPA = 0.592
+
 
 def _render_reduction_detour_grid_variant(
     data_dir,
@@ -49,10 +55,28 @@ def _render_reduction_detour_grid_variant(
     plot_title,
     selected,
     figure_name,
+    exp_config=None,
 ):
     """Load selected city OD data and render a reduction-detour grid."""
+    from dataclasses import replace
+
+    from emission.cal_single_delivery import create_ebike_params, get_emission_params
+    from sensitivity.vectorized_lca import EbikeScenario, compute_ebike_per_order_g
     from visualization.analysis import plot_reduction_detour_grid
 
+    if exp_config is None:
+        print(f"{figure_name}: exp_config missing; cannot apply kappa={REDUCTION_DETOUR_KAPPA}")
+        return
+
+    ebike_params = create_ebike_params(exp_config)
+    emission_cfg = get_emission_params(exp_config)
+    scenario = EbikeScenario(
+        kappa=REDUCTION_DETOUR_KAPPA,
+        rider_weight=emission_cfg["rider_weight"],
+        payload_kg=emission_cfg["payload_kg"],
+    )
+
+    gef_map = dict(zip(selected["region_key"], selected["gef"]))
     label_map = dict(zip(selected["region_key"], selected["region_name_en"]))
     od_dfs = {}
     labels = {}
@@ -72,10 +96,19 @@ def _render_reduction_detour_grid_variant(
         if not required.issubset(od_df.columns):
             print(f"{figure_name}: {key} missing columns — skipping")
             continue
+        gef = gef_map.get(key)
+        if gef is None or pd.isna(gef):
+            print(f"{figure_name}: {key} missing province GEF — skipping")
+            continue
+        ebike_pp = replace(ebike_params, e_use=float(gef))
+        road_km = od_df["road_distance_m"].to_numpy(dtype=float) / 1000.0
+        od_df = od_df.copy()
+        od_df["ebike_lifecycle_g"] = compute_ebike_per_order_g(road_km, ebike_pp, scenario)
         od_dfs[key] = od_df
         labels[key] = label_map.get(key, key)
 
     if od_dfs:
+        print(f"{figure_name}: rebuilt ebike_lifecycle_g at kappa={REDUCTION_DETOUR_KAPPA} for {len(od_dfs)} cities")
         plot_reduction_detour_grid(
             od_dfs=od_dfs,
             city_labels=labels,
@@ -379,7 +412,7 @@ def _render_distance_comparison(data_dir, out, for_latex, plot_title, plot_fn):
     )
 
 
-def render_all(data_dir: str, figures_dir: str, for_latex: bool = False, plot_title: bool = False, only: set = None):
+def render_all(data_dir: str, figures_dir: str, for_latex: bool = False, plot_title: bool = False, only: set = None, exp_config: dict = None):
     from visualization.analysis import plot_province_orders_emission, plot_province_orders_both_emissions, plot_province_total_ebike_lifecycle, plot_city_ebike_rank_top10, plot_city_ebike_rank_bottom10, plot_city_reduction_rank_top10, plot_grouped_scatter, plot_regions_map_and_gef_scatter, plot_regions_map_city_province_ranks, plot_regions_map_kappa_panels, plot_regions_map_pathway_scenarios
     from visualization.concepts import (
         plot_detour_and_lifecycle, plot_detour_lifecycle_distance, plot_emission_model_flowchart,
@@ -620,6 +653,7 @@ def render_all(data_dir: str, figures_dir: str, for_latex: bool = False, plot_ti
                             plot_title=plot_title,
                             selected=selected,
                             figure_name=figure_name,
+                            exp_config=exp_config,
                         )
 
             if _want("regions_map"):
@@ -838,7 +872,7 @@ def main():
     only = set(args.only.split(",")) if args.only else None
 
     print(f"for_latex={for_latex}, plot_title={plot_title}, only={only or 'all'}")
-    render_all(config["data_dir"], config["figures_dir"], for_latex=for_latex, plot_title=plot_title, only=only)
+    render_all(config["data_dir"], config["figures_dir"], for_latex=for_latex, plot_title=plot_title, only=only, exp_config=config)
 
 
 
