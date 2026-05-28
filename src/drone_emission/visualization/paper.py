@@ -126,10 +126,14 @@ def _select_top6_reduction_detour_variants(city_df, gef_df):
     city_df["gef_rank"] = city_df["gef"].rank(method="dense")
 
     big = city_df.nlargest(6, "total_odpair_annual_sales")
+    big_keys = set(big["region_key"])
 
     low_gef_provinces = gef_df.nsmallest(8, "gef")["province"].tolist()
     low_gef = (
-        city_df[city_df["province"].isin(low_gef_provinces)]
+        city_df[
+            city_df["province"].isin(low_gef_provinces)
+            & ~city_df["region_key"].isin(big_keys)
+        ]
         .nlargest(6, "total_odpair_annual_sales")
     )
 
