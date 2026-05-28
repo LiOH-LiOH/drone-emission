@@ -45,7 +45,7 @@ TOP6_REDUCTION_DETOUR_FIGURES = {
 # Recomputes ``ebike_lifecycle_g`` per OD via the vectorized LCA so the
 # (e-bike − drone) / e-bike comparison is against realistically-bundled ebike,
 # not the kappa=1.0 value stored in the OD CSV.
-REDUCTION_DETOUR_KAPPA = 0.592
+REDUCTION_DETOUR_KAPPA = 0.7
 
 
 def _render_reduction_detour_grid_variant(
