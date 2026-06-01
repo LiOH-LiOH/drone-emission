@@ -2392,8 +2392,9 @@ def plot_reduction_detour_grid(
     n_cols: int = 2,
     max_air_km: float = 5.0,
     absolute_reduction_metric: str = "total_t",
+    show_detour_boxplot: bool = True,
 ):
-    """Multi-city grid of detour-ratio boxplot + emission-reduction bars per air-distance bin.
+    """Multi-city grid of emission-reduction bars per air-distance bin.
 
     Args:
         od_dfs: Mapping ``{city_key: od_dataframe}``. Each frame needs
@@ -2411,6 +2412,8 @@ def plot_reduction_detour_grid(
         absolute_reduction_metric: Metric for the secondary y-axis. Use
             ``total_t`` for annual tonnes or ``per_order_g`` for grams per
             order in each distance bin.
+        show_detour_boxplot: If True, include the detour-ratio boxplot above
+            each emission-reduction panel.
     """
     keys = list(od_dfs.keys())
     n_cities = len(keys)
@@ -2422,9 +2425,13 @@ def plot_reduction_detour_grid(
 
     for i, key in enumerate(keys):
         r, c = divmod(i, n_cols)
-        inner = outer[r, c].subgridspec(2, 1, hspace=0.08, height_ratios=[1, 1])
-        ax_top = fig.add_subplot(inner[0])
-        ax_bot = fig.add_subplot(inner[1], sharex=ax_top)
+        if show_detour_boxplot:
+            inner = outer[r, c].subgridspec(2, 1, hspace=0.08, height_ratios=[1, 1])
+            ax_top = fig.add_subplot(inner[0])
+            ax_bot = fig.add_subplot(inner[1], sharex=ax_top)
+        else:
+            ax_top = None
+            ax_bot = fig.add_subplot(outer[r, c])
 
         centres, reduction_pct, reduction_abs, detour_by_bin, max_km = _bin_reduction_and_detour(
             od_dfs[key], bin_width_km, absolute_reduction_metric
@@ -2433,26 +2440,29 @@ def plot_reduction_detour_grid(
         x_ticks = np.arange(0, x_max + 1e-6, 1.0)
         x_tick_labels = [f"{int(t)}" for t in x_ticks]
 
-        nonempty = [(c_, d_) for c_, d_ in zip(centres, detour_by_bin) if d_.size > 0]
-        if nonempty:
-            box_positions = [c_ for c_, _ in nonempty]
-            box_data = [d_ for _, d_ in nonempty]
-            ax_top.boxplot(
-                box_data, positions=box_positions, widths=bin_width_km * 0.8,
-                showfliers=False, patch_artist=True,
-                boxprops=dict(facecolor="#cfe2f3", edgecolor="#1f4e79", linewidth=0.5),
-                medianprops=dict(color="#1f4e79", linewidth=1.0),
-                whiskerprops=dict(color="#1f4e79", linewidth=0.5),
-                capprops=dict(color="#1f4e79", linewidth=0.5),
-            )
-        ax_top.axhline(1.0, color="gray", linestyle="--", linewidth=0.7, alpha=0.6)
-        ax_top.set_ylabel("Detour (road / air)", fontsize=9)
-        ax_top.set_xticks(x_ticks, labels=x_tick_labels)
-        ax_top.set_xlim(0, x_max)
-        ax_top.tick_params(axis="x", labelbottom=False)
-        ax_top.tick_params(axis="both", labelsize=8)
-        ax_top.grid(axis="y", alpha=0.3)
-        ax_top.set_title(city_labels.get(key, key), fontsize=11, fontweight="bold")
+        if show_detour_boxplot:
+            nonempty = [(c_, d_) for c_, d_ in zip(centres, detour_by_bin) if d_.size > 0]
+            if nonempty:
+                box_positions = [c_ for c_, _ in nonempty]
+                box_data = [d_ for _, d_ in nonempty]
+                ax_top.boxplot(
+                    box_data, positions=box_positions, widths=bin_width_km * 0.8,
+                    showfliers=False, patch_artist=True,
+                    boxprops=dict(facecolor="#cfe2f3", edgecolor="#1f4e79", linewidth=0.5),
+                    medianprops=dict(color="#1f4e79", linewidth=1.0),
+                    whiskerprops=dict(color="#1f4e79", linewidth=0.5),
+                    capprops=dict(color="#1f4e79", linewidth=0.5),
+                )
+            ax_top.axhline(1.0, color="gray", linestyle="--", linewidth=0.7, alpha=0.6)
+            ax_top.set_ylabel("Detour (road / air)", fontsize=9)
+            ax_top.set_xticks(x_ticks, labels=x_tick_labels)
+            ax_top.set_xlim(0, x_max)
+            ax_top.tick_params(axis="x", labelbottom=False)
+            ax_top.tick_params(axis="both", labelsize=8)
+            ax_top.grid(axis="y", alpha=0.3)
+            ax_top.set_title(city_labels.get(key, key), fontsize=11, fontweight="bold")
+        else:
+            ax_bot.set_title(city_labels.get(key, key), fontsize=11, fontweight="bold")
 
         bar_colors = [
             "#2ca02c" if (np.isfinite(v) and v >= 0) else "#d62728" for v in reduction_pct
