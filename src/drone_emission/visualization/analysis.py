@@ -2381,6 +2381,71 @@ def _bin_reduction_and_detour(
     return centres, reduction_pct, reduction_abs, detour_by_bin, max_km
 
 
+def _find_reduction_break_even_km(
+    centres: np.ndarray,
+    reduction_pct: np.ndarray,
+    tol_pct: float = 0.25,
+    smooth_window: int = 5,
+    min_run: int = 2,
+):
+    """Find a sustained negative-to-positive crossing in binned reductions."""
+    valid = np.isfinite(centres) & np.isfinite(reduction_pct)
+    x = centres[valid]
+    y = reduction_pct[valid]
+    if x.size < 2:
+        return None
+
+    order = np.argsort(x)
+    x = x[order]
+    y = y[order]
+
+    half_window = max(1, smooth_window) // 2
+    y_smooth = np.empty_like(y, dtype=float)
+    for i in range(y.size):
+        start = max(0, i - half_window)
+        stop = min(y.size, i + half_window + 1)
+        y_smooth[i] = np.median(y[start:stop])
+
+    signs = np.zeros(y_smooth.size, dtype=int)
+    signs[y_smooth < -tol_pct] = -1
+    signs[y_smooth > tol_pct] = 1
+    significant = np.flatnonzero(signs)
+    if significant.size < 2:
+        return None
+
+    candidates = []
+    for left, right in zip(significant[:-1], significant[1:]):
+        if signs[left] != -1 or signs[right] != 1:
+            continue
+
+        before = 0
+        for idx in significant[significant <= left][::-1]:
+            if signs[idx] != -1:
+                break
+            before += 1
+
+        after = 0
+        for idx in significant[significant >= right]:
+            if signs[idx] != 1:
+                break
+            after += 1
+
+        if before >= min_run and after >= min_run:
+            gap = right - left
+            candidates.append((before + after - 0.25 * gap, left, right))
+
+    if not candidates:
+        return None
+
+    _, left, right = max(candidates, key=lambda item: item[0])
+    x0, x1 = x[left], x[right]
+    y0, y1 = y_smooth[left], y_smooth[right]
+    if y1 == y0:
+        return float((x0 + x1) / 2)
+    crossing = x0 + (0 - y0) * (x1 - x0) / (y1 - y0)
+    return float(np.clip(crossing, min(x0, x1), max(x0, x1)))
+
+
 def plot_reduction_detour_grid(
     od_dfs: dict,
     city_labels: dict = None,
@@ -2393,6 +2458,7 @@ def plot_reduction_detour_grid(
     max_air_km: float = 5.0,
     absolute_reduction_metric: str = "total_t",
     show_detour_boxplot: bool = True,
+    mark_reduction_break_even: bool = False,
 ):
     """Multi-city grid of emission-reduction bars per air-distance bin.
 
@@ -2414,6 +2480,8 @@ def plot_reduction_detour_grid(
             order in each distance bin.
         show_detour_boxplot: If True, include the detour-ratio boxplot above
             each emission-reduction panel.
+        mark_reduction_break_even: If True, mark the sustained negative-to-
+            positive crossing in the reduction bars when one is found.
     """
     keys = list(od_dfs.keys())
     n_cities = len(keys)
@@ -2480,6 +2548,30 @@ def plot_reduction_detour_grid(
         ax_bot.tick_params(axis="x", labelsize=8)
         ax_bot.tick_params(axis="y", labelsize=8, labelcolor="#2ca02c")
         ax_bot.grid(axis="y", alpha=0.3)
+
+        if mark_reduction_break_even:
+            break_even_km = _find_reduction_break_even_km(centres, reduction_pct)
+            if break_even_km is not None and break_even_km <= x_max:
+                ax_bot.axvline(
+                    break_even_km,
+                    color="#111111",
+                    linestyle=":",
+                    linewidth=1.0,
+                    alpha=0.85,
+                    zorder=5,
+                )
+                ax_bot.annotate(
+                    f"{break_even_km:.1f} km",
+                    xy=(break_even_km, 0.96),
+                    xycoords=("data", "axes fraction"),
+                    xytext=(3, 0),
+                    textcoords="offset points",
+                    ha="left",
+                    va="top",
+                    fontsize=7,
+                    color="#111111",
+                    rotation=90,
+                )
 
         ax_abs = ax_bot.twinx()
         ax_abs.plot(
