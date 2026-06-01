@@ -56,6 +56,7 @@ def _render_reduction_detour_grid_variant(
     selected,
     figure_name,
     exp_config=None,
+    absolute_reduction_metric="total_t",
 ):
     """Load selected city OD data and render a reduction-detour grid."""
     from dataclasses import replace
@@ -115,6 +116,7 @@ def _render_reduction_detour_grid_variant(
             save_path=os.path.join(out, f"{figure_name}.png"),
             for_latex=for_latex,
             plot_title=plot_title,
+            absolute_reduction_metric=absolute_reduction_metric,
         )
     else:
         print(f"{figure_name}: no city OD data available")
@@ -660,6 +662,7 @@ def render_all(data_dir: str, figures_dir: str, for_latex: bool = False, plot_ti
                             selected=selected,
                             figure_name=figure_name,
                             exp_config=exp_config,
+                            absolute_reduction_metric="per_order_g",
                         )
 
             if _want("regions_map"):

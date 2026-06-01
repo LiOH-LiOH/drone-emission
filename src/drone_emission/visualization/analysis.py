@@ -2322,15 +2322,26 @@ def plot_city_reduction_rank_top10(
     plt.close(fig)
 
 
-def _bin_reduction_and_detour(od_df: pd.DataFrame, bin_width_km: float):
+def _bin_reduction_and_detour(
+    od_df: pd.DataFrame,
+    bin_width_km: float,
+    absolute_reduction_metric: str = "total_t",
+):
     """Bin OD rows by air distance.
 
-    Returns (centres, reduction_pct, reduction_total_t, detour_by_bin, max_km).
+    Returns (centres, reduction_pct, reduction_abs, detour_by_bin, max_km).
     ``reduction_pct`` is (e-bike − drone) / e-bike per bin in percent,
     negative when the drone exceeds e-bike for the bin's OD pairs.
-    ``reduction_total_t`` is annual absolute emission reduction per bin in
-    tonnes CO2e, defined as all e-bike minus all drone.
+    ``reduction_abs`` is annual absolute emission reduction per bin in tonnes
+    CO2e when ``absolute_reduction_metric`` is ``total_t``. When it is
+    ``per_order_g``, it is (all e-bike − all drone) divided by total orders
+    in the distance range, in g CO2e/order.
     """
+    if absolute_reduction_metric not in {"total_t", "per_order_g"}:
+        raise ValueError(
+            "absolute_reduction_metric must be 'total_t' or 'per_order_g'"
+        )
+
     valid = od_df[(od_df["road_distance_m"] >= 0) & (od_df["distance_km"] > 0)].copy()
     road_km = valid["road_distance_m"].values / 1000.0
     air_km = valid["distance_km"].values
@@ -2346,7 +2357,7 @@ def _bin_reduction_and_detour(od_df: pd.DataFrame, bin_width_km: float):
 
     bin_idx = np.clip(np.digitize(air_km, edges) - 1, 0, n_bins - 1)
     reduction_pct = np.full(n_bins, np.nan)
-    reduction_total_t = np.zeros(n_bins)
+    reduction_abs = np.zeros(n_bins)
     detour_by_bin = []
     for k in range(n_bins):
         m = bin_idx == k
@@ -2355,11 +2366,19 @@ def _bin_reduction_and_detour(od_df: pd.DataFrame, bin_width_km: float):
             continue
         ebike_tot = (ebike_lc[m] * sales[m]).sum()
         drone_tot = (drone_lc[m] * sales[m]).sum()
-        reduction_total_t[k] = (ebike_tot - drone_tot) / 1e6  # g -> tonnes
+        if absolute_reduction_metric == "per_order_g":
+            total_orders = sales[m].sum()
+            reduction_abs[k] = (
+                (ebike_tot - drone_tot) / total_orders
+                if total_orders > 0
+                else np.nan
+            )
+        else:
+            reduction_abs[k] = (ebike_tot - drone_tot) / 1e6  # g -> tonnes
         if ebike_tot > 0:
             reduction_pct[k] = (ebike_tot - drone_tot) / ebike_tot * 100
         detour_by_bin.append(detour[m])
-    return centres, reduction_pct, reduction_total_t, detour_by_bin, max_km
+    return centres, reduction_pct, reduction_abs, detour_by_bin, max_km
 
 
 def plot_reduction_detour_grid(
@@ -2372,6 +2391,7 @@ def plot_reduction_detour_grid(
     bin_width_km: float = 0.1,
     n_cols: int = 2,
     max_air_km: float = 5.0,
+    absolute_reduction_metric: str = "total_t",
 ):
     """Multi-city grid of detour-ratio boxplot + emission-reduction bars per air-distance bin.
 
@@ -2388,6 +2408,9 @@ def plot_reduction_detour_grid(
         bin_width_km: Width of each road-distance bin in km.
         n_cols: Number of city columns in the grid.
         max_air_km: Maximum air distance shown on the x-axis.
+        absolute_reduction_metric: Metric for the secondary y-axis. Use
+            ``total_t`` for annual tonnes or ``per_order_g`` for grams per
+            order in each distance bin.
     """
     keys = list(od_dfs.keys())
     n_cities = len(keys)
@@ -2403,8 +2426,8 @@ def plot_reduction_detour_grid(
         ax_top = fig.add_subplot(inner[0])
         ax_bot = fig.add_subplot(inner[1], sharex=ax_top)
 
-        centres, reduction_pct, reduction_total_t, detour_by_bin, max_km = _bin_reduction_and_detour(
-            od_dfs[key], bin_width_km
+        centres, reduction_pct, reduction_abs, detour_by_bin, max_km = _bin_reduction_and_detour(
+            od_dfs[key], bin_width_km, absolute_reduction_metric
         )
         x_max = min(max_air_km, max_km)
         x_ticks = np.arange(0, x_max + 1e-6, 1.0)
@@ -2450,12 +2473,21 @@ def plot_reduction_detour_grid(
 
         ax_abs = ax_bot.twinx()
         ax_abs.plot(
-            centres, reduction_total_t,
+            centres, reduction_abs,
             color="#555555", alpha=0.5, linewidth=1.2, marker="o", markersize=2.5,
-            label="E-bike - drone (t CO2e)",
+            label=(
+                "E-bike - drone (g CO2e/order)"
+                if absolute_reduction_metric == "per_order_g"
+                else "E-bike - drone (t CO2e)"
+            ),
         )
         ax_abs.axhline(0, color="#555555", linewidth=0.5, alpha=0.35)
-        ax_abs.set_ylabel("E-bike - Drone (t CO2e/yr)", fontsize=9, color="#555555")
+        abs_ylabel = (
+            "(E-bike - Drone) / Orders (g CO2e/order)"
+            if absolute_reduction_metric == "per_order_g"
+            else "E-bike - Drone (t CO2e/yr)"
+        )
+        ax_abs.set_ylabel(abs_ylabel, fontsize=9, color="#555555")
         ax_abs.tick_params(axis="y", labelsize=8, labelcolor="#555555")
 
     # Hide any unused outer slots (when n_cities < n_rows * n_cols)
