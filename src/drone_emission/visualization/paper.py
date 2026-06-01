@@ -835,6 +835,11 @@ def render_all(data_dir: str, figures_dir: str, for_latex: bool = False, plot_ti
                                 if figure_name == "top6_reduction_detour_grid"
                                 else 0.0
                             ),
+                            bin_width_km=(
+                                0.2
+                                if figure_name == "top6_reduction_detour_grid"
+                                else 0.1
+                            ),
                         )
 
             if _want("regions_map"):
