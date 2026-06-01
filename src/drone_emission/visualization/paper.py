@@ -30,6 +30,7 @@ Available figures:
 
 import argparse
 import os
+import pickle
 import sys
 
 import pandas as pd
@@ -46,6 +47,17 @@ TOP6_REDUCTION_DETOUR_FIGURES = {
 # (e-bike − drone) / e-bike comparison is against realistically-bundled ebike,
 # not the kappa=1.0 value stored in the OD CSV.
 REDUCTION_DETOUR_KAPPA = 0.7
+REDUCTION_DETOUR_CACHE_VERSION = 1
+
+
+def _file_cache_signature(path):
+    """Return file metadata used to invalidate a figure-data cache."""
+    stat = os.stat(path)
+    return {
+        "path": os.path.abspath(path),
+        "size": stat.st_size,
+        "mtime_ns": stat.st_mtime_ns,
+    }
 
 
 def _render_reduction_detour_grid_variant(
@@ -63,13 +75,20 @@ def _render_reduction_detour_grid_variant(
     n_cols=2,
     grid_hspace=0.45,
     grid_wspace=0.22,
+    use_binned_cache=False,
+    bin_width_km=0.1,
 ):
     """Load selected city OD data and render a reduction-detour grid."""
-    from dataclasses import replace
+    from dataclasses import asdict, replace
 
     from emission.cal_single_delivery import create_ebike_params, get_emission_params
     from sensitivity.vectorized_lca import EbikeScenario, compute_ebike_per_order_g
-    from visualization.analysis import plot_reduction_detour_grid
+    from utils.config import get_cache_dir
+    from visualization.analysis import (
+        _bin_reduction_and_detour,
+        plot_reduction_detour_grid,
+        plot_reduction_detour_grid_binned,
+    )
 
     if exp_config is None:
         print(f"{figure_name}: exp_config missing; cannot apply kappa={REDUCTION_DETOUR_KAPPA}")
@@ -83,10 +102,83 @@ def _render_reduction_detour_grid_variant(
         payload_kg=emission_cfg["payload_kg"],
     )
 
+    selected_keys = selected["region_key"].tolist()
     gef_map = dict(zip(selected["region_key"], selected["gef"]))
     label_map = dict(zip(selected["region_key"], selected["region_name_en"]))
+    labels = {key: label_map.get(key, key) for key in selected_keys}
+    od_paths = {
+        key: os.path.join(data_dir, "city", key, f"{key}_od_pairs.csv")
+        for key in selected_keys
+    }
+
+    cache_path = None
+    cache_meta = None
+    available_keys = []
+    source_files = {}
+    for key in selected_keys:
+        od_path = od_paths[key]
+        if not os.path.exists(od_path):
+            print(f"{figure_name}: missing {od_path} — skipping {key}")
+            continue
+        gef = gef_map.get(key)
+        if gef is None or pd.isna(gef):
+            print(f"{figure_name}: {key} missing province GEF — skipping")
+            continue
+        available_keys.append(key)
+        source_files[key] = _file_cache_signature(od_path)
+
+    if not available_keys:
+        print(f"{figure_name}: no city OD data available")
+        return
+
+    if use_binned_cache:
+        cache_path = os.path.join(
+            get_cache_dir("visualization", "paper"),
+            f"{figure_name}_binned.pkl",
+        )
+        cache_meta = {
+            "version": REDUCTION_DETOUR_CACHE_VERSION,
+            "figure_name": figure_name,
+            "city_keys": available_keys,
+            "source_files": source_files,
+            "gef": {key: float(gef_map[key]) for key in available_keys},
+            "kappa": REDUCTION_DETOUR_KAPPA,
+            "ebike_params": asdict(ebike_params),
+            "scenario": asdict(scenario),
+            "bin_width_km": bin_width_km,
+            "absolute_reduction_metric": absolute_reduction_metric,
+        }
+        if os.path.exists(cache_path):
+            try:
+                with open(cache_path, "rb") as f:
+                    cache = pickle.load(f)
+                if cache.get("meta") == cache_meta:
+                    print(f"{figure_name}: loading binned data cache {cache_path}")
+                    plot_reduction_detour_grid_binned(
+                        binned_by_city=cache["binned_by_city"],
+                        city_labels=labels,
+                        save_path=os.path.join(out, f"{figure_name}.png"),
+                        figsize=figsize,
+                        for_latex=for_latex,
+                        plot_title=plot_title,
+                        bin_width_km=bin_width_km,
+                        n_cols=n_cols,
+                        absolute_reduction_metric=absolute_reduction_metric,
+                        show_detour_boxplot=show_detour_boxplot,
+                        mark_reduction_break_even=mark_reduction_break_even,
+                        grid_hspace=grid_hspace,
+                        grid_wspace=grid_wspace,
+                    )
+                    return
+                print(f"{figure_name}: binned data cache is stale; rebuilding")
+            except Exception as exc:
+                print(
+                    f"{figure_name}: failed to load binned data cache ({exc}); "
+                    "rebuilding"
+                )
+
     od_dfs = {}
-    labels = {}
+    binned_by_city = {}
     required = {
         "road_distance_m",
         "distance_km",
@@ -94,27 +186,62 @@ def _render_reduction_detour_grid_variant(
         "ebike_lifecycle_g",
         "annual_sales",
     }
-    for key in selected["region_key"].tolist():
-        od_path = os.path.join(data_dir, "city", key, f"{key}_od_pairs.csv")
-        if not os.path.exists(od_path):
-            print(f"{figure_name}: missing {od_path} — skipping {key}")
-            continue
+    for key in available_keys:
+        od_path = od_paths[key]
         od_df = pd.read_csv(od_path)
         if not required.issubset(od_df.columns):
             print(f"{figure_name}: {key} missing columns — skipping")
             continue
-        gef = gef_map.get(key)
-        if gef is None or pd.isna(gef):
-            print(f"{figure_name}: {key} missing province GEF — skipping")
-            continue
+        gef = gef_map[key]
         ebike_pp = replace(ebike_params, e_use=float(gef))
         road_km = od_df["road_distance_m"].to_numpy(dtype=float) / 1000.0
         od_df = od_df.copy()
         od_df["ebike_lifecycle_g"] = compute_ebike_per_order_g(road_km, ebike_pp, scenario)
-        od_dfs[key] = od_df
-        labels[key] = label_map.get(key, key)
+        if use_binned_cache:
+            centres, reduction_pct, reduction_abs, detour_by_bin, max_km = (
+                _bin_reduction_and_detour(
+                    od_df, bin_width_km, absolute_reduction_metric
+                )
+            )
+            binned_by_city[key] = {
+                "centres": centres,
+                "reduction_pct": reduction_pct,
+                "reduction_abs": reduction_abs,
+                "detour_by_bin": detour_by_bin,
+                "max_km": max_km,
+            }
+        else:
+            od_dfs[key] = od_df
 
-    if od_dfs:
+    if use_binned_cache and binned_by_city:
+        if cache_path and cache_meta:
+            with open(cache_path, "wb") as f:
+                pickle.dump(
+                    {"meta": cache_meta, "binned_by_city": binned_by_city},
+                    f,
+                    protocol=pickle.HIGHEST_PROTOCOL,
+                )
+            print(f"{figure_name}: wrote binned data cache {cache_path}")
+        print(
+            f"{figure_name}: rebuilt binned data at kappa={REDUCTION_DETOUR_KAPPA} "
+            f"for {len(binned_by_city)} cities"
+        )
+        plot_reduction_detour_grid_binned(
+            binned_by_city=binned_by_city,
+            city_labels=labels,
+            save_path=os.path.join(out, f"{figure_name}.png"),
+            figsize=figsize,
+            for_latex=for_latex,
+            plot_title=plot_title,
+            bin_width_km=bin_width_km,
+            n_cols=n_cols,
+            absolute_reduction_metric=absolute_reduction_metric,
+            show_detour_boxplot=show_detour_boxplot,
+            mark_reduction_break_even=mark_reduction_break_even,
+            grid_hspace=grid_hspace,
+            grid_wspace=grid_wspace,
+        )
+    elif od_dfs:
         print(f"{figure_name}: rebuilt ebike_lifecycle_g at kappa={REDUCTION_DETOUR_KAPPA} for {len(od_dfs)} cities")
         plot_reduction_detour_grid(
             od_dfs=od_dfs,
@@ -123,6 +250,7 @@ def _render_reduction_detour_grid_variant(
             figsize=figsize,
             for_latex=for_latex,
             plot_title=plot_title,
+            bin_width_km=bin_width_km,
             n_cols=n_cols,
             absolute_reduction_metric=absolute_reduction_metric,
             show_detour_boxplot=show_detour_boxplot,
@@ -678,7 +806,7 @@ def render_all(data_dir: str, figures_dir: str, for_latex: bool = False, plot_ti
                             show_detour_boxplot=False,
                             mark_reduction_break_even=True,
                             figsize=(
-                                (16, 12)
+                                (18, 14)
                                 if figure_name == "top6_reduction_detour_grid"
                                 else (12, 14)
                             ),
@@ -688,15 +816,16 @@ def render_all(data_dir: str, figures_dir: str, for_latex: bool = False, plot_ti
                                 else 2
                             ),
                             grid_hspace=(
-                                0.28
+                                0.40
                                 if figure_name == "top6_reduction_detour_grid"
                                 else 0.45
                             ),
                             grid_wspace=(
-                                0.38
+                                0.50
                                 if figure_name == "top6_reduction_detour_grid"
                                 else 0.22
                             ),
+                            use_binned_cache=figure_name == "top6_reduction_detour_grid",
                         )
 
             if _want("regions_map"):

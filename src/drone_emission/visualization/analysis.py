@@ -2446,8 +2446,8 @@ def _find_reduction_break_even_km(
     return float(np.clip(crossing, min(x0, x1), max(x0, x1)))
 
 
-def plot_reduction_detour_grid(
-    od_dfs: dict,
+def plot_reduction_detour_grid_binned(
+    binned_by_city: dict,
     city_labels: dict = None,
     save_path: str = None,
     figsize: tuple = (12, 14),
@@ -2462,13 +2462,12 @@ def plot_reduction_detour_grid(
     grid_hspace: float = 0.45,
     grid_wspace: float = 0.22,
 ):
-    """Multi-city grid of emission-reduction bars per air-distance bin.
+    """Multi-city grid from pre-binned emission-reduction data.
 
     Args:
-        od_dfs: Mapping ``{city_key: od_dataframe}``. Each frame needs
-                ``road_distance_m``, ``distance_km``, ``drone_lifecycle_g``,
-                ``ebike_lifecycle_g``, ``annual_sales``. Insertion order
-                determines panel order.
+        binned_by_city: Mapping ``{city_key: binned_data}``. Each binned data
+            dict needs ``centres``, ``reduction_pct``, ``reduction_abs``, and
+            ``max_km``. ``detour_by_bin`` is optional unless showing boxplots.
         city_labels: Optional ``{city_key: display_name}``. Defaults to key.
         save_path: Path to save figure (with extension). Shows plot if None.
         figsize: Figure size tuple.
@@ -2487,7 +2486,7 @@ def plot_reduction_detour_grid(
         grid_hspace: Vertical spacing between city panels.
         grid_wspace: Horizontal spacing between city panels.
     """
-    keys = list(od_dfs.keys())
+    keys = list(binned_by_city.keys())
     n_cities = len(keys)
     n_rows = int(np.ceil(n_cities / n_cols))
     city_labels = city_labels or {}
@@ -2505,9 +2504,14 @@ def plot_reduction_detour_grid(
             ax_top = None
             ax_bot = fig.add_subplot(outer[r, c])
 
-        centres, reduction_pct, reduction_abs, detour_by_bin, max_km = _bin_reduction_and_detour(
-            od_dfs[key], bin_width_km, absolute_reduction_metric
-        )
+        binned = binned_by_city[key]
+        centres = np.asarray(binned["centres"], dtype=float)
+        reduction_pct = np.asarray(binned["reduction_pct"], dtype=float)
+        reduction_abs = np.asarray(binned["reduction_abs"], dtype=float)
+        detour_by_bin = binned.get("detour_by_bin")
+        if detour_by_bin is None:
+            detour_by_bin = [np.array([]) for _ in centres]
+        max_km = float(binned["max_km"])
         x_max = min(max_air_km, max_km)
         x_ticks = np.arange(0, x_max + 1e-6, 1.0)
         x_tick_labels = [f"{int(t)}" for t in x_ticks]
@@ -2616,3 +2620,77 @@ def plot_reduction_detour_grid(
     else:
         plt.show()
     plt.close(fig)
+
+
+def plot_reduction_detour_grid(
+    od_dfs: dict,
+    city_labels: dict = None,
+    save_path: str = None,
+    figsize: tuple = (12, 14),
+    for_latex: bool = False,
+    plot_title: bool = False,
+    bin_width_km: float = 0.1,
+    n_cols: int = 2,
+    max_air_km: float = 5.0,
+    absolute_reduction_metric: str = "total_t",
+    show_detour_boxplot: bool = True,
+    mark_reduction_break_even: bool = False,
+    grid_hspace: float = 0.45,
+    grid_wspace: float = 0.22,
+):
+    """Multi-city grid of emission-reduction bars per air-distance bin.
+
+    Args:
+        od_dfs: Mapping ``{city_key: od_dataframe}``. Each frame needs
+                ``road_distance_m``, ``distance_km``, ``drone_lifecycle_g``,
+                ``ebike_lifecycle_g``, ``annual_sales``. Insertion order
+                determines panel order.
+        city_labels: Optional ``{city_key: display_name}``. Defaults to key.
+        save_path: Path to save figure (with extension). Shows plot if None.
+        figsize: Figure size tuple.
+        for_latex: If True, save as PDF.
+        plot_title: If True, show suptitle.
+        bin_width_km: Width of each road-distance bin in km.
+        n_cols: Number of city columns in the grid.
+        max_air_km: Maximum air distance shown on the x-axis.
+        absolute_reduction_metric: Metric for the secondary y-axis. Use
+            ``total_t`` for annual tonnes or ``per_order_g`` for grams per
+            order in each distance bin.
+        show_detour_boxplot: If True, include the detour-ratio boxplot above
+            each emission-reduction panel.
+        mark_reduction_break_even: If True, mark the sustained negative-to-
+            positive crossing in the reduction bars when one is found.
+        grid_hspace: Vertical spacing between city panels.
+        grid_wspace: Horizontal spacing between city panels.
+    """
+    binned_by_city = {}
+    for key, od_df in od_dfs.items():
+        centres, reduction_pct, reduction_abs, detour_by_bin, max_km = (
+            _bin_reduction_and_detour(
+                od_df, bin_width_km, absolute_reduction_metric
+            )
+        )
+        binned_by_city[key] = {
+            "centres": centres,
+            "reduction_pct": reduction_pct,
+            "reduction_abs": reduction_abs,
+            "detour_by_bin": detour_by_bin,
+            "max_km": max_km,
+        }
+
+    plot_reduction_detour_grid_binned(
+        binned_by_city=binned_by_city,
+        city_labels=city_labels,
+        save_path=save_path,
+        figsize=figsize,
+        for_latex=for_latex,
+        plot_title=plot_title,
+        bin_width_km=bin_width_km,
+        n_cols=n_cols,
+        max_air_km=max_air_km,
+        absolute_reduction_metric=absolute_reduction_metric,
+        show_detour_boxplot=show_detour_boxplot,
+        mark_reduction_break_even=mark_reduction_break_even,
+        grid_hspace=grid_hspace,
+        grid_wspace=grid_wspace,
+    )
