@@ -59,6 +59,10 @@ def _render_reduction_detour_grid_variant(
     absolute_reduction_metric="total_t",
     show_detour_boxplot=True,
     mark_reduction_break_even=False,
+    figsize=(12, 14),
+    n_cols=2,
+    grid_hspace=0.45,
+    grid_wspace=0.22,
 ):
     """Load selected city OD data and render a reduction-detour grid."""
     from dataclasses import replace
@@ -116,11 +120,15 @@ def _render_reduction_detour_grid_variant(
             od_dfs=od_dfs,
             city_labels=labels,
             save_path=os.path.join(out, f"{figure_name}.png"),
+            figsize=figsize,
             for_latex=for_latex,
             plot_title=plot_title,
+            n_cols=n_cols,
             absolute_reduction_metric=absolute_reduction_metric,
             show_detour_boxplot=show_detour_boxplot,
             mark_reduction_break_even=mark_reduction_break_even,
+            grid_hspace=grid_hspace,
+            grid_wspace=grid_wspace,
         )
     else:
         print(f"{figure_name}: no city OD data available")
@@ -131,14 +139,14 @@ def _select_top6_reduction_detour_variants(city_df, gef_df):
     city_df = city_df.copy()
     city_df["gef_rank"] = city_df["gef"].rank(method="dense")
 
-    big = city_df.nlargest(6, "total_odpair_annual_sales")
-    big_keys = set(big["region_key"])
+    big = city_df.nlargest(16, "total_odpair_annual_sales")
+    top6_big_keys = set(city_df.nlargest(6, "total_odpair_annual_sales")["region_key"])
 
     sales_median = city_df["total_odpair_annual_sales"].median()
     low_gef = (
         city_df[
             (city_df["total_odpair_annual_sales"] >= sales_median)
-            & ~city_df["region_key"].isin(big_keys)
+            & ~city_df["region_key"].isin(top6_big_keys)
         ]
         .sort_values(["gef", "total_odpair_annual_sales"], ascending=[True, False])
         .head(6)
@@ -669,6 +677,26 @@ def render_all(data_dir: str, figures_dir: str, for_latex: bool = False, plot_ti
                             absolute_reduction_metric="per_order_g",
                             show_detour_boxplot=False,
                             mark_reduction_break_even=True,
+                            figsize=(
+                                (16, 12)
+                                if figure_name == "top6_reduction_detour_grid"
+                                else (12, 14)
+                            ),
+                            n_cols=(
+                                4
+                                if figure_name == "top6_reduction_detour_grid"
+                                else 2
+                            ),
+                            grid_hspace=(
+                                0.28
+                                if figure_name == "top6_reduction_detour_grid"
+                                else 0.45
+                            ),
+                            grid_wspace=(
+                                0.38
+                                if figure_name == "top6_reduction_detour_grid"
+                                else 0.22
+                            ),
                         )
 
             if _want("regions_map"):

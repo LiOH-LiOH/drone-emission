@@ -2459,6 +2459,8 @@ def plot_reduction_detour_grid(
     absolute_reduction_metric: str = "total_t",
     show_detour_boxplot: bool = True,
     mark_reduction_break_even: bool = False,
+    grid_hspace: float = 0.45,
+    grid_wspace: float = 0.22,
 ):
     """Multi-city grid of emission-reduction bars per air-distance bin.
 
@@ -2482,6 +2484,8 @@ def plot_reduction_detour_grid(
             each emission-reduction panel.
         mark_reduction_break_even: If True, mark the sustained negative-to-
             positive crossing in the reduction bars when one is found.
+        grid_hspace: Vertical spacing between city panels.
+        grid_wspace: Horizontal spacing between city panels.
     """
     keys = list(od_dfs.keys())
     n_cities = len(keys)
@@ -2489,7 +2493,7 @@ def plot_reduction_detour_grid(
     city_labels = city_labels or {}
 
     fig = plt.figure(figsize=figsize)
-    outer = fig.add_gridspec(n_rows, n_cols, hspace=0.45, wspace=0.22)
+    outer = fig.add_gridspec(n_rows, n_cols, hspace=grid_hspace, wspace=grid_wspace)
 
     for i, key in enumerate(keys):
         r, c = divmod(i, n_cols)
