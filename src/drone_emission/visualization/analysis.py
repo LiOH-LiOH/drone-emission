@@ -2455,6 +2455,7 @@ def plot_reduction_detour_grid_binned(
     plot_title: bool = False,
     bin_width_km: float = 0.1,
     n_cols: int = 2,
+    min_air_km: float = 0.0,
     max_air_km: float = 5.0,
     absolute_reduction_metric: str = "total_t",
     show_detour_boxplot: bool = True,
@@ -2475,6 +2476,7 @@ def plot_reduction_detour_grid_binned(
         plot_title: If True, show suptitle.
         bin_width_km: Width of each road-distance bin in km.
         n_cols: Number of city columns in the grid.
+        min_air_km: Minimum air distance shown on the x-axis.
         max_air_km: Maximum air distance shown on the x-axis.
         absolute_reduction_metric: Metric for the secondary y-axis. Use
             ``total_t`` for annual tonnes or ``per_order_g`` for grams per
@@ -2513,8 +2515,11 @@ def plot_reduction_detour_grid_binned(
             detour_by_bin = [np.array([]) for _ in centres]
         max_km = float(binned["max_km"])
         x_max = min(max_air_km, max_km)
-        x_ticks = np.arange(0, x_max + 1e-6, 1.0)
-        x_tick_labels = [f"{int(t)}" for t in x_ticks]
+        x_min = min(min_air_km, x_max)
+        x_ticks = np.arange(np.ceil(x_min), x_max + 1e-6, 1.0)
+        if x_min > 0 and (not x_ticks.size or not np.isclose(x_ticks[0], x_min)):
+            x_ticks = np.insert(x_ticks, 0, x_min)
+        x_tick_labels = [f"{t:g}" for t in x_ticks]
 
         if show_detour_boxplot:
             nonempty = [(c_, d_) for c_, d_ in zip(centres, detour_by_bin) if d_.size > 0]
@@ -2532,7 +2537,7 @@ def plot_reduction_detour_grid_binned(
             ax_top.axhline(1.0, color="gray", linestyle="--", linewidth=0.7, alpha=0.6)
             ax_top.set_ylabel("Detour (road / air)", fontsize=9)
             ax_top.set_xticks(x_ticks, labels=x_tick_labels)
-            ax_top.set_xlim(0, x_max)
+            ax_top.set_xlim(x_min, x_max)
             ax_top.tick_params(axis="x", labelbottom=False)
             ax_top.tick_params(axis="both", labelsize=8)
             ax_top.grid(axis="y", alpha=0.3)
@@ -2551,7 +2556,7 @@ def plot_reduction_detour_grid_binned(
         ax_bot.axhline(0, color="gray", linewidth=0.5)
         ax_bot.set_xlabel("Air Distance (km)", fontsize=9)
         ax_bot.set_ylabel("(E-bike − Drone) / E-bike (%)", fontsize=9, color="#2ca02c")
-        ax_bot.set_xlim(0, x_max)
+        ax_bot.set_xlim(x_min, x_max)
         ax_bot.set_xticks(x_ticks, labels=x_tick_labels)
         ax_bot.tick_params(axis="x", labelsize=8)
         ax_bot.tick_params(axis="y", labelsize=8, labelcolor="#2ca02c")
@@ -2631,6 +2636,7 @@ def plot_reduction_detour_grid(
     plot_title: bool = False,
     bin_width_km: float = 0.1,
     n_cols: int = 2,
+    min_air_km: float = 0.0,
     max_air_km: float = 5.0,
     absolute_reduction_metric: str = "total_t",
     show_detour_boxplot: bool = True,
@@ -2652,6 +2658,7 @@ def plot_reduction_detour_grid(
         plot_title: If True, show suptitle.
         bin_width_km: Width of each road-distance bin in km.
         n_cols: Number of city columns in the grid.
+        min_air_km: Minimum air distance shown on the x-axis.
         max_air_km: Maximum air distance shown on the x-axis.
         absolute_reduction_metric: Metric for the secondary y-axis. Use
             ``total_t`` for annual tonnes or ``per_order_g`` for grams per
@@ -2687,6 +2694,7 @@ def plot_reduction_detour_grid(
         plot_title=plot_title,
         bin_width_km=bin_width_km,
         n_cols=n_cols,
+        min_air_km=min_air_km,
         max_air_km=max_air_km,
         absolute_reduction_metric=absolute_reduction_metric,
         show_detour_boxplot=show_detour_boxplot,

@@ -77,6 +77,7 @@ def _render_reduction_detour_grid_variant(
     grid_wspace=0.22,
     use_binned_cache=False,
     bin_width_km=0.1,
+    min_air_km=0.0,
 ):
     """Load selected city OD data and render a reduction-detour grid."""
     from dataclasses import asdict, replace
@@ -163,6 +164,7 @@ def _render_reduction_detour_grid_variant(
                         plot_title=plot_title,
                         bin_width_km=bin_width_km,
                         n_cols=n_cols,
+                        min_air_km=min_air_km,
                         absolute_reduction_metric=absolute_reduction_metric,
                         show_detour_boxplot=show_detour_boxplot,
                         mark_reduction_break_even=mark_reduction_break_even,
@@ -235,6 +237,7 @@ def _render_reduction_detour_grid_variant(
             plot_title=plot_title,
             bin_width_km=bin_width_km,
             n_cols=n_cols,
+            min_air_km=min_air_km,
             absolute_reduction_metric=absolute_reduction_metric,
             show_detour_boxplot=show_detour_boxplot,
             mark_reduction_break_even=mark_reduction_break_even,
@@ -252,6 +255,7 @@ def _render_reduction_detour_grid_variant(
             plot_title=plot_title,
             bin_width_km=bin_width_km,
             n_cols=n_cols,
+            min_air_km=min_air_km,
             absolute_reduction_metric=absolute_reduction_metric,
             show_detour_boxplot=show_detour_boxplot,
             mark_reduction_break_even=mark_reduction_break_even,
@@ -826,6 +830,11 @@ def render_all(data_dir: str, figures_dir: str, for_latex: bool = False, plot_ti
                                 else 0.22
                             ),
                             use_binned_cache=figure_name == "top6_reduction_detour_grid",
+                            min_air_km=(
+                                0.2
+                                if figure_name == "top6_reduction_detour_grid"
+                                else 0.0
+                            ),
                         )
 
             if _want("regions_map"):
