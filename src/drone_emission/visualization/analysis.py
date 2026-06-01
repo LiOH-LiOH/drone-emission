@@ -2446,6 +2446,23 @@ def _find_reduction_break_even_km(
     return float(np.clip(crossing, min(x0, x1), max(x0, x1)))
 
 
+def _padded_visible_ylim(values: np.ndarray, include_zero: bool = True):
+    """Return padded y-limits for finite visible values."""
+    finite = values[np.isfinite(values)]
+    if finite.size == 0:
+        return None
+    y_min = float(finite.min())
+    y_max = float(finite.max())
+    if include_zero:
+        y_min = min(y_min, 0.0)
+        y_max = max(y_max, 0.0)
+    if np.isclose(y_min, y_max):
+        pad = max(abs(y_min) * 0.1, 1.0)
+    else:
+        pad = (y_max - y_min) * 0.08
+    return y_min - pad, y_max + pad
+
+
 def plot_reduction_detour_grid_binned(
     binned_by_city: dict,
     city_labels: dict = None,
@@ -2520,6 +2537,7 @@ def plot_reduction_detour_grid_binned(
         if x_min > 0 and (not x_ticks.size or not np.isclose(x_ticks[0], x_min)):
             x_ticks = np.insert(x_ticks, 0, x_min)
         x_tick_labels = [f"{t:g}" for t in x_ticks]
+        visible = (centres >= x_min) & (centres <= x_max)
 
         if show_detour_boxplot:
             nonempty = [(c_, d_) for c_, d_ in zip(centres, detour_by_bin) if d_.size > 0]
@@ -2561,6 +2579,9 @@ def plot_reduction_detour_grid_binned(
         ax_bot.tick_params(axis="x", labelsize=8)
         ax_bot.tick_params(axis="y", labelsize=8, labelcolor="#2ca02c")
         ax_bot.grid(axis="y", alpha=0.3)
+        visible_pct_ylim = _padded_visible_ylim(reduction_pct[visible])
+        if visible_pct_ylim is not None:
+            ax_bot.set_ylim(*visible_pct_ylim)
 
         if mark_reduction_break_even:
             break_even_km = _find_reduction_break_even_km(centres, reduction_pct)
@@ -2604,6 +2625,9 @@ def plot_reduction_detour_grid_binned(
         )
         ax_abs.set_ylabel(abs_ylabel, fontsize=9, color="#555555")
         ax_abs.tick_params(axis="y", labelsize=8, labelcolor="#555555")
+        visible_abs_ylim = _padded_visible_ylim(reduction_abs[visible])
+        if visible_abs_ylim is not None:
+            ax_abs.set_ylim(*visible_abs_ylim)
 
     # Hide any unused outer slots (when n_cities < n_rows * n_cols)
     for j in range(n_cities, n_rows * n_cols):
