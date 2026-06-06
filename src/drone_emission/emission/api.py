@@ -6,10 +6,7 @@ from utils.province import get_province_from_district
 from utils.grid_emission_factor import fetch_factor, normalize_province_name
 from visualization.emission import (
     plot_distance_detour_scatter,
-    plot_distance_vs_emission,
-    plot_emission_reduction_analysis,
     plot_road_distance_distribution,
-    plot_time_vs_distance,
 )
 
 from .cal_single_delivery import (
@@ -74,14 +71,14 @@ def cal_emission(region_info, exp_config):
         ebike_params=ebike_params,
         drone_params=drone_params,
     )
-    total_orders = len(od_df)
 
     print(f"Using payload_kg = {payload_kg} kg, rider_weight = {rider_weight} kg")
     print(
         f"Grid emission factor (e_use) = {e_use:.4f} kg CO2e/kWh ({e_use * 1000:.1f} g CO2e/kWh)"
     )
     print(
-        f"E-bike velocity = {ebike_params.velocity} km/h, Drone velocity = {drone_params.v_level} km/h"
+        f"E-bike velocity = {ebike_params.velocity} km/h, "
+        f"Drone velocity = {drone_params.v_level} km/h"
     )
     print(f"E-bike kappa = {ebike_kappa:.6f}")
 
@@ -191,18 +188,30 @@ def cal_emission(region_info, exp_config):
         od_df.to_csv(od_save_path, index=False)
         print(f"Emission and time data saved to {od_save_path}")
 
+    if "annual_sales" not in od_df.columns:
+        raise ValueError(
+            f"{od_save_path} is missing annual_sales; city-level emissions must be "
+            "weighted by OD-pair order counts."
+        )
+    annual_sales = pd.to_numeric(od_df["annual_sales"], errors="coerce").fillna(0).to_numpy()
+    total_annual_orders = annual_sales.sum()
+    if total_annual_orders <= 0:
+        raise ValueError(
+            f"{od_save_path} has no positive annual_sales; cannot compute weighted emissions."
+        )
+
     # ==================== Use-phase Emission Analysis ====================
     # 基准：全部电动自行车排放
-    total_ebike_emissions = ebike_emissions.sum()
-    total_drone_emissions = drone_emissions.sum()
+    total_ebike_emissions = np.sum(ebike_emissions * annual_sales)
+    total_drone_emissions = np.sum(drone_emissions * annual_sales)
 
     print(f"\n===== Use-phase Emissions =====")
     print(f"全部使用无人机排放: {total_drone_emissions:.2f} kg CO2e")
     print(f"全部使用电动自行车排放: {total_ebike_emissions:.2f} kg CO2e")
 
     # ==================== Lifecycle Emission Analysis ====================
-    total_ebike_lifecycle = ebike_lifecycle.sum() / 1000  # g -> kg
-    total_drone_lifecycle = drone_lifecycle.sum() / 1000  # g -> kg
+    total_ebike_lifecycle = np.sum(ebike_lifecycle * annual_sales) / 1000  # g -> kg
+    total_drone_lifecycle = np.sum(drone_lifecycle * annual_sales) / 1000  # g -> kg
 
     print(f"\n===== Lifecycle Emissions (Production + Use) =====")
     print(f"全部使用无人机排放: {total_drone_lifecycle:.2f} kg CO2e")
@@ -214,109 +223,44 @@ def cal_emission(region_info, exp_config):
 
     region_info.set_stat("total_ebike_lifecycle", total_ebike_lifecycle)
     region_info.set_stat("total_drone_lifecycle", total_drone_lifecycle)
-
-    # 根据道路距离分布确定阈值范围
-    min_dist = road_distances.min()
-    max_dist = road_distances.max()
-    print(f"道路距离范围: {min_dist:.2f} - {max_dist:.2f} km")
-
-    # 生成10个合理的阈值，前后加上0和无限大
-    middle_thresholds = np.linspace(
-        max(0.3, np.percentile(road_distances, 5)),
-        np.percentile(road_distances, 95),
-        10,
+    region_info.set_stat(
+        "drone_minus_ebike_lifecycle_kg",
+        total_drone_lifecycle - total_ebike_lifecycle,
     )
-    thresholds = np.concatenate([[-0.01], middle_thresholds, [np.inf]])
-
-    # 计算每个阈值下的结果 (使用生命周期排放)
-    results = []
-    for threshold in thresholds:
-        # road_distance >= threshold 用无人机，否则用电动自行车
-        use_drone = road_distances >= threshold
-
-        mixed_lifecycle = np.where(use_drone, drone_lifecycle, ebike_lifecycle).sum()
-        drone_ratio = use_drone.sum() / total_orders * 100
-        reduction = (
-            (ebike_lifecycle.sum() - mixed_lifecycle) / ebike_lifecycle.sum() * 100
-        )
-
-        results.append(
-            {
-                "threshold": threshold,
-                "drone_count": use_drone.sum(),
-                "ebike_count": (~use_drone).sum(),
-                "drone_ratio": drone_ratio,
-                "emissions_g": mixed_lifecycle,
-                "reduction": reduction,
-            }
-        )
-
-    results_df = pd.DataFrame(results)
-
-    # Bundle delivery scenarios
-    bundle_coeffs = [0.9, 0.8, 0.7, 0.6]
-    bundle_results = {}
-
-    for coef in bundle_coeffs:
-        # Recalculate e-bike emissions with bundled distances
-        bundled_ebike_lifecycle = []
-        for row in od_df.itertuples():
-            road_distance_km = row.road_distance_m / 1000.0
-            bundled_distance = road_distance_km * coef
-            lifecycle_ebike = lca.calculate_lifecycle_emissions_per_order_simple(
-                bundled_distance, n_orders_per_delivery=1, vehicle_type="ebike"
-            )
-            bundled_ebike_lifecycle.append(lifecycle_ebike["total_per_order_g"])
-
-        bundled_ebike_lifecycle = np.array(bundled_ebike_lifecycle)
-
-        # Calculate mixed scenario results with bundled e-bike
-        coef_results = []
-        for threshold in thresholds:
-            use_drone = road_distances >= threshold
-            mixed_lifecycle = np.where(
-                use_drone, drone_lifecycle, bundled_ebike_lifecycle
-            ).sum()
-            drone_ratio = use_drone.sum() / total_orders * 100
-            reduction = (
-                (bundled_ebike_lifecycle.sum() - mixed_lifecycle)
-                / bundled_ebike_lifecycle.sum()
-                * 100
-            )
-            coef_results.append(
-                {
-                    "threshold": threshold,
-                    "drone_ratio": drone_ratio,
-                    "reduction": reduction,
-                }
-            )
-
-        bundle_results[coef] = pd.DataFrame(coef_results)
-
-    # Find max emission reduction and save stats
-    max_idx = results_df["reduction"].idxmax()
-    max_row = results_df.loc[max_idx]
-    region_info.set_stat("max_lifecycle_reduction_pct", float(max_row["reduction"]))
-    region_info.set_stat("optimal_threshold_km", float(max_row["threshold"]))
-    region_info.set_stat("optimal_drone_ratio_pct", float(max_row["drone_ratio"]))
     region_info.set_stat(
         "lifecycle_all_drone_reduction_pct", float(lifecycle_reduction)
     )
+    region_info.set_stat("ebike_kappa", ebike_kappa)
 
-    # 打印结果表格
-    print("\n" + "=" * 80)
-    print(
-        "混合场景对比 - 生命周期排放 (road_distance > 阈值 用无人机，否则用电动自行车)"
+    use_drone_oracle = drone_lifecycle < ebike_lifecycle
+    oracle_lifecycle = (
+        np.sum(np.where(use_drone_oracle, drone_lifecycle, ebike_lifecycle) * annual_sales)
+        / 1000
     )
-    print("=" * 80)
-    print(f"{'阈值(km)':<10} {'无人机占比%':<12} {'排放(g CO2e)':<18} {'减排%':<10}")
-    print("-" * 80)
-    for _, row in results_df.iterrows():
-        print(
-            f"{row['threshold']:<10.2f} {row['drone_ratio']:<12.1f} "
-            f"{row['emissions_g']:<18.2f} {row['reduction']:<10.2f}"
-        )
-    print("=" * 80)
+    oracle_reduction = (
+        (total_ebike_lifecycle - oracle_lifecycle) / total_ebike_lifecycle * 100
+    )
+    oracle_drone_order_ratio = annual_sales[use_drone_oracle].sum() / total_annual_orders * 100
+    region_info.set_stat("oracle_min_lifecycle_kg", oracle_lifecycle)
+    region_info.set_stat("oracle_min_reduction_vs_ebike_pct", oracle_reduction)
+    region_info.set_stat("oracle_drone_order_ratio_pct", oracle_drone_order_ratio)
+
+    for stale_key in (
+        "max_lifecycle_reduction_pct",
+        "optimal_threshold_km",
+        "optimal_drone_ratio_pct",
+    ):
+        region_info.stats.pop(stale_key, None)
+
+    min_dist = road_distances.min()
+    max_dist = road_distances.max()
+    print(f"道路距离范围: {min_dist:.2f} - {max_dist:.2f} km")
+    print(
+        "All-drone minus all-ebike lifecycle: "
+        f"{total_drone_lifecycle - total_ebike_lifecycle:.2f} kg CO2e"
+    )
+    print(f"Oracle minimum lifecycle: {oracle_lifecycle:.2f} kg CO2e")
+    print(f"Oracle reduction vs all-ebike: {oracle_reduction:.2f}%")
 
     # 绘制图形
     fig_save_dir = os.path.join(
@@ -324,27 +268,19 @@ def cal_emission(region_info, exp_config):
         region_level,
         region_name_en.lower(),
     )
-    save_path = os.path.join(
-        fig_save_dir, f"{region_name_en.lower()}_emission_reduction.png"
-    )
     for_latex = exp_config.get("for_latex", False)
     plot_title = exp_config.get("plot_title", False)
-    fig_path = plot_emission_reduction_analysis(
-        results_df,
-        bundle_results=bundle_results,
-        save_path=save_path,
-        for_latex=for_latex,
-        plot_title=plot_title,
-    )
-    print(f"\n图表已保存: {fig_path}")
 
     # 绘制道路距离分布图（按年销量加权）
-    annual_sales = od_df["annual_sales"].values
     dist_save_path = os.path.join(
         fig_save_dir, f"{region_name_en.lower()}_road_distance_distribution.png"
     )
     dist_fig_path = plot_road_distance_distribution(
-        road_distances, annual_sales, save_path=dist_save_path, for_latex=for_latex, plot_title=plot_title
+        road_distances,
+        annual_sales,
+        save_path=dist_save_path,
+        for_latex=for_latex,
+        plot_title=plot_title,
     )
     print(f"道路距离分布图已保存: {dist_fig_path}")
 
@@ -363,27 +299,16 @@ def cal_emission(region_info, exp_config):
     )
     print(f"距离-绕行比散点图已保存: {detour_fig_path}")
 
-    # Trip time vs distance plot
-    optimal_threshold = float(max_row["threshold"])
-    time_dist_path = os.path.join(
-        fig_save_dir, f"{region_name_en.lower()}_time_vs_distance.png"
+    return pd.DataFrame(
+        [
+            {
+                "total_drone_lifecycle_kg": total_drone_lifecycle,
+                "total_ebike_lifecycle_kg": total_ebike_lifecycle,
+                "drone_minus_ebike_lifecycle_kg": total_drone_lifecycle
+                - total_ebike_lifecycle,
+                "oracle_min_lifecycle_kg": oracle_lifecycle,
+                "oracle_min_reduction_vs_ebike_pct": oracle_reduction,
+                "oracle_drone_order_ratio_pct": oracle_drone_order_ratio,
+            }
+        ]
     )
-    time_dist_fig = plot_time_vs_distance(
-        road_distances, ebike_time, drone_time,
-        optimal_threshold_km=optimal_threshold,
-        save_path=time_dist_path, for_latex=for_latex, plot_title=plot_title,
-    )
-    print(f"Time vs distance plot saved: {time_dist_fig}")
-
-    # Distance vs emission plot
-    dist_emission_path = os.path.join(
-        fig_save_dir, f"{region_name_en.lower()}_distance_vs_emission.png"
-    )
-    dist_emission_fig = plot_distance_vs_emission(
-        road_distances, ebike_lifecycle, drone_lifecycle,
-        optimal_threshold_km=optimal_threshold,
-        save_path=dist_emission_path, for_latex=for_latex, plot_title=plot_title,
-    )
-    print(f"Distance vs emission plot saved: {dist_emission_fig}")
-
-    return results_df
