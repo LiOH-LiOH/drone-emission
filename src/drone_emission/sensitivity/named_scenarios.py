@@ -1,6 +1,6 @@
 """Named policy/grid scenarios per region.
 
-Six strategies × 2 anchor kappa values = 12 rows per city. Strategies are:
+Six strategies × configured anchor kappa values. Strategies are:
 
 1. ``all_ebike`` — threshold = +inf (no drones)
 2. ``all_drone`` — threshold = 0
@@ -14,8 +14,8 @@ Reductions are reported against:
 
 * ``reduction_vs_all_ebike_same_kappa_pct`` — vs strategy 1 at the same kappa
   (operational baseline a courier would compare against)
-* ``reduction_vs_anchor_ebike_pct`` — vs the all-ebike total at kappa=1.0,
-  current GEF (the "status quo" anchor)
+* ``reduction_vs_anchor_ebike_pct`` — vs the all-ebike total at the configured
+  baseline kappa, current GEF (the "status quo" anchor)
 """
 
 from __future__ import annotations
@@ -34,7 +34,7 @@ from .vectorized_lca import (
     compute_ebike_per_order_g,
 )
 
-KAPPA_ANCHORS = (0.7, 1.0)
+COMPARISON_KAPPA = 0.7
 GEF_MULT_2030 = 0.5  # TODO replace with IEA WEO 2024 STEPS China power-sector multiplier
 GEF_MULT_2060 = 0.2  # TODO same
 
@@ -141,7 +141,7 @@ def run_named_scenarios_for_region(
     rider_weight: float = 70.0,
     payload_kg: float = 1.0,
 ) -> pd.DataFrame:
-    """Compute named-strategy table for a single region (12 rows)."""
+    """Compute named-strategy table for a single region."""
     road_distances_km = od_df["road_distance_m"].to_numpy(dtype=float) / 1000.0
     straight_distances_km = od_df["distance_km"].to_numpy(dtype=float)
     if len(road_distances_km) == 0:
@@ -152,17 +152,20 @@ def run_named_scenarios_for_region(
     else:
         annual_sales = None
 
-    # Anchor reference: all-ebike total at kappa=1.0, current GEF.
+    baseline_kappa = float(getattr(ebike_params, "kappa", 1.0))
+    kappa_anchors = tuple(dict.fromkeys((COMPARISON_KAPPA, baseline_kappa)))
+
+    # Anchor reference: all-ebike total at configured baseline kappa, current GEF.
     anchor_ebike_g, _ = _per_od_emissions(
         road_distances_km, straight_distances_km,
         ebike_params, drone_params, province_gef_kwh,
-        kappa=1.0, gef_mult=1.0,
+        kappa=baseline_kappa, gef_mult=1.0,
         payload_kg=payload_kg, rider_weight=rider_weight,
     )
     anchor_total_g = float(anchor_ebike_g.sum())
 
     rows = []
-    for kappa in KAPPA_ANCHORS:
+    for kappa in kappa_anchors:
         # Pre-compute per-OD emissions for current-GEF and the two future-GEF cases.
         gef_cases = [
             ("current", 1.0),

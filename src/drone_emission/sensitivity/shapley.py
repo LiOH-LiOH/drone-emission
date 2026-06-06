@@ -5,7 +5,7 @@ counterfactual residual (all OFF):
 
 * **M1 routing geometry** — ON: e-bike uses road distance; OFF: e-bike uses
   straight-line distance (matching drone routing).
-* **M2 bundling** — ON: kappa = 0.7 (Eleme-derived realistic bundling);
+* **M2 bundling** — ON: configured baseline kappa;
   OFF: kappa = 1.0 (no bundling).
 * **M3 production amortization** — ON: include production+disposal; OFF:
   zero out for both modes.
@@ -36,7 +36,6 @@ from .vectorized_lca import (
 )
 
 MECHANISMS = ("M1_routing", "M2_bundling", "M3_production", "M4_gef")
-KAPPA_BUNDLING_ON = 0.7
 KAPPA_BUNDLING_OFF = 1.0
 GEF_CLEAN_MULT = 0.10  # OFF state for M4
 
@@ -61,7 +60,11 @@ def _coalition_reduction_pct(
     gef_mult = 1.0 if m4_gef else GEF_CLEAN_MULT
 
     # Bundling kappa from M2
-    kappa = KAPPA_BUNDLING_ON if m2_bundling else KAPPA_BUNDLING_OFF
+    kappa = (
+        float(getattr(ebike_params, "kappa", 1.0))
+        if m2_bundling
+        else KAPPA_BUNDLING_OFF
+    )
 
     e_scen = EbikeScenario(
         kappa=kappa,

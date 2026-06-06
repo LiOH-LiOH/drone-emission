@@ -22,7 +22,8 @@ Lifespan / amortization:
 * drone_utilization_rate                levels: 0.5, 1.2 (baseline 1.0; multiplier on annual deliveries)
 
 Anchor assumption (separate from drone-tech):
-* kappa (e-bike bundling)               levels: 0.7, 0.8, 0.9 (baseline 1.0)
+* kappa (e-bike bundling)               levels: 0.7, 0.8, 0.9
+                                        (baseline from experiment.toml)
 
 The gef_mult and ebike_lifespan_yr keys remain in BASELINE (anchor still uses
 them at gef_mult=1.0, ebike_lifespan_yr=4) but are no longer perturbed in
@@ -73,7 +74,7 @@ from .vectorized_lca import (
 # headline numbers — hardcoding a value here would silently override the
 # user's experimental configuration.
 BASELINE = {
-    "kappa": 1.0,
+    "kappa": 1 / (1.69 ** 0.5),
     "gef_mult": 1.0,                          # anchor still uses 1.0 (Sobol reads this); not in FEATURE_LEVELS
     "drone_energy_mult": 1.0,
     "payload_kg": 1.0,
@@ -96,7 +97,7 @@ FEATURE_LEVELS = {
     # corresponded to "aggressive bundling" (40% discount) which is at the
     # extreme tail of the Eleme empirical range, not a realistic operating
     # point. Remaining levels [0.7, 0.8, 0.9] cover the empirically plausible
-    # bundling range; baseline κ=1.0 (no bundling) is the upper bound.
+    # bundling range; the baseline comes from experiment.toml.
     "kappa": [0.7, 0.8, 0.9],
 
     # Tightened 2026-05-20: ±15% physics-model validation envelope, NOT the
@@ -340,9 +341,12 @@ def run_oat_for_region(
 
     thresholds = threshold_sweep_km(road_distances_km)
 
+    baseline = dict(BASELINE)
+    baseline["kappa"] = float(getattr(ebike_params, "kappa", BASELINE["kappa"]))
+
     def _kwargs_for(level_overrides: dict) -> dict:
         """Build the full feature kwargs dict for _row_for_scenario."""
-        merged = dict(BASELINE)
+        merged = dict(baseline)
         merged.update(level_overrides)
         return merged
 
@@ -350,20 +354,20 @@ def run_oat_for_region(
     anchor_ebike_g, _ = _emissions_for_scenario(
         road_distances_km, straight_distances_km,
         ebike_pp, drone_pp, rider_weight,
-        kappa=BASELINE["kappa"], gef_mult=BASELINE["gef_mult"],
-        drone_energy_mult=BASELINE["drone_energy_mult"],
-        payload_kg=BASELINE["payload_kg"],
-        ebike_lifespan_yr=BASELINE["ebike_lifespan_yr"],
-        drone_lifespan_yr=BASELINE["drone_lifespan_yr"],
-        drone_cruise_kmh=BASELINE["drone_cruise_kmh"],
-        drone_body_kg=BASELINE["drone_body_kg"],
-        drone_hover_s=BASELINE["drone_hover_s"],
-        drone_battery_lifespan_yr=BASELINE["drone_battery_lifespan_yr"],
-        headwind_mps=BASELINE["headwind_mps"],
-        drone_battery_mass=BASELINE["drone_battery_mass"],
-        drone_production_co2_per_kg=BASELINE["drone_production_co2_per_kg"],
-        drone_battery_co2_per_kwh=BASELINE["drone_battery_co2_per_kwh"],
-        drone_utilization_rate=BASELINE["drone_utilization_rate"],
+        kappa=baseline["kappa"], gef_mult=baseline["gef_mult"],
+        drone_energy_mult=baseline["drone_energy_mult"],
+        payload_kg=baseline["payload_kg"],
+        ebike_lifespan_yr=baseline["ebike_lifespan_yr"],
+        drone_lifespan_yr=baseline["drone_lifespan_yr"],
+        drone_cruise_kmh=baseline["drone_cruise_kmh"],
+        drone_body_kg=baseline["drone_body_kg"],
+        drone_hover_s=baseline["drone_hover_s"],
+        drone_battery_lifespan_yr=baseline["drone_battery_lifespan_yr"],
+        headwind_mps=baseline["headwind_mps"],
+        drone_battery_mass=baseline["drone_battery_mass"],
+        drone_production_co2_per_kg=baseline["drone_production_co2_per_kg"],
+        drone_battery_co2_per_kwh=baseline["drone_battery_co2_per_kwh"],
+        drone_utilization_rate=baseline["drone_utilization_rate"],
     )
     anchor_ebike_only_total_g = float(anchor_ebike_g.sum())
 

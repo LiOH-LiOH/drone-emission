@@ -70,6 +70,17 @@ def _annotate_unstudied(fig, cbar, cbar_ax, n_bands):
     )
 
 
+def _named_baseline_kappa(named: pd.DataFrame) -> float:
+    """Infer the configured baseline kappa from a named-scenario table."""
+    kappas = np.array(sorted(named["kappa"].dropna().unique()), dtype=float)
+    if kappas.size == 0:
+        return 1.0
+    non_comparison = kappas[~np.isclose(kappas, 0.7)]
+    if non_comparison.size:
+        return float(non_comparison.max())
+    return float(kappas.max())
+
+
 def plot_correlation_heatmap(
     corr_df: pd.DataFrame,
     save_path: str = None,
@@ -464,8 +475,8 @@ def plot_regions_map_and_gef_scatter(
         for_latex: If True, save as PDF.
         plot_title: If True, show title.
         gef_scenario: "current" (default), "2030", or "2060". Future scenarios pull
-            reductions from the `optimal_mixed_<year>` strategy at kappa=1.0 in the
-            named-sensitivity CSV.
+            reductions from the `optimal_mixed_<year>` strategy at the baseline
+            kappa in the named-sensitivity CSV.
         named_csv_path: Path to all_sensitivity_named.csv. Required when
             gef_scenario != "current".
     """
@@ -487,9 +498,10 @@ def plot_regions_map_and_gef_scatter(
         if named_csv_path is None:
             raise ValueError("named_csv_path is required when gef_scenario != 'current'")
         named = pd.read_csv(named_csv_path)
+        baseline_kappa = _named_baseline_kappa(named)
         scen_strategy = f"optimal_mixed_{gef_scenario}"
         reductions = (
-            named[(named["strategy"] == scen_strategy) & (named["kappa"] == 1.0)]
+            named[(named["strategy"] == scen_strategy) & np.isclose(named["kappa"], baseline_kappa)]
             [["region_key", "reduction_vs_anchor_ebike_pct"]]
             .rename(columns={"reduction_vs_anchor_ebike_pct": "max_lifecycle_reduction_pct"})
         )
@@ -689,8 +701,8 @@ def plot_regions_map_pathway_scenarios(
     today-baseline median drone share, consistent across all four panels.
 
     Panels (all from `all_sensitivity_named.csv`):
-        (a) today                    kappa=1.0, gef_mult=1.0, optimal_mixed
-        (b) halved GEF               kappa=1.0, gef_mult=0.5, optimal_mixed_2030
+        (a) today                    baseline kappa, gef_mult=1.0, optimal_mixed
+        (b) halved GEF               baseline kappa, gef_mult=0.5, optimal_mixed_2030
         (c) operator bundling        kappa=0.7, gef_mult=1.0, optimal_mixed
         (d) halved GEF + bundling    kappa=0.7, gef_mult=0.5, optimal_mixed_2030
 
@@ -710,9 +722,10 @@ def plot_regions_map_pathway_scenarios(
     named = pd.read_csv(named_csv_path)
     base = pd.read_csv(stats_csv_path)
 
+    baseline_kappa = _named_baseline_kappa(named)
     panels = [
-        ("a", "Today",                    1.0, 1.0, "optimal_mixed"),
-        ("b", "Halved GEF",               1.0, 0.5, "optimal_mixed_2030"),
+        ("a", "Today",                    baseline_kappa, 1.0, "optimal_mixed"),
+        ("b", "Halved GEF",               baseline_kappa, 0.5, "optimal_mixed_2030"),
         ("c", "Operator bundling",        0.7, 1.0, "optimal_mixed"),
         ("d", "Halved GEF + bundling",    0.7, 0.5, "optimal_mixed_2030"),
     ]
@@ -721,7 +734,7 @@ def plot_regions_map_pathway_scenarios(
     has_annual = "annual_lifecycle_kg" in named.columns
     if has_annual:
         anchor_rows = named[
-            np.isclose(named["kappa"], 1.0)
+            np.isclose(named["kappa"], baseline_kappa)
             & np.isclose(named["gef_mult"], 1.0)
             & (named["strategy"] == "all_ebike")
         ][["region_key", "annual_lifecycle_kg"]].rename(
@@ -763,9 +776,9 @@ def plot_regions_map_pathway_scenarios(
     shared_cmap, shared_norm, bin_edges, reduction_edges = _build_reduction_cmap(v_max)
 
     # Province order: total annual lifecycle emission under today's all-ebike
-    # baseline (kappa=1, gef=1, strategy=all_ebike). Largest emitters on the left.
+    # baseline (configured kappa, gef=1, strategy=all_ebike). Largest emitters on the left.
     anchor_named = named[
-        np.isclose(named["kappa"], 1.0)
+        np.isclose(named["kappa"], baseline_kappa)
         & np.isclose(named["gef_mult"], 1.0)
         & (named["strategy"] == "all_ebike")
     ].copy()

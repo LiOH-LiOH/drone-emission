@@ -68,6 +68,7 @@ def cal_emission(region_info, exp_config):
     drone_params = create_drone_params(exp_config)
     ebike_params.e_use = e_use
     drone_params.e_use = e_use
+    ebike_kappa = float(getattr(ebike_params, "kappa", 1.0))
 
     lca = LifeCycleEmissions(
         ebike_params=ebike_params,
@@ -82,6 +83,7 @@ def cal_emission(region_info, exp_config):
     print(
         f"E-bike velocity = {ebike_params.velocity} km/h, Drone velocity = {drone_params.v_level} km/h"
     )
+    print(f"E-bike kappa = {ebike_kappa:.6f}")
 
     # 检查是否已有排放列，避免重复计算
     has_emission_cols = (
@@ -93,8 +95,17 @@ def cal_emission(region_info, exp_config):
     has_time_cols = (
         "drone_time_min" in od_df.columns and "ebike_time_min" in od_df.columns
     )
+    cached_ebike_kappas = (
+        od_df["ebike_kappa"].dropna().to_numpy(dtype=float)
+        if "ebike_kappa" in od_df.columns
+        else np.array([])
+    )
+    has_matching_ebike_kappa = (
+        cached_ebike_kappas.size == len(od_df)
+        and np.allclose(cached_ebike_kappas, ebike_kappa)
+    )
 
-    if has_emission_cols and has_lifecycle_cols and has_time_cols:
+    if has_emission_cols and has_lifecycle_cols and has_time_cols and has_matching_ebike_kappa:
         print("Emission and time columns already exist, loading from CSV...")
         drone_emissions = od_df["drone_emission_kg"].values
         ebike_emissions = od_df["ebike_emission_kg"].values
@@ -123,13 +134,14 @@ def cal_emission(region_info, exp_config):
         for row in od_df.itertuples():
             distance_km = row.distance_km  # 直线距离，用于无人机
             road_distance_km = row.road_distance_m / 1000.0  # 道路距离，用于电动自行车
+            ebike_emission_distance_km = road_distance_km * ebike_kappa
 
             # Use-phase emissions
             result_drone = lca.calculate_drone_use_phase_emissions(
                 distance_km, payload_kg
             )
             result_ebike = lca.calculate_ebike_use_phase_emissions(
-                road_distance_km, payload_kg, rider_weight
+                ebike_emission_distance_km, payload_kg, rider_weight
             )
 
             drone_emissions_list.append(result_drone["emissions_kg_co2e"])
@@ -153,7 +165,7 @@ def cal_emission(region_info, exp_config):
                 distance_km, n_orders_per_delivery=1, vehicle_type="drone"
             )
             lifecycle_ebike = lca.calculate_lifecycle_emissions_per_order_simple(
-                road_distance_km, n_orders_per_delivery=1, vehicle_type="ebike"
+                ebike_emission_distance_km, n_orders_per_delivery=1, vehicle_type="ebike"
             )
 
             drone_lifecycle_list.append(lifecycle_drone["total_per_order_g"])
@@ -175,6 +187,7 @@ def cal_emission(region_info, exp_config):
         od_df["ebike_lifecycle_g"] = ebike_lifecycle
         od_df["drone_time_min"] = drone_time
         od_df["ebike_time_min"] = ebike_time
+        od_df["ebike_kappa"] = ebike_kappa
         od_df.to_csv(od_save_path, index=False)
         print(f"Emission and time data saved to {od_save_path}")
 

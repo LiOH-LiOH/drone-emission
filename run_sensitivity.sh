@@ -10,6 +10,7 @@
 #   ./run_sensitivity.sh 8                     # 8 parallel jobs, remote env
 #   ./run_sensitivity.sh 1 local               # sequential, local env
 #   ./run_sensitivity.sh 4 remote --include-districts
+#   ./run_sensitivity.sh 4 remote --force      # recompute existing outputs
 #
 # Logs go to ./logs/sensitivity_TIMESTAMP.log
 
@@ -50,7 +51,7 @@ EXTRA_FLAGS=()
 POSITIONAL=()
 for arg in "$@"; do
     case "$arg" in
-        --include-districts|--level=*|--region=*|--stages=*)
+        --force|--include-districts|--level=*|--region=*|--stages=*)
             EXTRA_FLAGS+=("$arg")
             ;;
         --level|--region|--stages)

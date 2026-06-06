@@ -72,7 +72,7 @@ def _scan_districts(data_dir: str) -> list[RegionConfig]:
     return out
 
 
-def _process_region(region_info, config: dict, stages=None) -> tuple[str, str, float]:
+def _process_region(region_info, config: dict, stages=None, force: bool = False) -> tuple[str, str, float]:
     """Return (region_key, status, elapsed_seconds). status ∈ {ok, skipped, missing_od, error}."""
     region_dict = region_info.to_dict()
     region_name_en = region_dict["region_name_en"].lower()
@@ -83,7 +83,7 @@ def _process_region(region_info, config: dict, stages=None) -> tuple[str, str, f
     # When restricting to a subset of stages, the "all outputs exist" early
     # exit must check only the requested stages — otherwise a stale full set
     # would skip a forced rerun of a single stage.
-    if stages is None and _outputs_exist(out_dir, region_name_en):
+    if not force and stages is None and _outputs_exist(out_dir, region_name_en):
         return region_key, "skipped", 0.0
     if not _od_csv_exists(out_dir, region_name_en):
         return region_key, "missing_od", 0.0
@@ -110,6 +110,8 @@ def main():
     parser.add_argument("--stages", type=str, default=None,
                          help="Comma-separated subset of stages to run: oat,shapley,sobol,named. "
                               "Default is all stages. Use 'oat' to run OAT-only.")
+    parser.add_argument("--force", action="store_true",
+                         help="Recompute requested sensitivity outputs even when CSVs already exist.")
     args = parser.parse_args()
 
     stages = None
@@ -117,6 +119,8 @@ def main():
         stages = [s.strip().lower() for s in args.stages.split(",") if s.strip()]
 
     config = load_config(os.path.join(PROJECT_ROOT, "experiment.toml"), env=args.env)
+    if args.force:
+        config.setdefault("sensitivity", {})["skip_if_done"] = False
     registry = init_registry(REGIONS_JSON, data_dir=config["data_dir"])
 
     regions: list = []
@@ -148,7 +152,9 @@ def main():
     elapsed_total = 0.0
 
     for i, (region_key, region_info) in enumerate(regions, 1):
-        rk, status, elapsed = _process_region(region_info, config, stages=stages)
+        rk, status, elapsed = _process_region(
+            region_info, config, stages=stages, force=args.force
+        )
         counts[status] += 1
         elapsed_total += elapsed
         print(f"[{i}/{n}] {rk}: {status} ({elapsed:.1f}s)", flush=True)

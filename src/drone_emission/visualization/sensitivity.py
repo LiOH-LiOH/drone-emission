@@ -574,8 +574,12 @@ def _pivot_mc_summary(sobol: pd.DataFrame) -> pd.DataFrame | None:
     if mc.empty:
         return None
     wide = mc.pivot_table(index="region_key", columns="feature", values="value")
+    old_anchor_col = "anchor_kappa1_reduction_pct"
+    anchor_col = "anchor_baseline_kappa_reduction_pct"
+    if anchor_col not in wide.columns and old_anchor_col in wide.columns:
+        wide[anchor_col] = wide[old_anchor_col]
     needed = ["mc_median_reduction_pct", "mc_p2.5", "mc_p97.5",
-              "anchor_kappa1_reduction_pct", "mc_mean_reduction_pct"]
+              anchor_col, "mc_mean_reduction_pct"]
     missing = [c for c in needed if c not in wide.columns]
     if missing:
         print(f"  _pivot_mc_summary: missing columns {missing}")
@@ -941,11 +945,11 @@ def plot_mc_uncertainty(
     for_latex: bool = False,
     plot_title: bool = False,
 ):
-    """Cross-city distribution of MC reduction% vs the κ=1.0 anchor.
+    """Cross-city distribution of MC reduction% vs the baseline-κ anchor.
 
     Two panels framing the headline robustness finding: the Saltelli uniform
     sample (which includes drone-uncompetitive corners) gives a much lower
-    median reduction than the policy-relevant κ=1.0 anchor.
+    median reduction than the policy-relevant baseline-κ anchor.
 
     Left: CDF of per-city MC medians with the 95% MC band as a ribbon, and
     the CDF of per-city anchor reductions overlaid for direct comparison.
@@ -967,12 +971,12 @@ def plot_mc_uncertainty(
 
     n = len(wide)
     by_mc = wide.sort_values("mc_median_reduction_pct").reset_index(drop=True)
-    by_anchor = wide.sort_values("anchor_kappa1_reduction_pct").reset_index(drop=True)
+    by_anchor = wide.sort_values("anchor_baseline_kappa_reduction_pct").reset_index(drop=True)
     rank = np.arange(1, n + 1) / n * 100.0
     mc_color = "#C44E52"  # fixed red for MC distribution (was OAT_MECHANISM_COLORS["grid"])
     anchor_color = OAT_MECHANISM_COLORS["anchor"]
-    anchor_mean = float(wide["anchor_kappa1_reduction_pct"].mean())
-    anchor_median = float(wide["anchor_kappa1_reduction_pct"].median())
+    anchor_mean = float(wide["anchor_baseline_kappa_reduction_pct"].mean())
+    anchor_median = float(wide["anchor_baseline_kappa_reduction_pct"].median())
     mc_median_overall = float(wide["mc_median_reduction_pct"].median())
 
     fig, (ax_l, ax_r) = plt.subplots(1, 2, figsize=figsize)
@@ -984,23 +988,23 @@ def plot_mc_uncertainty(
     ax_l.plot(by_mc["mc_median_reduction_pct"], rank,
               color=mc_color, linewidth=1.8,
               label=f"MC median (cross-city median {mc_median_overall:.1f}%)")
-    ax_l.plot(by_anchor["anchor_kappa1_reduction_pct"], rank,
+    ax_l.plot(by_anchor["anchor_baseline_kappa_reduction_pct"], rank,
               color=anchor_color, linewidth=1.8, linestyle="--",
-              label=f"Anchor κ=1.0 (cross-city median {anchor_median:.1f}%)")
+              label=f"Anchor baseline κ (cross-city median {anchor_median:.1f}%)")
     ax_l.set_xlabel("Reduction vs e-bike-only (%)")
     ax_l.set_ylabel("City percentile")
     ax_l.set_xlim(left=min(-5, float(by_mc["mc_p2.5"].min()) - 2))
     ax_l.legend(loc="lower right", fontsize=8, frameon=True)
 
     # Right: paired histogram of MC median (left-skewed) and anchor
-    bins = np.linspace(0, max(float(wide["anchor_kappa1_reduction_pct"].max()),
+    bins = np.linspace(0, max(float(wide["anchor_baseline_kappa_reduction_pct"].max()),
                               float(wide["mc_p97.5"].max())) + 2, 40)
     ax_r.hist(wide["mc_median_reduction_pct"].dropna(), bins=bins,
               color=mc_color, alpha=0.55, edgecolor="black", linewidth=0.4,
               label=f"MC median (mean {wide['mc_median_reduction_pct'].mean():.1f}%)")
-    ax_r.hist(wide["anchor_kappa1_reduction_pct"].dropna(), bins=bins,
+    ax_r.hist(wide["anchor_baseline_kappa_reduction_pct"].dropna(), bins=bins,
               color=anchor_color, alpha=0.55, edgecolor="black", linewidth=0.4,
-              label=f"Anchor κ=1.0 (mean {anchor_mean:.1f}%)")
+              label=f"Anchor baseline κ (mean {anchor_mean:.1f}%)")
     ax_r.axvline(anchor_mean, color=anchor_color, linestyle=":", linewidth=1.2)
     ax_r.set_xlabel("Reduction vs e-bike-only (%)")
     ax_r.set_ylabel("Number of cities")
@@ -1024,7 +1028,7 @@ def plot_mc_anchor_forest(
     """Per-city anchor reduction with the MC 95% band as vertical whiskers.
 
     Cities ordered along x by anchor reduction. Each city gets a dot for the
-    anchor (κ=1.0) reduction and a vertical [p2.5, p97.5] MC whisker. The
+    anchor (baseline κ) reduction and a vertical [p2.5, p97.5] MC whisker. The
     line plot of the MC median across the same ordering is overlaid so the
     reader sees whether the policy-relevant anchor sits inside the naive MC
     band for every city.
@@ -1041,7 +1045,7 @@ def plot_mc_anchor_forest(
     wide = _pivot_mc_summary(sobol)
     if wide is None:
         return None
-    wide = wide.sort_values("anchor_kappa1_reduction_pct").reset_index(drop=True)
+    wide = wide.sort_values("anchor_baseline_kappa_reduction_pct").reset_index(drop=True)
     if show_every > 1:
         wide = wide.iloc[::show_every].reset_index(drop=True)
     n = len(wide)
@@ -1055,9 +1059,9 @@ def plot_mc_anchor_forest(
               label="95% MC band")
     ax.plot(x, wide["mc_median_reduction_pct"], color=mc_color,
             linewidth=1.4, alpha=0.85, label="MC median")
-    ax.scatter(x, wide["anchor_kappa1_reduction_pct"],
+    ax.scatter(x, wide["anchor_baseline_kappa_reduction_pct"],
                color=anchor_color, s=10, zorder=4,
-               label="Anchor κ=1.0")
+               label="Anchor baseline κ")
     ax.set_xlabel("City (ordered by anchor reduction)")
     ax.set_ylabel("Reduction vs e-bike-only (%)")
     ax.set_xlim(-1, n)
@@ -1065,7 +1069,7 @@ def plot_mc_anchor_forest(
     ax.legend(loc="upper left", fontsize=8, frameon=True)
 
     if plot_title:
-        ax.set_title(f"Per-city MC band vs κ=1.0 anchor (n={n} cities)")
+        ax.set_title(f"Per-city MC band vs baseline-κ anchor (n={n} cities)")
     fig.tight_layout()
     return _finalize(save_path, dpi, for_latex, plot_title)
 
@@ -1081,7 +1085,7 @@ def plot_mc_anchor_scatter(
     """Scatter of anchor reduction (x) vs MC median reduction (y), per city.
 
     y = x diagonal drawn for reference. Cities above the diagonal: MC sample
-    happens to land above the κ=1.0 anchor (rare). Cities below: the naive
+    happens to land above the baseline-κ anchor (rare). Cities below: the naive
     uniform MC understates the policy-relevant reduction.
 
     Args:
@@ -1095,7 +1099,7 @@ def plot_mc_anchor_scatter(
     if wide is None:
         return None
 
-    anchor = wide["anchor_kappa1_reduction_pct"].to_numpy()
+    anchor = wide["anchor_baseline_kappa_reduction_pct"].to_numpy()
     mc_med = wide["mc_median_reduction_pct"].to_numpy()
     lo = float(min(np.nanmin(anchor), np.nanmin(mc_med)))
     hi = float(max(np.nanmax(anchor), np.nanmax(mc_med)))
@@ -1107,7 +1111,7 @@ def plot_mc_anchor_scatter(
             linewidth=0.8, linestyle="--", alpha=0.7, label="$y = x$")
     ax.scatter(anchor, mc_med, color=mc_color, alpha=0.55, s=18,
                edgecolor="none")
-    ax.set_xlabel("Anchor κ=1.0 reduction (%)")
+    ax.set_xlabel("Anchor baseline κ reduction (%)")
     ax.set_ylabel("MC median reduction (%)")
     ax.set_xlim(lo - pad, hi + pad)
     ax.set_ylim(lo - pad, hi + pad)
@@ -1122,7 +1126,7 @@ def plot_mc_anchor_scatter(
             bbox=dict(facecolor="white", edgecolor="black", alpha=0.85, pad=4))
 
     if plot_title:
-        ax.set_title("MC median vs κ=1.0 anchor per city")
+        ax.set_title("MC median vs baseline-κ anchor per city")
     fig.tight_layout()
     return _finalize(save_path, dpi, for_latex, plot_title)
 
@@ -1150,7 +1154,7 @@ def plot_named_boxplot(
             data.append(sub["reduction_vs_anchor_ebike_pct"].dropna().to_numpy())
             positions.append(pos)
             labels.append(f"{strat}\nκ={kappa}")
-            colors.append("#4C72B0" if kappa == 0.7 else "#DD8452")
+            colors.append("#4C72B0" if np.isclose(kappa, 0.7) else "#DD8452")
             pos += 1
         pos += 1
 

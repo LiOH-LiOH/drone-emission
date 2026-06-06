@@ -24,6 +24,7 @@ class EbikeParams:
     # 运行参数
     velocity: float = 30  # 速度 (km/h)
     e_use: float = 0.6  # 使用阶段排放因子 (kg CO2e/kWh)
+    kappa: float = 1.0  # Effective per-order distance factor for bundling
 
     # 寿命与数量
     lifespan: int = 4  # 使用寿命 (年)
@@ -214,6 +215,7 @@ def create_ebike_params(exp_config: Dict = None) -> EbikeParams:
     return EbikeParams(
         velocity=ebike_config.get("velocity", 30),
         e_use=emission_params.get("e_use", 0.6),
+        kappa=ebike_config.get("kappa", 1.0),
     )
 
 

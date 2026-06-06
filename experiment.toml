@@ -42,6 +42,7 @@ e_use = 0.4               # Grid emission factor (kg CO2e/kWh)
 
 [emission_params.ebike]
 velocity = 30             # E-bike velocity (km/h)
+kappa = 0.7692307692307692 # Effective per-order e-bike distance factor: 1 / sqrt(1.69)
 
 [emission_params.drone]
 v_level = 60              # Horizontal flight speed (km/h)

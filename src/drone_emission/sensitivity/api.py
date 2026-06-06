@@ -1,7 +1,7 @@
 """Sensitivity stage entry point.
 
-Runs OAT sweep, 4-mechanism Shapley decomposition, and named-scenarios for a
-single region; writes three CSV outputs alongside the existing per-region
+Runs OAT sweep, 4-mechanism Shapley decomposition, named scenarios, and Sobol
+MC for a single region; writes CSV outputs alongside the existing per-region
 data, and runs a runtime sanity check that the baseline scenario reproduces
 the values written by ``cal_emission`` to within 0.1%.
 """
@@ -103,8 +103,7 @@ def run_sensitivity(region_info, exp_config, stages=None) -> None:
     """Compute OAT + Shapley + named-scenarios for a single region.
 
     Reads the region's OD CSV produced by ``cal_emission`` and writes three
-    CSVs (``{region}_oat.csv``, ``{region}_shapley.csv``, ``{region}_named.csv``)
-    next to it.
+    sensitivity CSVs next to it.
     """
     cfg = region_info.to_dict()
     region_name_en = cfg["region_name_en"].lower()

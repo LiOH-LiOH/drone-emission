@@ -42,12 +42,14 @@ TOP6_REDUCTION_DETOUR_FIGURES = {
     "top6_reduction_detour_grid_random",
 }
 
-# Bundling factor used as the all-ebike baseline in the reduction-detour grids.
-# Recomputes ``ebike_lifecycle_g`` per OD via the vectorized LCA so the
-# (e-bike − drone) / e-bike comparison is against realistically-bundled ebike,
-# not the kappa=1.0 value stored in the OD CSV.
-REDUCTION_DETOUR_KAPPA = 1 / (1.69 ** 0.5)
 REDUCTION_DETOUR_CACHE_VERSION = 1
+
+
+def _get_ebike_kappa(exp_config):
+    """Return the configured baseline e-bike distance factor."""
+    emission_params = (exp_config or {}).get("emission_params", {})
+    ebike_params = emission_params.get("ebike", {})
+    return float(ebike_params.get("kappa", 1.0))
 
 
 def _file_cache_signature(path):
@@ -92,13 +94,14 @@ def _render_reduction_detour_grid_variant(
     )
 
     if exp_config is None:
-        print(f"{figure_name}: exp_config missing; cannot apply kappa={REDUCTION_DETOUR_KAPPA}")
+        print(f"{figure_name}: exp_config missing; cannot apply configured kappa")
         return
 
+    ebike_kappa = _get_ebike_kappa(exp_config)
     ebike_params = create_ebike_params(exp_config)
     emission_cfg = get_emission_params(exp_config)
     scenario = EbikeScenario(
-        kappa=REDUCTION_DETOUR_KAPPA,
+        kappa=ebike_kappa,
         rider_weight=emission_cfg["rider_weight"],
         payload_kg=emission_cfg["payload_kg"],
     )
@@ -143,7 +146,7 @@ def _render_reduction_detour_grid_variant(
             "city_keys": available_keys,
             "source_files": source_files,
             "gef": {key: float(gef_map[key]) for key in available_keys},
-            "kappa": REDUCTION_DETOUR_KAPPA,
+            "kappa": ebike_kappa,
             "ebike_params": asdict(ebike_params),
             "scenario": asdict(scenario),
             "bin_width_km": bin_width_km,
@@ -225,7 +228,7 @@ def _render_reduction_detour_grid_variant(
                 )
             print(f"{figure_name}: wrote binned data cache {cache_path}")
         print(
-            f"{figure_name}: rebuilt binned data at kappa={REDUCTION_DETOUR_KAPPA} "
+            f"{figure_name}: rebuilt binned data at kappa={ebike_kappa} "
             f"for {len(binned_by_city)} cities"
         )
         plot_reduction_detour_grid_binned(
@@ -245,7 +248,7 @@ def _render_reduction_detour_grid_variant(
             grid_wspace=grid_wspace,
         )
     elif od_dfs:
-        print(f"{figure_name}: rebuilt ebike_lifecycle_g at kappa={REDUCTION_DETOUR_KAPPA} for {len(od_dfs)} cities")
+        print(f"{figure_name}: rebuilt ebike_lifecycle_g at kappa={ebike_kappa} for {len(od_dfs)} cities")
         plot_reduction_detour_grid(
             od_dfs=od_dfs,
             city_labels=labels,

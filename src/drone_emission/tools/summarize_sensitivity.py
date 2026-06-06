@@ -36,7 +36,7 @@ def summarize_oat(df: pd.DataFrame) -> None:
 
     # Baseline (anchor) row per city
     base = df[df["feature_varied"] == "baseline"].copy()
-    print("--- Anchor baseline (κ=1, gef=1, payload=1, lifespans=4) ---")
+    print("--- Anchor baseline (configured κ, gef=1, payload=1, lifespans=4) ---")
     print(f"  cities with baseline row: {len(base)}")
     q1, q2, q3 = _q(base["reduction_vs_anchor_ebike_pct"])
     print(f"  reduction_vs_anchor_ebike_pct  P25/P50/P75: {q1} / {q2} / {q3}")
@@ -143,7 +143,7 @@ def compare_to_projections(oat: pd.DataFrame, shap: pd.DataFrame, named: pd.Data
     actual_anchor = float(base["reduction_vs_anchor_ebike_pct"].median())
     actual_share = float((base["reduction_vs_anchor_ebike_pct"] > 0).mean()) * 100
     print(f"  Anchor median reduction:      actual {actual_anchor:.1f}%   projected ~25% (15–35%)")
-    print(f"  Beneficial-city share @ κ=1:  actual {actual_share:.1f}%    projected >95%")
+    print(f"  Beneficial-city share @ anchor κ: actual {actual_share:.1f}%    projected >95%")
 
     # Tornado top-1 feature
     base_by_city = base.set_index("region_key")["reduction_vs_anchor_ebike_pct"]

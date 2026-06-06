@@ -25,8 +25,8 @@ lever instead. Ranges match OAT FEATURE_LEVELS, with Sobol extending
 asymmetric ranges (e.g. hover, headwind) down to the baseline so that
 uniform Saltelli sampling covers the full operating envelope.
 
-A separate anchor row reports the all-baseline (κ=1.0) reduction so the §2
-headline (29.2%) reconciles with the Sobol/MC summary without the κ=0.7
+A separate anchor row reports the configured all-baseline κ reduction so the §2
+headline reconciles with the Sobol/MC summary without the κ=0.7
 inconsistency that plagued the Shapley decomposition.
 
 Output CSV schema (per region)::
@@ -40,7 +40,7 @@ Output CSV schema (per region)::
     mc_summary   mc_p2.5                                               ...
     mc_summary   mc_p97.5                                              ...
     mc_summary   mc_n_samples                                          ...
-    mc_summary   anchor_kappa1_reduction_pct                           ...
+    mc_summary   anchor_baseline_kappa_reduction_pct                   ...
 """
 
 from __future__ import annotations
@@ -223,7 +223,7 @@ def run_sobol_for_region(
     # always has a fallback — features inside SOBOL_RANGES overwrite the
     # fixed value via sample_values on each Saltelli row.
     fixed = {
-        "kappa":                BASELINE["kappa"],
+        "kappa":                float(getattr(ebike_params, "kappa", BASELINE["kappa"])),
         "gef_mult":             BASELINE["gef_mult"],
         "drone_energy_mult":    BASELINE["drone_energy_mult"],
         "payload_kg":           BASELINE["payload_kg"],
@@ -280,9 +280,10 @@ def run_sobol_for_region(
             "value": float("nan"),
         })
 
-    # Anchor (all-baseline, κ=1.0) reduction for reconciling with the §2
+    # Anchor (all-baseline, configured κ) reduction for reconciling with the §2
     # headline. Same call as a Sobol sample with all values at baseline.
     anchor_sample = {f: _resolve_baseline(f, drone_pp) for f in feature_names}
+    anchor_sample["kappa"] = fixed["kappa"]
     anchor_red = _reduction_for_sample(
         anchor_sample,
         road_distances_km, straight_distances_km,
@@ -296,7 +297,7 @@ def run_sobol_for_region(
         ("mc_p2.5",                     float(np.percentile(Y, 2.5))),
         ("mc_p97.5",                    float(np.percentile(Y, 97.5))),
         ("mc_n_samples",                float(Y.size)),
-        ("anchor_kappa1_reduction_pct", float(anchor_red)),
+        ("anchor_baseline_kappa_reduction_pct", float(anchor_red)),
     ]
     for name, val in mc_rows:
         rows.append({
