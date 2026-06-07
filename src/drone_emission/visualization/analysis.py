@@ -1947,6 +1947,12 @@ def plot_city_gef_scatter_components(
     ax.set_xticks(x_all)
     ax.set_xticklabels(labels)
     ax.tick_params(axis="x", which="both", bottom=True, labelbottom=True, pad=2)
+    ax.set_zorder(3)
+    ax_fixed.set_zorder(1)
+    ax.patch.set_visible(False)
+    for tick_label in ax.get_xticklabels():
+        tick_label.set_clip_on(False)
+        tick_label.set_zorder(10)
     ax.set_xlim(-0.5, len(labels) - 0.5)
     ax.grid(True, axis="y", alpha=0.3, linestyle="--")
     ax.set_axisbelow(True)
