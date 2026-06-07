@@ -1643,10 +1643,9 @@ def plot_city_gef_distribution(
 
     gef_label = VARIABLE_LABELS.get(gef_col, "Grid Emission Factor (kg CO2e/kWh)")
     ax.set_ylabel("Use phase\n(g CO2e/order)", fontsize=12)
-    ax.set_xlabel(gef_label, fontsize=12)
     ax.set_xticks(x_all)
     ax.set_xticklabels(labels)
-    ax.tick_params(axis="x", which="both", bottom=True, labelbottom=True, pad=2)
+    ax.tick_params(axis="x", which="both", bottom=False, labelbottom=False)
     ax.set_xlim(-0.5, len(labels) - 0.5)
     ax.set_yscale("log")
     box_values = np.array(box_values, dtype=float)
@@ -1700,8 +1699,20 @@ def plot_city_gef_distribution(
     ax_fixed.set_yscale("log")
     ax_fixed.set_ylim(y_data_max * 1.12, y_floor)
     ax_fixed.set_ylabel("Production + EOL\n(g CO2e/order)", fontsize=12)
+    ax_fixed.set_xlabel(gef_label, fontsize=12)
+    ax_fixed.xaxis.set_label_position("top")
+    ax_fixed.xaxis.set_ticks_position("top")
     ax_fixed.set_xticks(x_all)
-    ax_fixed.tick_params(axis="x", which="both", bottom=False, labelbottom=False)
+    ax_fixed.set_xticklabels(labels)
+    ax_fixed.tick_params(
+        axis="x",
+        which="both",
+        top=True,
+        labeltop=True,
+        bottom=False,
+        labelbottom=False,
+        pad=2,
+    )
     ax_fixed.set_xlim(-0.5, len(labels) - 0.5)
     ax_fixed.grid(True, axis="y", alpha=0.3, linestyle="--")
     ax_fixed.set_axisbelow(True)
