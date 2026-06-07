@@ -1621,7 +1621,7 @@ def plot_city_gef_distribution(
             fontweight="bold",
         )
 
-    plt.tight_layout()
+    fig.subplots_adjust(left=0.11, right=0.98, bottom=0.18, top=0.96)
 
     if save_path:
         if for_latex and not save_path.endswith(".pdf"):
