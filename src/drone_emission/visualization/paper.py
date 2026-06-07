@@ -14,6 +14,7 @@ Available figures:
     shanghai_heatmap, shanghai_road_air_distance, shanghai_road_detour,
     shanghai_air_detour, shanghai_air_road_joint, shanghai_emission_reduction,
     shanghai_emission_by_distance, shanghai_reduction_detour_by_distance,
+    shanghai_city_context,
     top6_reduction_detour_grid, top6_reduction_detour_grid_low_gef,
     top6_reduction_detour_grid_random,
     province_orders_emission, province_orders_both_emissions,
@@ -46,6 +47,7 @@ TOP6_REDUCTION_DETOUR_FIGURES = {
     "top6_reduction_detour_grid_low_gef",
     "top6_reduction_detour_grid_random",
 }
+SHANGHAI_CITY_CONTEXT_FIGURE = "shanghai_city_context"
 
 REDUCTION_DETOUR_CACHE_VERSION = 2
 REDUCTION_DETOUR_SELECTION_METRIC = "total_ebike_lifecycle"
@@ -125,40 +127,26 @@ def _prepare_reduction_detour_city_stats(city_df):
     return city_df.dropna(subset=list(required))
 
 
-def _render_reduction_detour_grid_variant(
+def _build_reduction_detour_binned_by_city(
     data_dir,
-    out,
-    for_latex,
-    plot_title,
     selected,
     figure_name,
     exp_config=None,
     absolute_reduction_metric="total_t",
-    show_detour_boxplot=True,
-    mark_reduction_break_even=False,
-    figsize=(12, 14),
-    n_cols=2,
-    grid_hspace=0.45,
-    grid_wspace=0.22,
     use_binned_cache=False,
     bin_width_km=0.1,
-    min_air_km=0.0,
 ):
-    """Load selected city OD data and render a reduction-detour grid."""
+    """Return binned reduction-detour data for selected city rows."""
     from dataclasses import asdict, replace
 
     from emission.cal_single_delivery import create_ebike_params, get_emission_params
     from sensitivity.vectorized_lca import EbikeScenario, compute_ebike_per_order_g
     from utils.config import get_cache_dir
-    from visualization.analysis import (
-        _bin_reduction_and_detour,
-        plot_reduction_detour_grid,
-        plot_reduction_detour_grid_binned,
-    )
+    from visualization.analysis import _bin_reduction_and_detour
 
     if exp_config is None:
         print(f"{figure_name}: exp_config missing; cannot apply configured kappa")
-        return
+        return None
 
     ebike_kappa = _get_ebike_kappa(exp_config)
     ebike_params = create_ebike_params(exp_config)
@@ -196,7 +184,7 @@ def _render_reduction_detour_grid_variant(
 
     if not available_keys:
         print(f"{figure_name}: no city OD data available")
-        return
+        return None
 
     if use_binned_cache:
         cache_path = os.path.join(
@@ -221,23 +209,7 @@ def _render_reduction_detour_grid_variant(
                     cache = pickle.load(f)
                 if cache.get("meta") == cache_meta:
                     print(f"{figure_name}: loading binned data cache {cache_path}")
-                    plot_reduction_detour_grid_binned(
-                        binned_by_city=cache["binned_by_city"],
-                        city_labels=labels,
-                        save_path=os.path.join(out, f"{figure_name}.png"),
-                        figsize=figsize,
-                        for_latex=for_latex,
-                        plot_title=plot_title,
-                        bin_width_km=bin_width_km,
-                        n_cols=n_cols,
-                        min_air_km=min_air_km,
-                        absolute_reduction_metric=absolute_reduction_metric,
-                        show_detour_boxplot=show_detour_boxplot,
-                        mark_reduction_break_even=mark_reduction_break_even,
-                        grid_hspace=grid_hspace,
-                        grid_wspace=grid_wspace,
-                    )
-                    return
+                    return cache["binned_by_city"], labels
                 print(f"{figure_name}: binned data cache is stale; rebuilding")
             except Exception as exc:
                 print(
@@ -245,7 +217,6 @@ def _render_reduction_detour_grid_variant(
                     "rebuilding"
                 )
 
-    od_dfs = {}
     binned_by_city = {}
     required = {
         "road_distance_m",
@@ -265,21 +236,18 @@ def _render_reduction_detour_grid_variant(
         road_km = od_df["road_distance_m"].to_numpy(dtype=float) / 1000.0
         od_df = od_df.copy()
         od_df["ebike_lifecycle_g"] = compute_ebike_per_order_g(road_km, ebike_pp, scenario)
-        if use_binned_cache:
-            centres, reduction_pct, reduction_abs, detour_by_bin, max_km = (
-                _bin_reduction_and_detour(
-                    od_df, bin_width_km, absolute_reduction_metric
-                )
+        centres, reduction_pct, reduction_abs, detour_by_bin, max_km = (
+            _bin_reduction_and_detour(
+                od_df, bin_width_km, absolute_reduction_metric
             )
-            binned_by_city[key] = {
-                "centres": centres,
-                "reduction_pct": reduction_pct,
-                "reduction_abs": reduction_abs,
-                "detour_by_bin": detour_by_bin,
-                "max_km": max_km,
-            }
-        else:
-            od_dfs[key] = od_df
+        )
+        binned_by_city[key] = {
+            "centres": centres,
+            "reduction_pct": reduction_pct,
+            "reduction_abs": reduction_abs,
+            "detour_by_bin": detour_by_bin,
+            "max_km": max_km,
+        }
 
     if use_binned_cache and binned_by_city:
         if cache_path and cache_meta:
@@ -290,46 +258,69 @@ def _render_reduction_detour_grid_variant(
                     protocol=pickle.HIGHEST_PROTOCOL,
                 )
             print(f"{figure_name}: wrote binned data cache {cache_path}")
+    if binned_by_city:
         print(
             f"{figure_name}: rebuilt binned data at kappa={ebike_kappa} "
             f"for {len(binned_by_city)} cities"
         )
-        plot_reduction_detour_grid_binned(
-            binned_by_city=binned_by_city,
-            city_labels=labels,
-            save_path=os.path.join(out, f"{figure_name}.png"),
-            figsize=figsize,
-            for_latex=for_latex,
-            plot_title=plot_title,
-            bin_width_km=bin_width_km,
-            n_cols=n_cols,
-            min_air_km=min_air_km,
-            absolute_reduction_metric=absolute_reduction_metric,
-            show_detour_boxplot=show_detour_boxplot,
-            mark_reduction_break_even=mark_reduction_break_even,
-            grid_hspace=grid_hspace,
-            grid_wspace=grid_wspace,
-        )
-    elif od_dfs:
-        print(f"{figure_name}: rebuilt ebike_lifecycle_g at kappa={ebike_kappa} for {len(od_dfs)} cities")
-        plot_reduction_detour_grid(
-            od_dfs=od_dfs,
-            city_labels=labels,
-            save_path=os.path.join(out, f"{figure_name}.png"),
-            figsize=figsize,
-            for_latex=for_latex,
-            plot_title=plot_title,
-            bin_width_km=bin_width_km,
-            n_cols=n_cols,
-            min_air_km=min_air_km,
-            absolute_reduction_metric=absolute_reduction_metric,
-            show_detour_boxplot=show_detour_boxplot,
-            mark_reduction_break_even=mark_reduction_break_even,
-            grid_hspace=grid_hspace,
-            grid_wspace=grid_wspace,
-        )
-    else:
+        return binned_by_city, labels
+
+    print(f"{figure_name}: no city OD data available")
+    return None
+
+
+def _render_reduction_detour_grid_variant(
+    data_dir,
+    out,
+    for_latex,
+    plot_title,
+    selected,
+    figure_name,
+    exp_config=None,
+    absolute_reduction_metric="total_t",
+    show_detour_boxplot=True,
+    mark_reduction_break_even=False,
+    figsize=(12, 14),
+    n_cols=2,
+    grid_hspace=0.45,
+    grid_wspace=0.22,
+    use_binned_cache=False,
+    bin_width_km=0.1,
+    min_air_km=0.0,
+):
+    """Load selected city OD data and render a reduction-detour grid."""
+    from visualization.analysis import plot_reduction_detour_grid_binned
+
+    built = _build_reduction_detour_binned_by_city(
+        data_dir=data_dir,
+        selected=selected,
+        figure_name=figure_name,
+        exp_config=exp_config,
+        absolute_reduction_metric=absolute_reduction_metric,
+        use_binned_cache=use_binned_cache,
+        bin_width_km=bin_width_km,
+    )
+    if built is None:
         print(f"{figure_name}: no city OD data available")
+        return
+
+    binned_by_city, labels = built
+    plot_reduction_detour_grid_binned(
+        binned_by_city=binned_by_city,
+        city_labels=labels,
+        save_path=os.path.join(out, f"{figure_name}.png"),
+        figsize=figsize,
+        for_latex=for_latex,
+        plot_title=plot_title,
+        bin_width_km=bin_width_km,
+        n_cols=n_cols,
+        min_air_km=min_air_km,
+        absolute_reduction_metric=absolute_reduction_metric,
+        show_detour_boxplot=show_detour_boxplot,
+        mark_reduction_break_even=mark_reduction_break_even,
+        grid_hspace=grid_hspace,
+        grid_wspace=grid_wspace,
+    )
 
 
 def _select_top6_reduction_detour_variants(city_df, gef_df):
@@ -414,6 +405,108 @@ def _render_shanghai_heatmap(data_dir, out, for_latex, plot_title):
         lng_range=(121.0, 121.9),
         lat_range=(30.9, 31.55),
     )
+
+
+def _render_shanghai_city_context(data_dir, out, for_latex, plot_title, city_df, exp_config):
+    """Render a one-row Shanghai city context figure."""
+    region_key = "shanghai"
+    sales_path = os.path.join(data_dir, "city", region_key, f"{region_key}_sales.csv")
+    if not os.path.exists(sales_path):
+        print(f"{SHANGHAI_CITY_CONTEXT_FIGURE} skipped — missing {sales_path}")
+        return
+
+    selected = city_df[city_df["region_key"] == region_key].copy()
+    if selected.empty:
+        print(f"{SHANGHAI_CITY_CONTEXT_FIGURE} skipped — Shanghai row missing")
+        return
+
+    built = _build_reduction_detour_binned_by_city(
+        data_dir=data_dir,
+        selected=selected,
+        figure_name=SHANGHAI_CITY_CONTEXT_FIGURE,
+        exp_config=exp_config,
+        absolute_reduction_metric="per_order_g",
+        use_binned_cache=False,
+        bin_width_km=0.1,
+    )
+    if built is None:
+        return
+
+    binned_by_city, labels = built
+    if region_key not in binned_by_city:
+        print(f"{SHANGHAI_CITY_CONTEXT_FIGURE} skipped — Shanghai binned data missing")
+        return
+
+    import matplotlib.pyplot as plt
+
+    from visualization._utils import _add_title_suffix
+    from visualization.analysis import _plot_reduction_detour_panel
+    from visualization.sales import _plot_sales_heatmap_on_ax
+
+    sales_df = pd.read_csv(sales_path)
+    fig = plt.figure(figsize=(14.5, 5.6))
+    outer = fig.add_gridspec(1, 2, width_ratios=[1.05, 1.0], wspace=0.34)
+    heatmap_grid = outer[0].subgridspec(1, 2, width_ratios=[24, 1], wspace=0.05)
+    ax_heatmap = fig.add_subplot(heatmap_grid[0])
+    cax_heatmap = fig.add_subplot(heatmap_grid[1])
+
+    _plot_sales_heatmap_on_ax(
+        ax_heatmap,
+        sales_df,
+        "上海市",
+        boundaries_dict=None,
+        lng_range=(121.0, 121.9),
+        lat_range=(30.9, 31.55),
+        zoom=14,
+        cax=cax_heatmap,
+    )
+    ax_heatmap.set_xlabel("Longitude", fontsize=10)
+    ax_heatmap.set_ylabel("Latitude", fontsize=10)
+    ax_heatmap.grid(True, alpha=0.3, linestyle="--", color="white")
+    ax_heatmap.ticklabel_format(useOffset=False, style="plain")
+    ax_heatmap.text(
+        -0.10,
+        1.02,
+        "a",
+        transform=ax_heatmap.transAxes,
+        fontsize=13,
+        fontweight="bold",
+        va="bottom",
+    )
+
+    _, ax_reduction, _ = _plot_reduction_detour_panel(
+        fig,
+        outer[1],
+        binned_by_city[region_key],
+        labels.get(region_key, "Shanghai"),
+        bin_width_km=0.1,
+        min_air_km=0.2,
+        absolute_reduction_metric="per_order_g",
+        show_detour_boxplot=False,
+        mark_reduction_break_even=True,
+    )
+    ax_reduction.text(
+        -0.12,
+        1.08,
+        "b",
+        transform=ax_reduction.transAxes,
+        fontsize=13,
+        fontweight="bold",
+        va="bottom",
+    )
+
+    if plot_title:
+        fig.suptitle("Shanghai Delivery Demand and Emission Reduction by Distance", fontsize=14)
+
+    save_path = os.path.join(out, f"{SHANGHAI_CITY_CONTEXT_FIGURE}.png")
+    if for_latex and not save_path.endswith(".pdf"):
+        save_path = save_path.rsplit(".", 1)[0] + ".pdf"
+    if plot_title:
+        save_path = _add_title_suffix(save_path)
+    os.makedirs(os.path.dirname(save_path), exist_ok=True)
+    fig.savefig(save_path, dpi=300, bbox_inches="tight")
+    plt.close(fig)
+    print(f"Shanghai city context saved to {save_path}")
 
 
 def _render_shanghai_road_air_distance(data_dir, out, for_latex, plot_title):
@@ -857,6 +950,7 @@ def render_all(data_dir: str, figures_dir: str, for_latex: bool = False, plot_ti
         "regions_map_city_rank_inset",
         "regions_map_kappa_panels",
         "regions_map_pathway_scenarios",
+        SHANGHAI_CITY_CONTEXT_FIGURE,
     } | gef_figures | TOP6_REDUCTION_DETOUR_FIGURES
     if only is None or only & stats_figures:
         stats_path = os.path.join(data_dir, "all_region_stats.csv")
@@ -913,7 +1007,13 @@ def render_all(data_dir: str, figures_dir: str, for_latex: bool = False, plot_ti
                     plot_title=plot_title,
                 )
 
-            if _want("top6_reduction_detour_grid") or _want("top6_reduction_detour_grid_low_gef") or _want("top6_reduction_detour_grid_random"):
+            needs_reduction_detour_city_stats = (
+                _want(SHANGHAI_CITY_CONTEXT_FIGURE)
+                or _want("top6_reduction_detour_grid")
+                or _want("top6_reduction_detour_grid_low_gef")
+                or _want("top6_reduction_detour_grid_random")
+            )
+            if needs_reduction_detour_city_stats:
                 city_df = df[df["region_level"] == "city"].copy()
                 gef_path = os.path.join(data_dir, "gef_china.csv")
                 gef_df = pd.read_csv(gef_path, encoding="gbk")
@@ -921,6 +1021,17 @@ def render_all(data_dir: str, figures_dir: str, for_latex: bool = False, plot_ti
                 city_df = city_df.merge(gef_df, on="province", how="left")
                 city_df = _prepare_reduction_detour_city_stats(city_df)
 
+                if _want(SHANGHAI_CITY_CONTEXT_FIGURE):
+                    _render_shanghai_city_context(
+                        data_dir=data_dir,
+                        out=out,
+                        for_latex=for_latex,
+                        plot_title=plot_title,
+                        city_df=city_df,
+                        exp_config=exp_config,
+                    )
+
+            if _want("top6_reduction_detour_grid") or _want("top6_reduction_detour_grid_low_gef") or _want("top6_reduction_detour_grid_random"):
                 selected_map = _select_top6_reduction_detour_variants(city_df, gef_df)
                 for figure_name, selected in selected_map.items():
                     if _want(figure_name):

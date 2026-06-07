@@ -3814,6 +3814,149 @@ def _padded_visible_ylim(values: np.ndarray, include_zero: bool = True):
     return y_min - pad, y_max + pad
 
 
+def _plot_reduction_detour_panel(
+    fig,
+    subplot_spec,
+    binned: dict,
+    city_label: str,
+    bin_width_km: float = 0.1,
+    min_air_km: float = 0.0,
+    max_air_km: float = 5.0,
+    absolute_reduction_metric: str = "total_t",
+    show_detour_boxplot: bool = True,
+    mark_reduction_break_even: bool = False,
+):
+    """Draw one reduction-detour city panel inside an existing figure."""
+    if show_detour_boxplot:
+        inner = subplot_spec.subgridspec(2, 1, hspace=0.08, height_ratios=[1, 1])
+        ax_top = fig.add_subplot(inner[0])
+        ax_bot = fig.add_subplot(inner[1], sharex=ax_top)
+    else:
+        ax_top = None
+        ax_bot = fig.add_subplot(subplot_spec)
+
+    centres = np.asarray(binned["centres"], dtype=float)
+    reduction_pct = np.asarray(binned["reduction_pct"], dtype=float)
+    reduction_abs = np.asarray(binned["reduction_abs"], dtype=float)
+    detour_by_bin = binned.get("detour_by_bin")
+    if detour_by_bin is None:
+        detour_by_bin = [np.array([]) for _ in centres]
+    max_km = float(binned["max_km"])
+    x_max = min(max_air_km, max_km)
+    x_min = min(min_air_km, x_max)
+    x_ticks = np.arange(np.ceil(x_min), x_max + 1e-6, 1.0)
+    if x_min > 0 and (not x_ticks.size or not np.isclose(x_ticks[0], x_min)):
+        x_ticks = np.insert(x_ticks, 0, x_min)
+    x_tick_labels = [f"{t:g}" for t in x_ticks]
+    visible = (centres >= x_min) & (centres <= x_max)
+
+    if show_detour_boxplot:
+        nonempty = [(c_, d_) for c_, d_ in zip(centres, detour_by_bin) if d_.size > 0]
+        if nonempty:
+            box_positions = [c_ for c_, _ in nonempty]
+            box_data = [d_ for _, d_ in nonempty]
+            ax_top.boxplot(
+                box_data,
+                positions=box_positions,
+                widths=bin_width_km * 0.8,
+                showfliers=False,
+                patch_artist=True,
+                boxprops=dict(facecolor="#cfe2f3", edgecolor="#1f4e79", linewidth=0.5),
+                medianprops=dict(color="#1f4e79", linewidth=1.0),
+                whiskerprops=dict(color="#1f4e79", linewidth=0.5),
+                capprops=dict(color="#1f4e79", linewidth=0.5),
+            )
+        ax_top.axhline(1.0, color="gray", linestyle="--", linewidth=0.7, alpha=0.6)
+        ax_top.set_ylabel("Detour (road / air)", fontsize=9)
+        ax_top.set_xticks(x_ticks, labels=x_tick_labels)
+        ax_top.set_xlim(x_min, x_max)
+        ax_top.tick_params(axis="x", labelbottom=False)
+        ax_top.tick_params(axis="both", labelsize=8)
+        ax_top.grid(axis="y", alpha=0.3)
+        ax_top.set_title(city_label, fontsize=11, fontweight="bold")
+    else:
+        ax_bot.set_title(city_label, fontsize=11, fontweight="bold")
+
+    bar_colors = [
+        "#2ca02c" if (np.isfinite(v) and v >= 0) else "#d62728"
+        for v in reduction_pct
+    ]
+    ax_bot.bar(
+        centres,
+        reduction_pct,
+        width=bin_width_km,
+        color=bar_colors,
+        edgecolor="white",
+        linewidth=0.2,
+        align="center",
+        label="(E-bike - Drone) / E-bike",
+    )
+    ax_bot.axhline(0, color="gray", linewidth=0.5)
+    ax_bot.set_xlabel("Air Distance (km)", fontsize=9)
+    ax_bot.set_ylabel("(E-bike - Drone) / E-bike (%)", fontsize=9, color="#2ca02c")
+    ax_bot.set_xlim(x_min, x_max)
+    ax_bot.set_xticks(x_ticks, labels=x_tick_labels)
+    ax_bot.tick_params(axis="x", labelsize=8)
+    ax_bot.tick_params(axis="y", labelsize=8, labelcolor="#2ca02c")
+    ax_bot.grid(axis="y", alpha=0.3)
+    visible_pct_ylim = _padded_visible_ylim(reduction_pct[visible])
+    if visible_pct_ylim is not None:
+        ax_bot.set_ylim(*visible_pct_ylim)
+
+    if mark_reduction_break_even:
+        break_even_km = _find_reduction_break_even_km(centres, reduction_pct)
+        if break_even_km is not None and break_even_km <= x_max:
+            ax_bot.axvline(
+                break_even_km,
+                color="#111111",
+                linestyle=":",
+                linewidth=1.0,
+                alpha=0.85,
+                zorder=5,
+            )
+            ax_bot.annotate(
+                f"{break_even_km:.1f} km",
+                xy=(break_even_km, 0.96),
+                xycoords=("data", "axes fraction"),
+                xytext=(3, 0),
+                textcoords="offset points",
+                ha="left",
+                va="top",
+                fontsize=7,
+                color="#111111",
+                rotation=90,
+            )
+
+    ax_abs = ax_bot.twinx()
+    ax_abs.plot(
+        centres,
+        reduction_abs,
+        color="#555555",
+        alpha=0.5,
+        linewidth=1.2,
+        marker="o",
+        markersize=2.5,
+        label=(
+            "E-bike - drone (g CO2e/order)"
+            if absolute_reduction_metric == "per_order_g"
+            else "E-bike - drone (t CO2e)"
+        ),
+    )
+    ax_abs.axhline(0, color="#555555", linewidth=0.5, alpha=0.35)
+    abs_ylabel = (
+        "(E-bike - Drone) / Orders (g CO2e/order)"
+        if absolute_reduction_metric == "per_order_g"
+        else "E-bike - Drone (t CO2e/yr)"
+    )
+    ax_abs.set_ylabel(abs_ylabel, fontsize=9, color="#555555")
+    ax_abs.tick_params(axis="y", labelsize=8, labelcolor="#555555")
+    visible_abs_ylim = _padded_visible_ylim(reduction_abs[visible])
+    if visible_abs_ylim is not None:
+        ax_abs.set_ylim(*visible_abs_ylim)
+
+    return ax_top, ax_bot, ax_abs
+
+
 def plot_reduction_detour_grid_binned(
     binned_by_city: dict,
     city_labels: dict = None,
@@ -3866,119 +4009,18 @@ def plot_reduction_detour_grid_binned(
 
     for i, key in enumerate(keys):
         r, c = divmod(i, n_cols)
-        if show_detour_boxplot:
-            inner = outer[r, c].subgridspec(2, 1, hspace=0.08, height_ratios=[1, 1])
-            ax_top = fig.add_subplot(inner[0])
-            ax_bot = fig.add_subplot(inner[1], sharex=ax_top)
-        else:
-            ax_top = None
-            ax_bot = fig.add_subplot(outer[r, c])
-
-        binned = binned_by_city[key]
-        centres = np.asarray(binned["centres"], dtype=float)
-        reduction_pct = np.asarray(binned["reduction_pct"], dtype=float)
-        reduction_abs = np.asarray(binned["reduction_abs"], dtype=float)
-        detour_by_bin = binned.get("detour_by_bin")
-        if detour_by_bin is None:
-            detour_by_bin = [np.array([]) for _ in centres]
-        max_km = float(binned["max_km"])
-        x_max = min(max_air_km, max_km)
-        x_min = min(min_air_km, x_max)
-        x_ticks = np.arange(np.ceil(x_min), x_max + 1e-6, 1.0)
-        if x_min > 0 and (not x_ticks.size or not np.isclose(x_ticks[0], x_min)):
-            x_ticks = np.insert(x_ticks, 0, x_min)
-        x_tick_labels = [f"{t:g}" for t in x_ticks]
-        visible = (centres >= x_min) & (centres <= x_max)
-
-        if show_detour_boxplot:
-            nonempty = [(c_, d_) for c_, d_ in zip(centres, detour_by_bin) if d_.size > 0]
-            if nonempty:
-                box_positions = [c_ for c_, _ in nonempty]
-                box_data = [d_ for _, d_ in nonempty]
-                ax_top.boxplot(
-                    box_data, positions=box_positions, widths=bin_width_km * 0.8,
-                    showfliers=False, patch_artist=True,
-                    boxprops=dict(facecolor="#cfe2f3", edgecolor="#1f4e79", linewidth=0.5),
-                    medianprops=dict(color="#1f4e79", linewidth=1.0),
-                    whiskerprops=dict(color="#1f4e79", linewidth=0.5),
-                    capprops=dict(color="#1f4e79", linewidth=0.5),
-                )
-            ax_top.axhline(1.0, color="gray", linestyle="--", linewidth=0.7, alpha=0.6)
-            ax_top.set_ylabel("Detour (road / air)", fontsize=9)
-            ax_top.set_xticks(x_ticks, labels=x_tick_labels)
-            ax_top.set_xlim(x_min, x_max)
-            ax_top.tick_params(axis="x", labelbottom=False)
-            ax_top.tick_params(axis="both", labelsize=8)
-            ax_top.grid(axis="y", alpha=0.3)
-            ax_top.set_title(city_labels.get(key, key), fontsize=11, fontweight="bold")
-        else:
-            ax_bot.set_title(city_labels.get(key, key), fontsize=11, fontweight="bold")
-
-        bar_colors = [
-            "#2ca02c" if (np.isfinite(v) and v >= 0) else "#d62728" for v in reduction_pct
-        ]
-        ax_bot.bar(
-            centres, reduction_pct, width=bin_width_km,
-            color=bar_colors, edgecolor="white", linewidth=0.2, align="center",
-            label="(E-bike − Drone) / E-bike",
+        _plot_reduction_detour_panel(
+            fig,
+            outer[r, c],
+            binned_by_city[key],
+            city_labels.get(key, key),
+            bin_width_km=bin_width_km,
+            min_air_km=min_air_km,
+            max_air_km=max_air_km,
+            absolute_reduction_metric=absolute_reduction_metric,
+            show_detour_boxplot=show_detour_boxplot,
+            mark_reduction_break_even=mark_reduction_break_even,
         )
-        ax_bot.axhline(0, color="gray", linewidth=0.5)
-        ax_bot.set_xlabel("Air Distance (km)", fontsize=9)
-        ax_bot.set_ylabel("(E-bike − Drone) / E-bike (%)", fontsize=9, color="#2ca02c")
-        ax_bot.set_xlim(x_min, x_max)
-        ax_bot.set_xticks(x_ticks, labels=x_tick_labels)
-        ax_bot.tick_params(axis="x", labelsize=8)
-        ax_bot.tick_params(axis="y", labelsize=8, labelcolor="#2ca02c")
-        ax_bot.grid(axis="y", alpha=0.3)
-        visible_pct_ylim = _padded_visible_ylim(reduction_pct[visible])
-        if visible_pct_ylim is not None:
-            ax_bot.set_ylim(*visible_pct_ylim)
-
-        if mark_reduction_break_even:
-            break_even_km = _find_reduction_break_even_km(centres, reduction_pct)
-            if break_even_km is not None and break_even_km <= x_max:
-                ax_bot.axvline(
-                    break_even_km,
-                    color="#111111",
-                    linestyle=":",
-                    linewidth=1.0,
-                    alpha=0.85,
-                    zorder=5,
-                )
-                ax_bot.annotate(
-                    f"{break_even_km:.1f} km",
-                    xy=(break_even_km, 0.96),
-                    xycoords=("data", "axes fraction"),
-                    xytext=(3, 0),
-                    textcoords="offset points",
-                    ha="left",
-                    va="top",
-                    fontsize=7,
-                    color="#111111",
-                    rotation=90,
-                )
-
-        ax_abs = ax_bot.twinx()
-        ax_abs.plot(
-            centres, reduction_abs,
-            color="#555555", alpha=0.5, linewidth=1.2, marker="o", markersize=2.5,
-            label=(
-                "E-bike - drone (g CO2e/order)"
-                if absolute_reduction_metric == "per_order_g"
-                else "E-bike - drone (t CO2e)"
-            ),
-        )
-        ax_abs.axhline(0, color="#555555", linewidth=0.5, alpha=0.35)
-        abs_ylabel = (
-            "(E-bike - Drone) / Orders (g CO2e/order)"
-            if absolute_reduction_metric == "per_order_g"
-            else "E-bike - Drone (t CO2e/yr)"
-        )
-        ax_abs.set_ylabel(abs_ylabel, fontsize=9, color="#555555")
-        ax_abs.tick_params(axis="y", labelsize=8, labelcolor="#555555")
-        visible_abs_ylim = _padded_visible_ylim(reduction_abs[visible])
-        if visible_abs_ylim is not None:
-            ax_abs.set_ylim(*visible_abs_ylim)
 
     # Hide any unused outer slots (when n_cities < n_rows * n_cols)
     for j in range(n_cities, n_rows * n_cols):
