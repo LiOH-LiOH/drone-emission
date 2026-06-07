@@ -1987,7 +1987,6 @@ def plot_city_gef_scatter_components(
     ax_fixed.xaxis.set_label_position("bottom")
     ax_fixed.xaxis.set_ticks_position("bottom")
     ax_fixed.set_xticks(x_all)
-    ax_fixed.set_xticklabels([])
     ax_fixed.tick_params(
         axis="x",
         which="both",
