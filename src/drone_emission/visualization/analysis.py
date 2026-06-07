@@ -669,6 +669,8 @@ def plot_regions_map_optimal_drone_share(
         for_latex: If True, save as PDF.
         plot_title: If True, show title.
     """
+    from matplotlib.colors import BoundaryNorm, ListedColormap
+
     from visualization.regions import plot_regions_on_china_map
 
     try:
@@ -689,7 +691,22 @@ def plot_regions_map_optimal_drone_share(
         print("Regions map optimal drone share skipped — no valid drone-share values")
         return
 
-    cmap, norm, bin_edges, drone_share_edges = _build_reduction_cmap(100)
+    drone_share_edges = np.arange(0, 101, 10, dtype=float)
+    bin_edges = np.concatenate([[-10.0], drone_share_edges])
+    cmap = ListedColormap([
+        "#cccccc",
+        "#ffffff",
+        "#eaf2fb",
+        "#d6e6f5",
+        "#bdd7ec",
+        "#91bfdb",
+        "#6baed6",
+        "#4292c6",
+        "#2171b5",
+        "#08519c",
+        "#08306b",
+    ])
+    norm = BoundaryNorm(bin_edges, ncolors=cmap.N, clip=True)
 
     fig, ax = plt.subplots(figsize=figsize)
     plot_regions_on_china_map(
