@@ -101,7 +101,7 @@ def _build_drone_share_cmap():
     bin_edges = np.concatenate([[-20.0], drone_share_edges])
     cmap = ListedColormap([
         "#cccccc",
-        "#ffffff",
+        "#eef5fc",
         "#d6e6f5",
         "#91bfdb",
         "#4292c6",
@@ -3234,6 +3234,13 @@ def plot_regions_map_city_rank_and_drone_share(
     for spine in ax_b.spines.values():
         spine.set_visible(False)
 
+    share_dist_ax = ax_b.inset_axes([0.03, 0.04, 0.34, 0.30], zorder=10)
+    _plot_drone_share_distribution_inset(
+        drone_df,
+        drone_share_col,
+        ax=share_dist_ax,
+    )
+
     ax_a.text(-0.03, 1.02, "a", transform=ax_a.transAxes,
               fontsize=16, fontweight="bold", va="bottom", ha="right")
     ax_b.text(-0.03, 1.02, "b", transform=ax_b.transAxes,
@@ -3287,6 +3294,52 @@ def plot_regions_map_city_rank_and_drone_share(
         plt.show()
 
     plt.close(fig)
+
+
+def _plot_drone_share_distribution_inset(
+    df: pd.DataFrame,
+    drone_share_col: str,
+    ax: "plt.Axes",
+):
+    """Draw compact city-count distribution by optimal drone-share bin."""
+    values = pd.to_numeric(df[drone_share_col], errors="coerce").dropna()
+    if values.empty:
+        ax.axis("off")
+        return
+
+    bins = np.arange(0, 101, 20, dtype=float)
+    clipped = values.clip(lower=0, upper=100)
+    counts, edges = np.histogram(clipped, bins=bins)
+    centres = (edges[:-1] + edges[1:]) / 2
+
+    ax.bar(
+        centres,
+        counts,
+        width=17,
+        color="#91bfdb",
+        edgecolor="#08306b",
+        linewidth=0.5,
+        alpha=0.85,
+        zorder=2,
+    )
+
+    x_curve = np.linspace(float(centres.min()), float(centres.max()), 120)
+    y_curve = np.interp(x_curve, centres, counts)
+    ax.plot(x_curve, y_curve, color="#08306b", linewidth=1.2, zorder=3)
+
+    ax.set_xlim(0, 100)
+    ax.set_ylim(0, max(counts.max() * 1.18, 1))
+    ax.set_xlabel("Drone share (%)", fontsize=7, labelpad=1)
+    ax.set_ylabel("Cities", fontsize=7, labelpad=1)
+    ax.set_xticks([0, 50, 100])
+    ax.tick_params(axis="both", labelsize=6, length=2, pad=1)
+    ax.yaxis.grid(True, linestyle=":", alpha=0.35)
+    ax.set_axisbelow(True)
+    ax.set_facecolor("white")
+    ax.patch.set_alpha(0.90)
+    for spine in ax.spines.values():
+        spine.set_edgecolor("#666666")
+        spine.set_linewidth(0.6)
 
 
 def _plot_city_oracle_reduction_rank(
