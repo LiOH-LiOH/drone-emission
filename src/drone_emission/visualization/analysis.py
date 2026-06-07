@@ -1503,64 +1503,45 @@ def plot_city_gef_distribution(
     )
 
     bin_groups = []
-    bin_labels = []
-    for label in labels:
+    bin_positions = []
+    for idx, label in enumerate(labels):
         group = plot_df[plot_df["gef_range"] == label]
         if group.empty:
             continue
         bin_groups.append(group)
-        bin_labels.append(label)
+        bin_positions.append(idx)
 
     if not bin_groups:
         print("City GEF distribution skipped - no cities in GEF ranges")
         return
 
-    fig, (ax_top, ax) = plt.subplots(
-        2,
-        1,
-        figsize=figsize,
-        gridspec_kw={"height_ratios": [0.18, 1.0], "hspace": 0.04},
-        sharex=True,
-    )
+    fig, ax = plt.subplots(figsize=figsize)
 
-    x = np.arange(len(bin_groups))
-    density_x = np.concatenate(
-        [np.full(len(group), idx, dtype=float) for idx, group in enumerate(bin_groups)]
-    )
+    x_all = np.arange(len(labels))
+    x = np.array(bin_positions, dtype=float)
+    density_x = (gef.to_numpy(dtype=float) - start) / bin_width - 0.5
     if len(density_x) > 5 and np.unique(density_x).size > 1:
         from scipy.stats import gaussian_kde
 
-        x_violin = np.linspace(-0.5, len(bin_groups) - 0.5, 240)
+        x_violin = np.linspace(-0.5, len(labels) - 0.5, 240)
         density = gaussian_kde(density_x)(x_violin)
     else:
-        x_violin = x
-        density = np.array([len(group) for group in bin_groups], dtype=float)
+        x_violin = x_all
+        density = np.array(
+            [len(plot_df[plot_df["gef_range"] == label]) for label in labels],
+            dtype=float,
+        )
     if density.max() > 0:
         density = density / density.max()
-    ax_top.fill_between(
-        x_violin,
-        0,
-        density,
-        color="#7A7A7A",
-        alpha=0.35,
-        linewidth=0,
-        zorder=2,
-    )
-    ax_top.plot(x_violin, density, color="#555555", linewidth=0.8, zorder=3)
-    ax_top.set_ylim(0, 1.12)
-    ax_top.set_ylabel("")
-    ax_top.set_yticks([])
-    ax_top.tick_params(axis="x", which="both", bottom=False, labelbottom=False)
-    for spine in ("left", "right", "top"):
-        ax_top.spines[spine].set_visible(False)
-    ax_top.spines["bottom"].set_color("0.75")
 
     width = 0.28 if len(plot_cols) > 1 else 0.42
     legend_handles = []
+    box_values = []
 
     for col, _, label, color, offset in available_series:
         positions = x + (offset if len(plot_cols) > 1 else 0.0)
         data = [group[col].to_numpy(dtype=float) for group in bin_groups]
+        box_values.extend(np.concatenate(data).tolist())
         bp = ax.boxplot(
             data,
             positions=positions,
@@ -1588,10 +1569,33 @@ def plot_city_gef_distribution(
     gef_label = VARIABLE_LABELS.get(gef_col, "Grid Emission Factor (kg CO2e/kWh)")
     ax.set_xlabel(gef_label, fontsize=12)
     ax.set_ylabel("Use-phase emission per order (g CO2e/order)", fontsize=12)
-    ax.set_xticks(x)
-    ax.set_xticklabels(bin_labels, rotation=35, ha="right", fontsize=9)
-    ax.set_xlim(-0.5, len(bin_groups) - 0.5)
+    ax.set_xticks(x_all)
+    ax.set_xticklabels(labels, rotation=35, ha="right", fontsize=9)
+    ax.set_xlim(-0.5, len(labels) - 0.5)
     ax.set_yscale("log")
+    box_values = np.array(box_values, dtype=float)
+    y_data_min = box_values[box_values > 0].min()
+    y_data_max = box_values.max()
+    log_min = np.log10(y_data_min)
+    log_max = np.log10(y_data_max)
+    log_span = max(log_max - log_min, 0.25)
+    y_floor_log = log_min - log_span * 0.16
+    y_base_log = log_min - log_span * 0.145
+    y_top_log = log_min - log_span * 0.025
+    y_floor = 10 ** y_floor_log
+    y_base = 10 ** y_base_log
+    y_violin = 10 ** (y_base_log + density * (y_top_log - y_base_log))
+    ax.fill_between(
+        x_violin,
+        y_base,
+        y_violin,
+        color="#7A7A7A",
+        alpha=0.35,
+        linewidth=0,
+        zorder=1,
+    )
+    ax.plot(x_violin, y_violin, color="#555555", linewidth=0.8, zorder=2)
+    ax.set_ylim(y_floor, y_data_max * 1.12)
     ax.grid(True, axis="y", alpha=0.3, linestyle="--")
     ax.set_axisbelow(True)
     ax.legend(
@@ -1601,8 +1605,7 @@ def plot_city_gef_distribution(
         fontsize=9,
     )
 
-    y_min, y_max = ax.get_ylim()
-    label_y = y_min * (y_max / y_min) ** 0.04
+    label_y = 10 ** (y_top_log + log_span * 0.01)
     for xi, group in zip(x, bin_groups):
         ax.text(
             xi,
