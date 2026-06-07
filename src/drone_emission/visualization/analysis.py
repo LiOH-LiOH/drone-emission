@@ -94,8 +94,8 @@ def _build_reduction_cmap(v_max: float):
 
 
 def _build_absolute_reduction_log_cmap(values):
-    """Sequential cmap and log norm for positive absolute emission reductions."""
-    from matplotlib.colors import LogNorm
+    """Discrete sequential cmap with log-spaced absolute reduction bins."""
+    from matplotlib.colors import BoundaryNorm, ListedColormap
 
     values = pd.to_numeric(pd.Series(values), errors="coerce").to_numpy(dtype=float)
     positive = values[np.isfinite(values) & (values > 0)]
@@ -108,28 +108,15 @@ def _build_absolute_reduction_log_cmap(values):
         v_min = max(v_min / 10.0, np.finfo(float).tiny)
         v_max = v_max * 10.0
 
-    cmap = plt.get_cmap("YlGn").copy()
-    norm = LogNorm(vmin=v_min, vmax=v_max, clip=True)
-    ticks = np.geomspace(v_min, v_max, num=min(6, max(2, positive.size)))
-    return cmap, norm, ticks, v_min
+    value_edges = np.geomspace(v_min, v_max, num=6)
+    value_edges = np.concatenate([[0.0], value_edges])
+    bin_edges = np.concatenate([[-v_min], value_edges])
 
-
-def _draw_log_reduction_colorbar(fig, cbar_ax, cmap, norm, ticks, label_text):
-    """Draw a log-scaled colorbar for absolute emission reductions."""
-    sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
-    sm.set_array([])
-    cbar = fig.colorbar(sm, cax=cbar_ax)
-    cbar.set_ticks(ticks)
-    tick_labels = [
-        f"{int(t)}" if t >= 1 and np.isclose(t, round(t)) else f"{t:g}"
-        for t in ticks
-    ]
-    cbar.ax.set_yticklabels(tick_labels)
-    cbar.ax.minorticks_off()
-    cbar.outline.set_linewidth(0.6)
-    cbar.ax.tick_params(labelsize=9, length=2)
-    cbar.set_label(label_text, fontsize=11)
-    return cbar
+    base = plt.get_cmap("YlGn")
+    value_colors = [base(x) for x in np.linspace(0.25, 0.9, len(value_edges) - 1)]
+    cmap = ListedColormap(["#cccccc", *value_colors])
+    norm = BoundaryNorm(bin_edges, ncolors=cmap.N, clip=True)
+    return cmap, norm, bin_edges, value_edges
 
 
 def _draw_discrete_reduction_colorbar(fig, cbar_ax, cmap, norm, bin_edges,
@@ -3037,15 +3024,13 @@ def plot_regions_map_city_rank_inset(
         print(f"Regions map with city rank inset skipped — {exc}")
         return
     valid_reductions = map_df[reduction_col].dropna()
-    shared_cmap, shared_norm, colorbar_ticks, log_vmin = _build_absolute_reduction_log_cmap(
+    shared_cmap, shared_norm, bin_edges, reduction_edges = _build_absolute_reduction_log_cmap(
         valid_reductions
     )
-    map_color_col = f"{reduction_col}_log_color"
-    map_df[map_color_col] = pd.to_numeric(map_df[reduction_col], errors="coerce").clip(lower=log_vmin)
 
     fig, ax_a = plt.subplots(figsize=figsize)
     plot_regions_on_china_map(
-        df=map_df, color_by=map_color_col,
+        df=map_df, color_by=reduction_col,
         ax=ax_a, plot_title=plot_title,
         cmap=shared_cmap, norm=shared_norm,
         draw_colorbar=False, draw_legend=False,
@@ -3081,10 +3066,11 @@ def plot_regions_map_city_rank_inset(
     a_pos = ax_a.get_position()
     cbar_ax = fig.add_axes((a_pos.x1 + 0.005, a_pos.y0,
                             0.014, a_pos.height))
-    _draw_log_reduction_colorbar(
-        fig, cbar_ax, shared_cmap, shared_norm, colorbar_ticks,
+    cbar, n_bands = _draw_discrete_reduction_colorbar(
+        fig, cbar_ax, shared_cmap, shared_norm, bin_edges, reduction_edges,
         "E-bike - Oracle (t CO₂eq / yr)",
     )
+    _annotate_unstudied(fig, cbar, cbar_ax, n_bands)
 
     if save_path:
         if for_latex and not save_path.endswith(".pdf"):
