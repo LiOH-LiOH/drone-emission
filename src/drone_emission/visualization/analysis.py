@@ -1977,8 +1977,19 @@ def plot_city_gef_scatter_components(
     ax_fixed.set_ylabel("Production + EOL\n(g CO2e/order)", fontsize=12)
     gef_label = VARIABLE_LABELS.get(gef_col, "Grid Emission Factor (kg CO2e/kWh)")
     ax_fixed.set_xlabel(gef_label, fontsize=12)
+    ax_fixed.xaxis.set_label_position("bottom")
+    ax_fixed.xaxis.set_ticks_position("bottom")
     ax_fixed.set_xticks(x_all)
     ax_fixed.set_xticklabels(labels)
+    ax_fixed.tick_params(
+        axis="x",
+        which="both",
+        top=False,
+        labeltop=False,
+        bottom=True,
+        labelbottom=True,
+        pad=2,
+    )
     ax_fixed.set_xlim(-0.5, len(labels) - 0.5)
     ax_fixed.grid(True, axis="y", alpha=0.3, linestyle="--")
     ax_fixed.set_axisbelow(True)
