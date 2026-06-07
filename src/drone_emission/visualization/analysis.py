@@ -1860,7 +1860,7 @@ def plot_city_gef_scatter_components(
         2,
         1,
         figsize=figsize,
-        gridspec_kw={"height_ratios": [4.0, 1.0], "hspace": 0.06},
+        gridspec_kw={"height_ratios": [4.0, 1.0], "hspace": 0.22},
         sharex=True,
     )
     x_all = np.arange(len(labels), dtype=float)
