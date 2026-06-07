@@ -1444,6 +1444,20 @@ def plot_city_gef_distribution(
             0.18,
         ),
     ]
+    fixed_series = [
+        (
+            "total_ebike_fixed_emission_kg_per_order_g",
+            "E-bike",
+            "#4C8CBF",
+            -0.018,
+        ),
+        (
+            "total_drone_fixed_emission_kg_per_order_g",
+            "Drone",
+            "#E05C2B",
+            0.018,
+        ),
+    ]
     available_series = [
         spec for spec in series
         if spec[1] in df.columns and df[spec[1]].notna().any()
@@ -1454,52 +1468,81 @@ def plot_city_gef_distribution(
     if "total_odpair_annual_sales" not in df.columns:
         print("City GEF distribution skipped - missing total_odpair_annual_sales column")
         return
+    fixed_source_pairs = {
+        "total_ebike_fixed_emission_kg_per_order_g": (
+            "total_ebike_production_emission_kg",
+            "total_ebike_end_of_life_emission_kg",
+        ),
+        "total_drone_fixed_emission_kg_per_order_g": (
+            "total_drone_production_emission_kg",
+            "total_drone_end_of_life_emission_kg",
+        ),
+    }
+    available_fixed_series = [
+        spec for spec in fixed_series
+        if all(col in df.columns and df[col].notna().any() for col in fixed_source_pairs[spec[0]])
+    ]
+    if not available_fixed_series:
+        print(
+            "City GEF distribution skipped - missing production/end-of-life emission columns"
+        )
+        return
     source_cols = [source_col for _, source_col, _, _, _ in available_series]
     plot_cols = [plot_col for plot_col, _, _, _, _ in available_series]
+    fixed_source_cols = [
+        col
+        for plot_col, _, _, _ in available_fixed_series
+        for col in fixed_source_pairs[plot_col]
+    ]
+    fixed_plot_cols = [plot_col for plot_col, _, _, _ in available_fixed_series]
 
     plot_df = df.copy()
     if "region_level" in plot_df.columns:
         plot_df = plot_df[plot_df["region_level"] == "city"]
 
-    needed = [gef_col, "total_odpair_annual_sales"] + source_cols
+    needed = [gef_col, "total_odpair_annual_sales"] + source_cols + fixed_source_cols
     plot_df[gef_col] = pd.to_numeric(plot_df[gef_col], errors="coerce")
     plot_df["total_odpair_annual_sales"] = pd.to_numeric(
         plot_df["total_odpair_annual_sales"], errors="coerce"
     )
     for _, source_col, _, _, _ in available_series:
         plot_df[source_col] = pd.to_numeric(plot_df[source_col], errors="coerce")
+    for source_col in fixed_source_cols:
+        plot_df[source_col] = pd.to_numeric(plot_df[source_col], errors="coerce")
     plot_df = plot_df.dropna(subset=needed)
     valid_positive = (
         (plot_df[gef_col] > 0)
+        & (plot_df[gef_col] <= 0.8)
         & (plot_df["total_odpair_annual_sales"] > 0)
         & (plot_df[source_cols] > 0).all(axis=1)
+        & (plot_df[fixed_source_cols] >= 0).all(axis=1)
     )
     plot_df = plot_df[valid_positive]
     if plot_df.empty:
-        print("City GEF distribution skipped - no valid city GEF/use-phase values")
+        print("City GEF distribution skipped - no valid city GEF/emission values")
         return
     for plot_col, source_col, _, _, _ in available_series:
         plot_df[plot_col] = (
             plot_df[source_col] / plot_df["total_odpair_annual_sales"] * 1000.0
         )
+    for plot_col, _, _, _ in available_fixed_series:
+        production_col, eol_col = fixed_source_pairs[plot_col]
+        plot_df[plot_col] = (
+            (plot_df[production_col] + plot_df[eol_col])
+            / plot_df["total_odpair_annual_sales"]
+            * 1000.0
+        )
 
     gef = plot_df[gef_col]
     bin_width = 0.1
-    start = np.floor(gef.min() / bin_width) * bin_width
-    stop = np.ceil(gef.max() / bin_width) * bin_width + bin_width
-    bin_edges = np.arange(start, stop + bin_width, bin_width)
-    if len(bin_edges) < 3:
-        bin_edges = np.array([gef.min(), gef.mean(), gef.max()])
-    labels = [
-        f"{left:.1f}-{right:.1f}"
-        for left, right in zip(bin_edges[:-1], bin_edges[1:])
-    ]
+    bin_edges = np.arange(0.0, 0.8 + bin_width, bin_width)
+    labels = [f"{right:.1f}" for right in bin_edges[1:]]
     plot_df["gef_range"] = pd.cut(
         gef,
         bins=bin_edges,
         labels=labels,
         include_lowest=True,
-        right=False,
+        right=True,
     )
 
     bin_groups = []
@@ -1515,15 +1558,21 @@ def plot_city_gef_distribution(
         print("City GEF distribution skipped - no cities in GEF ranges")
         return
 
-    fig, ax = plt.subplots(figsize=figsize)
+    fig, (ax, ax_fixed) = plt.subplots(
+        2,
+        1,
+        figsize=figsize,
+        gridspec_kw={"height_ratios": [1.0, 0.55], "hspace": 0.06},
+        sharex=True,
+    )
 
-    x_all = np.arange(len(labels))
-    x = np.array(bin_positions, dtype=float)
-    density_x = (gef.to_numpy(dtype=float) - start) / bin_width - 0.5
+    x_all = bin_edges[1:]
+    x = x_all[np.array(bin_positions, dtype=int)]
+    density_x = gef.to_numpy(dtype=float)
     if len(density_x) > 5 and np.unique(density_x).size > 1:
         from scipy.stats import gaussian_kde
 
-        x_violin = np.linspace(-0.5, len(labels) - 0.5, 240)
+        x_violin = np.linspace(0.0, 0.8, 240)
         density = gaussian_kde(density_x)(x_violin)
     else:
         x_violin = x_all
@@ -1534,12 +1583,12 @@ def plot_city_gef_distribution(
     if density.max() > 0:
         density = density / density.max()
 
-    width = 0.28 if len(plot_cols) > 1 else 0.42
+    width = 0.028 if len(plot_cols) > 1 else 0.042
     legend_handles = []
     box_values = []
 
     for col, _, label, color, offset in available_series:
-        positions = x + (offset if len(plot_cols) > 1 else 0.0)
+        positions = x + (offset * 0.1 if len(plot_cols) > 1 else 0.0)
         data = [group[col].to_numpy(dtype=float) for group in bin_groups]
         box_values.extend(np.concatenate(data).tolist())
         bp = ax.boxplot(
@@ -1566,12 +1615,36 @@ def plot_city_gef_distribution(
             plt.Rectangle((0, 0), 1, 1, facecolor=color, alpha=0.45, edgecolor=color)
         )
 
+    fixed_values = []
+    for col, label, color, offset in available_fixed_series:
+        positions = x + (offset if len(fixed_plot_cols) > 1 else 0.0)
+        data = [group[col].to_numpy(dtype=float) for group in bin_groups]
+        fixed_values.extend(np.concatenate(data).tolist())
+        bp = ax_fixed.boxplot(
+            data,
+            positions=positions,
+            widths=width,
+            patch_artist=True,
+            showfliers=False,
+            manage_ticks=False,
+            zorder=3,
+        )
+        for patch in bp["boxes"]:
+            patch.set_facecolor(color)
+            patch.set_edgecolor(color)
+            patch.set_alpha(0.45)
+        for whisker in bp["whiskers"]:
+            whisker.set_color(color)
+        for cap in bp["caps"]:
+            cap.set_color(color)
+        for median in bp["medians"]:
+            median.set_color(color)
+            median.set_linewidth(1.8)
+
     gef_label = VARIABLE_LABELS.get(gef_col, "Grid Emission Factor (kg CO2e/kWh)")
-    ax.set_xlabel(gef_label, fontsize=12)
     ax.set_ylabel("Use-phase emission per order (g CO2e/order)", fontsize=12)
-    ax.set_xticks(x_all)
-    ax.set_xticklabels(labels, rotation=35, ha="right", fontsize=9)
-    ax.set_xlim(-0.5, len(labels) - 0.5)
+    ax.tick_params(axis="x", which="both", labelbottom=False)
+    ax.set_xlim(0.0, 0.8)
     ax.set_yscale("log")
     box_values = np.array(box_values, dtype=float)
     y_data_min = box_values[box_values > 0].min()
@@ -1616,6 +1689,19 @@ def plot_city_gef_distribution(
             fontsize=8,
             color="0.35",
         )
+
+    fixed_values = np.array(fixed_values, dtype=float)
+    fixed_positive = fixed_values[fixed_values > 0]
+    if fixed_positive.size:
+        ax_fixed.set_yscale("log")
+        ax_fixed.set_ylim(fixed_positive.max() * 1.12, fixed_positive.min() * 0.88)
+    ax_fixed.set_ylabel("Production + EOL per order (g CO2e/order)", fontsize=12)
+    ax_fixed.set_xlabel(gef_label, fontsize=12)
+    ax_fixed.set_xticks(np.arange(0.1, 0.81, 0.1))
+    ax_fixed.set_xticklabels([f"{tick:.1f}" for tick in np.arange(0.1, 0.81, 0.1)])
+    ax_fixed.set_xlim(0.0, 0.8)
+    ax_fixed.grid(True, axis="y", alpha=0.3, linestyle="--")
+    ax_fixed.set_axisbelow(True)
 
     if plot_title:
         ax.set_title(
