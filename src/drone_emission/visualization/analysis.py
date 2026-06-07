@@ -1856,7 +1856,13 @@ def plot_city_gef_scatter_components(
         print("City GEF stacked components skipped - no cities in GEF ranges")
         return
 
-    fig, ax = plt.subplots(figsize=figsize)
+    fig, (ax, ax_dist) = plt.subplots(
+        2,
+        1,
+        figsize=figsize,
+        gridspec_kw={"height_ratios": [4.0, 1.0], "hspace": 0.06},
+        sharex=True,
+    )
     x_all = np.arange(len(labels), dtype=float)
     x = x_all[np.array(bin_positions, dtype=int)]
     width = 0.28
@@ -1940,10 +1946,9 @@ def plot_city_gef_scatter_components(
 
     gef_label = VARIABLE_LABELS.get(gef_col, "Grid Emission Factor (kg CO2e/kWh)")
     ax.set_ylabel("Lifecycle emission\n(g CO2e/order)", fontsize=12)
-    ax.set_xlabel(gef_label, fontsize=12)
     ax.set_xticks(x_all)
     ax.set_xticklabels(labels)
-    ax.tick_params(axis="x", which="both", pad=2)
+    ax.tick_params(axis="x", which="both", bottom=False, labelbottom=False)
     ax.set_xlim(-0.5, len(labels) - 0.5)
     ax.set_ylim(0, max_total * 1.22)
     ax.grid(True, axis="y", alpha=0.3, linestyle="--")
@@ -1977,25 +1982,64 @@ def plot_city_gef_scatter_components(
         title_fontsize=9,
     )
 
+    density_x = plot_df[gef_col].to_numpy(dtype=float) / bin_width - 0.5
+    if len(density_x) > 5 and np.unique(density_x).size > 1:
+        from scipy.stats import gaussian_kde
+
+        x_violin = np.linspace(-0.5, len(labels) - 0.5, 240)
+        density = gaussian_kde(density_x)(x_violin)
+    else:
+        x_violin = x_all
+        density = np.array(
+            [len(plot_df[plot_df["gef_range"] == label]) for label in labels],
+            dtype=float,
+        )
+    if density.max() > 0:
+        density = density / density.max()
+
+    ax_dist.fill_between(
+        x_violin,
+        -density,
+        density,
+        color="#7A7A7A",
+        alpha=0.35,
+        linewidth=0,
+        zorder=1,
+    )
+    ax_dist.plot(x_violin, density, color="#555555", linewidth=0.8, zorder=2)
+    ax_dist.plot(x_violin, -density, color="#555555", linewidth=0.8, zorder=2)
+    ax_dist.scatter(
+        density_x,
+        np.zeros_like(density_x),
+        marker="|",
+        s=16,
+        color="#333333",
+        alpha=0.35,
+        linewidths=0.6,
+        zorder=3,
+    )
+    ax_dist.axhline(0, color="white", linewidth=0.7, alpha=0.9, zorder=2)
     for xi, group in zip(x, bin_groups):
-        ax.text(
+        ax_dist.text(
             xi,
-            0.02,
+            0.86,
             f"n={len(group)}",
-            transform=ax.get_xaxis_transform(),
             ha="center",
-            va="bottom",
+            va="center",
             fontsize=8,
             color="0.35",
-            clip_on=False,
-            zorder=12,
-            bbox={
-                "facecolor": "white",
-                "alpha": 0.7,
-                "edgecolor": "none",
-                "pad": 0.5,
-            },
+            zorder=4,
         )
+    ax_dist.set_ylim(-1.15, 1.15)
+    ax_dist.set_yticks([])
+    ax_dist.set_ylabel("Cities", fontsize=10)
+    ax_dist.set_xlabel(gef_label, fontsize=12)
+    ax_dist.set_xticks(x_all)
+    ax_dist.set_xticklabels(labels)
+    ax_dist.tick_params(axis="x", which="both", pad=2)
+    ax_dist.spines["left"].set_visible(False)
+    ax_dist.spines["right"].set_visible(False)
+    ax_dist.grid(False)
 
     if plot_title:
         ax.set_title(
@@ -2004,7 +2048,7 @@ def plot_city_gef_scatter_components(
             fontweight="bold",
         )
 
-    fig.subplots_adjust(left=0.11, right=0.98, bottom=0.18, top=0.96)
+    fig.subplots_adjust(left=0.11, right=0.98, bottom=0.17, top=0.96)
 
     if save_path:
         if for_latex and not save_path.endswith(".pdf"):
