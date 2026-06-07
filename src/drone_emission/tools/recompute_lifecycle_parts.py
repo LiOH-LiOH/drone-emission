@@ -215,12 +215,70 @@ def _update_weighted_stats(
         region_info.stats.pop(key, None)
 
 
+def _print_existing_comparison(
+    region_key: str,
+    region_info: RegionConfig,
+    od_df: pd.DataFrame,
+    annual_sales: np.ndarray,
+) -> None:
+    old_ebike = region_info.get_stat("total_ebike_lifecycle")
+    old_drone = region_info.get_stat("total_drone_lifecycle")
+    if old_ebike is None or old_drone is None:
+        print(f"[compare] {region_key}: existing lifecycle totals missing")
+        return
+
+    values = {
+        col: pd.to_numeric(od_df[col], errors="coerce").to_numpy()
+        for col in LIFECYCLE_COLUMNS
+    }
+    ebike_production = _weighted_kg(
+        values["ebike_lifecycle_production_g"], annual_sales
+    )
+    ebike_use = _weighted_kg(values["ebike_lifecycle_use_g"], annual_sales)
+    ebike_eol = _weighted_kg(values["ebike_lifecycle_eol_g"], annual_sales)
+    drone_production = _weighted_kg(
+        values["drone_lifecycle_production_g"], annual_sales
+    )
+    drone_use = _weighted_kg(values["drone_lifecycle_use_g"], annual_sales)
+    drone_eol = _weighted_kg(values["drone_lifecycle_eol_g"], annual_sales)
+    new_ebike = _weighted_kg(values["ebike_lifecycle_g"], annual_sales)
+    new_drone = _weighted_kg(values["drone_lifecycle_g"], annual_sales)
+    old_ebike = float(old_ebike)
+    old_drone = float(old_drone)
+
+    print(
+        f"[compare] {region_key} ebike: "
+        f"old={old_ebike:.6f} kg, new={new_ebike:.6f} kg, "
+        f"parts_sum={ebike_production + ebike_use + ebike_eol:.6f} kg, "
+        f"diff={new_ebike - old_ebike:.9f} kg "
+        f"({(new_ebike - old_ebike) / old_ebike * 100:.9f}%)"
+    )
+    print(
+        f"[compare] {region_key} ebike parts: "
+        f"production={ebike_production:.6f} kg, "
+        f"use={ebike_use:.6f} kg, eol={ebike_eol:.6f} kg"
+    )
+    print(
+        f"[compare] {region_key} drone: "
+        f"old={old_drone:.6f} kg, new={new_drone:.6f} kg, "
+        f"parts_sum={drone_production + drone_use + drone_eol:.6f} kg, "
+        f"diff={new_drone - old_drone:.9f} kg "
+        f"({(new_drone - old_drone) / old_drone * 100:.9f}%)"
+    )
+    print(
+        f"[compare] {region_key} drone parts: "
+        f"production={drone_production:.6f} kg, "
+        f"use={drone_use:.6f} kg, eol={drone_eol:.6f} kg"
+    )
+
+
 def _process_region(
     region_key: str,
     region_info: RegionConfig,
     exp_config: dict,
     dry_run: bool,
     write_od: bool,
+    compare_existing: bool,
 ) -> ProcessResult:
     t0 = time.time()
     od_path = _od_path(exp_config, region_info)
@@ -277,6 +335,8 @@ def _process_region(
         od_df["ebike_kappa"] = ebike_kappa
 
         annual_sales = _annual_sales(od_df)
+        if compare_existing:
+            _print_existing_comparison(region_key, region_info, od_df, annual_sales)
         _update_weighted_stats(region_info, od_df, annual_sales, ebike_kappa)
         region_info.set_stat("province", province)
 
@@ -346,6 +406,11 @@ def main() -> None:
         action="store_true",
         help="Run tools.enrich_stats after consolidation.",
     )
+    parser.add_argument(
+        "--compare-existing",
+        action="store_true",
+        help="Print old total lifecycle stats vs recomputed component sums.",
+    )
     args = parser.parse_args()
 
     exp_config = load_config(
@@ -368,6 +433,7 @@ def main() -> None:
             exp_config,
             dry_run=args.dry_run,
             write_od=not args.no_write_od,
+            compare_existing=args.compare_existing,
         )
         counts[result.status] = counts.get(result.status, 0) + 1
         elapsed_total += result.elapsed_s
