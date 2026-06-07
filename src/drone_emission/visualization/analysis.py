@@ -2894,8 +2894,6 @@ def plot_regions_map_city_rank_inset(
 
     ax_a.text(-0.03, 1.02, "a", transform=ax_a.transAxes,
               fontsize=16, fontweight="bold", va="bottom", ha="right")
-    ax_b.text(-0.06, 1.03, "b", transform=ax_b.transAxes,
-              fontsize=10, fontweight="bold", va="bottom", ha="right")
 
     fig.tight_layout()
 
