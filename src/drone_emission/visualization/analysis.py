@@ -93,6 +93,25 @@ def _build_reduction_cmap(v_max: float):
     return cmap, norm, bin_edges, reduction_edges
 
 
+def _build_drone_share_cmap():
+    """Return a 0-100 discrete white-to-blue cmap for drone share."""
+    from matplotlib.colors import BoundaryNorm, ListedColormap
+
+    drone_share_edges = np.arange(0, 101, 20, dtype=float)
+    bin_edges = np.concatenate([[-20.0], drone_share_edges])
+    cmap = ListedColormap([
+        "#cccccc",
+        "#ffffff",
+        "#d6e6f5",
+        "#91bfdb",
+        "#4292c6",
+        "#08519c",
+        "#08306b",
+    ])
+    norm = BoundaryNorm(bin_edges, ncolors=cmap.N, clip=True)
+    return cmap, norm, bin_edges, drone_share_edges
+
+
 def _build_absolute_reduction_log_cmap(values):
     """Discrete sequential cmap with log-spaced absolute reduction bins."""
     from matplotlib.colors import BoundaryNorm, ListedColormap
@@ -689,8 +708,6 @@ def plot_regions_map_optimal_drone_share(
         for_latex: If True, save as PDF.
         plot_title: If True, show title.
     """
-    from matplotlib.colors import BoundaryNorm, ListedColormap
-
     from visualization.regions import plot_regions_on_china_map
 
     try:
@@ -711,18 +728,7 @@ def plot_regions_map_optimal_drone_share(
         print("Regions map optimal drone share skipped — no valid drone-share values")
         return
 
-    drone_share_edges = np.arange(0, 101, 20, dtype=float)
-    bin_edges = np.concatenate([[-20.0], drone_share_edges])
-    cmap = ListedColormap([
-        "#cccccc",
-        "#ffffff",
-        "#d6e6f5",
-        "#91bfdb",
-        "#4292c6",
-        "#08519c",
-        "#08306b",
-    ])
-    norm = BoundaryNorm(bin_edges, ncolors=cmap.N, clip=True)
+    cmap, norm, bin_edges, drone_share_edges = _build_drone_share_cmap()
 
     fig, ax = plt.subplots(figsize=figsize)
     plot_regions_on_china_map(
@@ -3113,6 +3119,170 @@ def plot_regions_map_city_rank_inset(
         os.makedirs(os.path.dirname(save_path), exist_ok=True)
         plt.savefig(save_path, dpi=300, bbox_inches="tight")
         print(f"Regions map with city rank inset saved to {save_path}")
+    else:
+        plt.show()
+
+    plt.close(fig)
+
+
+def plot_regions_map_city_rank_and_drone_share(
+    df_stats: "pd.DataFrame",
+    stats_csv_path: str,
+    save_path: str = None,
+    figsize: tuple = (18, 9),
+    for_latex: bool = False,
+    plot_title: bool = False,
+):
+    """Side-by-side region maps for Oracle reduction and optimal drone share.
+
+    Args:
+        df_stats: all_region_stats DataFrame.
+        stats_csv_path: Path to all_region_stats.csv (for map function).
+        save_path: Path to save figure. Shows plot if None.
+        figsize: Figure size tuple.
+        for_latex: If True, save as PDF.
+        plot_title: If True, show title.
+    """
+    from visualization.regions import plot_regions_on_china_map
+
+    map_df = pd.read_csv(stats_csv_path)
+    for col in ("oracle_min_lifecycle_kg",):
+        if (
+            col not in map_df.columns
+            and col in df_stats.columns
+            and "region_key" in map_df.columns
+            and "region_key" in df_stats.columns
+        ):
+            map_df = map_df.merge(
+                df_stats[["region_key", col]],
+                on="region_key",
+                how="left",
+            )
+    try:
+        reduction_col = _oracle_reduction_tonnes_column(map_df)
+        drone_share_col = _weighted_drone_share_column(df_stats)
+    except KeyError as exc:
+        print(f"Regions map city rank and drone share skipped — {exc}")
+        return
+
+    reduction_values = map_df[reduction_col].dropna()
+    if reduction_values.empty:
+        print("Regions map city rank and drone share skipped — no valid reduction values")
+        return
+
+    drone_df = df_stats.copy()
+    drone_df[drone_share_col] = pd.to_numeric(drone_df[drone_share_col], errors="coerce")
+    if drone_df[drone_share_col].dropna().empty:
+        print("Regions map city rank and drone share skipped — no valid drone-share values")
+        return
+
+    reduction_cmap, reduction_norm, reduction_bins, reduction_edges = (
+        _build_absolute_reduction_log_cmap(reduction_values)
+    )
+    drone_cmap, drone_norm, drone_bins, drone_edges = _build_drone_share_cmap()
+
+    fig, (ax_a, ax_b) = plt.subplots(1, 2, figsize=figsize)
+
+    plot_regions_on_china_map(
+        df=map_df,
+        color_by=reduction_col,
+        ax=ax_a,
+        plot_title=False,
+        cmap=reduction_cmap,
+        norm=reduction_norm,
+        draw_colorbar=False,
+        draw_legend=False,
+    )
+    ax_a.set_xlabel("")
+    ax_a.set_ylabel("")
+    ax_a.set_xticks([])
+    ax_a.set_yticks([])
+    for spine in ax_a.spines.values():
+        spine.set_visible(False)
+
+    inset_ax = ax_a.inset_axes([0.03, 0.04, 0.34, 0.38], zorder=10)
+    _plot_city_oracle_reduction_rank(
+        map_df,
+        10,
+        plot_title=plot_title,
+        ax=inset_ax,
+        invert_vertical=True,
+        compact=True,
+    )
+    inset_ax.set_facecolor("none")
+    inset_ax.patch.set_alpha(0.0)
+    for name, spine in inset_ax.spines.items():
+        spine.set_visible(name in {"left", "bottom"})
+        spine.set_edgecolor("#666666")
+        spine.set_linewidth(0.6)
+
+    plot_regions_on_china_map(
+        df=drone_df,
+        color_by=drone_share_col,
+        ax=ax_b,
+        plot_title=False,
+        cmap=drone_cmap,
+        norm=drone_norm,
+        draw_colorbar=False,
+        draw_legend=False,
+    )
+    ax_b.set_xlabel("")
+    ax_b.set_ylabel("")
+    ax_b.set_xticks([])
+    ax_b.set_yticks([])
+    ax_b.grid(False)
+    for spine in ax_b.spines.values():
+        spine.set_visible(False)
+
+    ax_a.text(-0.03, 1.02, "a", transform=ax_a.transAxes,
+              fontsize=16, fontweight="bold", va="bottom", ha="right")
+    ax_b.text(-0.03, 1.02, "b", transform=ax_b.transAxes,
+              fontsize=16, fontweight="bold", va="bottom", ha="right")
+
+    if plot_title:
+        fig.suptitle(
+            "Regional Oracle Reduction and Optimal Drone Share",
+            fontsize=14,
+            fontweight="bold",
+        )
+
+    fig.tight_layout(w_pad=4.0)
+
+    fig.canvas.draw()
+    a_pos = ax_a.get_position()
+    cbar_a_ax = fig.add_axes((a_pos.x1 + 0.005, a_pos.y0, 0.010, a_pos.height))
+    cbar_a, n_bands_a = _draw_discrete_reduction_colorbar(
+        fig,
+        cbar_a_ax,
+        reduction_cmap,
+        reduction_norm,
+        reduction_bins,
+        reduction_edges,
+        "E-bike - Oracle (t CO₂eq / yr)",
+    )
+    _annotate_unstudied(fig, cbar_a, cbar_a_ax, n_bands_a)
+
+    b_pos = ax_b.get_position()
+    cbar_b_ax = fig.add_axes((b_pos.x1 + 0.005, b_pos.y0, 0.010, b_pos.height))
+    cbar_b, n_bands_b = _draw_discrete_reduction_colorbar(
+        fig,
+        cbar_b_ax,
+        drone_cmap,
+        drone_norm,
+        drone_bins,
+        drone_edges,
+        "Drone share at minimum lifecycle emission (%)",
+    )
+    _annotate_unstudied(fig, cbar_b, cbar_b_ax, n_bands_b)
+
+    if save_path:
+        if for_latex and not save_path.endswith(".pdf"):
+            save_path = save_path.rsplit(".", 1)[0] + ".pdf"
+        if plot_title:
+            save_path = _add_title_suffix(save_path)
+        os.makedirs(os.path.dirname(save_path), exist_ok=True)
+        plt.savefig(save_path, dpi=300, bbox_inches="tight")
+        print(f"Regions map city rank and drone share saved to {save_path}")
     else:
         plt.show()
 
