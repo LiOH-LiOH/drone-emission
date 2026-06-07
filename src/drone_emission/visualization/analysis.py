@@ -1562,7 +1562,7 @@ def plot_city_gef_distribution(
         2,
         1,
         figsize=figsize,
-        gridspec_kw={"height_ratios": [1.0, 0.55], "hspace": 0.0},
+        gridspec_kw={"height_ratios": [1.0, 1.0], "hspace": 0.0},
         sharex=True,
     )
 
@@ -1862,7 +1862,7 @@ def plot_city_gef_scatter_components(
         2,
         1,
         figsize=figsize,
-        gridspec_kw={"height_ratios": [1.0, 0.55], "hspace": 0.0},
+        gridspec_kw={"height_ratios": [1.0, 1.0], "hspace": 0.0},
         sharex=True,
     )
 
@@ -1888,9 +1888,11 @@ def plot_city_gef_scatter_components(
     for spec in vehicle_specs:
         all_values.extend(plot_df[spec["use_plot_col"]].to_numpy(dtype=float).tolist())
         all_values.extend(plot_df[spec["fixed_plot_col"]].to_numpy(dtype=float).tolist())
-        for xi, group in zip(x, bin_groups):
-            jitter = rng.uniform(-0.055, 0.055, size=len(group))
-            positions = xi + spec["offset"] + jitter
+        for group in bin_groups:
+            jitter = rng.uniform(-0.012, 0.012, size=len(group))
+            vehicle_offset = 0.025 if spec["offset"] > 0 else -0.025
+            positions = group[gef_col].to_numpy(dtype=float) / bin_width - 1.0
+            positions = positions + vehicle_offset + jitter
             ax.scatter(
                 positions,
                 group[spec["use_plot_col"]],
