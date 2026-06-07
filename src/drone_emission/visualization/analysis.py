@@ -3307,7 +3307,7 @@ def _plot_drone_share_distribution_inset(
         ax.axis("off")
         return
 
-    bins = np.arange(0, 101, 20, dtype=float)
+    bins = np.arange(0, 101, 10, dtype=float)
     clipped = values.clip(lower=0, upper=100)
     counts, edges = np.histogram(clipped, bins=bins)
     centres = (edges[:-1] + edges[1:]) / 2
@@ -3315,7 +3315,7 @@ def _plot_drone_share_distribution_inset(
     ax.bar(
         centres,
         counts,
-        width=17,
+        width=8.5,
         color="#91bfdb",
         edgecolor="#08306b",
         linewidth=0.5,
@@ -3323,8 +3323,14 @@ def _plot_drone_share_distribution_inset(
         zorder=2,
     )
 
-    x_curve = np.linspace(float(centres.min()), float(centres.max()), 120)
-    y_curve = np.interp(x_curve, centres, counts)
+    x_curve = np.linspace(float(centres.min()), float(centres.max()), 200)
+    if len(centres) >= 4:
+        from scipy.interpolate import make_interp_spline
+
+        spline = make_interp_spline(centres, counts, k=3)
+        y_curve = np.clip(spline(x_curve), 0, None)
+    else:
+        y_curve = np.interp(x_curve, centres, counts)
     ax.plot(x_curve, y_curve, color="#08306b", linewidth=1.2, zorder=3)
 
     ax.set_xlim(0, 100)
@@ -3335,9 +3341,10 @@ def _plot_drone_share_distribution_inset(
     ax.tick_params(axis="both", labelsize=6, length=2, pad=1)
     ax.yaxis.grid(True, linestyle=":", alpha=0.35)
     ax.set_axisbelow(True)
-    ax.set_facecolor("white")
-    ax.patch.set_alpha(0.90)
-    for spine in ax.spines.values():
+    ax.set_facecolor("none")
+    ax.patch.set_alpha(0.0)
+    for name, spine in ax.spines.items():
+        spine.set_visible(name in {"left", "bottom"})
         spine.set_edgecolor("#666666")
         spine.set_linewidth(0.6)
 
