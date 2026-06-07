@@ -2877,7 +2877,7 @@ def plot_regions_map_city_rank_inset(
     for spine in ax_a.spines.values():
         spine.set_visible(False)
 
-    ax_b = ax_a.inset_axes([0.03, 0.04, 0.34, 0.30], zorder=10)
+    ax_b = ax_a.inset_axes([0.03, 0.04, 0.34, 0.38], zorder=10)
     _plot_city_ebike_rank(
         df_stats, "top", 10,
         plot_title=plot_title,
@@ -2985,7 +2985,8 @@ def _plot_city_ebike_rank(
     ax.set_axisbelow(True)
     ax.tick_params(axis="x", labelsize=7 if compact else 10, pad=1 if compact else 3)
     ax.tick_params(axis="y", pad=1 if compact else 3)
-    ax.legend(loc="lower right", fontsize=6 if compact else 10, frameon=not compact)
+    ax.legend(loc="center right" if compact else "lower right",
+              fontsize=6 if compact else 10, frameon=not compact)
 
     xmax = ebike_t.max()
     pad = xmax * 0.01
