@@ -445,8 +445,8 @@ def _render_shanghai_city_context(data_dir, out, for_latex, plot_title, city_df,
 
     sales_df = pd.read_csv(sales_path)
     fig = plt.figure(figsize=(14.5, 5.6))
-    outer = fig.add_gridspec(1, 2, width_ratios=[1.05, 1.0], wspace=0.34)
-    heatmap_grid = outer[0].subgridspec(1, 2, width_ratios=[24, 1], wspace=0.05)
+    outer = fig.add_gridspec(1, 2, width_ratios=[1.25, 1.05], wspace=0.34)
+    heatmap_grid = outer[1].subgridspec(1, 2, width_ratios=[24, 1], wspace=0.05)
     ax_heatmap = fig.add_subplot(heatmap_grid[0])
     cax_heatmap = fig.add_subplot(heatmap_grid[1])
 
@@ -467,7 +467,7 @@ def _render_shanghai_city_context(data_dir, out, for_latex, plot_title, city_df,
     ax_heatmap.text(
         -0.10,
         1.02,
-        "a",
+        "b",
         transform=ax_heatmap.transAxes,
         fontsize=13,
         fontweight="bold",
@@ -476,7 +476,7 @@ def _render_shanghai_city_context(data_dir, out, for_latex, plot_title, city_df,
 
     _, ax_reduction, _ = _plot_reduction_detour_panel(
         fig,
-        outer[1],
+        outer[0],
         binned_by_city[region_key],
         labels.get(region_key, "Shanghai"),
         bin_width_km=0.1,
@@ -488,7 +488,7 @@ def _render_shanghai_city_context(data_dir, out, for_latex, plot_title, city_df,
     ax_reduction.text(
         -0.12,
         1.08,
-        "b",
+        "a",
         transform=ax_reduction.transAxes,
         fontsize=13,
         fontweight="bold",

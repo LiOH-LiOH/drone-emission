@@ -21,6 +21,9 @@ There is no formal pytest suite in the current tree. Validate changes with the n
 
 Agent preference: do not run Python code, Python modules, or test commands in this project unless the user explicitly asks for that validation. When preparing to run Python for checks, ask first or skip and report that validation was not run.
 
+## Paper Citation Quality
+For `docs/paper/` work, use strong academic sources by default: Nature-family journals, Transportation Research series journals, high-quality field journals, official data sources, and mandatory method/data references. Avoid weak or low-quality venues such as MDPI journals, generic sustainability journals, proceedings-like papers, market reports, and weak reviews for scholarly claims. If a weaker source is the only available fit for a necessary claim, explicitly warn the user before relying on it and record the reason in the paper citation notes.
+
 ## Commit & Pull Request Guidelines
 Recent commits use short imperative summaries such as `Fix circuity issue` and `Update network features`; keep the first line concise and action-oriented. Pull requests should describe the affected pipeline stage, list validation commands, note data/config assumptions, and include figures or screenshots when visualization output changes. Link related issues or experiment notes when available.
 
