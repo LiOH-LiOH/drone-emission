@@ -1512,7 +1512,7 @@ def plot_city_gef_distribution(
     plot_df = plot_df.dropna(subset=needed)
     valid_positive = (
         (plot_df[gef_col] > 0)
-        & (plot_df[gef_col] <= 1.0)
+        & (plot_df[gef_col] <= 0.9)
         & (plot_df["total_odpair_annual_sales"] > 0)
         & (plot_df[source_cols] > 0).all(axis=1)
         & (plot_df[fixed_source_cols] >= 0).all(axis=1)
@@ -1535,7 +1535,7 @@ def plot_city_gef_distribution(
 
     gef = plot_df[gef_col]
     bin_width = 0.1
-    bin_edges = np.linspace(0.0, 1.0, 11)
+    bin_edges = np.linspace(0.0, 0.9, 10)
     labels = [f"{right:.1f}" for right in bin_edges[1:]]
     plot_df["gef_range"] = pd.cut(
         gef,
@@ -1562,7 +1562,7 @@ def plot_city_gef_distribution(
         2,
         1,
         figsize=figsize,
-        gridspec_kw={"height_ratios": [1.0, 0.55], "hspace": 0.06},
+        gridspec_kw={"height_ratios": [1.0, 0.55], "hspace": 0.0},
         sharex=True,
     )
 
@@ -1642,13 +1642,20 @@ def plot_city_gef_distribution(
             median.set_linewidth(1.8)
 
     gef_label = VARIABLE_LABELS.get(gef_col, "Grid Emission Factor (kg CO2e/kWh)")
-    ax.set_ylabel("Use-phase emission per order (g CO2e/order)", fontsize=12)
-    ax.tick_params(axis="x", which="both", labelbottom=False)
+    ax.set_ylabel("Use phase\n(g CO2e/order)", fontsize=12)
+    ax.set_xlabel(gef_label, fontsize=12)
+    ax.set_xticks(x_all)
+    ax.set_xticklabels(labels)
+    ax.tick_params(axis="x", which="both", bottom=True, labelbottom=True, pad=2)
     ax.set_xlim(-0.5, len(labels) - 0.5)
     ax.set_yscale("log")
     box_values = np.array(box_values, dtype=float)
-    y_data_min = box_values[box_values > 0].min()
-    y_data_max = box_values.max()
+    fixed_values = np.array(fixed_values, dtype=float)
+    all_positive = np.concatenate(
+        [box_values[box_values > 0], fixed_values[fixed_values > 0]]
+    )
+    y_data_min = all_positive.min()
+    y_data_max = all_positive.max()
     log_min = np.log10(y_data_min)
     log_max = np.log10(y_data_max)
     log_span = max(log_max - log_min, 0.25)
@@ -1690,15 +1697,11 @@ def plot_city_gef_distribution(
             color="0.35",
         )
 
-    fixed_values = np.array(fixed_values, dtype=float)
-    fixed_positive = fixed_values[fixed_values > 0]
-    if fixed_positive.size:
-        ax_fixed.set_yscale("log")
-        ax_fixed.set_ylim(fixed_positive.max() * 1.12, fixed_positive.min() * 0.88)
-    ax_fixed.set_ylabel("Production + EOL per order (g CO2e/order)", fontsize=12)
-    ax_fixed.set_xlabel(gef_label, fontsize=12)
+    ax_fixed.set_yscale("log")
+    ax_fixed.set_ylim(y_data_max * 1.12, y_floor)
+    ax_fixed.set_ylabel("Production + EOL\n(g CO2e/order)", fontsize=12)
     ax_fixed.set_xticks(x_all)
-    ax_fixed.set_xticklabels(labels)
+    ax_fixed.tick_params(axis="x", which="both", bottom=False, labelbottom=False)
     ax_fixed.set_xlim(-0.5, len(labels) - 0.5)
     ax_fixed.grid(True, axis="y", alpha=0.3, linestyle="--")
     ax_fixed.set_axisbelow(True)
