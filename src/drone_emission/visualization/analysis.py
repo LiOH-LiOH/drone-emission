@@ -617,8 +617,6 @@ def plot_regions_map_optimal_drone_share(
         for_latex: If True, save as PDF.
         plot_title: If True, show title.
     """
-    from matplotlib.colors import LinearSegmentedColormap, Normalize
-
     from visualization.regions import plot_regions_on_china_map
 
     try:
@@ -639,23 +637,18 @@ def plot_regions_map_optimal_drone_share(
         print("Regions map optimal drone share skipped — no valid drone-share values")
         return
 
-    cmap = LinearSegmentedColormap.from_list(
-        "drone_share_heat",
-        ["#fff7bc", "#fec44f", "#ec7014", "#41b6c4", "#225ea8"],
-    )
-    norm = Normalize(vmin=0, vmax=100)
+    cmap, norm, bin_edges, drone_share_edges = _build_reduction_cmap(100)
 
     fig, ax = plt.subplots(figsize=figsize)
     plot_regions_on_china_map(
         df=map_df,
         color_by=drone_share_col,
-        colorbar_label="Drone share at minimum lifecycle emission (%)",
         ax=ax,
         plot_title=False,
         cmap=cmap,
         norm=norm,
-        draw_colorbar=True,
-        draw_legend=True,
+        draw_colorbar=False,
+        draw_legend=False,
     )
 
     ax.set_xlabel("")
@@ -674,6 +667,20 @@ def plot_regions_map_optimal_drone_share(
         )
 
     plt.tight_layout()
+
+    fig.canvas.draw()
+    ax_pos = ax.get_position()
+    cbar_ax = fig.add_axes((ax_pos.x1 + 0.005, ax_pos.y0, 0.014, ax_pos.height))
+    cbar, n_bands = _draw_discrete_reduction_colorbar(
+        fig,
+        cbar_ax,
+        cmap,
+        norm,
+        bin_edges,
+        drone_share_edges,
+        "Drone share at minimum lifecycle emission (%)",
+    )
+    _annotate_unstudied(fig, cbar, cbar_ax, n_bands)
 
     if save_path:
         if for_latex and not save_path.endswith(".pdf"):
