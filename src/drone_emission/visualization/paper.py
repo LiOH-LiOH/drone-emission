@@ -23,6 +23,7 @@ Available figures:
     city_gef_distribution,
     city_gef_scatter_components,
     regions_map,
+    regions_map_optimal_drone_share,
     scatter_detour_ratio_vs_reduction_by_gef,
     regions_map_and_gef_scatter,
     regions_map_city_province_ranks,
@@ -663,6 +664,7 @@ def render_all(data_dir: str, figures_dir: str, for_latex: bool = False, plot_ti
         plot_regions_map_city_province_ranks,
         plot_regions_map_city_rank_inset,
         plot_regions_map_kappa_panels,
+        plot_regions_map_optimal_drone_share,
         plot_regions_map_pathway_scenarios,
     )
     from visualization.concepts import (
@@ -847,6 +849,7 @@ def render_all(data_dir: str, figures_dir: str, for_latex: bool = False, plot_ti
         "city_ebike_rank_bottom10",
         "city_reduction_rank_top10",
         "regions_map",
+        "regions_map_optimal_drone_share",
         "regions_map_city_province_ranks",
         "regions_map_city_rank_inset",
         "regions_map_kappa_panels",
@@ -966,6 +969,14 @@ def render_all(data_dir: str, figures_dir: str, for_latex: bool = False, plot_ti
                 plot_regions_on_china_map(
                     csv_path=stats_path,
                     save_path=os.path.join(out, "regions_map.png"),
+                    for_latex=for_latex,
+                    plot_title=plot_title,
+                )
+
+            if _want("regions_map_optimal_drone_share"):
+                plot_regions_map_optimal_drone_share(
+                    df,
+                    save_path=os.path.join(out, "regions_map_optimal_drone_share.png"),
                     for_latex=for_latex,
                     plot_title=plot_title,
                 )

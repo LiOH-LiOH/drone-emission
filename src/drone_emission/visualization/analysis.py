@@ -601,6 +601,94 @@ def plot_regions_map_and_gef_scatter(
     plt.close(fig)
 
 
+def plot_regions_map_optimal_drone_share(
+    df: pd.DataFrame,
+    save_path: str = None,
+    figsize: tuple = (10, 9),
+    for_latex: bool = False,
+    plot_title: bool = False,
+):
+    """China choropleth of drone share needed for the best reduction mix.
+
+    Args:
+        df: all_region_stats DataFrame with region_name_cn and a weighted drone-share metric.
+        save_path: Path to save figure. Shows plot if None.
+        figsize: Figure size tuple.
+        for_latex: If True, save as PDF.
+        plot_title: If True, show title.
+    """
+    from matplotlib.colors import LinearSegmentedColormap, Normalize
+
+    from visualization.regions import plot_regions_on_china_map
+
+    try:
+        drone_share_col = _weighted_drone_share_column(df)
+    except KeyError as exc:
+        print(f"Regions map optimal drone share skipped — {exc}")
+        return
+
+    needed = {"region_name_cn", drone_share_col}
+    missing = sorted(needed - set(df.columns))
+    if missing:
+        print(f"Regions map optimal drone share skipped — missing columns {missing}")
+        return
+
+    map_df = df.copy()
+    map_df[drone_share_col] = pd.to_numeric(map_df[drone_share_col], errors="coerce")
+    if map_df[drone_share_col].dropna().empty:
+        print("Regions map optimal drone share skipped — no valid drone-share values")
+        return
+
+    cmap = LinearSegmentedColormap.from_list(
+        "drone_share_heat",
+        ["#fff7bc", "#fec44f", "#ec7014", "#41b6c4", "#225ea8"],
+    )
+    norm = Normalize(vmin=0, vmax=100)
+
+    fig, ax = plt.subplots(figsize=figsize)
+    plot_regions_on_china_map(
+        df=map_df,
+        color_by=drone_share_col,
+        colorbar_label="Drone share at minimum lifecycle emission (%)",
+        ax=ax,
+        plot_title=False,
+        cmap=cmap,
+        norm=norm,
+        draw_colorbar=True,
+        draw_legend=True,
+    )
+
+    ax.set_xlabel("")
+    ax.set_ylabel("")
+    ax.set_xticks([])
+    ax.set_yticks([])
+    ax.grid(False)
+    for spine in ax.spines.values():
+        spine.set_visible(False)
+
+    if plot_title:
+        fig.suptitle(
+            "Drone Share Needed for Minimum Lifecycle Emission",
+            fontsize=14,
+            fontweight="bold",
+        )
+
+    plt.tight_layout()
+
+    if save_path:
+        if for_latex and not save_path.endswith(".pdf"):
+            save_path = save_path.rsplit(".", 1)[0] + ".pdf"
+        if plot_title:
+            save_path = _add_title_suffix(save_path)
+        os.makedirs(os.path.dirname(save_path), exist_ok=True)
+        plt.savefig(save_path, dpi=300, bbox_inches="tight")
+        print(f"Regions map optimal drone share saved to {save_path}")
+    else:
+        plt.show()
+
+    plt.close(fig)
+
+
 def plot_regions_map_kappa_panels(
     oat_csv_path: str,
     stats_csv_path: str,
