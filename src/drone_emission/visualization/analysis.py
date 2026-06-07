@@ -22,6 +22,8 @@ WEIGHTED_DRONE_SHARE_COLUMNS = (
     "oracle_drone_order_ratio_pct",
     "optimal_drone_ratio_pct",
 )
+ORACLE_REDUCTION_KG_COL = "oracle_min_reduction_vs_ebike_kg"
+ORACLE_REDUCTION_T_COL = "oracle_min_reduction_vs_ebike_t"
 
 
 def _first_available_column(df: pd.DataFrame, candidates: tuple[str, ...], purpose: str) -> str:
@@ -50,6 +52,26 @@ def _weighted_drone_share_column(df: pd.DataFrame) -> str:
     return _first_available_column(df, WEIGHTED_DRONE_SHARE_COLUMNS, "weighted drone share")
 
 
+def _oracle_reduction_tonnes_column(df: pd.DataFrame) -> str:
+    """Add and return the absolute Oracle-vs-e-bike reduction column in tonnes."""
+    if "total_ebike_lifecycle" not in df.columns:
+        raise KeyError("Missing column for Oracle reduction: total_ebike_lifecycle")
+    ebike = pd.to_numeric(df["total_ebike_lifecycle"], errors="coerce")
+
+    if "oracle_min_lifecycle_kg" in df.columns:
+        oracle = pd.to_numeric(df["oracle_min_lifecycle_kg"], errors="coerce")
+        df[ORACLE_REDUCTION_KG_COL] = ebike - oracle
+    else:
+        reduction_pct_col = _first_available_column(
+            df, WEIGHTED_REDUCTION_COLUMNS, "weighted reduction"
+        )
+        reduction_pct = pd.to_numeric(df[reduction_pct_col], errors="coerce")
+        df[ORACLE_REDUCTION_KG_COL] = ebike * reduction_pct / 100.0
+
+    df[ORACLE_REDUCTION_T_COL] = df[ORACLE_REDUCTION_KG_COL] / 1e3
+    return ORACLE_REDUCTION_T_COL
+
+
 def _build_reduction_cmap(v_max: float):
     """Discrete green sequential cmap with gray 'Unstudied' band below 0.
 
@@ -71,6 +93,33 @@ def _build_reduction_cmap(v_max: float):
     return cmap, norm, bin_edges, reduction_edges
 
 
+def _build_absolute_reduction_cmap(v_max: float):
+    """Discrete sequential cmap for non-negative absolute emission reductions."""
+    from matplotlib.colors import BoundaryNorm, ListedColormap
+
+    if not np.isfinite(v_max) or v_max <= 0:
+        v_max = 1.0
+    raw_step = v_max / 5.0
+    magnitude = 10 ** np.floor(np.log10(raw_step))
+    step = next(
+        candidate * magnitude
+        for candidate in (1, 2, 5, 10)
+        if candidate * magnitude >= raw_step
+    )
+    top = max(np.ceil(v_max / step) * step, step)
+    value_edges = np.arange(0, top + step, step, dtype=float)
+    if value_edges[-1] < top:
+        value_edges = np.append(value_edges, top)
+
+    n_value_bins = len(value_edges) - 1
+    base = plt.get_cmap("YlGn")
+    value_colors = [base(x) for x in np.linspace(0.25, 0.9, n_value_bins)]
+    cmap = ListedColormap(["#cccccc", *value_colors])
+    bin_edges = np.concatenate([[-step], value_edges])
+    norm = BoundaryNorm(bin_edges, ncolors=cmap.N, clip=True)
+    return cmap, norm, bin_edges, value_edges
+
+
 def _draw_discrete_reduction_colorbar(fig, cbar_ax, cmap, norm, bin_edges,
                                       reduction_edges, label_text):
     """Draw the discrete reduction colorbar with a vertical 'Unstudied'
@@ -84,7 +133,11 @@ def _draw_discrete_reduction_colorbar(fig, cbar_ax, cmap, norm, bin_edges,
         boundaries=bin_edges, ticks=reduction_edges,
         spacing="uniform",
     )
-    cbar.ax.set_yticklabels([f"{int(b)}" for b in reduction_edges])
+    tick_labels = [
+        f"{int(b)}" if np.isclose(b, round(b)) else f"{b:g}"
+        for b in reduction_edges
+    ]
+    cbar.ax.set_yticklabels(tick_labels)
     plt.setp(cbar.ax.get_yticklabels(), rotation=0)
     cbar.outline.set_linewidth(0.6)
     cbar.ax.tick_params(labelsize=9, length=2)
@@ -2941,7 +2994,7 @@ def plot_regions_map_city_rank_inset(
     for_latex: bool = False,
     plot_title: bool = False,
 ):
-    """China choropleth with compact top-city e-bike rank inset.
+    """China choropleth with compact top-city Oracle reduction inset.
 
     Args:
         df_stats: all_region_stats DataFrame.
@@ -2954,9 +3007,29 @@ def plot_regions_map_city_rank_inset(
     from visualization.regions import plot_regions_on_china_map
 
     map_df = pd.read_csv(stats_csv_path)
-    reduction_col = _weighted_reduction_column(map_df)
-    v_max = max(float(map_df[reduction_col].max(skipna=True)), 0.0)
-    shared_cmap, shared_norm, bin_edges, reduction_edges = _build_reduction_cmap(v_max)
+    for col in ("oracle_min_lifecycle_kg",):
+        if (
+            col not in map_df.columns
+            and col in df_stats.columns
+            and "region_key" in map_df.columns
+            and "region_key" in df_stats.columns
+        ):
+            map_df = map_df.merge(
+                df_stats[["region_key", col]],
+                on="region_key",
+                how="left",
+            )
+    try:
+        reduction_col = _oracle_reduction_tonnes_column(map_df)
+    except KeyError as exc:
+        print(f"Regions map with city rank inset skipped — {exc}")
+        return
+    valid_reductions = map_df[reduction_col].dropna()
+    v_max = max(
+        float(valid_reductions.max()) if not valid_reductions.empty else 0.0,
+        0.0,
+    )
+    shared_cmap, shared_norm, bin_edges, reduction_edges = _build_absolute_reduction_cmap(v_max)
 
     fig, ax_a = plt.subplots(figsize=figsize)
     plot_regions_on_china_map(
@@ -2973,8 +3046,8 @@ def plot_regions_map_city_rank_inset(
         spine.set_visible(False)
 
     ax_b = ax_a.inset_axes([0.03, 0.04, 0.34, 0.38], zorder=10)
-    _plot_city_ebike_rank(
-        df_stats, "top", 10,
+    _plot_city_oracle_reduction_rank(
+        map_df, 10,
         plot_title=plot_title,
         ax=ax_b,
         invert_vertical=True,
@@ -2998,7 +3071,7 @@ def plot_regions_map_city_rank_inset(
                             0.014, a_pos.height))
     cbar, n_bands = _draw_discrete_reduction_colorbar(
         fig, cbar_ax, shared_cmap, shared_norm, bin_edges, reduction_edges,
-        VARIABLE_LABELS.get(reduction_col, reduction_col),
+        "E-bike - Oracle (t CO₂eq / yr)",
     )
     _annotate_unstudied(fig, cbar, cbar_ax, n_bands)
 
@@ -3010,6 +3083,104 @@ def plot_regions_map_city_rank_inset(
         os.makedirs(os.path.dirname(save_path), exist_ok=True)
         plt.savefig(save_path, dpi=300, bbox_inches="tight")
         print(f"Regions map with city rank inset saved to {save_path}")
+    else:
+        plt.show()
+
+    plt.close(fig)
+
+
+def _plot_city_oracle_reduction_rank(
+    df: pd.DataFrame,
+    n: int,
+    save_path: str = None,
+    figsize: tuple = (10, 7),
+    for_latex: bool = False,
+    plot_title: bool = False,
+    ax: "plt.Axes" = None,
+    invert_vertical: bool = False,
+    compact: bool = False,
+):
+    """Shared horizontal bar plot for top cities by absolute Oracle reduction."""
+    base_cols = ["region_name_en", "total_ebike_lifecycle"]
+    missing = [col for col in base_cols if col not in df.columns]
+    has_oracle = "oracle_min_lifecycle_kg" in df.columns
+    fallback_cols = [col for col in WEIGHTED_REDUCTION_COLUMNS if col in df.columns]
+    if missing or (not has_oracle and not fallback_cols):
+        needed = base_cols + ["oracle_min_lifecycle_kg or weighted reduction column"]
+        print(f"City Oracle reduction rank skipped — missing columns {needed}")
+        return
+
+    metric_cols = ["oracle_min_lifecycle_kg"] if has_oracle else fallback_cols
+    sub = df[base_cols + metric_cols].copy()
+    try:
+        reduction_col = _oracle_reduction_tonnes_column(sub)
+    except KeyError as exc:
+        print(f"City Oracle reduction rank skipped — {exc}")
+        return
+    sub = sub.dropna(subset=[reduction_col])
+    if sub.empty:
+        print("City Oracle reduction rank skipped — no rows with e-bike + Oracle emissions")
+        return
+
+    ranked = sub.sort_values(reduction_col, ascending=False).head(n)
+    ranked = ranked.sort_values(reduction_col, ascending=True).reset_index(drop=True)
+    if invert_vertical:
+        ranked = ranked.iloc[::-1].reset_index(drop=True)
+
+    cities = ranked["region_name_en"].tolist()
+    reductions_t = ranked[reduction_col].to_numpy(dtype=float)
+    y = np.arange(len(cities))
+    bar_color = "#1F6E2D"
+
+    _external_ax = ax is not None
+    if _external_ax:
+        fig = ax.get_figure()
+    else:
+        fig, ax = plt.subplots(figsize=figsize)
+
+    ax.barh(y, reductions_t, height=0.6, color=bar_color, alpha=0.88, zorder=2)
+    ax.set_yticks(y)
+    ax.set_yticklabels(cities, fontsize=7 if compact else 10)
+    ax.set_xlabel("E-bike - Oracle (t CO₂eq / yr)", fontsize=7 if compact else 12)
+    if compact:
+        ax.grid(False)
+    else:
+        ax.xaxis.grid(True, linestyle="--", alpha=0.4)
+    ax.set_axisbelow(True)
+    ax.tick_params(axis="x", labelsize=7 if compact else 10, pad=1 if compact else 3)
+    ax.tick_params(axis="y", pad=1 if compact else 3)
+
+    xmax = max(float(np.nanmax(reductions_t)), 1.0)
+    ax.set_xlim(0, xmax * (1.04 if compact else 1.18))
+    if not compact:
+        pad = xmax * 0.01
+        for i, value in enumerate(reductions_t):
+            fmt = "{:,.2f}" if value < 10 else ("{:,.1f}" if value < 100 else "{:,.0f}")
+            ax.text(
+                value + pad, i, fmt.format(value),
+                va="center", ha="left", fontsize=9, color="black", zorder=4,
+            )
+
+    if plot_title:
+        title = f"Top {n} Cities by E-bike - Oracle Lifecycle Emission"
+        if _external_ax:
+            ax.set_title(title, fontsize=12, fontweight="bold")
+        else:
+            fig.suptitle(title, fontsize=14, fontweight="bold")
+
+    if _external_ax:
+        return
+
+    plt.tight_layout()
+
+    if save_path:
+        ext = ".pdf" if for_latex else ".png"
+        out = save_path + ext
+        if plot_title:
+            out = _add_title_suffix(out)
+        os.makedirs(os.path.dirname(out), exist_ok=True)
+        plt.savefig(out, dpi=300, bbox_inches="tight")
+        print(f"City Oracle reduction rank saved to {out}")
     else:
         plt.show()
 
