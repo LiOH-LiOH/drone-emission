@@ -75,6 +75,84 @@ def _prepare_data(df):
     return lng, lat, sales
 
 
+def _sales_heatmap_geometry(lng, lat, boundaries_dict=None, lng_range=None, lat_range=None):
+    """Return heatmap bounds and map aspect geometry."""
+    if lng_range is not None and lat_range is not None:
+        min_lng, max_lng = lng_range
+        min_lat, max_lat = lat_range
+        heatmap_range = [list(lng_range), list(lat_range)]
+    elif boundaries_dict:
+        min_lng = boundaries_dict["min_lng"]
+        max_lng = boundaries_dict["max_lng"]
+        min_lat = boundaries_dict["min_lat"]
+        max_lat = boundaries_dict["max_lat"]
+        heatmap_range = [[min_lng, max_lng], [min_lat, max_lat]]
+    else:
+        pad_x = (lng.max() - lng.min()) * HEATMAP_PADDING_COEFF
+        pad_y = (lat.max() - lat.min()) * HEATMAP_PADDING_COEFF
+        min_lng, max_lng = lng.min() - pad_x, lng.max() + pad_x
+        min_lat, max_lat = lat.min() - pad_y, lat.max() + pad_y
+        heatmap_range = [[min_lng, max_lng], [min_lat, max_lat]]
+
+    avg_lat = (min_lat + max_lat) / 2
+    aspect_ratio = 1.0 / np.cos(np.radians(avg_lat))
+    plot_height = (max_lat - min_lat) * aspect_ratio
+    plot_width = max_lng - min_lng
+    return heatmap_range, aspect_ratio, plot_height, plot_width
+
+
+def _plot_sales_heatmap_on_ax(
+    ax,
+    df,
+    region_name_cn,
+    boundaries_dict=None,
+    lng_range=None,
+    lat_range=None,
+    zoom=14,
+    cax=None,
+):
+    """Draw a sales heatmap on an existing axes and return the image artist."""
+    lng, lat, sales = _prepare_data(df)
+    heatmap_range, aspect_ratio, plot_height, plot_width = _sales_heatmap_geometry(
+        lng, lat, boundaries_dict, lng_range, lat_range
+    )
+
+    bins_x = 1000
+    bins_y = max(1, int(bins_x * (plot_height / plot_width)))
+    heatmap, xedges, yedges = np.histogram2d(
+        lng, lat, bins=[bins_x, bins_y], weights=sales, range=heatmap_range
+    )
+    heatmap_smooth = gaussian_filter(heatmap, sigma=15)
+    mask_threshold = heatmap_smooth.max() * 0.001
+    heatmap_masked = np.ma.masked_where(heatmap_smooth < mask_threshold, heatmap_smooth)
+
+    map_cmap = get_custom_cmap(0.1)
+    extent = [xedges[0], xedges[-1], yedges[0], yedges[-1]]
+    ax.set_aspect(aspect_ratio)
+    im = ax.imshow(
+        heatmap_masked.T,
+        extent=extent,
+        origin="lower",
+        cmap=map_cmap,
+        aspect=aspect_ratio,
+        interpolation="bilinear",
+        zorder=10,
+    )
+
+    ax.set_xlim(heatmap_range[0])
+    ax.set_ylim(heatmap_range[1])
+    add_basemap_and_boundaries(ax, region_name_cn, boundaries_dict, zoom=zoom)
+    ax.set_xlim(heatmap_range[0])
+    ax.set_ylim(heatmap_range[1])
+
+    if cax is None:
+        divider = make_axes_locatable(ax)
+        cax = divider.append_axes("right", size="4%", pad=0.1)
+    cbar = plt.colorbar(im, cax=cax, label="Sales Density (Weighted)")
+    cbar.ax.tick_params(labelsize=10)
+    return im
+
+
 def plot_sales_heatmap(
     df, region_name, region_name_cn, boundaries_dict=None, save_path=None,
     for_latex=False, plot_title=False, lng_range=None, lat_range=None, zoom=14,
