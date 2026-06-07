@@ -1700,17 +1700,17 @@ def plot_city_gef_distribution(
     ax_fixed.set_ylim(y_data_max * 1.12, y_floor)
     ax_fixed.set_ylabel("Production + EOL\n(g CO2e/order)", fontsize=12)
     ax_fixed.set_xlabel(gef_label, fontsize=12)
-    ax_fixed.xaxis.set_label_position("top")
-    ax_fixed.xaxis.set_ticks_position("top")
+    ax_fixed.xaxis.set_label_position("bottom")
+    ax_fixed.xaxis.set_ticks_position("bottom")
     ax_fixed.set_xticks(x_all)
     ax_fixed.set_xticklabels(labels)
     ax_fixed.tick_params(
         axis="x",
         which="both",
-        top=True,
-        labeltop=True,
-        bottom=False,
-        labelbottom=False,
+        top=False,
+        labeltop=False,
+        bottom=True,
+        labelbottom=True,
         pad=2,
     )
     ax_fixed.set_xlim(-0.5, len(labels) - 0.5)
