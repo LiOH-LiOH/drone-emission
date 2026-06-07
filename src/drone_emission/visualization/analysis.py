@@ -3339,7 +3339,7 @@ def _plot_drone_share_distribution_inset(
     ax.set_ylabel("Cities", fontsize=7, labelpad=1)
     ax.set_xticks([0, 50, 100])
     ax.tick_params(axis="both", labelsize=6, length=2, pad=1)
-    ax.yaxis.grid(True, linestyle=":", alpha=0.35)
+    ax.grid(False)
     ax.set_axisbelow(True)
     ax.set_facecolor("none")
     ax.patch.set_alpha(0.0)
