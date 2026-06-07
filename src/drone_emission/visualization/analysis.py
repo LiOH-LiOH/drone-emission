@@ -1409,10 +1409,10 @@ def plot_city_gef_distribution(
     for_latex: bool = False,
     plot_title: bool = False,
 ):
-    """Plot city distribution across grid emission factor values.
+    """Plot city use-phase emission distributions across grid emission factor ranges.
 
     Args:
-        df: DataFrame with city-level grid emission factor values.
+        df: DataFrame with city-level grid emission factor and use-phase emissions.
         save_path: Path to save figure. Shows plot if None.
         figsize: Figure size tuple.
         for_latex: If True, save as PDF.
@@ -1428,91 +1428,137 @@ def plot_city_gef_distribution(
         print("City GEF distribution skipped - missing grid_emission_factor or gef column")
         return
 
+    emission_cols = [
+        col for col in (
+            "total_ebike_use_phase_emission_kg",
+            "total_drone_use_phase_emission_kg",
+        )
+        if col in df.columns and df[col].notna().any()
+    ]
+    if not emission_cols:
+        print(
+            "City GEF distribution skipped - missing total_ebike_use_phase_emission_kg "
+            "or total_drone_use_phase_emission_kg column"
+        )
+        return
+
     plot_df = df.copy()
     if "region_level" in plot_df.columns:
         plot_df = plot_df[plot_df["region_level"] == "city"]
 
-    gef = pd.to_numeric(plot_df[gef_col], errors="coerce").dropna()
-    if gef.empty:
-        print("City GEF distribution skipped - no valid city GEF values")
+    needed = [gef_col] + emission_cols
+    plot_df[gef_col] = pd.to_numeric(plot_df[gef_col], errors="coerce")
+    for col in emission_cols:
+        plot_df[col] = pd.to_numeric(plot_df[col], errors="coerce") / 1000.0
+    plot_df = plot_df.dropna(subset=needed)
+    valid_positive = (plot_df[gef_col] > 0) & (plot_df[emission_cols] > 0).all(axis=1)
+    plot_df = plot_df[valid_positive]
+    if plot_df.empty:
+        print("City GEF distribution skipped - no valid city GEF/use-phase values")
         return
 
-    n_bins = min(18, max(6, int(np.sqrt(len(gef)))))
-    counts, bin_edges = np.histogram(gef, bins=n_bins)
-    bin_width = float(np.mean(np.diff(bin_edges)))
+    gef = plot_df[gef_col]
+    bin_width = 0.1
+    start = np.floor(gef.min() / bin_width) * bin_width
+    stop = np.ceil(gef.max() / bin_width) * bin_width + bin_width
+    bin_edges = np.arange(start, stop + bin_width, bin_width)
+    if len(bin_edges) < 3:
+        bin_edges = np.array([gef.min(), gef.mean(), gef.max()])
+    labels = [
+        f"{left:.1f}-{right:.1f}"
+        for left, right in zip(bin_edges[:-1], bin_edges[1:])
+    ]
+    plot_df["gef_range"] = pd.cut(
+        gef,
+        bins=bin_edges,
+        labels=labels,
+        include_lowest=True,
+        right=False,
+    )
+
+    bin_groups = []
+    bin_labels = []
+    for label in labels:
+        group = plot_df[plot_df["gef_range"] == label]
+        if group.empty:
+            continue
+        bin_groups.append(group)
+        bin_labels.append(label)
+
+    if not bin_groups:
+        print("City GEF distribution skipped - no cities in GEF ranges")
+        return
 
     fig, ax = plt.subplots(figsize=figsize)
 
-    ax.hist(
-        gef,
-        bins=bin_edges,
-        color="#5B8CC0",
-        edgecolor="white",
-        linewidth=0.8,
-        alpha=0.82,
-        label="Cities",
-        zorder=2,
-    )
+    x = np.arange(len(bin_groups))
+    series = [
+        ("total_ebike_use_phase_emission_kg", "E-bike", "#4C8CBF", -0.18),
+        ("total_drone_use_phase_emission_kg", "Drone", "#E05C2B", 0.18),
+    ]
+    width = 0.28 if len(emission_cols) > 1 else 0.42
+    legend_handles = []
 
-    if len(gef) > 5 and gef.nunique() > 1:
-        from scipy.stats import gaussian_kde
-
-        kde = gaussian_kde(gef)
-        x_kde = np.linspace(gef.min(), gef.max(), 240)
-        y_kde = kde(x_kde) * len(gef) * bin_width
-        ax.plot(
-            x_kde,
-            y_kde,
-            color="#B23A2E",
-            linewidth=2.2,
-            label="KDE",
-            zorder=4,
+    for col, label, color, offset in series:
+        if col not in emission_cols:
+            continue
+        positions = x + (offset if len(emission_cols) > 1 else 0.0)
+        data = [group[col].to_numpy(dtype=float) for group in bin_groups]
+        bp = ax.boxplot(
+            data,
+            positions=positions,
+            widths=width,
+            patch_artist=True,
+            showfliers=False,
+            manage_ticks=False,
+            zorder=3,
         )
-
-    ax.axvline(
-        gef.median(),
-        color="#1F6E2D",
-        linestyle="--",
-        linewidth=1.5,
-        label=f"Median: {gef.median():.2f}",
-        zorder=5,
-    )
-    ax.axvline(
-        gef.mean(),
-        color="#2F2F2F",
-        linestyle=":",
-        linewidth=1.5,
-        label=f"Mean: {gef.mean():.2f}",
-        zorder=5,
-    )
+        for patch in bp["boxes"]:
+            patch.set_facecolor(color)
+            patch.set_edgecolor(color)
+            patch.set_alpha(0.45)
+        for whisker in bp["whiskers"]:
+            whisker.set_color(color)
+        for cap in bp["caps"]:
+            cap.set_color(color)
+        for median in bp["medians"]:
+            median.set_color(color)
+            median.set_linewidth(1.8)
+        legend_handles.append(
+            plt.Rectangle((0, 0), 1, 1, facecolor=color, alpha=0.45, edgecolor=color)
+        )
 
     gef_label = VARIABLE_LABELS.get(gef_col, "Grid Emission Factor (kg CO2e/kWh)")
     ax.set_xlabel(gef_label, fontsize=12)
-    ax.set_ylabel("Number of cities", fontsize=12)
-    ax.set_ylim(0, max(counts.max() * 1.18, 1))
+    ax.set_ylabel("Annual use-phase emission (t CO2e/yr)", fontsize=12)
+    ax.set_xticks(x)
+    ax.set_xticklabels(bin_labels, rotation=35, ha="right", fontsize=9)
+    ax.set_yscale("log")
     ax.grid(True, axis="y", alpha=0.3, linestyle="--")
     ax.set_axisbelow(True)
-    ax.legend(loc="upper right", fontsize=9)
-
-    ax.text(
-        0.02,
-        0.96,
-        f"n={len(gef)}",
-        transform=ax.transAxes,
-        ha="left",
-        va="top",
+    ax.legend(
+        legend_handles,
+        [label for col, label, _, _ in series if col in emission_cols],
+        loc="upper left",
         fontsize=9,
-        bbox=dict(
-            boxstyle="round,pad=0.25",
-            facecolor="white",
-            edgecolor="0.75",
-            alpha=0.9,
-        ),
     )
+
+    y_min, y_max = ax.get_ylim()
+    label_y = y_min * (y_max / y_min) ** 0.04
+    for xi, group in zip(x, bin_groups):
+        ax.text(
+            xi,
+            label_y,
+            f"n={len(group)}",
+            ha="center",
+            va="bottom",
+            fontsize=8,
+            color="0.35",
+        )
 
     if plot_title:
         ax.set_title(
-            "City Distribution by Grid Emission Factor",
+            "City Use-phase Emission by Grid Emission Factor Range",
             fontsize=14,
             fontweight="bold",
         )
