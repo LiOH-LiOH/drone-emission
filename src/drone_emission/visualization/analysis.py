@@ -1944,7 +1944,9 @@ def plot_city_gef_scatter_components(
     ax.set_yscale("log")
     ax.set_ylim(y_floor, y_data_max * 1.12)
     ax.set_ylabel("Use phase\n(g CO2e/order)", fontsize=12)
-    ax.tick_params(axis="x", which="both", bottom=False, labelbottom=False)
+    ax.set_xticks(x_all)
+    ax.set_xticklabels(labels)
+    ax.tick_params(axis="x", which="both", bottom=True, labelbottom=True, pad=2)
     ax.set_xlim(-0.5, len(labels) - 0.5)
     ax.grid(True, axis="y", alpha=0.3, linestyle="--")
     ax.set_axisbelow(True)
@@ -1976,16 +1978,16 @@ def plot_city_gef_scatter_components(
     ax_fixed.set_ylabel("Production + EOL\n(g CO2e/order)", fontsize=12)
     gef_label = VARIABLE_LABELS.get(gef_col, "Grid Emission Factor (kg CO2e/kWh)")
     ax_fixed.set_xlabel(gef_label, fontsize=12)
-    ax_fixed.xaxis.set_label_position("top")
-    ax_fixed.xaxis.set_ticks_position("top")
+    ax_fixed.xaxis.set_label_position("bottom")
+    ax_fixed.xaxis.set_ticks_position("bottom")
     ax_fixed.set_xticks(x_all)
-    ax_fixed.set_xticklabels(labels)
+    ax_fixed.set_xticklabels([])
     ax_fixed.tick_params(
         axis="x",
         which="both",
-        top=True,
-        labeltop=True,
-        bottom=False,
+        top=False,
+        labeltop=False,
+        bottom=True,
         labelbottom=False,
         pad=2,
     )
