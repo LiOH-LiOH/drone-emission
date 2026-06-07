@@ -16,9 +16,9 @@ _PROJECT_ROOT = os.path.dirname(
 
 # Feature and result variable definitions
 RESULT_VARIABLES = [
-    "max_lifecycle_reduction_pct",
-    "optimal_threshold_km",
-    "optimal_drone_ratio_pct",
+    "oracle_min_reduction_vs_ebike_pct",
+    "oracle_drone_order_ratio_pct",
+    "lifecycle_all_drone_reduction_pct",
 ]
 
 FEATURE_VARIABLES = {
@@ -349,10 +349,22 @@ def load_annual_emissions(csv_path: str = None) -> pd.DataFrame:
     df["all_ebike_tonnes"] = df["total_ebike_lifecycle"] / 1000.0
     df["all_drone_tonnes"] = df["total_drone_lifecycle"] / 1000.0
 
-    # Optimal mix: apply reduction percentage
-    reduction = df["max_lifecycle_reduction_pct"].fillna(0)
-    df["optimal_mix_tonnes"] = df["all_ebike_tonnes"] * (1 - reduction / 100)
-    df["reduction_pct"] = reduction
+    if "oracle_min_lifecycle_kg" in df.columns:
+        df["optimal_mix_tonnes"] = df["oracle_min_lifecycle_kg"] / 1000.0
+        df["reduction_pct"] = (
+            (df["total_ebike_lifecycle"] - df["oracle_min_lifecycle_kg"])
+            / df["total_ebike_lifecycle"]
+            * 100.0
+        )
+    else:
+        reduction_col = (
+            "oracle_min_reduction_vs_ebike_pct"
+            if "oracle_min_reduction_vs_ebike_pct" in df.columns
+            else "max_lifecycle_reduction_pct"
+        )
+        reduction = df[reduction_col].fillna(0)
+        df["optimal_mix_tonnes"] = df["all_ebike_tonnes"] * (1 - reduction / 100)
+        df["reduction_pct"] = reduction
 
     df["region_name"] = df["region_name_en"]
 

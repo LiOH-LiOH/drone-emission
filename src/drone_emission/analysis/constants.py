@@ -3,6 +3,12 @@
 # Human-readable labels for variables
 VARIABLE_LABELS = {
     # Results
+    "oracle_min_reduction_vs_ebike_pct": "Oracle Lifecycle Reduction (%)",
+    "oracle_drone_order_ratio_pct": "Oracle Drone Order Ratio (%)",
+    "lifecycle_all_drone_reduction_pct": "All-Drone Lifecycle Reduction (%)",
+    "drone_minus_ebike_lifecycle_kg": "Drone - E-bike Lifecycle (kg)",
+    "total_ebike_lifecycle": "Annual E-bike Lifecycle (kg)",
+    "total_drone_lifecycle": "Annual Drone Lifecycle (kg)",
     "max_lifecycle_reduction_pct": "Max Lifecycle Reduction (%)",
     "optimal_threshold_km": "Optimal Threshold (km)",
     "optimal_drone_ratio_pct": "Optimal Drone Ratio (%)",

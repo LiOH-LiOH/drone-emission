@@ -8,6 +8,12 @@ import pandas as pd
 import requests
 from matplotlib.colors import LinearSegmentedColormap, TwoSlopeNorm
 
+WEIGHTED_REDUCTION_COLUMNS = (
+    "oracle_min_reduction_vs_ebike_pct",
+    "max_lifecycle_reduction_pct",
+    "lifecycle_all_drone_reduction_pct",
+)
+
 # Project root directory
 _PROJECT_ROOT = os.path.dirname(
     os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -51,7 +57,18 @@ def _fetch_city_boundaries(adcode: str):
         return data
     except Exception as e:
         print(f"Failed to fetch boundaries for adcode {adcode}: {e}")
-        return None
+    return None
+
+
+def _resolve_color_by(df: pd.DataFrame, color_by: str) -> str:
+    """Prefer weighted reduction columns when legacy reduction output is absent."""
+    if color_by in df.columns:
+        return color_by
+    if color_by == "max_lifecycle_reduction_pct":
+        for candidate in WEIGHTED_REDUCTION_COLUMNS:
+            if candidate in df.columns:
+                return candidate
+    return color_by
 
 
 def _fetch_china_boundaries():
@@ -253,12 +270,14 @@ def plot_regions_on_china_map(
     if df is not None:
         if region_keys is not None:
             df = df[df["region_key"].isin(region_keys)]
+        color_by = _resolve_color_by(df, color_by)
         region_names_cn = df["region_name_cn"].values
         color_values = df[color_by].values if color_by in df.columns else None
     elif csv_path is not None:
         df = pd.read_csv(csv_path)
         if region_keys is not None:
             df = df[df["region_key"].isin(region_keys)]
+        color_by = _resolve_color_by(df, color_by)
 
         region_names_cn = df["region_name_cn"].values
         color_values = df[color_by].values if color_by in df.columns else None

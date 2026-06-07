@@ -487,7 +487,7 @@ def _render_shanghai_emission_reduction(data_dir, out, for_latex, plot_title):
     from visualization.emission import plot_emission_reduction_vs_drone_ratio
 
     df = pd.read_csv(od_path)
-    required = {"road_distance_m", "drone_lifecycle_g", "ebike_lifecycle_g"}
+    required = {"road_distance_m", "drone_lifecycle_g", "ebike_lifecycle_g", "annual_sales"}
     if not required.issubset(df.columns):
         missing = required - set(df.columns)
         print(f"Emission reduction skipped — {od_path} missing columns {missing}")
@@ -645,7 +645,7 @@ def _render_distance_comparison(data_dir, out, for_latex, plot_title, plot_fn):
 
 
 def render_all(data_dir: str, figures_dir: str, for_latex: bool = False, plot_title: bool = False, only: set = None, exp_config: dict = None):
-    from visualization.analysis import plot_province_orders_emission, plot_province_orders_both_emissions, plot_province_total_ebike_lifecycle, plot_city_ebike_rank_top10, plot_city_ebike_rank_bottom10, plot_city_reduction_rank_top10, plot_grouped_scatter, plot_regions_map_and_gef_scatter, plot_regions_map_city_province_ranks, plot_regions_map_kappa_panels, plot_regions_map_pathway_scenarios
+    from visualization.analysis import _weighted_reduction_column, plot_province_orders_emission, plot_province_orders_both_emissions, plot_province_total_ebike_lifecycle, plot_city_ebike_rank_top10, plot_city_ebike_rank_bottom10, plot_city_reduction_rank_top10, plot_grouped_scatter, plot_regions_map_and_gef_scatter, plot_regions_map_city_province_ranks, plot_regions_map_kappa_panels, plot_regions_map_pathway_scenarios
     from visualization.concepts import (
         plot_detour_and_lifecycle, plot_detour_lifecycle_distance, plot_emission_model_flowchart,
     )
@@ -1006,10 +1006,11 @@ def render_all(data_dir: str, figures_dir: str, for_latex: bool = False, plot_ti
                 else:
                     df_enriched = pd.read_csv(enriched_path)
                     if _want("scatter_detour_ratio_vs_reduction_by_gef"):
+                        reduction_col = _weighted_reduction_column(df_enriched)
                         plot_grouped_scatter(
                             df_enriched,
                             feature_var="detour_ratio",
-                            result_var="max_lifecycle_reduction_pct",
+                            result_var=reduction_col,
                             group_var="grid_emission_factor",
                             threshold=0.3,
                             save_path=os.path.join(out, "scatter_detour_ratio_vs_reduction_by_gef.png"),

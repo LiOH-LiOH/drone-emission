@@ -13,6 +13,35 @@ from visualization._utils import _add_title_suffix
 from analysis.constants import PROVINCE_NAME_EN, VARIABLE_LABELS
 
 
+WEIGHTED_REDUCTION_COLUMNS = (
+    "oracle_min_reduction_vs_ebike_pct",
+    "max_lifecycle_reduction_pct",
+    "lifecycle_all_drone_reduction_pct",
+)
+WEIGHTED_DRONE_SHARE_COLUMNS = (
+    "oracle_drone_order_ratio_pct",
+    "optimal_drone_ratio_pct",
+)
+
+
+def _first_available_column(df: pd.DataFrame, candidates: tuple[str, ...], purpose: str) -> str:
+    """Return the first available candidate column, preferring weighted metrics."""
+    for col in candidates:
+        if col in df.columns and df[col].notna().any():
+            return col
+    raise KeyError(f"No {purpose} column found; tried {', '.join(candidates)}")
+
+
+def _weighted_reduction_column(df: pd.DataFrame) -> str:
+    """Return the preferred weighted reduction metric column for city stats."""
+    return _first_available_column(df, WEIGHTED_REDUCTION_COLUMNS, "weighted reduction")
+
+
+def _weighted_drone_share_column(df: pd.DataFrame) -> str:
+    """Return the preferred weighted drone-share metric column for city stats."""
+    return _first_available_column(df, WEIGHTED_DRONE_SHARE_COLUMNS, "weighted drone share")
+
+
 def _build_reduction_cmap(v_max: float):
     """Discrete green sequential cmap with gray 'Unstudied' band below 0.
 
@@ -488,10 +517,10 @@ def plot_regions_map_and_gef_scatter(
 
     if gef_scenario == "current":
         map_df = None
-        map_color_by = "max_lifecycle_reduction_pct"
+        map_color_by = _weighted_reduction_column(df_stats)
         scatter_df = df_enriched
-        scatter_result_var = "max_lifecycle_reduction_pct"
-        cbar_label = None
+        scatter_result_var = _weighted_reduction_column(scatter_df)
+        cbar_label = VARIABLE_LABELS.get(map_color_by, map_color_by)
         y_label_override = None
         scatter_group_labels = None
     else:
@@ -970,7 +999,8 @@ def plot_regions_map_city_province_ranks(
     from visualization.regions import plot_regions_on_china_map
 
     map_df = pd.read_csv(stats_csv_path)
-    v_max = max(float(map_df["max_lifecycle_reduction_pct"].max(skipna=True)), 0.0)
+    reduction_col = _weighted_reduction_column(map_df)
+    v_max = max(float(map_df[reduction_col].max(skipna=True)), 0.0)
     shared_cmap, shared_norm, bin_edges, reduction_edges = _build_reduction_cmap(v_max)
 
     fig = plt.figure(figsize=figsize)
@@ -985,7 +1015,7 @@ def plot_regions_map_city_province_ranks(
     ax_c = fig.add_subplot(gs[1, :])
 
     plot_regions_on_china_map(
-        df=map_df, color_by="max_lifecycle_reduction_pct",
+        df=map_df, color_by=reduction_col,
         ax=ax_a, plot_title=plot_title,
         cmap=shared_cmap, norm=shared_norm,
         draw_colorbar=False, draw_legend=False,
@@ -1012,7 +1042,7 @@ def plot_regions_map_city_province_ranks(
                             0.012, a_pos.height))
     cbar, n_bands = _draw_discrete_reduction_colorbar(
         fig, cbar_ax, shared_cmap, shared_norm, bin_edges, reduction_edges,
-        r"Reduction vs today's all-ebike anchor (%)",
+        VARIABLE_LABELS.get(reduction_col, reduction_col),
     )
     _annotate_unstudied(fig, cbar, cbar_ax, n_bands)
 
@@ -1283,10 +1313,11 @@ def plot_emission_distribution(
     for_latex: bool = False,
     plot_title: bool = False,
 ):
-    """Plot distribution of emission reduction and optimal drone ratio across all cities.
+    """Plot distribution of emission reduction and drone order ratio across all cities.
 
-    Two subplots: histogram+KDE of max_lifecycle_reduction_pct, and histogram of
-    optimal_drone_ratio_pct. Annotated with n, mean, median, std.
+    Two subplots: histogram+KDE of the preferred weighted reduction metric, and
+    histogram of the preferred weighted drone-share metric. Annotated with n,
+    mean, median, std.
 
     Args:
         df: DataFrame with region statistics (from load_region_stats).
@@ -1297,9 +1328,11 @@ def plot_emission_distribution(
     """
     fig, axes = plt.subplots(1, 2, figsize=figsize)
 
-    # Subplot 1: max_lifecycle_reduction_pct
     ax1 = axes[0]
-    col1 = "max_lifecycle_reduction_pct"
+    try:
+        col1 = _weighted_reduction_column(df)
+    except KeyError:
+        col1 = None
     if col1 in df.columns:
         data1 = df[col1].dropna()
         ax1.hist(data1, bins=30, alpha=0.7, color="#3498db", edgecolor="white", density=True)
@@ -1320,13 +1353,15 @@ def plot_emission_distribution(
             transform=ax1.transAxes, ha="right", va="top", fontsize=9,
             bbox=dict(boxstyle="round,pad=0.3", facecolor="wheat", alpha=0.5),
         )
-    ax1.set_xlabel(VARIABLE_LABELS.get(col1, col1), fontsize=11)
+    ax1.set_xlabel(VARIABLE_LABELS.get(col1, col1) if col1 else "Reduction (%)", fontsize=11)
     ax1.set_ylabel("Density", fontsize=11)
     ax1.grid(True, alpha=0.3, linestyle="--")
 
-    # Subplot 2: optimal_drone_ratio_pct
     ax2 = axes[1]
-    col2 = "optimal_drone_ratio_pct"
+    try:
+        col2 = _weighted_drone_share_column(df)
+    except KeyError:
+        col2 = None
     if col2 in df.columns:
         data2 = df[col2].dropna()
         ax2.hist(data2, bins=30, alpha=0.7, color="#2ecc71", edgecolor="white", density=True)
@@ -1344,7 +1379,7 @@ def plot_emission_distribution(
             transform=ax2.transAxes, ha="right", va="top", fontsize=9,
             bbox=dict(boxstyle="round,pad=0.3", facecolor="wheat", alpha=0.5),
         )
-    ax2.set_xlabel(VARIABLE_LABELS.get(col2, col2), fontsize=11)
+    ax2.set_xlabel(VARIABLE_LABELS.get(col2, col2) if col2 else "Drone order ratio (%)", fontsize=11)
     ax2.set_ylabel("Density", fontsize=11)
     ax2.grid(True, alpha=0.3, linestyle="--")
 
@@ -1385,6 +1420,13 @@ def plot_city_emission_ranking(
         for_latex: If True, save as PDF.
         plot_title: If True, show title.
     """
+    if variable == "max_lifecycle_reduction_pct" and variable not in df.columns:
+        try:
+            variable = _weighted_reduction_column(df)
+        except KeyError as exc:
+            print(f"City emission ranking skipped — {exc}")
+            return
+
     if variable not in df.columns or "region_name" not in df.columns:
         print(f"Required columns not found for city ranking plot")
         return
@@ -1767,7 +1809,7 @@ def plot_geographic_pattern(
     for_latex: bool = False,
     plot_title: bool = False,
 ):
-    """Scatter plot of latitude vs max_lifecycle_reduction_pct with regression.
+    """Scatter plot of latitude vs weighted reduction metric with regression.
 
     Args:
         df: DataFrame with region statistics (must have min_lat/max_lat columns).
@@ -1776,7 +1818,11 @@ def plot_geographic_pattern(
         for_latex: If True, save as PDF.
         plot_title: If True, show title.
     """
-    result_col = "max_lifecycle_reduction_pct"
+    try:
+        result_col = _weighted_reduction_column(df)
+    except KeyError as exc:
+        print(f"Geographic pattern plot skipped — {exc}")
+        return
 
     # Compute center latitude from boundary columns
     if "min_lat" in df.columns and "max_lat" in df.columns:
@@ -2012,18 +2058,23 @@ def plot_province_total_ebike_lifecycle(
     """Province bar chart ranked by total annual e-bike emission, with reduction% boxplot overlay.
 
     Bars (left axis) show summed total_ebike_lifecycle per province, sorted descending.
-    Boxplot (right axis) shows per-city distribution of max_lifecycle_reduction_pct
-    within each province.
+    Boxplot (right axis) shows the per-city distribution of the preferred
+    weighted reduction metric within each province.
 
     Args:
         df: all_region_stats DataFrame with province, total_ebike_lifecycle,
-            max_lifecycle_reduction_pct.
+            and a weighted reduction metric.
         save_path: Path without extension. Saves PNG or PDF; shows interactively if None.
         figsize: Figure size tuple.
         for_latex: Save as PDF when True.
         plot_title: Add title when True.
     """
-    needed = ["province", "total_ebike_lifecycle", "max_lifecycle_reduction_pct"]
+    try:
+        reduction_col = _weighted_reduction_column(df)
+    except KeyError as exc:
+        print(f"Province total ebike lifecycle skipped — {exc}")
+        return
+    needed = ["province", "total_ebike_lifecycle", reduction_col]
     sub = df[needed].dropna().copy()
     if sub.empty:
         print("Province total ebike lifecycle skipped — no rows with required columns")
@@ -2041,7 +2092,7 @@ def plot_province_total_ebike_lifecycle(
     ordered = prov["province_en"].tolist()
     ebike_t = prov["total_ebike"].values / 1e3
     reduction_data = [
-        sub.loc[sub["province_en"] == p, "max_lifecycle_reduction_pct"].values
+        sub.loc[sub["province_en"] == p, reduction_col].values
         for p in ordered
     ]
 
@@ -2086,7 +2137,7 @@ def plot_province_total_ebike_lifecycle(
     for median in bp["medians"]:
         median.set_color(box_color)
         median.set_linewidth(1.5)
-    ax2.set_ylabel("Max lifecycle reduction (%)", fontsize=12, color=box_color)
+    ax2.set_ylabel(VARIABLE_LABELS.get(reduction_col, reduction_col), fontsize=12, color=box_color)
     ax2.tick_params(axis="y", labelcolor=box_color)
     ax2.set_xlim(ax1.get_xlim())
 
@@ -2096,7 +2147,10 @@ def plot_province_total_ebike_lifecycle(
     ]
     ax1.legend(
         handles,
-        ["Total e-bike emission", "Max reduction % (per-city distribution)"],
+        [
+            "Total e-bike emission",
+            f"{VARIABLE_LABELS.get(reduction_col, reduction_col)} (per-city)",
+        ],
         loc="upper right",
         fontsize=10,
     )

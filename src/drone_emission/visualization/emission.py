@@ -59,12 +59,29 @@ def add_experiment_info_box(
 
 
 def _draw_emission_reduction_vs_drone_ratio(ax, od_df, plot_title: bool = False, n_thresholds: int = 10):
-    """Draw the emission reduction vs drone ratio curve onto *ax*."""
-    road_km = od_df["road_distance_m"].values / 1000.0
-    drone_lc = od_df["drone_lifecycle_g"].values
-    ebike_lc = od_df["ebike_lifecycle_g"].values
-    total_orders = len(od_df)
-    ebike_total = ebike_lc.sum()
+    """Draw the sales-weighted emission reduction vs drone-order ratio curve."""
+    required = ["road_distance_m", "drone_lifecycle_g", "ebike_lifecycle_g", "annual_sales"]
+    valid = od_df.dropna(subset=required).copy()
+    for col in required:
+        valid[col] = pd.to_numeric(valid[col], errors="coerce")
+    valid = valid.dropna(subset=required)
+    valid = valid[
+        (valid["road_distance_m"] >= 0)
+        & (valid["annual_sales"] > 0)
+    ]
+    if valid.empty:
+        ax.text(0.5, 0.5, "weighted lifecycle data\nnot available",
+                transform=ax.transAxes, ha="center", va="center",
+                fontsize=10, color="#888888")
+        ax.tick_params(left=False, bottom=False, labelleft=False, labelbottom=False)
+        return
+
+    road_km = valid["road_distance_m"].to_numpy(dtype=float) / 1000.0
+    drone_lc = valid["drone_lifecycle_g"].to_numpy(dtype=float)
+    ebike_lc = valid["ebike_lifecycle_g"].to_numpy(dtype=float)
+    annual_sales = valid["annual_sales"].to_numpy(dtype=float)
+    total_orders = annual_sales.sum()
+    ebike_total = np.sum(ebike_lc * annual_sales)
 
     middle = np.linspace(
         max(0.3, np.percentile(road_km, 5)),
@@ -77,14 +94,14 @@ def _draw_emission_reduction_vs_drone_ratio(ax, od_df, plot_title: bool = False,
     reductions = []
     for t in thresholds:
         use_drone = road_km >= t
-        mixed = np.where(use_drone, drone_lc, ebike_lc).sum()
-        drone_ratios.append(use_drone.sum() / total_orders * 100)
+        mixed = np.sum(np.where(use_drone, drone_lc, ebike_lc) * annual_sales)
+        drone_ratios.append(annual_sales[use_drone].sum() / total_orders * 100)
         reductions.append((ebike_total - mixed) / ebike_total * 100)
 
     ax.plot(drone_ratios, reductions, "b-s", linewidth=2, markersize=6)
     ax.axhline(y=0, color="gray", linestyle="--", alpha=0.5)
-    ax.set_xlabel("Drone Delivery Ratio (%)", fontsize=12)
-    ax.set_ylabel("Emission Reduction (%)", fontsize=12)
+    ax.set_xlabel("Drone Order Ratio (%)", fontsize=12)
+    ax.set_ylabel("Weighted Emission Reduction (%)", fontsize=12)
     ax.grid(True, alpha=0.3)
     if plot_title:
         ax.set_title("Emission Reduction vs Drone Ratio", fontsize=14)
@@ -98,15 +115,15 @@ def plot_emission_reduction_vs_drone_ratio(
     plot_title: bool = False,
     n_thresholds: int = 10,
 ):
-    """Emission reduction (%) vs drone delivery ratio (%).
+    """Emission reduction (%) vs drone order ratio (%).
 
     Sweeps road-distance thresholds: orders with road_distance >= threshold
     are served by drone, others by e-bike. Plots resulting lifecycle reduction
-    against drone share. No bundling.
+    against annual-sales-weighted drone order share.
 
     Args:
         od_df: OD pairs DataFrame with road_distance_m, drone_lifecycle_g,
-               ebike_lifecycle_g columns.
+               ebike_lifecycle_g, annual_sales columns.
         save_path: Path to save figure (with extension). Shows plot if None.
         figsize: Figure size tuple.
         for_latex: If True, save as PDF.
@@ -1883,16 +1900,22 @@ def plot_distance_vs_emission(
     ebike_lifecycle_g,
     drone_lifecycle_g,
     optimal_threshold_km: float,
+    annual_sales=None,
     save_path: str = None,
     dpi: int = 300,
     for_latex: bool = False,
     plot_title: bool = False,
     n_bins: int = 50,
 ):
-    """Plot lifecycle emission vs trip distance for all-ebike and optimal mix scenarios."""
+    """Plot lifecycle emission vs trip distance for all-ebike and optimal mix scenarios.
+
+    When ``annual_sales`` is provided, binned means are weighted by annual OD
+    order counts.
+    """
     road_distances_km = np.asarray(road_distances_km)
     ebike_lifecycle_g = np.asarray(ebike_lifecycle_g)
     drone_lifecycle_g = np.asarray(drone_lifecycle_g)
+    weights = None if annual_sales is None else np.asarray(annual_sales, dtype=float)
 
     mix_emission = np.where(road_distances_km >= optimal_threshold_km, drone_lifecycle_g, ebike_lifecycle_g)
 
@@ -1900,8 +1923,17 @@ def plot_distance_vs_emission(
     bin_centers = (bin_edges[:-1] + bin_edges[1:]) / 2
     bin_idx = np.clip(np.digitize(road_distances_km, bin_edges) - 1, 0, n_bins - 1)
 
-    ebike_means = np.array([ebike_lifecycle_g[bin_idx == i].mean() if (bin_idx == i).any() else np.nan for i in range(n_bins)])
-    mix_means = np.array([mix_emission[bin_idx == i].mean() if (bin_idx == i).any() else np.nan for i in range(n_bins)])
+    def _bin_mean(values, mask):
+        if not mask.any():
+            return np.nan
+        if weights is None:
+            return values[mask].mean()
+        w = weights[mask]
+        total_w = w.sum()
+        return np.average(values[mask], weights=w) if total_w > 0 else np.nan
+
+    ebike_means = np.array([_bin_mean(ebike_lifecycle_g, bin_idx == i) for i in range(n_bins)])
+    mix_means = np.array([_bin_mean(mix_emission, bin_idx == i) for i in range(n_bins)])
 
     fig, ax = plt.subplots(figsize=(10, 6))
     ax.plot(bin_centers, ebike_means, color="#e74c3c", linewidth=2, label="All E-bike")
