@@ -1946,9 +1946,10 @@ def plot_city_gef_scatter_components(
 
     gef_label = VARIABLE_LABELS.get(gef_col, "Grid Emission Factor (kg CO2e/kWh)")
     ax.set_ylabel("Lifecycle emission\n(g CO2e/order)", fontsize=12)
+    ax.set_xlabel(gef_label, fontsize=12)
     ax.set_xticks(x_all)
     ax.set_xticklabels(labels)
-    ax.tick_params(axis="x", which="both", bottom=False, labelbottom=False)
+    ax.tick_params(axis="x", which="both", bottom=True, labelbottom=True, pad=2)
     ax.set_xlim(-0.5, len(labels) - 0.5)
     ax.set_ylim(0, max_total * 1.22)
     ax.grid(True, axis="y", alpha=0.3, linestyle="--")
@@ -2000,13 +2001,12 @@ def plot_city_gef_scatter_components(
     ax_dist.fill_between(
         x_violin,
         -density,
-        density,
+        0,
         color="#7A7A7A",
         alpha=0.35,
         linewidth=0,
         zorder=1,
     )
-    ax_dist.plot(x_violin, density, color="#555555", linewidth=0.8, zorder=2)
     ax_dist.plot(x_violin, -density, color="#555555", linewidth=0.8, zorder=2)
     ax_dist.scatter(
         density_x,
@@ -2018,25 +2018,12 @@ def plot_city_gef_scatter_components(
         linewidths=0.6,
         zorder=3,
     )
-    ax_dist.axhline(0, color="white", linewidth=0.7, alpha=0.9, zorder=2)
-    for xi, group in zip(x, bin_groups):
-        ax_dist.text(
-            xi,
-            0.86,
-            f"n={len(group)}",
-            ha="center",
-            va="center",
-            fontsize=8,
-            color="0.35",
-            zorder=4,
-        )
-    ax_dist.set_ylim(-1.15, 1.15)
+    ax_dist.axhline(0, color="#555555", linewidth=0.8, zorder=2)
+    ax_dist.set_ylim(-1.15, 0.12)
     ax_dist.set_yticks([])
     ax_dist.set_ylabel("Cities", fontsize=10)
-    ax_dist.set_xlabel(gef_label, fontsize=12)
     ax_dist.set_xticks(x_all)
-    ax_dist.set_xticklabels(labels)
-    ax_dist.tick_params(axis="x", which="both", pad=2)
+    ax_dist.tick_params(axis="x", which="both", bottom=False, labelbottom=False)
     ax_dist.spines["left"].set_visible(False)
     ax_dist.spines["right"].set_visible(False)
     ax_dist.grid(False)
