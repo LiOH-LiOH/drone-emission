@@ -34,6 +34,14 @@ def _first_available_column(df: pd.DataFrame, candidates: tuple[str, ...], purpo
 
 def _weighted_reduction_column(df: pd.DataFrame) -> str:
     """Return the preferred weighted reduction metric column for city stats."""
+    if {"total_ebike_lifecycle", "oracle_min_lifecycle_kg"}.issubset(df.columns):
+        ebike = pd.to_numeric(df["total_ebike_lifecycle"], errors="coerce")
+        oracle = pd.to_numeric(df["oracle_min_lifecycle_kg"], errors="coerce")
+        df["oracle_min_reduction_vs_ebike_pct"] = np.where(
+            ebike > 0,
+            (1.0 - oracle / ebike) * 100.0,
+            np.nan,
+        )
     return _first_available_column(df, WEIGHTED_REDUCTION_COLUMNS, "weighted reduction")
 
 
@@ -2841,10 +2849,17 @@ def _plot_city_ebike_rank(
     ax: "plt.Axes" = None,
 ):
     """Shared horizontal grouped-bar plot for top/bottom city ebike rankings."""
-    needed = ["region_name_en", "total_ebike_lifecycle", "total_drone_lifecycle"]
-    sub = df[needed].dropna()
+    needed = ["region_name_en", "total_ebike_lifecycle", "oracle_min_lifecycle_kg"]
+    missing = [col for col in needed if col not in df.columns]
+    if missing:
+        print(f"City ebike rank ({mode}) skipped — missing columns {missing}")
+        return
+    sub = df[needed].copy()
+    sub["total_ebike_lifecycle"] = pd.to_numeric(sub["total_ebike_lifecycle"], errors="coerce")
+    sub["oracle_min_lifecycle_kg"] = pd.to_numeric(sub["oracle_min_lifecycle_kg"], errors="coerce")
+    sub = sub.dropna()
     if sub.empty:
-        print(f"City ebike rank ({mode}) skipped — no rows with ebike + drone emissions")
+        print(f"City ebike rank ({mode}) skipped — no rows with ebike + oracle-min emissions")
         return
 
     ascending = mode == "bottom"
@@ -2855,21 +2870,21 @@ def _plot_city_ebike_rank(
     cities = ranked["region_name_en"].tolist()
     # Raw stats are kg CO₂eq; convert to tonnes for display.
     ebike_t = ranked["total_ebike_lifecycle"].values / 1e3
-    drone_t = ranked["total_drone_lifecycle"].values / 1e3
+    oracle_t = ranked["oracle_min_lifecycle_kg"].values / 1e3
 
     y = np.arange(len(cities))
     bar_h = 0.6
     ebike_color = "#E05C2B"
-    drone_color = "#2CA02C"
+    oracle_color = "#2CA02C"
 
     _external_ax = ax is not None
     if _external_ax:
         fig = ax.get_figure()
     else:
         fig, ax = plt.subplots(figsize=figsize)
-    # E-bike (orange) is the full bar; drone (green) overlays from 0, covering the avoided portion.
+    # E-bike (orange) is the full baseline; oracle minimum (green) overlays the residual.
     ax.barh(y, ebike_t, height=bar_h, color=ebike_color, alpha=0.85, label="E-bike (total)", zorder=2)
-    ax.barh(y, drone_t, height=bar_h, color=drone_color, alpha=0.95, label="Drone (residual)", zorder=3)
+    ax.barh(y, oracle_t, height=bar_h, color=oracle_color, alpha=0.95, label="Oracle minimum", zorder=3)
 
     ax.set_yticks(y)
     ax.set_yticklabels(cities, fontsize=10)
@@ -2880,8 +2895,8 @@ def _plot_city_ebike_rank(
 
     xmax = ebike_t.max()
     pad = xmax * 0.01
-    for i, (e, d) in enumerate(zip(ebike_t, drone_t)):
-        reduction = e - d
+    for i, (e, o) in enumerate(zip(ebike_t, oracle_t)):
+        reduction = e - o
         fmt = "{:,.2f}" if reduction < 10 else ("{:,.1f}" if reduction < 100 else "{:,.0f}")
         reduction_pct = reduction / e * 100 if e > 0 else 0
         ax.text(e + pad, i, f"{fmt.format(reduction)} (−{reduction_pct:.1f}%)",
@@ -2924,10 +2939,10 @@ def plot_city_ebike_rank_top10(
     plot_title: bool = False,
     ax: "plt.Axes" = None,
 ):
-    """Horizontal grouped bars: top-10 cities by annual e-bike lifecycle emission, with drone alongside.
+    """Horizontal grouped bars: top-10 cities by annual e-bike lifecycle emission, with oracle minimum alongside.
 
     Args:
-        df: all_region_stats DataFrame with region_name_en, total_ebike_lifecycle, total_drone_lifecycle.
+        df: all_region_stats DataFrame with region_name_en, total_ebike_lifecycle, oracle_min_lifecycle_kg.
         save_path: Path without extension. Saves PNG or PDF; shows interactively if None.
         figsize: Figure size tuple.
         for_latex: Save as PDF when True.
@@ -2945,10 +2960,10 @@ def plot_city_ebike_rank_bottom10(
     plot_title: bool = False,
     ax: "plt.Axes" = None,
 ):
-    """Horizontal grouped bars: bottom-10 cities by annual e-bike lifecycle emission, with drone alongside.
+    """Horizontal grouped bars: bottom-10 cities by annual e-bike lifecycle emission, with oracle minimum alongside.
 
     Args:
-        df: all_region_stats DataFrame with region_name_en, total_ebike_lifecycle, total_drone_lifecycle.
+        df: all_region_stats DataFrame with region_name_en, total_ebike_lifecycle, oracle_min_lifecycle_kg.
         save_path: Path without extension. Saves PNG or PDF; shows interactively if None.
         figsize: Figure size tuple.
         for_latex: Save as PDF when True.
