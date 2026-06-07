@@ -1449,13 +1449,13 @@ def plot_city_gef_distribution(
             "total_ebike_fixed_emission_kg_per_order_g",
             "E-bike",
             "#4C8CBF",
-            -0.018,
+            -0.18,
         ),
         (
             "total_drone_fixed_emission_kg_per_order_g",
             "Drone",
             "#E05C2B",
-            0.018,
+            0.18,
         ),
     ]
     available_series = [
@@ -1512,7 +1512,7 @@ def plot_city_gef_distribution(
     plot_df = plot_df.dropna(subset=needed)
     valid_positive = (
         (plot_df[gef_col] > 0)
-        & (plot_df[gef_col] <= 0.8)
+        & (plot_df[gef_col] <= 1.0)
         & (plot_df["total_odpair_annual_sales"] > 0)
         & (plot_df[source_cols] > 0).all(axis=1)
         & (plot_df[fixed_source_cols] >= 0).all(axis=1)
@@ -1535,7 +1535,7 @@ def plot_city_gef_distribution(
 
     gef = plot_df[gef_col]
     bin_width = 0.1
-    bin_edges = np.arange(0.0, 0.8 + bin_width, bin_width)
+    bin_edges = np.linspace(0.0, 1.0, 11)
     labels = [f"{right:.1f}" for right in bin_edges[1:]]
     plot_df["gef_range"] = pd.cut(
         gef,
@@ -1566,13 +1566,13 @@ def plot_city_gef_distribution(
         sharex=True,
     )
 
-    x_all = bin_edges[1:]
+    x_all = np.arange(len(labels), dtype=float)
     x = x_all[np.array(bin_positions, dtype=int)]
-    density_x = gef.to_numpy(dtype=float)
+    density_x = gef.to_numpy(dtype=float) / bin_width - 1.0
     if len(density_x) > 5 and np.unique(density_x).size > 1:
         from scipy.stats import gaussian_kde
 
-        x_violin = np.linspace(0.0, 0.8, 240)
+        x_violin = np.linspace(-0.5, len(labels) - 0.5, 240)
         density = gaussian_kde(density_x)(x_violin)
     else:
         x_violin = x_all
@@ -1583,12 +1583,12 @@ def plot_city_gef_distribution(
     if density.max() > 0:
         density = density / density.max()
 
-    width = 0.028 if len(plot_cols) > 1 else 0.042
+    width = 0.28 if len(plot_cols) > 1 else 0.42
     legend_handles = []
     box_values = []
 
     for col, _, label, color, offset in available_series:
-        positions = x + (offset * 0.1 if len(plot_cols) > 1 else 0.0)
+        positions = x + (offset if len(plot_cols) > 1 else 0.0)
         data = [group[col].to_numpy(dtype=float) for group in bin_groups]
         box_values.extend(np.concatenate(data).tolist())
         bp = ax.boxplot(
@@ -1644,7 +1644,7 @@ def plot_city_gef_distribution(
     gef_label = VARIABLE_LABELS.get(gef_col, "Grid Emission Factor (kg CO2e/kWh)")
     ax.set_ylabel("Use-phase emission per order (g CO2e/order)", fontsize=12)
     ax.tick_params(axis="x", which="both", labelbottom=False)
-    ax.set_xlim(0.0, 0.8)
+    ax.set_xlim(-0.5, len(labels) - 0.5)
     ax.set_yscale("log")
     box_values = np.array(box_values, dtype=float)
     y_data_min = box_values[box_values > 0].min()
@@ -1697,9 +1697,9 @@ def plot_city_gef_distribution(
         ax_fixed.set_ylim(fixed_positive.max() * 1.12, fixed_positive.min() * 0.88)
     ax_fixed.set_ylabel("Production + EOL per order (g CO2e/order)", fontsize=12)
     ax_fixed.set_xlabel(gef_label, fontsize=12)
-    ax_fixed.set_xticks(np.arange(0.1, 0.81, 0.1))
-    ax_fixed.set_xticklabels([f"{tick:.1f}" for tick in np.arange(0.1, 0.81, 0.1)])
-    ax_fixed.set_xlim(0.0, 0.8)
+    ax_fixed.set_xticks(x_all)
+    ax_fixed.set_xticklabels(labels)
+    ax_fixed.set_xlim(-0.5, len(labels) - 0.5)
     ax_fixed.grid(True, axis="y", alpha=0.3, linestyle="--")
     ax_fixed.set_axisbelow(True)
 
