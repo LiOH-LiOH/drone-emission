@@ -1409,10 +1409,10 @@ def plot_city_gef_distribution(
     for_latex: bool = False,
     plot_title: bool = False,
 ):
-    """Plot city emission distributions across grid emission factor ranges.
+    """Plot per-order use-phase emission distributions across GEF ranges.
 
     Args:
-        df: DataFrame with city-level grid emission factor and emission totals.
+        df: DataFrame with city-level grid emission factor and use-phase emissions.
         save_path: Path to save figure. Shows plot if None.
         figsize: Figure size tuple.
         for_latex: If True, save as PDF.
@@ -1428,53 +1428,60 @@ def plot_city_gef_distribution(
         print("City GEF distribution skipped - missing grid_emission_factor or gef column")
         return
 
-    metric_sets = [
+    series = [
         (
-            "use-phase",
-            (
-                ("total_ebike_use_phase_emission_kg", "E-bike", "#4C8CBF", -0.18),
-                ("total_drone_use_phase_emission_kg", "Drone", "#E05C2B", 0.18),
-            ),
+            "total_ebike_use_phase_emission_kg_per_order_g",
+            "total_ebike_use_phase_emission_kg",
+            "E-bike",
+            "#4C8CBF",
+            -0.18,
         ),
         (
-            "lifecycle",
-            (
-                ("total_ebike_lifecycle", "E-bike", "#4C8CBF", -0.18),
-                ("total_drone_lifecycle", "Drone", "#E05C2B", 0.18),
-            ),
+            "total_drone_use_phase_emission_kg_per_order_g",
+            "total_drone_use_phase_emission_kg",
+            "Drone",
+            "#E05C2B",
+            0.18,
         ),
     ]
-    metric_label = None
-    series = []
-    for candidate_label, candidate_series in metric_sets:
-        available = [
-            spec for spec in candidate_series
-            if spec[0] in df.columns and df[spec[0]].notna().any()
-        ]
-        if available:
-            metric_label = candidate_label
-            series = available
-            break
-
-    if not series:
-        print("City GEF distribution skipped - missing city emission total columns")
+    available_series = [
+        spec for spec in series
+        if spec[1] in df.columns and df[spec[1]].notna().any()
+    ]
+    if not available_series:
+        print("City GEF distribution skipped - missing city use-phase emission columns")
         return
-    emission_cols = [col for col, _, _, _ in series]
+    if "total_odpair_annual_sales" not in df.columns:
+        print("City GEF distribution skipped - missing total_odpair_annual_sales column")
+        return
+    source_cols = [source_col for _, source_col, _, _, _ in available_series]
+    plot_cols = [plot_col for plot_col, _, _, _, _ in available_series]
 
     plot_df = df.copy()
     if "region_level" in plot_df.columns:
         plot_df = plot_df[plot_df["region_level"] == "city"]
 
-    needed = [gef_col] + emission_cols
+    needed = [gef_col, "total_odpair_annual_sales"] + source_cols
     plot_df[gef_col] = pd.to_numeric(plot_df[gef_col], errors="coerce")
-    for col in emission_cols:
-        plot_df[col] = pd.to_numeric(plot_df[col], errors="coerce") / 1000.0
+    plot_df["total_odpair_annual_sales"] = pd.to_numeric(
+        plot_df["total_odpair_annual_sales"], errors="coerce"
+    )
+    for _, source_col, _, _, _ in available_series:
+        plot_df[source_col] = pd.to_numeric(plot_df[source_col], errors="coerce")
     plot_df = plot_df.dropna(subset=needed)
-    valid_positive = (plot_df[gef_col] > 0) & (plot_df[emission_cols] > 0).all(axis=1)
+    valid_positive = (
+        (plot_df[gef_col] > 0)
+        & (plot_df["total_odpair_annual_sales"] > 0)
+        & (plot_df[source_cols] > 0).all(axis=1)
+    )
     plot_df = plot_df[valid_positive]
     if plot_df.empty:
-        print("City GEF distribution skipped - no valid city GEF/emission values")
+        print("City GEF distribution skipped - no valid city GEF/use-phase values")
         return
+    for plot_col, source_col, _, _, _ in available_series:
+        plot_df[plot_col] = (
+            plot_df[source_col] / plot_df["total_odpair_annual_sales"] * 1000.0
+        )
 
     gef = plot_df[gef_col]
     bin_width = 0.1
@@ -1511,13 +1518,11 @@ def plot_city_gef_distribution(
     fig, ax = plt.subplots(figsize=figsize)
 
     x = np.arange(len(bin_groups))
-    width = 0.28 if len(emission_cols) > 1 else 0.42
+    width = 0.28 if len(plot_cols) > 1 else 0.42
     legend_handles = []
 
-    for col, label, color, offset in series:
-        if col not in emission_cols:
-            continue
-        positions = x + (offset if len(emission_cols) > 1 else 0.0)
+    for col, _, label, color, offset in available_series:
+        positions = x + (offset if len(plot_cols) > 1 else 0.0)
         data = [group[col].to_numpy(dtype=float) for group in bin_groups]
         bp = ax.boxplot(
             data,
@@ -1545,7 +1550,7 @@ def plot_city_gef_distribution(
 
     gef_label = VARIABLE_LABELS.get(gef_col, "Grid Emission Factor (kg CO2e/kWh)")
     ax.set_xlabel(gef_label, fontsize=12)
-    ax.set_ylabel(f"Annual {metric_label} emission (t CO2e/yr)", fontsize=12)
+    ax.set_ylabel("Use-phase emission per order (g CO2e/order)", fontsize=12)
     ax.set_xticks(x)
     ax.set_xticklabels(bin_labels, rotation=35, ha="right", fontsize=9)
     ax.set_yscale("log")
@@ -1553,7 +1558,7 @@ def plot_city_gef_distribution(
     ax.set_axisbelow(True)
     ax.legend(
         legend_handles,
-        [label for col, label, _, _ in series if col in emission_cols],
+        [label for _, _, label, _, _ in available_series],
         loc="upper left",
         fontsize=9,
     )
@@ -1573,7 +1578,7 @@ def plot_city_gef_distribution(
 
     if plot_title:
         ax.set_title(
-            f"City {metric_label.title()} Emission by Grid Emission Factor Range",
+            "City Use-phase Emission per Order by Grid Emission Factor Range",
             fontsize=14,
             fontweight="bold",
         )
