@@ -1515,9 +1515,46 @@ def plot_city_gef_distribution(
         print("City GEF distribution skipped - no cities in GEF ranges")
         return
 
-    fig, ax = plt.subplots(figsize=figsize)
+    fig, (ax_top, ax) = plt.subplots(
+        2,
+        1,
+        figsize=figsize,
+        gridspec_kw={"height_ratios": [0.18, 1.0], "hspace": 0.04},
+        sharex=True,
+    )
 
     x = np.arange(len(bin_groups))
+    density_x = np.concatenate(
+        [np.full(len(group), idx, dtype=float) for idx, group in enumerate(bin_groups)]
+    )
+    if len(density_x) > 5 and np.unique(density_x).size > 1:
+        from scipy.stats import gaussian_kde
+
+        x_violin = np.linspace(-0.5, len(bin_groups) - 0.5, 240)
+        density = gaussian_kde(density_x)(x_violin)
+    else:
+        x_violin = x
+        density = np.array([len(group) for group in bin_groups], dtype=float)
+    if density.max() > 0:
+        density = density / density.max()
+    ax_top.fill_between(
+        x_violin,
+        0,
+        density,
+        color="#7A7A7A",
+        alpha=0.35,
+        linewidth=0,
+        zorder=2,
+    )
+    ax_top.plot(x_violin, density, color="#555555", linewidth=0.8, zorder=3)
+    ax_top.set_ylim(0, 1.12)
+    ax_top.set_ylabel("")
+    ax_top.set_yticks([])
+    ax_top.tick_params(axis="x", which="both", bottom=False, labelbottom=False)
+    for spine in ("left", "right", "top"):
+        ax_top.spines[spine].set_visible(False)
+    ax_top.spines["bottom"].set_color("0.75")
+
     width = 0.28 if len(plot_cols) > 1 else 0.42
     legend_handles = []
 
@@ -1553,6 +1590,7 @@ def plot_city_gef_distribution(
     ax.set_ylabel("Use-phase emission per order (g CO2e/order)", fontsize=12)
     ax.set_xticks(x)
     ax.set_xticklabels(bin_labels, rotation=35, ha="right", fontsize=9)
+    ax.set_xlim(-0.5, len(bin_groups) - 0.5)
     ax.set_yscale("log")
     ax.grid(True, axis="y", alpha=0.3, linestyle="--")
     ax.set_axisbelow(True)
