@@ -108,7 +108,22 @@ def _build_absolute_reduction_log_cmap(values):
         v_min = max(v_min / 10.0, np.finfo(float).tiny)
         v_max = v_max * 10.0
 
-    value_edges = np.geomspace(v_min, v_max, num=6)
+    min_decade = int(np.floor(np.log10(v_min)))
+    max_decade = int(np.ceil(np.log10(v_max)))
+    nice_edges = [
+        mult * (10 ** decade)
+        for decade in range(min_decade, max_decade + 1)
+        for mult in (1, 2, 5)
+    ]
+    value_edges = np.array(
+        [edge for edge in nice_edges if edge >= v_min and edge <= v_max],
+        dtype=float,
+    )
+    lower_edge = 10 ** min_decade
+    upper_edge = 10 ** max_decade
+    value_edges = np.unique(np.concatenate([[lower_edge], value_edges, [upper_edge]]))
+    if len(value_edges) > 7:
+        value_edges = np.array([10 ** decade for decade in range(min_decade, max_decade + 1)], dtype=float)
     value_edges = np.concatenate([[0.0], value_edges])
     bin_edges = np.concatenate([[-v_min], value_edges])
 
@@ -132,10 +147,15 @@ def _draw_discrete_reduction_colorbar(fig, cbar_ax, cmap, norm, bin_edges,
         boundaries=bin_edges, ticks=reduction_edges,
         spacing="uniform",
     )
-    tick_labels = [
-        f"{int(b)}" if np.isclose(b, round(b)) else f"{b:g}"
-        for b in reduction_edges
-    ]
+    def _format_tick(value):
+        if np.isclose(value, 0):
+            return "0"
+        if abs(value) >= 1000:
+            scaled = value / 1000
+            return f"{int(scaled)}k" if np.isclose(scaled, round(scaled)) else f"{scaled:g}k"
+        return f"{int(value)}" if np.isclose(value, round(value)) else f"{value:g}"
+
+    tick_labels = [_format_tick(b) for b in reduction_edges]
     cbar.ax.set_yticklabels(tick_labels)
     plt.setp(cbar.ax.get_yticklabels(), rotation=0)
     cbar.outline.set_linewidth(0.6)
@@ -691,18 +711,14 @@ def plot_regions_map_optimal_drone_share(
         print("Regions map optimal drone share skipped — no valid drone-share values")
         return
 
-    drone_share_edges = np.arange(0, 101, 10, dtype=float)
-    bin_edges = np.concatenate([[-10.0], drone_share_edges])
+    drone_share_edges = np.arange(0, 101, 20, dtype=float)
+    bin_edges = np.concatenate([[-20.0], drone_share_edges])
     cmap = ListedColormap([
         "#cccccc",
         "#ffffff",
-        "#eaf2fb",
         "#d6e6f5",
-        "#bdd7ec",
         "#91bfdb",
-        "#6baed6",
         "#4292c6",
-        "#2171b5",
         "#08519c",
         "#08306b",
     ])
