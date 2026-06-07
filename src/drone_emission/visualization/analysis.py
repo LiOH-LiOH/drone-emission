@@ -1889,10 +1889,9 @@ def plot_city_gef_scatter_components(
         all_values.extend(plot_df[spec["use_plot_col"]].to_numpy(dtype=float).tolist())
         all_values.extend(plot_df[spec["fixed_plot_col"]].to_numpy(dtype=float).tolist())
         for group in bin_groups:
-            jitter = rng.uniform(-0.012, 0.012, size=len(group))
-            vehicle_offset = 0.025 if spec["offset"] > 0 else -0.025
+            jitter = rng.uniform(-0.01, 0.01, size=len(group))
             positions = group[gef_col].to_numpy(dtype=float) / bin_width - 1.0
-            positions = positions + vehicle_offset + jitter
+            positions = positions + jitter
             ax.scatter(
                 positions,
                 group[spec["use_plot_col"]],
@@ -1977,17 +1976,17 @@ def plot_city_gef_scatter_components(
     ax_fixed.set_ylabel("Production + EOL\n(g CO2e/order)", fontsize=12)
     gef_label = VARIABLE_LABELS.get(gef_col, "Grid Emission Factor (kg CO2e/kWh)")
     ax_fixed.set_xlabel(gef_label, fontsize=12)
-    ax_fixed.xaxis.set_label_position("bottom")
-    ax_fixed.xaxis.set_ticks_position("bottom")
+    ax_fixed.xaxis.set_label_position("top")
+    ax_fixed.xaxis.set_ticks_position("top")
     ax_fixed.set_xticks(x_all)
     ax_fixed.set_xticklabels(labels)
     ax_fixed.tick_params(
         axis="x",
         which="both",
-        top=False,
-        labeltop=False,
-        bottom=True,
-        labelbottom=True,
+        top=True,
+        labeltop=True,
+        bottom=False,
+        labelbottom=False,
         pad=2,
     )
     ax_fixed.set_xlim(-0.5, len(labels) - 0.5)
