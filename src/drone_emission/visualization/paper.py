@@ -42,7 +42,8 @@ TOP6_REDUCTION_DETOUR_FIGURES = {
     "top6_reduction_detour_grid_random",
 }
 
-REDUCTION_DETOUR_CACHE_VERSION = 1
+REDUCTION_DETOUR_CACHE_VERSION = 2
+REDUCTION_DETOUR_SELECTION_METRIC = "total_ebike_lifecycle"
 
 
 def _get_ebike_kappa(exp_config):
@@ -60,6 +61,63 @@ def _file_cache_signature(path):
         "size": stat.st_size,
         "mtime_ns": stat.st_mtime_ns,
     }
+
+
+def _prepare_reduction_detour_city_stats(city_df):
+    """Return city stats rows eligible for reduction-detour grids."""
+    required = {
+        "region_key",
+        "region_name_en",
+        "province",
+        "total_odpair_annual_sales",
+        "total_ebike_lifecycle",
+        "total_drone_lifecycle",
+        "gef",
+    }
+    missing = sorted(required - set(city_df.columns))
+    if missing:
+        print(
+            "top6_reduction_detour_grid skipped — all_region_stats.csv missing "
+            f"columns {missing}"
+        )
+        return city_df.iloc[0:0].copy()
+
+    city_df = city_df.copy()
+    numeric_cols = [
+        "total_odpair_annual_sales",
+        "total_ebike_lifecycle",
+        "total_drone_lifecycle",
+        "gef",
+    ]
+    for col in numeric_cols:
+        city_df[col] = pd.to_numeric(city_df[col], errors="coerce")
+
+    if "ebike_kappa" in city_df.columns:
+        before = len(city_df)
+        city_df["ebike_kappa"] = pd.to_numeric(city_df["ebike_kappa"], errors="coerce")
+        city_df = city_df[city_df["ebike_kappa"].notna()]
+        skipped = before - len(city_df)
+        if skipped:
+            print(
+                "top6_reduction_detour_grid: skipped "
+                f"{skipped} city rows without weighted kappa stats"
+            )
+    else:
+        print(
+            "top6_reduction_detour_grid: all_region_stats.csv has no ebike_kappa "
+            "column; run tools.recompute_kappa_city_metrics for weighted stats"
+        )
+
+    if "drone_minus_ebike_lifecycle_kg" in city_df.columns:
+        city_df["drone_minus_ebike_lifecycle_kg"] = pd.to_numeric(
+            city_df["drone_minus_ebike_lifecycle_kg"], errors="coerce"
+        )
+    else:
+        city_df["drone_minus_ebike_lifecycle_kg"] = (
+            city_df["total_drone_lifecycle"] - city_df["total_ebike_lifecycle"]
+        )
+
+    return city_df.dropna(subset=list(required))
 
 
 def _render_reduction_detour_grid_variant(
@@ -271,30 +329,49 @@ def _render_reduction_detour_grid_variant(
 
 def _select_top6_reduction_detour_variants(city_df, gef_df):
     """Return deterministic city selections for reduction-detour grid variants."""
+    selection_metric = REDUCTION_DETOUR_SELECTION_METRIC
+    if city_df.empty:
+        return {
+            "top6_reduction_detour_grid": city_df,
+            "top6_reduction_detour_grid_low_gef": city_df,
+            "top6_reduction_detour_grid_random": city_df,
+        }
+    if selection_metric not in city_df.columns:
+        print(
+            "top6_reduction_detour_grid skipped — all_region_stats.csv missing "
+            f"{selection_metric}"
+        )
+        empty = city_df.iloc[0:0].copy()
+        return {
+            "top6_reduction_detour_grid": empty,
+            "top6_reduction_detour_grid_low_gef": empty,
+            "top6_reduction_detour_grid_random": empty,
+        }
+
     city_df = city_df.copy()
     city_df["gef_rank"] = city_df["gef"].rank(method="dense")
 
-    big = city_df.nlargest(16, "total_odpair_annual_sales")
-    top6_big_keys = set(city_df.nlargest(6, "total_odpair_annual_sales")["region_key"])
+    big = city_df.nlargest(16, selection_metric)
+    top6_big_keys = set(city_df.nlargest(6, selection_metric)["region_key"])
 
-    sales_median = city_df["total_odpair_annual_sales"].median()
+    weighted_lifecycle_median = city_df[selection_metric].median()
     low_gef = (
         city_df[
-            (city_df["total_odpair_annual_sales"] >= sales_median)
+            (city_df[selection_metric] >= weighted_lifecycle_median)
             & ~city_df["region_key"].isin(top6_big_keys)
         ]
-        .sort_values(["gef", "total_odpair_annual_sales"], ascending=[True, False])
+        .sort_values(["gef", selection_metric], ascending=[True, False])
         .head(6)
     )
 
-    big_cutoff = city_df["total_odpair_annual_sales"].quantile(0.75)
-    small_floor = city_df["total_odpair_annual_sales"].quantile(0.25)
+    big_cutoff = city_df[selection_metric].quantile(0.75)
+    small_floor = city_df[selection_metric].quantile(0.25)
     low_gef_provinces = gef_df.nsmallest(8, "gef")["province"].tolist()
     non_low_gef = ~city_df["province"].isin(low_gef_provinces)
     mid_candidates = city_df[
         non_low_gef
-        & (city_df["total_odpair_annual_sales"] < big_cutoff)
-        & (city_df["total_odpair_annual_sales"] >= small_floor)
+        & (city_df[selection_metric] < big_cutoff)
+        & (city_df[selection_metric] >= small_floor)
     ]
     random_mid = mid_candidates.sample(
         n=min(6, len(mid_candidates)),
@@ -797,6 +874,7 @@ def render_all(data_dir: str, figures_dir: str, for_latex: bool = False, plot_ti
                 gef_df = pd.read_csv(gef_path, encoding="gbk")
                 gef_df.columns = ["province", "gef"]
                 city_df = city_df.merge(gef_df, on="province", how="left")
+                city_df = _prepare_reduction_detour_city_stats(city_df)
 
                 selected_map = _select_top6_reduction_detour_variants(city_df, gef_df)
                 for figure_name, selected in selected_map.items():

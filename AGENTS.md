@@ -19,6 +19,8 @@ Use Python 3.10+ and follow PEP 8 conventions: four-space indentation, `snake_ca
 ## Testing Guidelines
 There is no formal pytest suite in the current tree. Validate changes with the narrowest runnable workflow: use `bash scripts/test_run.sh <region> local` for end-to-end changes, or run the affected module/tool directly from `src/drone_emission`. For data-fetching work, use existing cached files when possible with `python main.py --region <region> --env local --no-fetch`. Record the region, environment, and command used in PR notes.
 
+Agent preference: do not run Python code, Python modules, or test commands in this project unless the user explicitly asks for that validation. When preparing to run Python for checks, ask first or skip and report that validation was not run.
+
 ## Commit & Pull Request Guidelines
 Recent commits use short imperative summaries such as `Fix circuity issue` and `Update network features`; keep the first line concise and action-oriented. Pull requests should describe the affected pipeline stage, list validation commands, note data/config assumptions, and include figures or screenshots when visualization output changes. Link related issues or experiment notes when available.
 
