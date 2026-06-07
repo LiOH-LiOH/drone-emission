@@ -1226,16 +1226,18 @@ class LifeCycleEmissions:
                 deliveries_per_day * p.working_days_per_year * p.lifespan
             )
 
-            # Production emissions
+            # Production and end-of-life emissions
             prod = self.calculate_ebike_production_emissions()
-            body_lifetime_kg = (
-                prod["body_production_kg"] + prod["body_disposal_kg"]
-            ) / p.lifespan
-            battery_lifetime_kg = (
-                prod["battery_production_kg"] + prod["battery_disposal_kg"]
-            ) / p.battery_lifespan
-            annual_prod_kg = body_lifetime_kg + battery_lifetime_kg
+            annual_prod_kg = (
+                prod["body_production_kg"] / p.lifespan
+                + prod["battery_production_kg"] / p.battery_lifespan
+            )
+            annual_eol_kg = (
+                prod["body_disposal_kg"] / p.lifespan
+                + prod["battery_disposal_kg"] / p.battery_lifespan
+            )
             prod_per_delivery_kg = annual_prod_kg * p.lifespan / lifetime_deliveries
+            eol_per_delivery_kg = annual_eol_kg * p.lifespan / lifetime_deliveries
 
             # Use emissions
             use = self.calculate_ebike_use_phase_emissions(
@@ -1252,14 +1254,16 @@ class LifeCycleEmissions:
             )
 
             prod = self.calculate_drone_production_emissions()
-            body_lifetime_kg = (
-                prod["body_production_kg"] + prod["body_disposal_kg"]
-            ) / p.lifespan
-            battery_lifetime_kg = (
-                prod["battery_production_kg"] + prod["battery_disposal_kg"]
-            ) / p.battery_lifespan
-            annual_prod_kg = body_lifetime_kg + battery_lifetime_kg
+            annual_prod_kg = (
+                prod["body_production_kg"] / p.lifespan
+                + prod["battery_production_kg"] / p.battery_lifespan
+            )
+            annual_eol_kg = (
+                prod["body_disposal_kg"] / p.lifespan
+                + prod["battery_disposal_kg"] / p.battery_lifespan
+            )
             prod_per_delivery_kg = annual_prod_kg * p.lifespan / lifetime_deliveries
+            eol_per_delivery_kg = annual_eol_kg * p.lifespan / lifetime_deliveries
 
             # Use emissions (drone carries 1 order)
             use = self.calculate_drone_use_phase_emissions(distance_km, 1.0)
@@ -1274,14 +1278,16 @@ class LifeCycleEmissions:
             )
 
             prod = self.calculate_ecar_production_emissions()
-            body_lifetime_kg = (
-                prod["body_production_kg"] + prod["body_disposal_kg"]
-            ) / p.lifespan
-            battery_lifetime_kg = (
-                prod["battery_production_kg"] + prod["battery_disposal_kg"]
-            ) / p.battery_lifespan
-            annual_prod_kg = body_lifetime_kg + battery_lifetime_kg
+            annual_prod_kg = (
+                prod["body_production_kg"] / p.lifespan
+                + prod["battery_production_kg"] / p.battery_lifespan
+            )
+            annual_eol_kg = (
+                prod["body_disposal_kg"] / p.lifespan
+                + prod["battery_disposal_kg"] / p.battery_lifespan
+            )
             prod_per_delivery_kg = annual_prod_kg * p.lifespan / lifetime_deliveries
+            eol_per_delivery_kg = annual_eol_kg * p.lifespan / lifetime_deliveries
 
             use = self.calculate_ecar_use_phase_emissions(
                 distance_km, n_orders_per_delivery
@@ -1297,8 +1303,10 @@ class LifeCycleEmissions:
             )
 
             prod = self.calculate_gasoline_car_production_emissions()
-            annual_prod_kg = prod["total_kg"] / p.lifespan
+            annual_prod_kg = prod["body_production_kg"] / p.lifespan
+            annual_eol_kg = prod["body_disposal_kg"] / p.lifespan
             prod_per_delivery_kg = annual_prod_kg * p.lifespan / lifetime_deliveries
+            eol_per_delivery_kg = annual_eol_kg * p.lifespan / lifetime_deliveries
 
             use = self.calculate_gasoline_car_use_phase_emissions(
                 distance_km, n_orders_per_delivery
@@ -1311,7 +1319,8 @@ class LifeCycleEmissions:
         # Per order
         prod_per_order_g = prod_per_delivery_kg * 1000 / n_orders_per_delivery
         use_per_order_g = use_per_delivery_kg * 1000 / n_orders_per_delivery
-        total_per_order_g = prod_per_order_g + use_per_order_g
+        eol_per_order_g = eol_per_delivery_kg * 1000 / n_orders_per_delivery
+        total_per_order_g = prod_per_order_g + use_per_order_g + eol_per_order_g
 
         return {
             "vehicle_type": vehicle_type,
@@ -1320,6 +1329,7 @@ class LifeCycleEmissions:
             "lifetime_deliveries": lifetime_deliveries,
             "production_per_order_g": prod_per_order_g,
             "use_per_order_g": use_per_order_g,
+            "end_of_life_per_order_g": eol_per_order_g,
             "total_per_order_g": total_per_order_g,
         }
 

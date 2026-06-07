@@ -98,6 +98,19 @@ def _ebike_production_lifetime_kg(p: EbikeParams, lifespan: float, battery_lifes
     return body_lifetime + battery_lifetime
 
 
+def _ebike_lifecycle_annual_parts_kg(
+    p: EbikeParams, lifespan: float, battery_lifespan: float
+) -> tuple[float, float]:
+    body_prod = p.e_body * p.w_body
+    total_battery_kwh = p.v_battery * p.n_battery
+    battery_prod = p.e_battery * total_battery_kwh
+    body_dispose = p.e_body_dispose * p.w_body
+    battery_dispose = p.e_battery_dispose * total_battery_kwh
+    production_kg = body_prod / lifespan + battery_prod / battery_lifespan
+    end_of_life_kg = body_dispose / lifespan + battery_dispose / battery_lifespan
+    return production_kg, end_of_life_kg
+
+
 def _drone_production_lifetime_kg(p: DroneParams, lifespan: float, battery_lifespan: float) -> float:
     body_prod = p.e_body * p.w_body
     body_dispose = p.e_body_dispose * p.w_body
@@ -107,6 +120,73 @@ def _drone_production_lifetime_kg(p: DroneParams, lifespan: float, battery_lifes
     body_lifetime = (body_prod + body_dispose) / lifespan
     battery_lifetime = (battery_prod + battery_dispose) / battery_lifespan
     return body_lifetime + battery_lifetime
+
+
+def _drone_lifecycle_annual_parts_kg(
+    p: DroneParams, lifespan: float, battery_lifespan: float
+) -> tuple[float, float]:
+    body_prod = p.e_body * p.w_body
+    total_battery_kwh = p.v_battery * p.n_battery
+    battery_prod = p.e_battery * total_battery_kwh
+    body_dispose = p.e_body_dispose * p.w_body
+    battery_dispose = p.e_battery_dispose * total_battery_kwh
+    production_kg = body_prod / lifespan + battery_prod / battery_lifespan
+    end_of_life_kg = body_dispose / lifespan + battery_dispose / battery_lifespan
+    return production_kg, end_of_life_kg
+
+
+def compute_ebike_per_order_parts_g(
+    distances_km: np.ndarray,
+    ebike_params: EbikeParams,
+    scenario: EbikeScenario,
+) -> dict[str, np.ndarray]:
+    """Vectorized e-bike lifecycle components per order (g CO2e)."""
+    p = ebike_params
+    s = scenario
+    lifespan = s.lifespan_yr if s.lifespan_yr is not None else p.lifespan
+    battery_lifespan = (
+        s.battery_lifespan_yr if s.battery_lifespan_yr is not None else p.battery_lifespan
+    )
+
+    d_eff = np.asarray(distances_km, dtype=float) * s.kappa
+
+    eng = EbikeEnergyModel(p)
+    velocity_kmh = p.velocity
+    velocity_ms = velocity_kmh / 3.6
+    w_go = p.w_body + p.w_battery + s.rider_weight + s.payload_kg
+    w_return = p.w_body + p.w_battery + s.rider_weight
+    P_go, _ = eng.calculate_power(w_go, velocity_ms)
+    P_return, _ = eng.calculate_power(w_return, velocity_ms)
+    energy_kwh = (P_go + P_return) * d_eff / velocity_kmh * s.energy_mult
+    use_g = energy_kwh * p.e_use * s.gef_mult * 1000.0
+    if not s.include_use:
+        use_g = np.zeros_like(d_eff)
+
+    delivery_time_min = 2.0 * d_eff / velocity_kmh * 60.0 + p.loading_time_min
+    deliveries_per_day = p.working_hours_per_day * 60.0 / delivery_time_min
+    production_annual_kg, eol_annual_kg = _ebike_lifecycle_annual_parts_kg(
+        p, lifespan, battery_lifespan
+    )
+    prod_g = (
+        production_annual_kg
+        / (deliveries_per_day * p.working_days_per_year)
+        * 1000.0
+    )
+    eol_g = eol_annual_kg / (deliveries_per_day * p.working_days_per_year) * 1000.0
+    if not s.include_production:
+        prod_g = np.zeros_like(d_eff)
+        eol_g = np.zeros_like(d_eff)
+
+    divisor = s.n_orders_per_delivery
+    prod_g = prod_g / divisor
+    use_g = use_g / divisor
+    eol_g = eol_g / divisor
+    return {
+        "production_g": prod_g,
+        "use_g": use_g,
+        "end_of_life_g": eol_g,
+        "total_g": prod_g + use_g + eol_g,
+    }
 
 
 def compute_ebike_per_order_g(
@@ -122,52 +202,17 @@ def compute_ebike_per_order_g(
 
     Returns an array shaped like ``distances_km``.
     """
-    p = ebike_params
-    s = scenario
-    lifespan = s.lifespan_yr if s.lifespan_yr is not None else p.lifespan
-    battery_lifespan = (
-        s.battery_lifespan_yr if s.battery_lifespan_yr is not None else p.battery_lifespan
-    )
-
-    d_eff = np.asarray(distances_km, dtype=float) * s.kappa
-
-    # Use-phase: scenario-constant powers from existing energy model (cached scalars)
-    eng = EbikeEnergyModel(p)
-    velocity_kmh = p.velocity
-    velocity_ms = velocity_kmh / 3.6
-    w_go = p.w_body + p.w_battery + s.rider_weight + s.payload_kg
-    w_return = p.w_body + p.w_battery + s.rider_weight
-    P_go, _ = eng.calculate_power(w_go, velocity_ms)
-    P_return, _ = eng.calculate_power(w_return, velocity_ms)
-    # Mirror cal_single_delivery.py:401: energy_kwh = (P_go + P_return) * (d / v)
-    # already encodes round trip (loaded one-way + empty one-way).
-    energy_kwh = (P_go + P_return) * d_eff / velocity_kmh * s.energy_mult
-    use_g = energy_kwh * p.e_use * s.gef_mult * 1000.0
-    if not s.include_use:
-        use_g = np.zeros_like(d_eff)
-
-    # Production amortization, per OD
-    delivery_time_min = 2.0 * d_eff / velocity_kmh * 60.0 + p.loading_time_min
-    deliveries_per_day = p.working_hours_per_day * 60.0 / delivery_time_min
-    annual_prod_kg = _ebike_production_lifetime_kg(p, lifespan, battery_lifespan)
-    # Mirror lines 1226-1227: prod_per_delivery_kg = annual_prod * lifespan / lifetime_deliveries
-    # where lifetime_deliveries = deliveries_per_day * working_days * lifespan
-    # => the lifespan in numerator and denominator cancel:
-    prod_per_delivery_kg = annual_prod_kg / (deliveries_per_day * p.working_days_per_year)
-    prod_g = prod_per_delivery_kg * 1000.0
-    if not s.include_production:
-        prod_g = np.zeros_like(d_eff)
-
-    total_g = (prod_g + use_g) / s.n_orders_per_delivery
-    return total_g
+    return compute_ebike_per_order_parts_g(
+        distances_km, ebike_params, scenario
+    )["total_g"]
 
 
-def compute_drone_per_order_g(
+def compute_drone_per_order_parts_g(
     distances_km: np.ndarray,
     drone_params: DroneParams,
     scenario: DroneScenario,
-) -> np.ndarray:
-    """Vectorized per-order lifecycle emissions for the drone mode (g CO2e)."""
+) -> dict[str, np.ndarray]:
+    """Vectorized drone lifecycle components per order (g CO2e)."""
     p = drone_params
     s = scenario
     lifespan = s.lifespan_yr if s.lifespan_yr is not None else p.lifespan
@@ -177,7 +222,6 @@ def compute_drone_per_order_g(
 
     d = np.asarray(distances_km, dtype=float)
 
-    # Use-phase: scenario-constant powers via existing flight-angle power calc
     eng = DroneEnergyModel(p)
     w_loaded = p.w_body + p.w_battery + s.payload_kg
     w_empty = p.w_body + p.w_battery
@@ -202,24 +246,44 @@ def compute_drone_per_order_g(
         + P_takeoff_empty * t_takeoff_h
         + P_landing_empty * t_landing_h
     )
-    # Linear-in-distance: level flight loaded + empty
     energy_kwh = (E_const + (P_level_loaded + P_level_empty) * d / p.v_level) * s.energy_mult
     use_g = energy_kwh * p.e_use * s.gef_mult * 1000.0
     if not s.include_use:
         use_g = np.zeros_like(d)
 
-    # Production amortization, per OD. The scalar code uses
-    # delivery_time_min = 2*d/v_level*60 + loading; we mirror exactly.
     delivery_time_min = 2.0 * d / p.v_level * 60.0 + p.loading_time_min
     deliveries_per_day = p.working_hours_per_day * 60.0 / delivery_time_min
-    annual_prod_kg = _drone_production_lifetime_kg(p, lifespan, battery_lifespan)
-    prod_per_delivery_kg = annual_prod_kg / (deliveries_per_day * p.working_days_per_year * s.utilization_mult)
-    prod_g = prod_per_delivery_kg * 1000.0
+    production_annual_kg, eol_annual_kg = _drone_lifecycle_annual_parts_kg(
+        p, lifespan, battery_lifespan
+    )
+    denominator = deliveries_per_day * p.working_days_per_year * s.utilization_mult
+    prod_g = production_annual_kg / denominator * 1000.0
+    eol_g = eol_annual_kg / denominator * 1000.0
     if not s.include_production:
         prod_g = np.zeros_like(d)
+        eol_g = np.zeros_like(d)
 
-    total_g = (prod_g + use_g) / s.n_orders_per_delivery
-    return total_g
+    divisor = s.n_orders_per_delivery
+    prod_g = prod_g / divisor
+    use_g = use_g / divisor
+    eol_g = eol_g / divisor
+    return {
+        "production_g": prod_g,
+        "use_g": use_g,
+        "end_of_life_g": eol_g,
+        "total_g": prod_g + use_g + eol_g,
+    }
+
+
+def compute_drone_per_order_g(
+    distances_km: np.ndarray,
+    drone_params: DroneParams,
+    scenario: DroneScenario,
+) -> np.ndarray:
+    """Vectorized per-order lifecycle emissions for the drone mode (g CO2e)."""
+    return compute_drone_per_order_parts_g(
+        distances_km, drone_params, scenario
+    )["total_g"]
 
 
 def threshold_sweep_km(road_distances_km: np.ndarray) -> np.ndarray:

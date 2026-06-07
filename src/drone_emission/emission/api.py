@@ -16,6 +16,15 @@ from .cal_single_delivery import (
     get_emission_params,
 )
 
+LIFECYCLE_COMPONENT_COLUMNS = (
+    "drone_lifecycle_production_g",
+    "drone_lifecycle_use_g",
+    "drone_lifecycle_eol_g",
+    "ebike_lifecycle_production_g",
+    "ebike_lifecycle_use_g",
+    "ebike_lifecycle_eol_g",
+)
+
 
 def cal_emission(region_info, exp_config):
     region_config = region_info.to_dict()
@@ -89,6 +98,9 @@ def cal_emission(region_info, exp_config):
     has_lifecycle_cols = (
         "drone_lifecycle_g" in od_df.columns and "ebike_lifecycle_g" in od_df.columns
     )
+    has_lifecycle_component_cols = all(
+        col in od_df.columns for col in LIFECYCLE_COMPONENT_COLUMNS
+    )
     has_time_cols = (
         "drone_time_min" in od_df.columns and "ebike_time_min" in od_df.columns
     )
@@ -102,12 +114,24 @@ def cal_emission(region_info, exp_config):
         and np.allclose(cached_ebike_kappas, ebike_kappa)
     )
 
-    if has_emission_cols and has_lifecycle_cols and has_time_cols and has_matching_ebike_kappa:
+    if (
+        has_emission_cols
+        and has_lifecycle_cols
+        and has_lifecycle_component_cols
+        and has_time_cols
+        and has_matching_ebike_kappa
+    ):
         print("Emission and time columns already exist, loading from CSV...")
         drone_emissions = od_df["drone_emission_kg"].values
         ebike_emissions = od_df["ebike_emission_kg"].values
         drone_lifecycle = od_df["drone_lifecycle_g"].values
         ebike_lifecycle = od_df["ebike_lifecycle_g"].values
+        drone_lifecycle_production = od_df["drone_lifecycle_production_g"].values
+        drone_lifecycle_use = od_df["drone_lifecycle_use_g"].values
+        drone_lifecycle_eol = od_df["drone_lifecycle_eol_g"].values
+        ebike_lifecycle_production = od_df["ebike_lifecycle_production_g"].values
+        ebike_lifecycle_use = od_df["ebike_lifecycle_use_g"].values
+        ebike_lifecycle_eol = od_df["ebike_lifecycle_eol_g"].values
         drone_time = od_df["drone_time_min"].values
         ebike_time = od_df["ebike_time_min"].values
         road_distances = od_df["road_distance_m"].values / 1000.0
@@ -117,6 +141,12 @@ def cal_emission(region_info, exp_config):
         ebike_emissions_list = []
         drone_lifecycle_list = []
         ebike_lifecycle_list = []
+        drone_lifecycle_production_list = []
+        drone_lifecycle_use_list = []
+        drone_lifecycle_eol_list = []
+        ebike_lifecycle_production_list = []
+        ebike_lifecycle_use_list = []
+        ebike_lifecycle_eol_list = []
         drone_time_list = []
         ebike_time_list = []
         road_distances_list = []
@@ -167,12 +197,32 @@ def cal_emission(region_info, exp_config):
 
             drone_lifecycle_list.append(lifecycle_drone["total_per_order_g"])
             ebike_lifecycle_list.append(lifecycle_ebike["total_per_order_g"])
+            drone_lifecycle_production_list.append(
+                lifecycle_drone["production_per_order_g"]
+            )
+            drone_lifecycle_use_list.append(lifecycle_drone["use_per_order_g"])
+            drone_lifecycle_eol_list.append(
+                lifecycle_drone["end_of_life_per_order_g"]
+            )
+            ebike_lifecycle_production_list.append(
+                lifecycle_ebike["production_per_order_g"]
+            )
+            ebike_lifecycle_use_list.append(lifecycle_ebike["use_per_order_g"])
+            ebike_lifecycle_eol_list.append(
+                lifecycle_ebike["end_of_life_per_order_g"]
+            )
             road_distances_list.append(road_distance_km)
 
         drone_emissions = np.array(drone_emissions_list)
         ebike_emissions = np.array(ebike_emissions_list)
         drone_lifecycle = np.array(drone_lifecycle_list)
         ebike_lifecycle = np.array(ebike_lifecycle_list)
+        drone_lifecycle_production = np.array(drone_lifecycle_production_list)
+        drone_lifecycle_use = np.array(drone_lifecycle_use_list)
+        drone_lifecycle_eol = np.array(drone_lifecycle_eol_list)
+        ebike_lifecycle_production = np.array(ebike_lifecycle_production_list)
+        ebike_lifecycle_use = np.array(ebike_lifecycle_use_list)
+        ebike_lifecycle_eol = np.array(ebike_lifecycle_eol_list)
         drone_time = np.array(drone_time_list)
         ebike_time = np.array(ebike_time_list)
         road_distances = np.array(road_distances_list)
@@ -182,6 +232,12 @@ def cal_emission(region_info, exp_config):
         od_df["ebike_emission_kg"] = ebike_emissions
         od_df["drone_lifecycle_g"] = drone_lifecycle
         od_df["ebike_lifecycle_g"] = ebike_lifecycle
+        od_df["drone_lifecycle_production_g"] = drone_lifecycle_production
+        od_df["drone_lifecycle_use_g"] = drone_lifecycle_use
+        od_df["drone_lifecycle_eol_g"] = drone_lifecycle_eol
+        od_df["ebike_lifecycle_production_g"] = ebike_lifecycle_production
+        od_df["ebike_lifecycle_use_g"] = ebike_lifecycle_use
+        od_df["ebike_lifecycle_eol_g"] = ebike_lifecycle_eol
         od_df["drone_time_min"] = drone_time
         od_df["ebike_time_min"] = ebike_time
         od_df["ebike_kappa"] = ebike_kappa
@@ -212,10 +268,36 @@ def cal_emission(region_info, exp_config):
     # ==================== Lifecycle Emission Analysis ====================
     total_ebike_lifecycle = np.sum(ebike_lifecycle * annual_sales) / 1000  # g -> kg
     total_drone_lifecycle = np.sum(drone_lifecycle * annual_sales) / 1000  # g -> kg
+    total_ebike_production_emission = (
+        np.sum(ebike_lifecycle_production * annual_sales) / 1000
+    )
+    total_ebike_use_phase_emission = np.sum(ebike_lifecycle_use * annual_sales) / 1000
+    total_ebike_end_of_life_emission = (
+        np.sum(ebike_lifecycle_eol * annual_sales) / 1000
+    )
+    total_drone_production_emission = (
+        np.sum(drone_lifecycle_production * annual_sales) / 1000
+    )
+    total_drone_use_phase_emission = np.sum(drone_lifecycle_use * annual_sales) / 1000
+    total_drone_end_of_life_emission = (
+        np.sum(drone_lifecycle_eol * annual_sales) / 1000
+    )
 
-    print(f"\n===== Lifecycle Emissions (Production + Use) =====")
+    print(f"\n===== Lifecycle Emissions (Production + Use + End of Life) =====")
     print(f"全部使用无人机排放: {total_drone_lifecycle:.2f} kg CO2e")
     print(f"全部使用电动自行车排放: {total_ebike_lifecycle:.2f} kg CO2e")
+    print(
+        "电动自行车分项: "
+        f"production={total_ebike_production_emission:.2f}, "
+        f"use={total_ebike_use_phase_emission:.2f}, "
+        f"end_of_life={total_ebike_end_of_life_emission:.2f} kg CO2e"
+    )
+    print(
+        "无人机分项: "
+        f"production={total_drone_production_emission:.2f}, "
+        f"use={total_drone_use_phase_emission:.2f}, "
+        f"end_of_life={total_drone_end_of_life_emission:.2f} kg CO2e"
+    )
     lifecycle_reduction = (
         (total_ebike_lifecycle - total_drone_lifecycle) / total_ebike_lifecycle * 100
     )
@@ -223,6 +305,30 @@ def cal_emission(region_info, exp_config):
 
     region_info.set_stat("total_ebike_lifecycle", total_ebike_lifecycle)
     region_info.set_stat("total_drone_lifecycle", total_drone_lifecycle)
+    region_info.set_stat(
+        "total_ebike_production_emission_kg",
+        total_ebike_production_emission,
+    )
+    region_info.set_stat(
+        "total_ebike_use_phase_emission_kg",
+        total_ebike_use_phase_emission,
+    )
+    region_info.set_stat(
+        "total_ebike_end_of_life_emission_kg",
+        total_ebike_end_of_life_emission,
+    )
+    region_info.set_stat(
+        "total_drone_production_emission_kg",
+        total_drone_production_emission,
+    )
+    region_info.set_stat(
+        "total_drone_use_phase_emission_kg",
+        total_drone_use_phase_emission,
+    )
+    region_info.set_stat(
+        "total_drone_end_of_life_emission_kg",
+        total_drone_end_of_life_emission,
+    )
     region_info.set_stat(
         "drone_minus_ebike_lifecycle_kg",
         total_drone_lifecycle - total_ebike_lifecycle,
@@ -304,6 +410,12 @@ def cal_emission(region_info, exp_config):
             {
                 "total_drone_lifecycle_kg": total_drone_lifecycle,
                 "total_ebike_lifecycle_kg": total_ebike_lifecycle,
+                "total_drone_production_emission_kg": total_drone_production_emission,
+                "total_drone_use_phase_emission_kg": total_drone_use_phase_emission,
+                "total_drone_end_of_life_emission_kg": total_drone_end_of_life_emission,
+                "total_ebike_production_emission_kg": total_ebike_production_emission,
+                "total_ebike_use_phase_emission_kg": total_ebike_use_phase_emission,
+                "total_ebike_end_of_life_emission_kg": total_ebike_end_of_life_emission,
                 "drone_minus_ebike_lifecycle_kg": total_drone_lifecycle
                 - total_ebike_lifecycle,
                 "oracle_min_lifecycle_kg": oracle_lifecycle,
