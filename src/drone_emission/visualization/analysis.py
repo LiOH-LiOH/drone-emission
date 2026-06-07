@@ -2877,11 +2877,7 @@ def plot_regions_map_city_rank_inset(
     for spine in ax_a.spines.values():
         spine.set_visible(False)
 
-    ax_b = ax_a.inset_axes([0.03, 0.04, 0.40, 0.30], zorder=10)
-    ax_b.set_facecolor("white")
-    for spine in ax_b.spines.values():
-        spine.set_edgecolor("#666666")
-        spine.set_linewidth(0.6)
+    ax_b = ax_a.inset_axes([0.03, 0.04, 0.34, 0.30], zorder=10)
     _plot_city_ebike_rank(
         df_stats, "top", 10,
         plot_title=plot_title,
@@ -2889,6 +2885,12 @@ def plot_regions_map_city_rank_inset(
         invert_vertical=True,
         compact=True,
     )
+    ax_b.set_facecolor("none")
+    ax_b.patch.set_alpha(0.0)
+    for name, spine in ax_b.spines.items():
+        spine.set_visible(name in {"left", "bottom"})
+        spine.set_edgecolor("#666666")
+        spine.set_linewidth(0.6)
 
     ax_a.text(-0.03, 1.02, "a", transform=ax_a.transAxes,
               fontsize=16, fontweight="bold", va="bottom", ha="right")
@@ -2976,7 +2978,10 @@ def _plot_city_ebike_rank(
     ax.set_yticks(y)
     ax.set_yticklabels(cities, fontsize=7 if compact else 10)
     ax.set_xlabel("Annual lifecycle emission (t CO₂eq)", fontsize=7 if compact else 12)
-    ax.xaxis.grid(True, linestyle="--", alpha=0.35 if compact else 0.4)
+    if compact:
+        ax.grid(False)
+    else:
+        ax.xaxis.grid(True, linestyle="--", alpha=0.4)
     ax.set_axisbelow(True)
     ax.tick_params(axis="x", labelsize=7 if compact else 10, pad=1 if compact else 3)
     ax.tick_params(axis="y", pad=1 if compact else 3)
