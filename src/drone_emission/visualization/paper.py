@@ -21,6 +21,7 @@ Available figures:
     city_ebike_rank_top10, city_ebike_rank_bottom10,
     city_reduction_rank_top10,
     city_gef_distribution,
+    city_gef_scatter_components,
     regions_map,
     scatter_detour_ratio_vs_reduction_by_gef,
     regions_map_and_gef_scatter,
@@ -651,6 +652,7 @@ def render_all(data_dir: str, figures_dir: str, for_latex: bool = False, plot_ti
         plot_city_ebike_rank_bottom10,
         plot_city_ebike_rank_top10,
         plot_city_gef_distribution,
+        plot_city_gef_scatter_components,
         plot_city_reduction_rank_top10,
         plot_grouped_scatter,
         plot_province_orders_both_emissions,
@@ -830,6 +832,7 @@ def render_all(data_dir: str, figures_dir: str, for_latex: bool = False, plot_ti
     future_gef_figures = ("regions_map_and_gef_scatter_2030", "regions_map_and_gef_scatter_2060")
     gef_figures = {
         "city_gef_distribution",
+        "city_gef_scatter_components",
         "scatter_detour_ratio_vs_reduction_by_gef",
         "regions_map_and_gef_scatter",
         *future_gef_figures,
@@ -1009,6 +1012,13 @@ def render_all(data_dir: str, figures_dir: str, for_latex: bool = False, plot_ti
                         plot_city_gef_distribution(
                             df_enriched,
                             save_path=os.path.join(out, "city_gef_distribution.png"),
+                            for_latex=for_latex,
+                            plot_title=plot_title,
+                        )
+                    if _want("city_gef_scatter_components"):
+                        plot_city_gef_scatter_components(
+                            df_enriched,
+                            save_path=os.path.join(out, "city_gef_scatter_components.png"),
                             for_latex=for_latex,
                             plot_title=plot_title,
                         )

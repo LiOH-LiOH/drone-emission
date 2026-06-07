@@ -1740,6 +1740,270 @@ def plot_city_gef_distribution(
     plt.close(fig)
 
 
+def plot_city_gef_scatter_components(
+    df: pd.DataFrame,
+    save_path: str = None,
+    figsize: tuple = (8, 5),
+    for_latex: bool = False,
+    plot_title: bool = False,
+):
+    """Plot city per-order emission components by GEF as scatter points.
+
+    Args:
+        df: DataFrame with city-level grid emission factor and component emissions.
+        save_path: Path to save figure. Shows plot if None.
+        figsize: Figure size tuple.
+        for_latex: If True, save as PDF.
+        plot_title: If True, show title.
+    """
+    gef_col = None
+    for candidate in ("grid_emission_factor", "gef"):
+        if candidate in df.columns and df[candidate].notna().any():
+            gef_col = candidate
+            break
+
+    if gef_col is None:
+        print("City GEF scatter skipped - missing grid_emission_factor or gef column")
+        return
+    if "total_odpair_annual_sales" not in df.columns:
+        print("City GEF scatter skipped - missing total_odpair_annual_sales column")
+        return
+
+    vehicle_specs = [
+        {
+            "label": "E-bike",
+            "color": "#4C8CBF",
+            "offset": -0.18,
+            "use_col": "total_ebike_use_phase_emission_kg",
+            "production_col": "total_ebike_production_emission_kg",
+            "eol_col": "total_ebike_end_of_life_emission_kg",
+            "use_plot_col": "ebike_use_per_order_g",
+            "fixed_plot_col": "ebike_fixed_per_order_g",
+        },
+        {
+            "label": "Drone",
+            "color": "#E05C2B",
+            "offset": 0.18,
+            "use_col": "total_drone_use_phase_emission_kg",
+            "production_col": "total_drone_production_emission_kg",
+            "eol_col": "total_drone_end_of_life_emission_kg",
+            "use_plot_col": "drone_use_per_order_g",
+            "fixed_plot_col": "drone_fixed_per_order_g",
+        },
+    ]
+    required_cols = ["total_odpair_annual_sales"]
+    for spec in vehicle_specs:
+        required_cols.extend([spec["use_col"], spec["production_col"], spec["eol_col"]])
+
+    missing = [col for col in required_cols if col not in df.columns]
+    if missing:
+        print(f"City GEF scatter skipped - missing columns {missing}")
+        return
+
+    plot_df = df.copy()
+    if "region_level" in plot_df.columns:
+        plot_df = plot_df[plot_df["region_level"] == "city"]
+
+    numeric_cols = [gef_col] + required_cols
+    for col in numeric_cols:
+        plot_df[col] = pd.to_numeric(plot_df[col], errors="coerce")
+    plot_df = plot_df.dropna(subset=numeric_cols)
+    valid_positive = (
+        (plot_df[gef_col] > 0)
+        & (plot_df[gef_col] <= 0.9)
+        & (plot_df["total_odpair_annual_sales"] > 0)
+    )
+    for spec in vehicle_specs:
+        valid_positive = (
+            valid_positive
+            & (plot_df[spec["use_col"]] > 0)
+            & (plot_df[spec["production_col"]] >= 0)
+            & (plot_df[spec["eol_col"]] >= 0)
+        )
+    plot_df = plot_df[valid_positive]
+    if plot_df.empty:
+        print("City GEF scatter skipped - no valid city GEF/emission values")
+        return
+
+    orders = plot_df["total_odpair_annual_sales"]
+    for spec in vehicle_specs:
+        plot_df[spec["use_plot_col"]] = plot_df[spec["use_col"]] / orders * 1000.0
+        plot_df[spec["fixed_plot_col"]] = (
+            (plot_df[spec["production_col"]] + plot_df[spec["eol_col"]])
+            / orders
+            * 1000.0
+        )
+
+    bin_width = 0.1
+    bin_edges = np.linspace(0.0, 0.9, 10)
+    labels = [f"{right:.1f}" for right in bin_edges[1:]]
+    plot_df["gef_range"] = pd.cut(
+        plot_df[gef_col],
+        bins=bin_edges,
+        labels=labels,
+        include_lowest=True,
+        right=True,
+    )
+
+    bin_groups = []
+    bin_positions = []
+    for idx, label in enumerate(labels):
+        group = plot_df[plot_df["gef_range"] == label]
+        if group.empty:
+            continue
+        bin_groups.append(group)
+        bin_positions.append(idx)
+
+    if not bin_groups:
+        print("City GEF scatter skipped - no cities in GEF ranges")
+        return
+
+    fig, (ax, ax_fixed) = plt.subplots(
+        2,
+        1,
+        figsize=figsize,
+        gridspec_kw={"height_ratios": [1.0, 0.55], "hspace": 0.0},
+        sharex=True,
+    )
+
+    x_all = np.arange(len(labels), dtype=float)
+    x = x_all[np.array(bin_positions, dtype=int)]
+    density_x = plot_df[gef_col].to_numpy(dtype=float) / bin_width - 1.0
+    if len(density_x) > 5 and np.unique(density_x).size > 1:
+        from scipy.stats import gaussian_kde
+
+        x_violin = np.linspace(-0.5, len(labels) - 0.5, 240)
+        density = gaussian_kde(density_x)(x_violin)
+    else:
+        x_violin = x_all
+        density = np.array(
+            [len(plot_df[plot_df["gef_range"] == label]) for label in labels],
+            dtype=float,
+        )
+    if density.max() > 0:
+        density = density / density.max()
+
+    rng = np.random.default_rng(20260607)
+    all_values = []
+    for spec in vehicle_specs:
+        all_values.extend(plot_df[spec["use_plot_col"]].to_numpy(dtype=float).tolist())
+        all_values.extend(plot_df[spec["fixed_plot_col"]].to_numpy(dtype=float).tolist())
+        for xi, group in zip(x, bin_groups):
+            jitter = rng.uniform(-0.055, 0.055, size=len(group))
+            positions = xi + spec["offset"] + jitter
+            ax.scatter(
+                positions,
+                group[spec["use_plot_col"]],
+                s=22,
+                color=spec["color"],
+                alpha=0.65,
+                edgecolors="white",
+                linewidths=0.35,
+                zorder=3,
+            )
+            ax_fixed.scatter(
+                positions,
+                group[spec["fixed_plot_col"]],
+                s=22,
+                color=spec["color"],
+                alpha=0.65,
+                edgecolors="white",
+                linewidths=0.35,
+                zorder=3,
+            )
+
+    all_values = np.array(all_values, dtype=float)
+    all_positive = all_values[all_values > 0]
+    if all_positive.size == 0:
+        print("City GEF scatter skipped - no positive per-order emission values")
+        return
+
+    y_data_min = all_positive.min()
+    y_data_max = all_positive.max()
+    log_min = np.log10(y_data_min)
+    log_max = np.log10(y_data_max)
+    log_span = max(log_max - log_min, 0.25)
+    y_floor_log = log_min - log_span * 0.16
+    y_base_log = log_min - log_span * 0.145
+    y_top_log = log_min - log_span * 0.025
+    y_floor = 10 ** y_floor_log
+    y_base = 10 ** y_base_log
+    y_violin = 10 ** (y_base_log + density * (y_top_log - y_base_log))
+
+    ax.fill_between(
+        x_violin,
+        y_base,
+        y_violin,
+        color="#7A7A7A",
+        alpha=0.35,
+        linewidth=0,
+        zorder=1,
+    )
+    ax.plot(x_violin, y_violin, color="#555555", linewidth=0.8, zorder=2)
+    ax.set_yscale("log")
+    ax.set_ylim(y_floor, y_data_max * 1.12)
+    ax.set_ylabel("Use phase\n(g CO2e/order)", fontsize=12)
+    ax.tick_params(axis="x", which="both", bottom=False, labelbottom=False)
+    ax.set_xlim(-0.5, len(labels) - 0.5)
+    ax.grid(True, axis="y", alpha=0.3, linestyle="--")
+    ax.set_axisbelow(True)
+
+    legend_handles = [
+        plt.Line2D(
+            [0], [0], marker="o", color="w",
+            markerfacecolor=spec["color"], markeredgecolor="white",
+            markersize=6, label=spec["label"],
+        )
+        for spec in vehicle_specs
+    ]
+    ax.legend(handles=legend_handles, loc="upper left", fontsize=9)
+
+    label_y = 10 ** (y_top_log + log_span * 0.01)
+    for xi, group in zip(x, bin_groups):
+        ax.text(
+            xi,
+            label_y,
+            f"n={len(group)}",
+            ha="center",
+            va="bottom",
+            fontsize=8,
+            color="0.35",
+        )
+
+    ax_fixed.set_yscale("log")
+    ax_fixed.set_ylim(y_data_max * 1.12, y_floor)
+    ax_fixed.set_ylabel("Production + EOL\n(g CO2e/order)", fontsize=12)
+    gef_label = VARIABLE_LABELS.get(gef_col, "Grid Emission Factor (kg CO2e/kWh)")
+    ax_fixed.set_xlabel(gef_label, fontsize=12)
+    ax_fixed.set_xticks(x_all)
+    ax_fixed.set_xticklabels(labels)
+    ax_fixed.set_xlim(-0.5, len(labels) - 0.5)
+    ax_fixed.grid(True, axis="y", alpha=0.3, linestyle="--")
+    ax_fixed.set_axisbelow(True)
+
+    if plot_title:
+        ax.set_title(
+            "City Per-order Emission Components by Grid Emission Factor",
+            fontsize=14,
+            fontweight="bold",
+        )
+
+    fig.subplots_adjust(left=0.11, right=0.98, bottom=0.18, top=0.96)
+
+    if save_path:
+        if for_latex and not save_path.endswith(".pdf"):
+            save_path = save_path.rsplit(".", 1)[0] + ".pdf"
+        if plot_title:
+            save_path = _add_title_suffix(save_path)
+        os.makedirs(os.path.dirname(save_path), exist_ok=True)
+        plt.savefig(save_path, dpi=300, bbox_inches="tight")
+        print(f"City GEF scatter components saved to {save_path}")
+    else:
+        plt.show()
+
+    plt.close(fig)
+
+
 def plot_city_emission_ranking(
     df: pd.DataFrame,
     variable: str = "max_lifecycle_reduction_pct",
