@@ -2838,6 +2838,89 @@ def plot_province_total_ebike_lifecycle(
     plt.close(fig)
 
 
+def plot_regions_map_city_rank_inset(
+    df_stats: "pd.DataFrame",
+    stats_csv_path: str,
+    save_path: str = None,
+    figsize: tuple = (10, 9),
+    for_latex: bool = False,
+    plot_title: bool = False,
+):
+    """China choropleth with compact top-city e-bike rank inset.
+
+    Args:
+        df_stats: all_region_stats DataFrame.
+        stats_csv_path: Path to all_region_stats.csv (for map function).
+        save_path: Path to save figure. Shows plot if None.
+        figsize: Figure size tuple.
+        for_latex: If True, save as PDF.
+        plot_title: If True, show titles on panels.
+    """
+    from visualization.regions import plot_regions_on_china_map
+
+    map_df = pd.read_csv(stats_csv_path)
+    reduction_col = _weighted_reduction_column(map_df)
+    v_max = max(float(map_df[reduction_col].max(skipna=True)), 0.0)
+    shared_cmap, shared_norm, bin_edges, reduction_edges = _build_reduction_cmap(v_max)
+
+    fig, ax_a = plt.subplots(figsize=figsize)
+    plot_regions_on_china_map(
+        df=map_df, color_by=reduction_col,
+        ax=ax_a, plot_title=plot_title,
+        cmap=shared_cmap, norm=shared_norm,
+        draw_colorbar=False, draw_legend=False,
+    )
+    ax_a.set_xlabel("")
+    ax_a.set_ylabel("")
+    ax_a.set_xticks([])
+    ax_a.set_yticks([])
+    for spine in ax_a.spines.values():
+        spine.set_visible(False)
+
+    ax_b = ax_a.inset_axes([0.03, 0.04, 0.40, 0.30], zorder=10)
+    ax_b.set_facecolor("white")
+    for spine in ax_b.spines.values():
+        spine.set_edgecolor("#666666")
+        spine.set_linewidth(0.6)
+    _plot_city_ebike_rank(
+        df_stats, "top", 10,
+        plot_title=plot_title,
+        ax=ax_b,
+        invert_vertical=True,
+        compact=True,
+    )
+
+    ax_a.text(-0.03, 1.02, "a", transform=ax_a.transAxes,
+              fontsize=16, fontweight="bold", va="bottom", ha="right")
+    ax_b.text(-0.06, 1.03, "b", transform=ax_b.transAxes,
+              fontsize=10, fontweight="bold", va="bottom", ha="right")
+
+    fig.tight_layout()
+
+    fig.canvas.draw()
+    a_pos = ax_a.get_position()
+    cbar_ax = fig.add_axes((a_pos.x1 + 0.005, a_pos.y0,
+                            0.014, a_pos.height))
+    cbar, n_bands = _draw_discrete_reduction_colorbar(
+        fig, cbar_ax, shared_cmap, shared_norm, bin_edges, reduction_edges,
+        VARIABLE_LABELS.get(reduction_col, reduction_col),
+    )
+    _annotate_unstudied(fig, cbar, cbar_ax, n_bands)
+
+    if save_path:
+        if for_latex and not save_path.endswith(".pdf"):
+            save_path = save_path.rsplit(".", 1)[0] + ".pdf"
+        if plot_title:
+            save_path = _add_title_suffix(save_path)
+        os.makedirs(os.path.dirname(save_path), exist_ok=True)
+        plt.savefig(save_path, dpi=300, bbox_inches="tight")
+        print(f"Regions map with city rank inset saved to {save_path}")
+    else:
+        plt.show()
+
+    plt.close(fig)
+
+
 def _plot_city_ebike_rank(
     df: pd.DataFrame,
     mode: str,
@@ -2847,6 +2930,8 @@ def _plot_city_ebike_rank(
     for_latex: bool = False,
     plot_title: bool = False,
     ax: "plt.Axes" = None,
+    invert_vertical: bool = False,
+    compact: bool = False,
 ):
     """Shared horizontal grouped-bar plot for top/bottom city ebike rankings."""
     needed = ["region_name_en", "total_ebike_lifecycle", "oracle_min_lifecycle_kg"]
@@ -2866,6 +2951,8 @@ def _plot_city_ebike_rank(
     ranked = sub.sort_values("total_ebike_lifecycle", ascending=ascending).head(n)
     # Largest bar at top for readability
     ranked = ranked.sort_values("total_ebike_lifecycle", ascending=True).reset_index(drop=True)
+    if invert_vertical:
+        ranked = ranked.iloc[::-1].reset_index(drop=True)
 
     cities = ranked["region_name_en"].tolist()
     # Raw stats are kg CO₂eq; convert to tonnes for display.
@@ -2887,22 +2974,25 @@ def _plot_city_ebike_rank(
     ax.barh(y, oracle_t, height=bar_h, color=oracle_color, alpha=0.95, label="Oracle minimum", zorder=3)
 
     ax.set_yticks(y)
-    ax.set_yticklabels(cities, fontsize=10)
-    ax.set_xlabel("Annual lifecycle emission (t CO₂eq)", fontsize=12)
-    ax.xaxis.grid(True, linestyle="--", alpha=0.4)
+    ax.set_yticklabels(cities, fontsize=7 if compact else 10)
+    ax.set_xlabel("Annual lifecycle emission (t CO₂eq)", fontsize=7 if compact else 12)
+    ax.xaxis.grid(True, linestyle="--", alpha=0.35 if compact else 0.4)
     ax.set_axisbelow(True)
-    ax.legend(loc="lower right", fontsize=10)
+    ax.tick_params(axis="x", labelsize=7 if compact else 10, pad=1 if compact else 3)
+    ax.tick_params(axis="y", pad=1 if compact else 3)
+    ax.legend(loc="lower right", fontsize=6 if compact else 10, frameon=not compact)
 
     xmax = ebike_t.max()
     pad = xmax * 0.01
-    for i, (e, o) in enumerate(zip(ebike_t, oracle_t)):
-        reduction = e - o
-        fmt = "{:,.2f}" if reduction < 10 else ("{:,.1f}" if reduction < 100 else "{:,.0f}")
-        reduction_pct = reduction / e * 100 if e > 0 else 0
-        ax.text(e + pad, i, f"{fmt.format(reduction)} (−{reduction_pct:.1f}%)",
-                va="center", ha="left",
-                fontsize=9, color="black", zorder=4)
-    ax.set_xlim(0, xmax * 1.22)
+    if not compact:
+        for i, (e, o) in enumerate(zip(ebike_t, oracle_t)):
+            reduction = e - o
+            fmt = "{:,.2f}" if reduction < 10 else ("{:,.1f}" if reduction < 100 else "{:,.0f}")
+            reduction_pct = reduction / e * 100 if e > 0 else 0
+            ax.text(e + pad, i, f"{fmt.format(reduction)} (−{reduction_pct:.1f}%)",
+                    va="center", ha="left",
+                    fontsize=9, color="black", zorder=4)
+    ax.set_xlim(0, xmax * (1.04 if compact else 1.22))
 
     if plot_title:
         label = "Top" if mode == "top" else "Bottom"
