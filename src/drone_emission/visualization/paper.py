@@ -518,8 +518,8 @@ def _render_shanghai_city_context(data_dir, out, for_latex, plot_title, city_df,
         _plot_reduction_absolute_scatter_panel,
         _plot_reduction_detour_panel,
     )
-    fig = plt.figure(figsize=(17.0, 5.6))
-    outer = fig.add_gridspec(1, 3, width_ratios=[1.35, 1.20, 0.85], wspace=0.34)
+    fig = plt.figure(figsize=(6.4, 12.6))
+    outer = fig.add_gridspec(3, 1, height_ratios=[1.0, 1.0, 0.85], hspace=0.50)
     ax_power_mix = fig.add_subplot(outer[2])
 
     _, ax_reduction, _ = _plot_reduction_detour_panel(
@@ -559,16 +559,15 @@ def _render_shanghai_city_context(data_dir, out, for_latex, plot_title, city_df,
             new_height,
         ])
 
-    panel_label_y = ax_reduction.get_position().y1 + 0.012
-    for label, ax, x_offset in (
-        ("a", ax_reduction, -0.020),
-        ("b", ax_scatter, -0.020),
-        ("c", ax_power_mix, -0.010),
+    for label, ax in (
+        ("a", ax_reduction),
+        ("b", ax_scatter),
+        ("c", ax_power_mix),
     ):
         pos = ax.get_position()
         fig.text(
-            pos.x0 + x_offset,
-            panel_label_y,
+            pos.x0 - 0.055,
+            pos.y1 + 0.010,
             label,
             fontsize=13,
             fontweight="bold",
