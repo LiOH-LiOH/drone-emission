@@ -52,6 +52,11 @@ SHANGHAI_CITY_CONTEXT_FIGURE = "shanghai_city_context"
 
 REDUCTION_DETOUR_CACHE_VERSION = 2
 REDUCTION_DETOUR_SELECTION_METRIC = "total_ebike_lifecycle"
+RETIRED_THRESHOLD_METRIC_COLUMNS = {
+    "max_lifecycle_reduction_pct",
+    "optimal_threshold_km",
+    "optimal_drone_ratio_pct",
+}
 POWER_GENERATION_2022_100M_KWH = {
     "shanghai": {
         "total": 955.0,
@@ -98,6 +103,48 @@ def _file_cache_signature(path):
         "size": stat.st_size,
         "mtime_ns": stat.st_mtime_ns,
     }
+
+
+def _attach_enrichment_columns(stats_df, enriched_df):
+    """Return latest stats with enrichment-only columns attached."""
+    if "region_key" not in stats_df.columns or "region_key" not in enriched_df.columns:
+        print(
+            "GEF figures: region_key missing from stats or enriched CSV; "
+            "using enriched CSV as-is"
+        )
+        return enriched_df
+
+    enrichment_cols = [
+        col
+        for col in enriched_df.columns
+        if col != "region_key"
+        and col not in stats_df.columns
+        and col not in RETIRED_THRESHOLD_METRIC_COLUMNS
+    ]
+    dropped = sorted(
+        col
+        for col in RETIRED_THRESHOLD_METRIC_COLUMNS
+        if col in enriched_df.columns and col not in stats_df.columns
+    )
+    if dropped:
+        print(
+            "GEF figures: ignored stale threshold metrics from enriched CSV: "
+            f"{', '.join(dropped)}"
+        )
+
+    merged = stats_df.merge(
+        enriched_df[["region_key", *enrichment_cols]],
+        on="region_key",
+        how="left",
+    )
+    missing_enrichment = (
+        merged[enrichment_cols].isna().all(axis=1).sum()
+        if enrichment_cols
+        else 0
+    )
+    if missing_enrichment:
+        print(f"GEF figures: {missing_enrichment} rows missing enrichment columns")
+    return merged
 
 
 def _prepare_reduction_detour_city_stats(city_df):
@@ -1269,6 +1316,7 @@ def render_all(data_dir: str, figures_dir: str, for_latex: bool = False, plot_ti
                     print(f"GEF figures skipped — missing {enriched_path}; run tools.enrich_stats first")
                 else:
                     df_enriched = pd.read_csv(enriched_path)
+                    df_enriched = _attach_enrichment_columns(df, df_enriched)
                     if _want("city_gef_distribution"):
                         plot_city_gef_distribution(
                             df_enriched,
