@@ -9,13 +9,14 @@ Run:
 
 Available figures:
     detour_lifecycle_distance, lifecycle_distance_detour_boxplot,
-    lifecycle_distance_route_factor, production_phase_per_km, emission_model_flowchart,
+    lifecycle_distance_route_factor, production_phase_per_km, end_of_life_phase_per_km,
+    emission_model_flowchart,
     detour_and_lifecycle, distance_comparison,
     distance_comparison_high_3x3, distance_comparison_low_3x3,
     shanghai_heatmap, shanghai_road_air_distance, shanghai_road_detour,
     shanghai_air_detour, shanghai_air_road_joint, shanghai_emission_reduction,
     shanghai_emission_by_distance, shanghai_reduction_detour_by_distance,
-    shanghai_city_context,
+    shanghai_city_context, chongqing_city_context,
     top6_reduction_detour_grid, top6_reduction_detour_grid_low_gef,
     top6_reduction_detour_grid_random,
     province_orders_emission, province_orders_both_emissions,
@@ -49,6 +50,11 @@ TOP6_REDUCTION_DETOUR_FIGURES = {
     "top6_reduction_detour_grid_random",
 }
 SHANGHAI_CITY_CONTEXT_FIGURE = "shanghai_city_context"
+CHONGQING_CITY_CONTEXT_FIGURE = "chongqing_city_context"
+CITY_CONTEXT_FIGURES = {
+    SHANGHAI_CITY_CONTEXT_FIGURE: ("shanghai", "Shanghai"),
+    CHONGQING_CITY_CONTEXT_FIGURE: ("chongqing", "Chongqing"),
+}
 
 REDUCTION_DETOUR_CACHE_VERSION = 2
 REDUCTION_DETOUR_SELECTION_METRIC = "total_ebike_lifecycle"
@@ -546,19 +552,27 @@ def _plot_power_generation_mix_pie(ax, region_key, legend_ax=None):
     ax.set_axis_off()
 
 
-def _render_shanghai_city_context(data_dir, out, for_latex, plot_title, city_df, exp_config):
-    """Render a one-row Shanghai city context figure."""
-    region_key = "shanghai"
-
+def _render_city_context(
+    data_dir,
+    out,
+    for_latex,
+    plot_title,
+    city_df,
+    exp_config,
+    figure_name,
+    region_key,
+    display_name,
+):
+    """Render a one-row city context figure."""
     selected = city_df[city_df["region_key"] == region_key].copy()
     if selected.empty:
-        print(f"{SHANGHAI_CITY_CONTEXT_FIGURE} skipped — Shanghai row missing")
+        print(f"{figure_name} skipped — {display_name} row missing")
         return
 
     built = _build_reduction_detour_binned_by_city(
         data_dir=data_dir,
         selected=selected,
-        figure_name=SHANGHAI_CITY_CONTEXT_FIGURE,
+        figure_name=figure_name,
         exp_config=exp_config,
         absolute_reduction_metric="per_order_g",
         use_binned_cache=False,
@@ -569,7 +583,7 @@ def _render_shanghai_city_context(data_dir, out, for_latex, plot_title, city_df,
 
     binned_by_city, labels = built
     if region_key not in binned_by_city:
-        print(f"{SHANGHAI_CITY_CONTEXT_FIGURE} skipped — Shanghai binned data missing")
+        print(f"{figure_name} skipped — {display_name} binned data missing")
         return
 
     import matplotlib.pyplot as plt
@@ -589,7 +603,7 @@ def _render_shanghai_city_context(data_dir, out, for_latex, plot_title, city_df,
         fig,
         outer[0],
         binned_by_city[region_key],
-        labels.get(region_key, "Shanghai"),
+        labels.get(region_key, display_name),
         bin_width_km=0.1,
         min_air_km=0.2,
         absolute_reduction_metric="per_order_g",
@@ -604,7 +618,7 @@ def _render_shanghai_city_context(data_dir, out, for_latex, plot_title, city_df,
         fig,
         outer[1],
         binned_by_city[region_key],
-        labels.get(region_key, "Shanghai"),
+        labels.get(region_key, display_name),
         min_air_km=0.2,
         absolute_reduction_metric="per_order_g",
         show_city_label=False,
@@ -639,9 +653,12 @@ def _render_shanghai_city_context(data_dir, out, for_latex, plot_title, city_df,
         )
 
     if plot_title:
-        fig.suptitle("Shanghai Emission Reduction by Distance and Power Mix", fontsize=14)
+        fig.suptitle(
+            f"{display_name} Emission Reduction by Distance and Power Mix",
+            fontsize=14,
+        )
 
-    save_path = os.path.join(out, f"{SHANGHAI_CITY_CONTEXT_FIGURE}.png")
+    save_path = os.path.join(out, f"{figure_name}.png")
     if for_latex and not save_path.endswith(".pdf"):
         save_path = save_path.rsplit(".", 1)[0] + ".pdf"
     if plot_title:
@@ -649,7 +666,44 @@ def _render_shanghai_city_context(data_dir, out, for_latex, plot_title, city_df,
     os.makedirs(os.path.dirname(save_path), exist_ok=True)
     fig.savefig(save_path, dpi=300, bbox_inches="tight")
     plt.close(fig)
-    print(f"Shanghai city context saved to {save_path}")
+    print(f"{display_name} city context saved to {save_path}")
+
+
+def _render_shanghai_city_context(data_dir, out, for_latex, plot_title, city_df, exp_config):
+    """Render a one-row Shanghai city context figure."""
+    _render_city_context(
+        data_dir=data_dir,
+        out=out,
+        for_latex=for_latex,
+        plot_title=plot_title,
+        city_df=city_df,
+        exp_config=exp_config,
+        figure_name=SHANGHAI_CITY_CONTEXT_FIGURE,
+        region_key="shanghai",
+        display_name="Shanghai",
+    )
+
+
+def _render_chongqing_city_context(
+    data_dir,
+    out,
+    for_latex,
+    plot_title,
+    city_df,
+    exp_config,
+):
+    """Render a one-row Chongqing city context figure."""
+    _render_city_context(
+        data_dir=data_dir,
+        out=out,
+        for_latex=for_latex,
+        plot_title=plot_title,
+        city_df=city_df,
+        exp_config=exp_config,
+        figure_name=CHONGQING_CITY_CONTEXT_FIGURE,
+        region_key="chongqing",
+        display_name="Chongqing",
+    )
 
 
 def _render_shanghai_road_air_distance(data_dir, out, for_latex, plot_title):
@@ -909,6 +963,7 @@ def render_all(data_dir: str, figures_dir: str, for_latex: bool = False, plot_ti
         plot_detour_and_lifecycle, plot_detour_lifecycle_distance, plot_emission_model_flowchart,
     )
     from visualization.emission import (
+        plot_end_of_life_phase_per_km,
         plot_lifecycle_distance_route_factor,
         plot_production_phase_per_km,
     )
@@ -932,6 +987,13 @@ def render_all(data_dir: str, figures_dir: str, for_latex: bool = False, plot_ti
     if _want("production_phase_per_km"):
         plot_production_phase_per_km(
             save_path=os.path.join(out, "production_phase_per_km.png"),
+            for_latex=for_latex,
+            plot_title=plot_title,
+        )
+
+    if _want("end_of_life_phase_per_km"):
+        plot_end_of_life_phase_per_km(
+            save_path=os.path.join(out, "end_of_life_phase_per_km.png"),
             for_latex=for_latex,
             plot_title=plot_title,
         )
@@ -1122,7 +1184,7 @@ def render_all(data_dir: str, figures_dir: str, for_latex: bool = False, plot_ti
         "regions_map_city_rank_inset",
         "regions_map_kappa_panels",
         "regions_map_pathway_scenarios",
-        SHANGHAI_CITY_CONTEXT_FIGURE,
+        *CITY_CONTEXT_FIGURES,
     } | gef_figures | TOP6_REDUCTION_DETOUR_FIGURES
     if only is None or only & stats_figures:
         stats_path = os.path.join(data_dir, "all_region_stats.csv")
@@ -1180,7 +1242,7 @@ def render_all(data_dir: str, figures_dir: str, for_latex: bool = False, plot_ti
                 )
 
             needs_reduction_detour_city_stats = (
-                _want(SHANGHAI_CITY_CONTEXT_FIGURE)
+                any(_want(figure_name) for figure_name in CITY_CONTEXT_FIGURES)
                 or _want("top6_reduction_detour_grid")
                 or _want("top6_reduction_detour_grid_low_gef")
                 or _want("top6_reduction_detour_grid_random")
@@ -1195,6 +1257,16 @@ def render_all(data_dir: str, figures_dir: str, for_latex: bool = False, plot_ti
 
                 if _want(SHANGHAI_CITY_CONTEXT_FIGURE):
                     _render_shanghai_city_context(
+                        data_dir=data_dir,
+                        out=out,
+                        for_latex=for_latex,
+                        plot_title=plot_title,
+                        city_df=city_df,
+                        exp_config=exp_config,
+                    )
+
+                if _want(CHONGQING_CITY_CONTEXT_FIGURE):
+                    _render_chongqing_city_context(
                         data_dir=data_dir,
                         out=out,
                         for_latex=for_latex,
