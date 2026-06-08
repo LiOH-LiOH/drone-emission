@@ -391,15 +391,14 @@ def _draw_phase_per_km_barplot(
     ax.set_ylabel(ylabel, fontsize=9.5)
     ax.set_ylim(0, max(totals) * 1.25)
     ax.tick_params(axis="y", labelsize=9)
-    ax.grid(axis="y", alpha=0.25, linewidth=0.8)
-    ax.set_axisbelow(True)
+    ax.grid(False)
     ax.spines["top"].set_visible(False)
     ax.spines["right"].set_visible(False)
     ax.legend(
         frameon=False,
         loc="upper right",
         ncol=1,
-        fontsize=8.3,
+        fontsize=8.0,
         handlelength=1.5,
     )
 
@@ -430,7 +429,7 @@ def plot_production_detour_eol_panels(
 
     fig = plt.figure(figsize=figsize)
     fig.patch.set_facecolor("white")
-    gs = fig.add_gridspec(1, 3, width_ratios=[0.75, 3.0, 0.75], wspace=0.20)
+    gs = fig.add_gridspec(1, 3, width_ratios=[0.95, 3.0, 0.95], wspace=0.18)
     bar_left = gs[0, 0].subgridspec(3, 1, height_ratios=[0.18, 0.64, 0.18])
     bar_right = gs[0, 2].subgridspec(3, 1, height_ratios=[0.18, 0.64, 0.18])
     axes = [
@@ -443,8 +442,8 @@ def plot_production_detour_eol_panels(
         axes[0],
         production_df,
         ylabel="Production emission\n(g CO$_2$e / vehicle-km)",
-        body_label="Body production",
-        battery_label="Battery production",
+        body_label="Body",
+        battery_label="Battery",
         body_color="#7f8c8d",
         battery_color="#2ca25f",
         distance_km=distance_km,
@@ -454,8 +453,8 @@ def plot_production_detour_eol_panels(
         axes[2],
         eol_df,
         ylabel="End-of-life emission\n(g CO$_2$e / vehicle-km)",
-        body_label="Body end-of-life",
-        battery_label="Battery end-of-life",
+        body_label="Body",
+        battery_label="Battery",
         body_color="#8b8f97",
         battery_color="#5b8db8",
         distance_km=distance_km,

@@ -17,6 +17,8 @@ Available figures:
     shanghai_air_detour, shanghai_air_road_joint, shanghai_emission_reduction,
     shanghai_emission_by_distance, shanghai_reduction_detour_by_distance,
     shanghai_city_context, chongqing_city_context, chengdu_city_context,
+    guangzhou_city_context, tianjin_city_context, dali_city_context,
+    kunming_city_context,
     top6_reduction_detour_grid, top6_reduction_detour_grid_low_gef,
     top6_reduction_detour_grid_random,
     province_orders_emission, province_orders_both_emissions,
@@ -49,13 +51,42 @@ TOP6_REDUCTION_DETOUR_FIGURES = {
     "top6_reduction_detour_grid_low_gef",
     "top6_reduction_detour_grid_random",
 }
-SHANGHAI_CITY_CONTEXT_FIGURE = "shanghai_city_context"
-CHONGQING_CITY_CONTEXT_FIGURE = "chongqing_city_context"
-CHENGDU_CITY_CONTEXT_FIGURE = "chengdu_city_context"
 CITY_CONTEXT_FIGURES = {
-    SHANGHAI_CITY_CONTEXT_FIGURE: ("shanghai", "Shanghai", "shanghai"),
-    CHONGQING_CITY_CONTEXT_FIGURE: ("chongqing", "Chongqing", "chongqing"),
-    CHENGDU_CITY_CONTEXT_FIGURE: ("chengdu", "Chengdu", "sichuan"),
+    "shanghai_city_context": {
+        "region_key": "shanghai",
+        "display_name": "Shanghai",
+        "power_region_key": "shanghai",
+    },
+    "chongqing_city_context": {
+        "region_key": "chongqing",
+        "display_name": "Chongqing",
+        "power_region_key": "chongqing",
+    },
+    "chengdu_city_context": {
+        "region_key": "chengdu",
+        "display_name": "Chengdu",
+        "power_region_key": "sichuan",
+    },
+    "guangzhou_city_context": {
+        "region_key": "guangzhou",
+        "display_name": "Guangzhou",
+        "power_region_key": "guangdong",
+    },
+    "tianjin_city_context": {
+        "region_key": "tianjin",
+        "display_name": "Tianjin",
+        "power_region_key": "tianjin",
+    },
+    "dali_city_context": {
+        "region_key": "dalibaizuzizhizhou",
+        "display_name": "Dali",
+        "power_region_key": "yunnan",
+    },
+    "kunming_city_context": {
+        "region_key": "kunming",
+        "display_name": "Kunming",
+        "power_region_key": "yunnan",
+    },
 }
 
 REDUCTION_DETOUR_CACHE_VERSION = 2
@@ -87,12 +118,34 @@ POWER_GENERATION_2022_100M_KWH = {
         "Wind": 134.71,
         "Solar": 30.28,
     },
+    "yunnan": {
+        "total": 4017.0,
+        "Hydro": 3282.91,
+        "Thermal": 464.53,
+        "Wind": 213.81,
+        "Solar": 55.40,
+    },
+    "guangdong": {
+        "total": 6366.0,
+        "Hydro": 344.41,
+        "Thermal": 4469.17,
+        "Wind": 268.66,
+        "Solar": 134.89,
+    },
+    "tianjin": {
+        "total": 765.0,
+        "Hydro": 0.14,
+        "Thermal": 715.72,
+        "Wind": 25.51,
+        "Solar": 23.52,
+    },
 }
 POWER_MIX_COLORS = {
     "Hydro": "#4c78a8",
     "Thermal": "#8c564b",
     "Wind": "#59a14f",
     "Solar": "#f2cf5b",
+    "Other": "#9e9e9e",
 }
 
 
@@ -500,6 +553,10 @@ def _plot_power_generation_mix_pie(ax, region_key, legend_ax=None):
     total = generation["total"]
     components = ["Hydro", "Thermal", "Wind", "Solar"]
     values = [generation[name] for name in components]
+    remainder = total - sum(values)
+    if remainder / total > 0.005:
+        components.append("Other")
+        values.append(remainder)
     percentages = [value / total * 100 for value in values]
     nonzero = [
         (name, value)
@@ -675,68 +732,6 @@ def _render_city_context(
     fig.savefig(save_path, dpi=300, bbox_inches="tight")
     plt.close(fig)
     print(f"{display_name} city context saved to {save_path}")
-
-
-def _render_shanghai_city_context(data_dir, out, for_latex, plot_title, city_df, exp_config):
-    """Render a one-row Shanghai city context figure."""
-    _render_city_context(
-        data_dir=data_dir,
-        out=out,
-        for_latex=for_latex,
-        plot_title=plot_title,
-        city_df=city_df,
-        exp_config=exp_config,
-        figure_name=SHANGHAI_CITY_CONTEXT_FIGURE,
-        region_key="shanghai",
-        display_name="Shanghai",
-        power_region_key="shanghai",
-    )
-
-
-def _render_chongqing_city_context(
-    data_dir,
-    out,
-    for_latex,
-    plot_title,
-    city_df,
-    exp_config,
-):
-    """Render a one-row Chongqing city context figure."""
-    _render_city_context(
-        data_dir=data_dir,
-        out=out,
-        for_latex=for_latex,
-        plot_title=plot_title,
-        city_df=city_df,
-        exp_config=exp_config,
-        figure_name=CHONGQING_CITY_CONTEXT_FIGURE,
-        region_key="chongqing",
-        display_name="Chongqing",
-        power_region_key="chongqing",
-    )
-
-
-def _render_chengdu_city_context(
-    data_dir,
-    out,
-    for_latex,
-    plot_title,
-    city_df,
-    exp_config,
-):
-    """Render a one-row Chengdu city context figure."""
-    _render_city_context(
-        data_dir=data_dir,
-        out=out,
-        for_latex=for_latex,
-        plot_title=plot_title,
-        city_df=city_df,
-        exp_config=exp_config,
-        figure_name=CHENGDU_CITY_CONTEXT_FIGURE,
-        region_key="chengdu",
-        display_name="Chengdu",
-        power_region_key="sichuan",
-    )
 
 
 def _render_shanghai_road_air_distance(data_dir, out, for_latex, plot_title):
@@ -1298,34 +1293,18 @@ def render_all(data_dir: str, figures_dir: str, for_latex: bool = False, plot_ti
                 city_df = city_df.merge(gef_df, on="province", how="left")
                 city_df = _prepare_reduction_detour_city_stats(city_df)
 
-                if _want(SHANGHAI_CITY_CONTEXT_FIGURE):
-                    _render_shanghai_city_context(
+                for figure_name, context in CITY_CONTEXT_FIGURES.items():
+                    if not _want(figure_name):
+                        continue
+                    _render_city_context(
                         data_dir=data_dir,
                         out=out,
                         for_latex=for_latex,
                         plot_title=plot_title,
                         city_df=city_df,
                         exp_config=exp_config,
-                    )
-
-                if _want(CHONGQING_CITY_CONTEXT_FIGURE):
-                    _render_chongqing_city_context(
-                        data_dir=data_dir,
-                        out=out,
-                        for_latex=for_latex,
-                        plot_title=plot_title,
-                        city_df=city_df,
-                        exp_config=exp_config,
-                    )
-
-                if _want(CHENGDU_CITY_CONTEXT_FIGURE):
-                    _render_chengdu_city_context(
-                        data_dir=data_dir,
-                        out=out,
-                        for_latex=for_latex,
-                        plot_title=plot_title,
-                        city_df=city_df,
-                        exp_config=exp_config,
+                        figure_name=figure_name,
+                        **context,
                     )
 
             if _want("top6_reduction_detour_grid") or _want("top6_reduction_detour_grid_low_gef") or _want("top6_reduction_detour_grid_random"):
