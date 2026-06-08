@@ -3828,6 +3828,7 @@ def _plot_reduction_detour_panel(
     show_city_label: bool = True,
     bar_width_fraction: float = 1.0,
     show_absolute_axis: bool = True,
+    show_saturation_fit: bool = False,
 ):
     """Draw one reduction-detour city panel inside an existing figure."""
     if show_detour_boxplot:
@@ -3903,7 +3904,69 @@ def _plot_reduction_detour_panel(
     ax_bot.tick_params(axis="x", labelsize=8)
     ax_bot.tick_params(axis="y", labelsize=8, labelcolor="#2ca02c")
     ax_bot.grid(axis="y", alpha=0.3)
-    visible_pct_ylim = _padded_visible_ylim(reduction_pct[visible])
+
+    saturation_fit_y = None
+    if show_saturation_fit:
+        fit_mask = visible & np.isfinite(centres) & np.isfinite(reduction_pct)
+        x_fit_data = centres[fit_mask]
+        y_fit_data = reduction_pct[fit_mask]
+        if x_fit_data.size >= 4:
+            try:
+                from scipy.optimize import curve_fit
+
+                x0 = float(x_min)
+
+                def saturation_model(x, y0, amplitude, rate):
+                    return y0 + amplitude * (1.0 - np.exp(-rate * (x - x0)))
+
+                initial = [
+                    float(y_fit_data[0]),
+                    float(y_fit_data[-1] - y_fit_data[0]),
+                    0.8,
+                ]
+                params, _ = curve_fit(
+                    saturation_model,
+                    x_fit_data,
+                    y_fit_data,
+                    p0=initial,
+                    bounds=([-np.inf, -np.inf, 0.0], [np.inf, np.inf, np.inf]),
+                    maxfev=10000,
+                )
+                x_fit = np.linspace(x_min, x_max, 160)
+                saturation_fit_y = saturation_model(x_fit, *params)
+                ax_bot.plot(
+                    x_fit,
+                    saturation_fit_y,
+                    color="#111111",
+                    linewidth=1.2,
+                    alpha=0.9,
+                    zorder=4,
+                )
+                y0, amplitude, rate = params
+                sign = "+" if amplitude >= 0 else "-"
+                equation = (
+                    f"y = {y0:.1f} {sign} {abs(amplitude):.1f}"
+                    f"(1 - e^(-{rate:.2f}(x - {x0:.1f})))"
+                )
+                ax_bot.text(
+                    0.03,
+                    0.94,
+                    equation,
+                    transform=ax_bot.transAxes,
+                    fontsize=7.5,
+                    ha="left",
+                    va="top",
+                    color="#111111",
+                    bbox=dict(facecolor="white", edgecolor="none", alpha=0.75, pad=1.8),
+                    zorder=6,
+                )
+            except Exception:
+                saturation_fit_y = None
+
+    ylim_values = reduction_pct[visible]
+    if saturation_fit_y is not None:
+        ylim_values = np.concatenate([ylim_values, saturation_fit_y])
+    visible_pct_ylim = _padded_visible_ylim(ylim_values)
     if visible_pct_ylim is not None:
         ax_bot.set_ylim(*visible_pct_ylim)
 
@@ -3974,6 +4037,7 @@ def _plot_reduction_absolute_scatter_panel(
     max_air_km: float = 5.0,
     absolute_reduction_metric: str = "total_t",
     show_city_label: bool = True,
+    show_linear_equation: bool = True,
 ):
     """Draw absolute reduction as scatter with a linear fit."""
     ax = fig.add_subplot(subplot_spec)
@@ -3996,6 +4060,7 @@ def _plot_reduction_absolute_scatter_panel(
         linewidth=0,
         zorder=3,
     )
+    y_fit = None
     if x.size >= 2:
         slope, intercept = np.polyfit(x, y, deg=1)
         x_fit = np.array([x_min, x_max], dtype=float)
@@ -4008,6 +4073,21 @@ def _plot_reduction_absolute_scatter_panel(
             alpha=0.85,
             zorder=4,
         )
+        if show_linear_equation:
+            sign = "+" if intercept >= 0 else "-"
+            equation = f"y = {slope:.1f}x {sign} {abs(intercept):.1f}"
+            ax.text(
+                0.05,
+                0.94,
+                equation,
+                transform=ax.transAxes,
+                fontsize=8,
+                ha="left",
+                va="top",
+                color="#111111",
+                bbox=dict(facecolor="white", edgecolor="none", alpha=0.75, pad=1.8),
+                zorder=6,
+            )
 
     ax.axhline(0, color="#555555", linewidth=0.5, alpha=0.35)
     x_ticks = np.arange(np.ceil(x_min), x_max + 1e-6, 1.0)
@@ -4025,7 +4105,10 @@ def _plot_reduction_absolute_scatter_panel(
     ax.tick_params(axis="both", labelsize=8)
     ax.tick_params(axis="y", labelcolor="#555555")
     ax.grid(axis="y", alpha=0.3)
-    visible_abs_ylim = _padded_visible_ylim(y)
+    ylim_values = y
+    if y_fit is not None:
+        ylim_values = np.concatenate([ylim_values, y_fit])
+    visible_abs_ylim = _padded_visible_ylim(ylim_values)
     if visible_abs_ylim is not None:
         ax.set_ylim(*visible_abs_ylim)
     if show_city_label:

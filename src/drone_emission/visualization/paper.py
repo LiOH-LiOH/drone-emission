@@ -535,6 +535,7 @@ def _render_shanghai_city_context(data_dir, out, for_latex, plot_title, city_df,
         show_city_label=False,
         bar_width_fraction=0.78,
         show_absolute_axis=False,
+        show_saturation_fit=True,
     )
     ax_reduction.text(
         -0.12,
