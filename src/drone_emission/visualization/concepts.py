@@ -397,8 +397,7 @@ def _draw_phase_per_km_barplot(
     ax.spines["right"].set_visible(False)
     ax.legend(
         frameon=False,
-        loc="upper center",
-        bbox_to_anchor=(0.5, 1.16),
+        loc="upper right",
         ncol=1,
         fontsize=8.3,
         handlelength=1.5,
@@ -407,7 +406,7 @@ def _draw_phase_per_km_barplot(
 
 def plot_production_detour_eol_panels(
     save_path: str = None,
-    figsize: tuple = (13.2, 4.0),
+    figsize: tuple = (12.0, 4.0),
     for_latex: bool = False,
     plot_title: bool = False,
     distance_km: float = 1.0,
@@ -431,7 +430,7 @@ def plot_production_detour_eol_panels(
 
     fig = plt.figure(figsize=figsize)
     fig.patch.set_facecolor("white")
-    gs = fig.add_gridspec(1, 3, width_ratios=[1.0, 1.45, 1.0], wspace=0.28)
+    gs = fig.add_gridspec(1, 3, width_ratios=[1.0, 2.0, 1.0], wspace=0.28)
     axes = [fig.add_subplot(gs[0, i]) for i in range(3)]
 
     _draw_phase_per_km_barplot(
