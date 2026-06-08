@@ -3825,6 +3825,8 @@ def _plot_reduction_detour_panel(
     absolute_reduction_metric: str = "total_t",
     show_detour_boxplot: bool = True,
     mark_reduction_break_even: bool = False,
+    show_city_label: bool = True,
+    bar_width_fraction: float = 1.0,
 ):
     """Draw one reduction-detour city panel inside an existing figure."""
     if show_detour_boxplot:
@@ -3873,8 +3875,9 @@ def _plot_reduction_detour_panel(
         ax_top.tick_params(axis="x", labelbottom=False)
         ax_top.tick_params(axis="both", labelsize=8)
         ax_top.grid(axis="y", alpha=0.3)
-        ax_top.set_title(city_label, fontsize=11, fontweight="bold")
-    else:
+        if show_city_label:
+            ax_top.set_title(city_label, fontsize=11, fontweight="bold")
+    elif show_city_label:
         ax_bot.set_title(city_label, fontsize=11, fontweight="bold")
 
     bar_colors = [
@@ -3884,7 +3887,7 @@ def _plot_reduction_detour_panel(
     ax_bot.bar(
         centres,
         reduction_pct,
-        width=bin_width_km,
+        width=bin_width_km * bar_width_fraction,
         color=bar_colors,
         edgecolor="white",
         linewidth=0.2,

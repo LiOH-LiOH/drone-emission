@@ -51,6 +51,35 @@ SHANGHAI_CITY_CONTEXT_FIGURE = "shanghai_city_context"
 
 REDUCTION_DETOUR_CACHE_VERSION = 2
 REDUCTION_DETOUR_SELECTION_METRIC = "total_ebike_lifecycle"
+POWER_GENERATION_2022_100M_KWH = {
+    "shanghai": {
+        "total": 955.0,
+        "Hydro": 0.0,
+        "Thermal": 912.60,
+        "Wind": 24.56,
+        "Solar": 17.82,
+    },
+    "chongqing": {
+        "total": 998.0,
+        "Hydro": 203.11,
+        "Thermal": 755.15,
+        "Wind": 34.02,
+        "Solar": 5.56,
+    },
+    "sichuan": {
+        "total": 4846.0,
+        "Hydro": 3886.56,
+        "Thermal": 794.61,
+        "Wind": 134.71,
+        "Solar": 30.28,
+    },
+}
+POWER_MIX_COLORS = {
+    "Hydro": "#4c78a8",
+    "Thermal": "#8c564b",
+    "Wind": "#59a14f",
+    "Solar": "#f2cf5b",
+}
 
 
 def _get_ebike_kappa(exp_config):
@@ -407,6 +436,54 @@ def _render_shanghai_heatmap(data_dir, out, for_latex, plot_title):
     )
 
 
+def _plot_power_generation_mix_pie(ax, region_key):
+    """Draw the 2022 power generation mix pie for one region."""
+    from matplotlib.patches import Patch
+
+    generation = POWER_GENERATION_2022_100M_KWH[region_key]
+    total = generation["total"]
+    components = ["Hydro", "Thermal", "Wind", "Solar"]
+    values = [generation[name] for name in components]
+    percentages = [value / total * 100 for value in values]
+    nonzero = [
+        (name, value)
+        for name, value in zip(components, values)
+        if value > 0
+    ]
+    pie_labels = [name for name, _ in nonzero]
+    pie_values = [value for _, value in nonzero]
+    pie_colors = [POWER_MIX_COLORS[name] for name in pie_labels]
+
+    ax.pie(
+        pie_values,
+        colors=pie_colors,
+        startangle=92,
+        counterclock=False,
+        wedgeprops=dict(edgecolor="white", linewidth=0.8),
+    )
+    legend_handles = [
+        Patch(
+            facecolor=POWER_MIX_COLORS[name],
+            edgecolor="none",
+            label=f"{name} {pct:.1f}%",
+        )
+        for name, pct in zip(components, percentages)
+    ]
+    ax.legend(
+        handles=legend_handles,
+        loc="lower center",
+        bbox_to_anchor=(0.5, -0.20),
+        frameon=False,
+        fontsize=8.5,
+        ncol=1,
+        handlelength=1.1,
+        handletextpad=0.4,
+        borderaxespad=0.0,
+    )
+    ax.set_aspect("equal")
+    ax.set_axis_off()
+
+
 def _render_shanghai_city_context(data_dir, out, for_latex, plot_title, city_df, exp_config):
     """Render a one-row Shanghai city context figure."""
     region_key = "shanghai"
@@ -444,11 +521,12 @@ def _render_shanghai_city_context(data_dir, out, for_latex, plot_title, city_df,
     from visualization.sales import _plot_sales_heatmap_on_ax
 
     sales_df = pd.read_csv(sales_path)
-    fig = plt.figure(figsize=(14.5, 5.6))
-    outer = fig.add_gridspec(1, 2, width_ratios=[1.25, 1.05], wspace=0.34)
+    fig = plt.figure(figsize=(17.2, 5.6))
+    outer = fig.add_gridspec(1, 3, width_ratios=[1.60, 1.05, 0.72], wspace=0.32)
     heatmap_grid = outer[1].subgridspec(1, 2, width_ratios=[24, 1], wspace=0.05)
     ax_heatmap = fig.add_subplot(heatmap_grid[0])
     cax_heatmap = fig.add_subplot(heatmap_grid[1])
+    ax_power_mix = fig.add_subplot(outer[2])
 
     _plot_sales_heatmap_on_ax(
         ax_heatmap,
@@ -484,12 +562,25 @@ def _render_shanghai_city_context(data_dir, out, for_latex, plot_title, city_df,
         absolute_reduction_metric="per_order_g",
         show_detour_boxplot=False,
         mark_reduction_break_even=True,
+        show_city_label=False,
+        bar_width_fraction=0.78,
     )
     ax_reduction.text(
         -0.12,
         1.08,
         "a",
         transform=ax_reduction.transAxes,
+        fontsize=13,
+        fontweight="bold",
+        va="bottom",
+    )
+
+    _plot_power_generation_mix_pie(ax_power_mix, region_key)
+    ax_power_mix.text(
+        -0.06,
+        1.02,
+        "c",
+        transform=ax_power_mix.transAxes,
         fontsize=13,
         fontweight="bold",
         va="bottom",
