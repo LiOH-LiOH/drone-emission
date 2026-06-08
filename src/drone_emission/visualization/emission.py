@@ -1960,6 +1960,7 @@ def _draw_lifecycle_distance_route_factor(
     cax=None,
     draw_heatmap: bool = True,
     contour_percentiles=None,
+    mark_center: bool = False,
 ) -> None:
     """Draw lifecycle distance/route-factor comparison onto *ax*."""
     distances = np.linspace(0.5, 4, 30)
@@ -2010,7 +2011,11 @@ def _draw_lifecycle_distance_route_factor(
     if od_df is not None:
         from scipy.ndimage import gaussian_filter
 
-        valid = od_df.dropna(subset=["distance_km", "road_distance_m", "annual_sales"])
+        valid = od_df.dropna(subset=["distance_km", "road_distance_m", "annual_sales"]).copy()
+        for col in ["distance_km", "road_distance_m", "annual_sales"]:
+            valid[col] = pd.to_numeric(valid[col], errors="coerce")
+        valid = valid.dropna(subset=["distance_km", "road_distance_m", "annual_sales"])
+        valid = valid[valid["annual_sales"] > 0]
         valid = valid[(valid["distance_km"] >= distances[0]) & (valid["distance_km"] <= distances[-1])].copy()
         valid["detour"] = valid["road_distance_m"] / (valid["distance_km"] * 1000)
         valid = valid[(valid["detour"] >= detour_ratios[0]) & (valid["detour"] <= detour_ratios[-1])]
@@ -2033,20 +2038,37 @@ def _draw_lifecycle_distance_route_factor(
             z_sorted = np.sort(Zi.ravel())[::-1]
             z_cumsum = np.cumsum(z_sorted) / z_sorted.sum()
             pcts = tuple(contour_percentiles)
-            kde_levels = sorted([z_sorted[np.searchsorted(z_cumsum, p)] for p in pcts])
+            level_pairs = [
+                (z_sorted[np.searchsorted(z_cumsum, p)], p)
+                for p in pcts
+            ]
+            level_pairs = sorted(level_pairs, key=lambda pair: pair[0])
+            kde_levels = [level for level, _ in level_pairs]
 
             cs = ax.contour(Xi, Yi, Zi, levels=kde_levels, colors="black",
                             linewidths=1.2 if not draw_heatmap else 1.0,
                             linestyles="solid", alpha=0.85 if not draw_heatmap else 0.7)
-            fmt = {l: f"{int(round(p * 100))}%" for l, p in zip(kde_levels, pcts)}
+            fmt = {level: f"{int(round(p * 100))}%" for level, p in level_pairs}
             ax.clabel(cs, fmt=fmt, fontsize=7, inline=True)
 
-            legend_label = (
-                "80% order distribution (Shanghai)"
-                if pcts == (0.80,)
-                else "Order distribution (Shanghai)"
-            )
-            ax.plot([], [], color="black", linewidth=1.0, linestyle="solid", label=legend_label)
+            if mark_center:
+                weights = valid["annual_sales"].to_numpy(dtype=float)
+                center_x = np.average(valid["distance_km"].to_numpy(dtype=float), weights=weights)
+                center_y = np.average(valid["detour"].to_numpy(dtype=float), weights=weights)
+                ax.scatter(
+                    center_x,
+                    center_y,
+                    s=48,
+                    marker="o",
+                    facecolor="#d73027",
+                    edgecolor="white",
+                    linewidth=0.9,
+                    zorder=6,
+                    label="Weighted center",
+                )
+
+            ax.plot([], [], color="black", linewidth=1.0, linestyle="solid",
+                    label="Order distribution (Shanghai)")
             ax.legend(loc="upper right", fontsize=9, framealpha=0.7)
 
 
@@ -2057,10 +2079,10 @@ def plot_lifecycle_distance_route_factor(
     for_latex: bool = False,
     plot_title: bool = False,
 ):
-    """Shanghai order-density contour over air distance and detour ratio.
+    """Shanghai order-density contours over air distance and detour ratio.
 
-    Draws only the 80% weighted order-density contour, without the lifecycle
-    background heatmap or colorbar.
+    Draws only the weighted center point and 30%/60% order-density contours,
+    without the lifecycle background heatmap or colorbar.
 
     Args:
         od_df: OD pairs DataFrame with columns distance_km, road_distance_m, annual_sales.
@@ -2076,7 +2098,8 @@ def plot_lifecycle_distance_route_factor(
         od_df=od_df,
         plot_title=plot_title,
         draw_heatmap=False,
-        contour_percentiles=(0.80,),
+        contour_percentiles=(0.30, 0.60),
+        mark_center=True,
     )
     plt.tight_layout()
 
