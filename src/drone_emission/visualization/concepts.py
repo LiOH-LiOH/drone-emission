@@ -336,6 +336,155 @@ def plot_detour_ratio_concept(
     plt.close(fig)
 
 
+def _draw_phase_per_km_barplot(
+    ax: plt.Axes,
+    df,
+    *,
+    ylabel: str,
+    body_label: str,
+    battery_label: str,
+    body_color: str,
+    battery_color: str,
+    distance_km: float,
+) -> None:
+    """Draw one stacked body/battery phase-emission bar panel."""
+    x = np.arange(len(df))
+    body = df["body_g_per_km"].to_numpy()
+    battery = df["battery_g_per_km"].to_numpy()
+    totals = body + battery
+    edge_color = "#2f3437"
+
+    ax.bar(
+        x,
+        body,
+        width=0.56,
+        color=body_color,
+        edgecolor=edge_color,
+        linewidth=0.8,
+        label=body_label,
+    )
+    ax.bar(
+        x,
+        battery,
+        width=0.56,
+        bottom=body,
+        color=battery_color,
+        edgecolor=edge_color,
+        linewidth=0.8,
+        label=battery_label,
+    )
+
+    for i, total in enumerate(totals):
+        ax.text(
+            x[i],
+            total + max(totals) * 0.035,
+            f"{total:.1f}",
+            ha="center",
+            va="bottom",
+            fontsize=8.5,
+            color="#222222",
+        )
+
+    ax.set_xticks(x)
+    ax.set_xticklabels(df["vehicle"], fontsize=9)
+    ax.set_xlabel(f"{distance_km:g} km one-way trips", fontsize=9)
+    ax.set_ylabel(ylabel, fontsize=9.5)
+    ax.set_ylim(0, max(totals) * 1.25)
+    ax.tick_params(axis="y", labelsize=9)
+    ax.grid(axis="y", alpha=0.25, linewidth=0.8)
+    ax.set_axisbelow(True)
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+    ax.legend(
+        frameon=False,
+        loc="upper center",
+        bbox_to_anchor=(0.5, 1.16),
+        ncol=1,
+        fontsize=8.3,
+        handlelength=1.5,
+    )
+
+
+def plot_production_detour_eol_panels(
+    save_path: str = None,
+    figsize: tuple = (13.2, 4.0),
+    for_latex: bool = False,
+    plot_title: bool = False,
+    distance_km: float = 1.0,
+):
+    """Three-panel concept figure linking production, detour ratio, and end-of-life emissions.
+
+    Args:
+        save_path: Path to save figure. Shows plot if None.
+        figsize: Figure size tuple.
+        for_latex: If True, save as PDF.
+        plot_title: If True, show title.
+        distance_km: One-way delivery distance used for phase-emission amortization.
+    """
+    from visualization.emission import (
+        _end_of_life_phase_parts_per_km,
+        _production_phase_parts_per_km,
+    )
+
+    production_df = _production_phase_parts_per_km(distance_km)
+    eol_df = _end_of_life_phase_parts_per_km(distance_km)
+
+    fig = plt.figure(figsize=figsize)
+    fig.patch.set_facecolor("white")
+    gs = fig.add_gridspec(1, 3, width_ratios=[1.0, 1.45, 1.0], wspace=0.28)
+    axes = [fig.add_subplot(gs[0, i]) for i in range(3)]
+
+    _draw_phase_per_km_barplot(
+        axes[0],
+        production_df,
+        ylabel="Production emission\n(g CO$_2$e / vehicle-km)",
+        body_label="Body production",
+        battery_label="Battery production",
+        body_color="#7f8c8d",
+        battery_color="#2ca25f",
+        distance_km=distance_km,
+    )
+    _draw_detour_ratio_concept(axes[1], plot_title=plot_title)
+    _draw_phase_per_km_barplot(
+        axes[2],
+        eol_df,
+        ylabel="End-of-life emission\n(g CO$_2$e / vehicle-km)",
+        body_label="Body end-of-life",
+        battery_label="Battery end-of-life",
+        body_color="#8b8f97",
+        battery_color="#5b8db8",
+        distance_km=distance_km,
+    )
+
+    for letter, ax in zip(("a", "b", "c"), axes):
+        ax.text(
+            0.01,
+            1.02,
+            letter,
+            transform=ax.transAxes,
+            ha="left",
+            va="bottom",
+            fontsize=12,
+            fontweight="bold",
+            color="#1c2830",
+        )
+
+    if plot_title:
+        fig.suptitle("Lifecycle Components and Route Detour Concept", fontsize=13)
+
+    if save_path:
+        if for_latex and not save_path.endswith(".pdf"):
+            save_path = save_path.rsplit(".", 1)[0] + ".pdf"
+        if plot_title:
+            save_path = _add_title_suffix(save_path)
+        os.makedirs(os.path.dirname(save_path), exist_ok=True)
+        plt.savefig(save_path, dpi=300, bbox_inches="tight")
+        print(f"Production detour EOL panels saved to {save_path}")
+    else:
+        plt.show()
+    plt.close(fig)
+
+
 # ---------------------------------------------------------------------------
 # Emission model LCA flowchart
 # ---------------------------------------------------------------------------

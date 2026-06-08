@@ -10,13 +10,13 @@ Run:
 Available figures:
     detour_lifecycle_distance, lifecycle_distance_detour_boxplot,
     lifecycle_distance_route_factor, production_phase_per_km, end_of_life_phase_per_km,
-    emission_model_flowchart,
+    production_detour_eol_panels, emission_model_flowchart,
     detour_and_lifecycle, distance_comparison,
     distance_comparison_high_3x3, distance_comparison_low_3x3,
     shanghai_heatmap, shanghai_road_air_distance, shanghai_road_detour,
     shanghai_air_detour, shanghai_air_road_joint, shanghai_emission_reduction,
     shanghai_emission_by_distance, shanghai_reduction_detour_by_distance,
-    shanghai_city_context, chongqing_city_context,
+    shanghai_city_context, chongqing_city_context, chengdu_city_context,
     top6_reduction_detour_grid, top6_reduction_detour_grid_low_gef,
     top6_reduction_detour_grid_random,
     province_orders_emission, province_orders_both_emissions,
@@ -51,9 +51,11 @@ TOP6_REDUCTION_DETOUR_FIGURES = {
 }
 SHANGHAI_CITY_CONTEXT_FIGURE = "shanghai_city_context"
 CHONGQING_CITY_CONTEXT_FIGURE = "chongqing_city_context"
+CHENGDU_CITY_CONTEXT_FIGURE = "chengdu_city_context"
 CITY_CONTEXT_FIGURES = {
-    SHANGHAI_CITY_CONTEXT_FIGURE: ("shanghai", "Shanghai"),
-    CHONGQING_CITY_CONTEXT_FIGURE: ("chongqing", "Chongqing"),
+    SHANGHAI_CITY_CONTEXT_FIGURE: ("shanghai", "Shanghai", "shanghai"),
+    CHONGQING_CITY_CONTEXT_FIGURE: ("chongqing", "Chongqing", "chongqing"),
+    CHENGDU_CITY_CONTEXT_FIGURE: ("chengdu", "Chengdu", "sichuan"),
 }
 
 REDUCTION_DETOUR_CACHE_VERSION = 2
@@ -562,8 +564,10 @@ def _render_city_context(
     figure_name,
     region_key,
     display_name,
+    power_region_key=None,
 ):
     """Render a one-row city context figure."""
+    power_region_key = power_region_key or region_key
     selected = city_df[city_df["region_key"] == region_key].copy()
     if selected.empty:
         print(f"{figure_name} skipped — {display_name} row missing")
@@ -624,7 +628,11 @@ def _render_city_context(
         show_city_label=False,
     )
 
-    _plot_power_generation_mix_pie(ax_power_mix, region_key, legend_ax=ax_power_legend)
+    _plot_power_generation_mix_pie(
+        ax_power_mix,
+        power_region_key,
+        legend_ax=ax_power_legend,
+    )
 
     for ax in (ax_reduction, ax_scatter):
         pos = ax.get_position()
@@ -681,6 +689,7 @@ def _render_shanghai_city_context(data_dir, out, for_latex, plot_title, city_df,
         figure_name=SHANGHAI_CITY_CONTEXT_FIGURE,
         region_key="shanghai",
         display_name="Shanghai",
+        power_region_key="shanghai",
     )
 
 
@@ -703,6 +712,30 @@ def _render_chongqing_city_context(
         figure_name=CHONGQING_CITY_CONTEXT_FIGURE,
         region_key="chongqing",
         display_name="Chongqing",
+        power_region_key="chongqing",
+    )
+
+
+def _render_chengdu_city_context(
+    data_dir,
+    out,
+    for_latex,
+    plot_title,
+    city_df,
+    exp_config,
+):
+    """Render a one-row Chengdu city context figure."""
+    _render_city_context(
+        data_dir=data_dir,
+        out=out,
+        for_latex=for_latex,
+        plot_title=plot_title,
+        city_df=city_df,
+        exp_config=exp_config,
+        figure_name=CHENGDU_CITY_CONTEXT_FIGURE,
+        region_key="chengdu",
+        display_name="Chengdu",
+        power_region_key="sichuan",
     )
 
 
@@ -960,7 +993,10 @@ def render_all(data_dir: str, figures_dir: str, for_latex: bool = False, plot_ti
         plot_regions_map_pathway_scenarios,
     )
     from visualization.concepts import (
-        plot_detour_and_lifecycle, plot_detour_lifecycle_distance, plot_emission_model_flowchart,
+        plot_detour_and_lifecycle,
+        plot_detour_lifecycle_distance,
+        plot_emission_model_flowchart,
+        plot_production_detour_eol_panels,
     )
     from visualization.emission import (
         plot_end_of_life_phase_per_km,
@@ -994,6 +1030,13 @@ def render_all(data_dir: str, figures_dir: str, for_latex: bool = False, plot_ti
     if _want("end_of_life_phase_per_km"):
         plot_end_of_life_phase_per_km(
             save_path=os.path.join(out, "end_of_life_phase_per_km.png"),
+            for_latex=for_latex,
+            plot_title=plot_title,
+        )
+
+    if _want("production_detour_eol_panels"):
+        plot_production_detour_eol_panels(
+            save_path=os.path.join(out, "production_detour_eol_panels.png"),
             for_latex=for_latex,
             plot_title=plot_title,
         )
@@ -1267,6 +1310,16 @@ def render_all(data_dir: str, figures_dir: str, for_latex: bool = False, plot_ti
 
                 if _want(CHONGQING_CITY_CONTEXT_FIGURE):
                     _render_chongqing_city_context(
+                        data_dir=data_dir,
+                        out=out,
+                        for_latex=for_latex,
+                        plot_title=plot_title,
+                        city_df=city_df,
+                        exp_config=exp_config,
+                    )
+
+                if _want(CHENGDU_CITY_CONTEXT_FIGURE):
+                    _render_chengdu_city_context(
                         data_dir=data_dir,
                         out=out,
                         for_latex=for_latex,
