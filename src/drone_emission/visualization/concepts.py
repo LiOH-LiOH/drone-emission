@@ -430,9 +430,9 @@ def plot_production_detour_eol_panels(
 
     fig = plt.figure(figsize=figsize)
     fig.patch.set_facecolor("white")
-    gs = fig.add_gridspec(1, 3, width_ratios=[1.0, 2.5, 1.0], wspace=0.24)
-    bar_left = gs[0, 0].subgridspec(3, 1, height_ratios=[0.12, 0.76, 0.12])
-    bar_right = gs[0, 2].subgridspec(3, 1, height_ratios=[0.12, 0.76, 0.12])
+    gs = fig.add_gridspec(1, 3, width_ratios=[0.75, 3.0, 0.75], wspace=0.20)
+    bar_left = gs[0, 0].subgridspec(3, 1, height_ratios=[0.18, 0.64, 0.18])
+    bar_right = gs[0, 2].subgridspec(3, 1, height_ratios=[0.18, 0.64, 0.18])
     axes = [
         fig.add_subplot(bar_left[1, 0]),
         fig.add_subplot(gs[0, 1]),

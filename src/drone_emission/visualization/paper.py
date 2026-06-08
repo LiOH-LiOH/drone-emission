@@ -1475,7 +1475,7 @@ def render_all(data_dir: str, figures_dir: str, for_latex: bool = False, plot_ti
                             group_var="grid_emission_factor",
                             threshold=0.3,
                             save_path=os.path.join(out, "scatter_detour_ratio_vs_reduction_by_gef.png"),
-                            figsize=(12, 4),
+                            figsize=(16, 4),
                             for_latex=for_latex,
                             plot_title=plot_title,
                         )
