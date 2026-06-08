@@ -537,16 +537,6 @@ def _render_shanghai_city_context(data_dir, out, for_latex, plot_title, city_df,
         show_absolute_axis=False,
         show_saturation_fit=True,
     )
-    ax_reduction.text(
-        -0.12,
-        1.08,
-        "a",
-        transform=ax_reduction.transAxes,
-        fontsize=13,
-        fontweight="bold",
-        va="bottom",
-    )
-
     ax_scatter = _plot_reduction_absolute_scatter_panel(
         fig,
         outer[1],
@@ -556,26 +546,34 @@ def _render_shanghai_city_context(data_dir, out, for_latex, plot_title, city_df,
         absolute_reduction_metric="per_order_g",
         show_city_label=False,
     )
-    ax_scatter.text(
-        -0.12,
-        1.08,
-        "b",
-        transform=ax_scatter.transAxes,
-        fontsize=13,
-        fontweight="bold",
-        va="bottom",
-    )
 
     _plot_power_generation_mix_pie(ax_power_mix, region_key)
-    ax_power_mix.text(
-        -0.06,
-        1.02,
-        "c",
-        transform=ax_power_mix.transAxes,
-        fontsize=13,
-        fontweight="bold",
-        va="bottom",
-    )
+
+    for ax in (ax_reduction, ax_scatter):
+        pos = ax.get_position()
+        new_height = pos.height * 0.75
+        ax.set_position([
+            pos.x0,
+            pos.y0 + (pos.height - new_height) / 2,
+            pos.width,
+            new_height,
+        ])
+
+    panel_label_y = ax_reduction.get_position().y1 + 0.012
+    for label, ax, x_offset in (
+        ("a", ax_reduction, -0.020),
+        ("b", ax_scatter, -0.020),
+        ("c", ax_power_mix, -0.010),
+    ):
+        pos = ax.get_position()
+        fig.text(
+            pos.x0 + x_offset,
+            panel_label_y,
+            label,
+            fontsize=13,
+            fontweight="bold",
+            va="bottom",
+        )
 
     if plot_title:
         fig.suptitle("Shanghai Emission Reduction by Distance and Power Mix", fontsize=14)
