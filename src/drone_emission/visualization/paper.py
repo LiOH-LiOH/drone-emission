@@ -459,7 +459,8 @@ def _plot_power_generation_mix_pie(ax, region_key):
         colors=pie_colors,
         startangle=92,
         counterclock=False,
-        wedgeprops=dict(edgecolor="white", linewidth=0.8),
+        radius=1.18,
+        wedgeprops=dict(width=0.42, edgecolor="white", linewidth=0.9),
     )
     legend_handles = [
         Patch(
@@ -472,7 +473,7 @@ def _plot_power_generation_mix_pie(ax, region_key):
     ax.legend(
         handles=legend_handles,
         loc="lower center",
-        bbox_to_anchor=(0.5, -0.20),
+        bbox_to_anchor=(0.5, -0.24),
         frameon=False,
         fontsize=8.5,
         ncol=1,
@@ -487,10 +488,6 @@ def _plot_power_generation_mix_pie(ax, region_key):
 def _render_shanghai_city_context(data_dir, out, for_latex, plot_title, city_df, exp_config):
     """Render a one-row Shanghai city context figure."""
     region_key = "shanghai"
-    sales_path = os.path.join(data_dir, "city", region_key, f"{region_key}_sales.csv")
-    if not os.path.exists(sales_path):
-        print(f"{SHANGHAI_CITY_CONTEXT_FIGURE} skipped — missing {sales_path}")
-        return
 
     selected = city_df[city_df["region_key"] == region_key].copy()
     if selected.empty:
@@ -518,39 +515,9 @@ def _render_shanghai_city_context(data_dir, out, for_latex, plot_title, city_df,
 
     from visualization._utils import _add_title_suffix
     from visualization.analysis import _plot_reduction_detour_panel
-    from visualization.sales import _plot_sales_heatmap_on_ax
-
-    sales_df = pd.read_csv(sales_path)
-    fig = plt.figure(figsize=(17.2, 5.6))
-    outer = fig.add_gridspec(1, 3, width_ratios=[1.60, 1.05, 0.72], wspace=0.32)
-    heatmap_grid = outer[1].subgridspec(1, 2, width_ratios=[24, 1], wspace=0.05)
-    ax_heatmap = fig.add_subplot(heatmap_grid[0])
-    cax_heatmap = fig.add_subplot(heatmap_grid[1])
-    ax_power_mix = fig.add_subplot(outer[2])
-
-    _plot_sales_heatmap_on_ax(
-        ax_heatmap,
-        sales_df,
-        "上海市",
-        boundaries_dict=None,
-        lng_range=(121.0, 121.9),
-        lat_range=(30.9, 31.55),
-        zoom=14,
-        cax=cax_heatmap,
-    )
-    ax_heatmap.set_xlabel("Longitude", fontsize=10)
-    ax_heatmap.set_ylabel("Latitude", fontsize=10)
-    ax_heatmap.grid(True, alpha=0.3, linestyle="--", color="white")
-    ax_heatmap.ticklabel_format(useOffset=False, style="plain")
-    ax_heatmap.text(
-        -0.10,
-        1.02,
-        "b",
-        transform=ax_heatmap.transAxes,
-        fontsize=13,
-        fontweight="bold",
-        va="bottom",
-    )
+    fig = plt.figure(figsize=(12.6, 5.6))
+    outer = fig.add_gridspec(1, 2, width_ratios=[1.65, 0.90], wspace=0.28)
+    ax_power_mix = fig.add_subplot(outer[1])
 
     _, ax_reduction, _ = _plot_reduction_detour_panel(
         fig,
@@ -579,7 +546,7 @@ def _render_shanghai_city_context(data_dir, out, for_latex, plot_title, city_df,
     ax_power_mix.text(
         -0.06,
         1.02,
-        "c",
+        "b",
         transform=ax_power_mix.transAxes,
         fontsize=13,
         fontweight="bold",
@@ -587,7 +554,7 @@ def _render_shanghai_city_context(data_dir, out, for_latex, plot_title, city_df,
     )
 
     if plot_title:
-        fig.suptitle("Shanghai Delivery Demand and Emission Reduction by Distance", fontsize=14)
+        fig.suptitle("Shanghai Emission Reduction by Distance and Power Mix", fontsize=14)
 
     save_path = os.path.join(out, f"{SHANGHAI_CITY_CONTEXT_FIGURE}.png")
     if for_latex and not save_path.endswith(".pdf"):
