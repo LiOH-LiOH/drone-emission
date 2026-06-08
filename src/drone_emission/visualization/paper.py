@@ -8,7 +8,8 @@ Run:
     ../../.venv/bin/python -m visualization.paper --only shanghai_heatmap,distance_comparison
 
 Available figures:
-    detour_lifecycle_distance, lifecycle_distance_detour_boxplot, emission_model_flowchart,
+    detour_lifecycle_distance, lifecycle_distance_detour_boxplot,
+    lifecycle_distance_route_factor, emission_model_flowchart,
     detour_and_lifecycle, distance_comparison,
     distance_comparison_high_3x3, distance_comparison_low_3x3,
     shanghai_heatmap, shanghai_road_air_distance, shanghai_road_detour,
@@ -844,6 +845,7 @@ def render_all(data_dir: str, figures_dir: str, for_latex: bool = False, plot_ti
     from visualization.concepts import (
         plot_detour_and_lifecycle, plot_detour_lifecycle_distance, plot_emission_model_flowchart,
     )
+    from visualization.emission import plot_lifecycle_distance_route_factor
     from visualization.regions import plot_regions_on_china_map
     from visualization.roadnet import plot_distance_comparison
 
@@ -910,6 +912,24 @@ def render_all(data_dir: str, figures_dir: str, for_latex: bool = False, plot_ti
                 plot_lifecycle_distance_detour_boxplot(
                     od_df,
                     save_path=os.path.join(out, "lifecycle_distance_detour_boxplot.png"),
+                    for_latex=for_latex,
+                    plot_title=plot_title,
+                )
+
+    if _want("lifecycle_distance_route_factor"):
+        od_path = os.path.join(data_dir, "city", "shanghai", "shanghai_od_pairs.csv")
+        if not os.path.exists(od_path):
+            print(f"lifecycle_distance_route_factor skipped — missing {od_path}")
+        else:
+            od_df = pd.read_csv(od_path)
+            required = {"distance_km", "road_distance_m", "annual_sales"}
+            if not required.issubset(od_df.columns):
+                missing = required - set(od_df.columns)
+                print(f"lifecycle_distance_route_factor skipped — {od_path} missing columns {missing}")
+            else:
+                plot_lifecycle_distance_route_factor(
+                    od_df,
+                    save_path=os.path.join(out, "lifecycle_distance_route_factor.png"),
                     for_latex=for_latex,
                     plot_title=plot_title,
                 )
