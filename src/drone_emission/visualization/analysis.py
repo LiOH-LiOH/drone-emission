@@ -3827,6 +3827,7 @@ def _plot_reduction_detour_panel(
     mark_reduction_break_even: bool = False,
     show_city_label: bool = True,
     bar_width_fraction: float = 1.0,
+    show_absolute_axis: bool = True,
 ):
     """Draw one reduction-detour city panel inside an existing figure."""
     if show_detour_boxplot:
@@ -3930,6 +3931,10 @@ def _plot_reduction_detour_panel(
                 rotation=90,
             )
 
+    ax_abs = None
+    if not show_absolute_axis:
+        return ax_top, ax_bot, ax_abs
+
     ax_abs = ax_bot.twinx()
     ax_abs.plot(
         centres,
@@ -3958,6 +3963,74 @@ def _plot_reduction_detour_panel(
         ax_abs.set_ylim(*visible_abs_ylim)
 
     return ax_top, ax_bot, ax_abs
+
+
+def _plot_reduction_absolute_scatter_panel(
+    fig,
+    subplot_spec,
+    binned: dict,
+    city_label: str,
+    min_air_km: float = 0.0,
+    max_air_km: float = 5.0,
+    absolute_reduction_metric: str = "total_t",
+    show_city_label: bool = True,
+):
+    """Draw absolute reduction as scatter with a linear fit."""
+    ax = fig.add_subplot(subplot_spec)
+    centres = np.asarray(binned["centres"], dtype=float)
+    reduction_abs = np.asarray(binned["reduction_abs"], dtype=float)
+    max_km = float(binned["max_km"])
+    x_max = min(max_air_km, max_km)
+    x_min = min(min_air_km, x_max)
+    visible = (centres >= x_min) & (centres <= x_max)
+    finite = visible & np.isfinite(centres) & np.isfinite(reduction_abs)
+    x = centres[finite]
+    y = reduction_abs[finite]
+
+    ax.scatter(
+        x,
+        y,
+        color="#555555",
+        alpha=0.72,
+        s=14,
+        linewidth=0,
+        zorder=3,
+    )
+    if x.size >= 2:
+        slope, intercept = np.polyfit(x, y, deg=1)
+        x_fit = np.array([x_min, x_max], dtype=float)
+        y_fit = slope * x_fit + intercept
+        ax.plot(
+            x_fit,
+            y_fit,
+            color="#111111",
+            linewidth=1.2,
+            alpha=0.85,
+            zorder=4,
+        )
+
+    ax.axhline(0, color="#555555", linewidth=0.5, alpha=0.35)
+    x_ticks = np.arange(np.ceil(x_min), x_max + 1e-6, 1.0)
+    if x_min > 0 and (not x_ticks.size or not np.isclose(x_ticks[0], x_min)):
+        x_ticks = np.insert(x_ticks, 0, x_min)
+    ax.set_xlim(x_min, x_max)
+    ax.set_xticks(x_ticks, labels=[f"{t:g}" for t in x_ticks])
+    ax.set_xlabel("Air Distance (km)", fontsize=9)
+    ylabel = (
+        "E-bike - Drone (g CO2e/order)"
+        if absolute_reduction_metric == "per_order_g"
+        else "E-bike - Drone (t CO2e/yr)"
+    )
+    ax.set_ylabel(ylabel, fontsize=9, color="#555555")
+    ax.tick_params(axis="both", labelsize=8)
+    ax.tick_params(axis="y", labelcolor="#555555")
+    ax.grid(axis="y", alpha=0.3)
+    visible_abs_ylim = _padded_visible_ylim(y)
+    if visible_abs_ylim is not None:
+        ax.set_ylim(*visible_abs_ylim)
+    if show_city_label:
+        ax.set_title(city_label, fontsize=11, fontweight="bold")
+    return ax
 
 
 def plot_reduction_detour_grid_binned(

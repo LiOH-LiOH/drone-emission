@@ -460,7 +460,7 @@ def _plot_power_generation_mix_pie(ax, region_key):
         startangle=92,
         counterclock=False,
         radius=1.18,
-        wedgeprops=dict(width=0.42, edgecolor="white", linewidth=0.9),
+        wedgeprops=dict(width=0.42, edgecolor="white", linewidth=2.2),
     )
     legend_handles = [
         Patch(
@@ -514,10 +514,13 @@ def _render_shanghai_city_context(data_dir, out, for_latex, plot_title, city_df,
     import matplotlib.pyplot as plt
 
     from visualization._utils import _add_title_suffix
-    from visualization.analysis import _plot_reduction_detour_panel
-    fig = plt.figure(figsize=(12.6, 5.6))
-    outer = fig.add_gridspec(1, 2, width_ratios=[1.65, 0.90], wspace=0.28)
-    ax_power_mix = fig.add_subplot(outer[1])
+    from visualization.analysis import (
+        _plot_reduction_absolute_scatter_panel,
+        _plot_reduction_detour_panel,
+    )
+    fig = plt.figure(figsize=(17.0, 5.6))
+    outer = fig.add_gridspec(1, 3, width_ratios=[1.35, 1.20, 0.85], wspace=0.34)
+    ax_power_mix = fig.add_subplot(outer[2])
 
     _, ax_reduction, _ = _plot_reduction_detour_panel(
         fig,
@@ -531,6 +534,7 @@ def _render_shanghai_city_context(data_dir, out, for_latex, plot_title, city_df,
         mark_reduction_break_even=True,
         show_city_label=False,
         bar_width_fraction=0.78,
+        show_absolute_axis=False,
     )
     ax_reduction.text(
         -0.12,
@@ -542,11 +546,30 @@ def _render_shanghai_city_context(data_dir, out, for_latex, plot_title, city_df,
         va="bottom",
     )
 
+    ax_scatter = _plot_reduction_absolute_scatter_panel(
+        fig,
+        outer[1],
+        binned_by_city[region_key],
+        labels.get(region_key, "Shanghai"),
+        min_air_km=0.2,
+        absolute_reduction_metric="per_order_g",
+        show_city_label=False,
+    )
+    ax_scatter.text(
+        -0.12,
+        1.08,
+        "b",
+        transform=ax_scatter.transAxes,
+        fontsize=13,
+        fontweight="bold",
+        va="bottom",
+    )
+
     _plot_power_generation_mix_pie(ax_power_mix, region_key)
     ax_power_mix.text(
         -0.06,
         1.02,
-        "b",
+        "c",
         transform=ax_power_mix.transAxes,
         fontsize=13,
         fontweight="bold",
