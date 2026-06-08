@@ -2116,6 +2116,150 @@ def plot_lifecycle_distance_route_factor(
         plt.show()
 
 
+def _production_phase_parts_per_km(distance_km: float):
+    """Return body/battery production amortization per round-trip vehicle-km."""
+    from emission.cal_single_delivery import LifeCycleEmissions
+
+    lca = LifeCycleEmissions()
+    rows = []
+
+    specs = [
+        (
+            "E-bike",
+            lca.ebike_p,
+            lca.calculate_ebike_production_emissions(),
+            lca.ebike_p.velocity,
+        ),
+        (
+            "Drone",
+            lca.drone_p,
+            lca.calculate_drone_production_emissions(),
+            lca.drone_p.v_level,
+        ),
+    ]
+    for vehicle, p, prod, speed_kmh in specs:
+        delivery_time_min = (2 * distance_km / speed_kmh) * 60 + p.loading_time_min
+        deliveries_per_day = p.working_hours_per_day * 60 / delivery_time_min
+        annual_deliveries = deliveries_per_day * p.working_days_per_year
+        round_trip_km = 2 * distance_km
+
+        body_g_per_km = (
+            prod["body_production_kg"] / p.lifespan
+            / annual_deliveries
+            * 1000
+            / round_trip_km
+        )
+        battery_g_per_km = (
+            prod["battery_production_kg"] / p.battery_lifespan
+            / annual_deliveries
+            * 1000
+            / round_trip_km
+        )
+        rows.append(
+            {
+                "vehicle": vehicle,
+                "body_g_per_km": body_g_per_km,
+                "battery_g_per_km": battery_g_per_km,
+            }
+        )
+
+    return pd.DataFrame(rows)
+
+
+def plot_production_phase_per_km(
+    save_path: str = None,
+    figsize: tuple = (5.2, 3.6),
+    for_latex: bool = False,
+    plot_title: bool = False,
+    distance_km: float = 1.0,
+):
+    """Stacked bar plot of body and battery production emissions per vehicle-km.
+
+    Args:
+        save_path: Path to save figure. Shows plot if None.
+        figsize: Figure size tuple.
+        for_latex: If True, save as PDF.
+        plot_title: If True, show title.
+        distance_km: One-way delivery distance used for delivery-time amortization.
+    """
+    df = _production_phase_parts_per_km(distance_km)
+    x = np.arange(len(df))
+    body = df["body_g_per_km"].to_numpy()
+    battery = df["battery_g_per_km"].to_numpy()
+    totals = body + battery
+
+    fig, ax = plt.subplots(figsize=figsize)
+    fig.patch.set_facecolor("white")
+
+    body_color = "#7f8c8d"
+    battery_color = "#2ca25f"
+    edge_color = "#2f3437"
+
+    ax.bar(
+        x,
+        body,
+        width=0.56,
+        color=body_color,
+        edgecolor=edge_color,
+        linewidth=0.8,
+        label="Body production",
+    )
+    ax.bar(
+        x,
+        battery,
+        width=0.56,
+        bottom=body,
+        color=battery_color,
+        edgecolor=edge_color,
+        linewidth=0.8,
+        label="Battery production",
+    )
+
+    for i, total in enumerate(totals):
+        ax.text(
+            x[i],
+            total + max(totals) * 0.035,
+            f"{total:.1f}",
+            ha="center",
+            va="bottom",
+            fontsize=9,
+            color="#222222",
+        )
+
+    ax.set_xticks(x)
+    ax.set_xticklabels(df["vehicle"])
+    ax.set_xlabel(f"Amortized using {distance_km:g} km one-way trips")
+    ax.set_ylabel("Production emission (g CO$_2$e / vehicle-km)")
+    ax.set_ylim(0, max(totals) * 1.25)
+    ax.grid(axis="y", alpha=0.25, linewidth=0.8)
+    ax.set_axisbelow(True)
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+    ax.legend(
+        frameon=False,
+        loc="upper center",
+        bbox_to_anchor=(0.5, 1.15),
+        ncol=2,
+        fontsize=9,
+    )
+    if plot_title:
+        ax.set_title("Production Phase Emissions per Kilometer")
+
+    plt.tight_layout()
+
+    if save_path:
+        if for_latex and not save_path.endswith(".pdf"):
+            save_path = save_path.rsplit(".", 1)[0] + ".pdf"
+        if plot_title:
+            save_path = _add_title_suffix(save_path)
+        os.makedirs(os.path.dirname(save_path), exist_ok=True)
+        plt.savefig(save_path, dpi=300, bbox_inches="tight")
+        print(f"Production phase per km barplot saved to {save_path}")
+    else:
+        plt.show()
+    plt.close(fig)
+
+
 def plot_lifecycle_distance_detour_boxplot(
     od_df: pd.DataFrame,
     save_path: str = None,

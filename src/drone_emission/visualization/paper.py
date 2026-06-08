@@ -9,7 +9,7 @@ Run:
 
 Available figures:
     detour_lifecycle_distance, lifecycle_distance_detour_boxplot,
-    lifecycle_distance_route_factor, emission_model_flowchart,
+    lifecycle_distance_route_factor, production_phase_per_km, emission_model_flowchart,
     detour_and_lifecycle, distance_comparison,
     distance_comparison_high_3x3, distance_comparison_low_3x3,
     shanghai_heatmap, shanghai_road_air_distance, shanghai_road_detour,
@@ -893,7 +893,7 @@ def render_all(data_dir: str, figures_dir: str, for_latex: bool = False, plot_ti
         plot_city_gef_distribution,
         plot_city_gef_scatter_components,
         plot_city_reduction_rank_top10,
-        plot_grouped_scatter,
+        plot_grouped_scatter_split_panels,
         plot_province_orders_both_emissions,
         plot_province_orders_emission,
         plot_province_total_ebike_lifecycle,
@@ -908,7 +908,10 @@ def render_all(data_dir: str, figures_dir: str, for_latex: bool = False, plot_ti
     from visualization.concepts import (
         plot_detour_and_lifecycle, plot_detour_lifecycle_distance, plot_emission_model_flowchart,
     )
-    from visualization.emission import plot_lifecycle_distance_route_factor
+    from visualization.emission import (
+        plot_lifecycle_distance_route_factor,
+        plot_production_phase_per_km,
+    )
     from visualization.regions import plot_regions_on_china_map
     from visualization.roadnet import plot_distance_comparison
 
@@ -922,6 +925,13 @@ def render_all(data_dir: str, figures_dir: str, for_latex: bool = False, plot_ti
     if _want("emission_model_flowchart"):
         plot_emission_model_flowchart(
             save_path=os.path.join(out, "emission_model_flowchart.png"),
+            for_latex=for_latex,
+            plot_title=plot_title,
+        )
+
+    if _want("production_phase_per_km"):
+        plot_production_phase_per_km(
+            save_path=os.path.join(out, "production_phase_per_km.png"),
             for_latex=for_latex,
             plot_title=plot_title,
         )
@@ -1333,7 +1343,7 @@ def render_all(data_dir: str, figures_dir: str, for_latex: bool = False, plot_ti
                         )
                     if _want("scatter_detour_ratio_vs_reduction_by_gef"):
                         reduction_col = _weighted_reduction_column(df_enriched)
-                        plot_grouped_scatter(
+                        plot_grouped_scatter_split_panels(
                             df_enriched,
                             feature_var="detour_ratio",
                             result_var=reduction_col,

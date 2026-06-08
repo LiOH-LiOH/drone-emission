@@ -581,6 +581,183 @@ def plot_grouped_scatter(
     plt.close(fig)
 
 
+def plot_grouped_scatter_split_panels(
+    df: pd.DataFrame,
+    feature_var: str,
+    result_var: str,
+    group_var: str,
+    threshold: float,
+    save_path: str = None,
+    figsize: tuple = (10, 4.8),
+    for_latex: bool = False,
+    plot_title: bool = False,
+    group_labels: tuple = None,
+):
+    """Plot threshold-split scatter panels with shared axes and one central colorbar.
+
+    Args:
+        df: DataFrame with region statistics.
+        feature_var: X-axis variable name.
+        result_var: Y-axis variable name.
+        group_var: Variable to split groups on.
+        threshold: Split threshold for group_var.
+        save_path: Path to save figure. Shows plot if None.
+        figsize: Figure size tuple.
+        for_latex: If True, save as PDF.
+        plot_title: If True, show title.
+        group_labels: Tuple of (low_label, high_label). Auto-generated if None.
+    """
+    valid_mask = df[[feature_var, result_var, group_var]].notna().all(axis=1)
+    plot_df = df.loc[valid_mask].copy()
+    if plot_df.empty:
+        print("Grouped scatter split panels skipped - no valid rows")
+        return
+
+    low_mask = plot_df[group_var] <= threshold
+    high_mask = ~low_mask
+
+    if group_labels is None:
+        group_labels = (
+            f"Low GEF ($\\leq$ {threshold})",
+            f"High GEF (> {threshold})",
+        )
+
+    x_data_min = plot_df[feature_var].min()
+    x_data_max = plot_df[feature_var].max()
+    y_data_min = plot_df[result_var].min()
+    y_data_max = plot_df[result_var].max()
+    x_pad = (x_data_max - x_data_min) * 0.03 or 0.1
+    y_pad = (y_data_max - y_data_min) * 0.06 or 1.0
+    x_global_min = x_data_min - x_pad
+    x_global_max = x_data_max + x_pad
+    y_global_min = y_data_min - y_pad
+    y_global_max = y_data_max + y_pad
+
+    from matplotlib.colors import LinearSegmentedColormap, Normalize
+    from matplotlib.cm import ScalarMappable
+
+    cmap = LinearSegmentedColormap.from_list(
+        "gef", ["#006837", "#31A354", "#D95F0E", "#A50F15"]
+    )
+    gef_vals = plot_df[group_var].values
+    norm = Normalize(vmin=gef_vals.min(), vmax=gef_vals.max())
+
+    fig = plt.figure(figsize=figsize)
+    gs = fig.add_gridspec(1, 3, width_ratios=[1, 0.055, 1], wspace=0.22)
+    ax_low = fig.add_subplot(gs[0, 0])
+    cbar_ax = fig.add_subplot(gs[0, 1])
+    ax_high = fig.add_subplot(gs[0, 2], sharex=ax_low, sharey=ax_low)
+    axes = [ax_low, ax_high]
+    masks = [low_mask, high_mask]
+    line_colors = ["#006837", "#A50F15"]
+    panel_letters = ["a", "b"]
+
+    for ax, mask, line_color, label, panel_letter in zip(
+        axes, masks, line_colors, group_labels, panel_letters
+    ):
+        panel_df = plot_df.loc[mask]
+        ax.scatter(
+            panel_df[feature_var].values,
+            panel_df[result_var].values,
+            s=24,
+            alpha=0.68,
+            c=panel_df[group_var].values,
+            cmap=cmap,
+            norm=norm,
+            edgecolors="none",
+            zorder=10,
+        )
+
+        x = panel_df[feature_var].values
+        y = panel_df[result_var].values
+        if len(x) >= 3 and np.sum((x - np.mean(x)) ** 2) > 0:
+            slope, intercept, _, _, _ = stats.linregress(x, y)
+            x_line = np.linspace(x_global_min, x_global_max, 100)
+            y_line = slope * x_line + intercept
+            ax.plot(
+                x_line,
+                y_line,
+                color=line_color,
+                linewidth=2.5,
+                alpha=0.42,
+                zorder=15,
+            )
+            n = len(x)
+            se = np.sqrt(np.sum((y - (slope * x + intercept)) ** 2) / (n - 2))
+            t_val = stats.t.ppf(0.975, n - 2)
+            x_mean = np.mean(x)
+            ci = t_val * se * np.sqrt(
+                1.0 / n + (x_line - x_mean) ** 2 / np.sum((x - x_mean) ** 2)
+            )
+            ax.fill_between(
+                x_line,
+                y_line - ci,
+                y_line + ci,
+                alpha=0.11,
+                color=line_color,
+                zorder=5,
+            )
+
+        ax.text(
+            -0.10,
+            1.02,
+            panel_letter,
+            transform=ax.transAxes,
+            fontsize=14,
+            fontweight="bold",
+            va="bottom",
+            ha="right",
+        )
+        ax.text(
+            0.03,
+            0.96,
+            label,
+            transform=ax.transAxes,
+            fontsize=9,
+            va="top",
+            ha="left",
+            bbox=dict(
+                boxstyle="round,pad=0.22",
+                facecolor="white",
+                edgecolor="0.7",
+                alpha=0.9,
+            ),
+        )
+        ax.set_xlim(x_global_min, x_global_max)
+        ax.set_ylim(y_global_min, y_global_max)
+        ax.set_xlabel(VARIABLE_LABELS.get(feature_var, feature_var), fontsize=12)
+        ax.grid(True, alpha=0.3, linestyle="--")
+
+    ax_low.set_ylabel(VARIABLE_LABELS.get(result_var, result_var), fontsize=12)
+    ax_high.tick_params(labelleft=False)
+
+    sm = ScalarMappable(norm=norm, cmap=cmap)
+    sm.set_array([])
+    cbar = fig.colorbar(sm, cax=cbar_ax)
+    cbar.set_label(VARIABLE_LABELS.get(group_var, group_var), fontsize=10)
+
+    if plot_title:
+        fig.suptitle(
+            f"{VARIABLE_LABELS.get(feature_var, feature_var)} vs "
+            f"{VARIABLE_LABELS.get(result_var, result_var)}",
+            fontsize=12,
+            fontweight="bold",
+        )
+
+    if save_path:
+        if for_latex and not save_path.endswith(".pdf"):
+            save_path = save_path.rsplit(".", 1)[0] + ".pdf"
+        if plot_title:
+            save_path = _add_title_suffix(save_path)
+        os.makedirs(os.path.dirname(save_path), exist_ok=True)
+        plt.savefig(save_path, dpi=300, bbox_inches="tight")
+        print(f"Grouped scatter split panels saved to {save_path}")
+    else:
+        plt.show()
+
+    plt.close(fig)
+
+
 def plot_regions_map_and_gef_scatter(
     df_stats: "pd.DataFrame",
     df_enriched: "pd.DataFrame",
