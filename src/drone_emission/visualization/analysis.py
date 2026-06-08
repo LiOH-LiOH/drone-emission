@@ -3163,11 +3163,11 @@ def plot_regions_map_city_rank_and_drone_share(
     df_stats: "pd.DataFrame",
     stats_csv_path: str,
     save_path: str = None,
-    figsize: tuple = (18, 9),
+    figsize: tuple = (18, 13),
     for_latex: bool = False,
     plot_title: bool = False,
 ):
-    """Side-by-side region maps for Oracle reduction and optimal drone share.
+    """Maps for Oracle reduction and drone share, with province lifecycle ranking.
 
     Args:
         df_stats: all_region_stats DataFrame.
@@ -3215,7 +3215,17 @@ def plot_regions_map_city_rank_and_drone_share(
     )
     drone_cmap, drone_norm, drone_bins, drone_edges = _build_drone_share_cmap()
 
-    fig, (ax_a, ax_b) = plt.subplots(1, 2, figsize=figsize)
+    fig = plt.figure(figsize=figsize)
+    gs = fig.add_gridspec(
+        2,
+        2,
+        height_ratios=[1.0, 0.45],
+        hspace=0.28,
+        wspace=0.25,
+    )
+    ax_a = fig.add_subplot(gs[0, 0])
+    ax_b = fig.add_subplot(gs[0, 1])
+    ax_c = fig.add_subplot(gs[1, :])
 
     plot_regions_on_china_map(
         df=map_df,
@@ -3280,14 +3290,22 @@ def plot_regions_map_city_rank_and_drone_share(
     ax_b.text(-0.03, 1.02, "b", transform=ax_b.transAxes,
               fontsize=16, fontweight="bold", va="bottom", ha="right")
 
+    plot_province_total_ebike_lifecycle(
+        df_stats,
+        ax=ax_c,
+        plot_title=plot_title,
+    )
+    ax_c.text(-0.03, 1.02, "c", transform=ax_c.transAxes,
+              fontsize=16, fontweight="bold", va="bottom", ha="right")
+
     if plot_title:
         fig.suptitle(
-            "Regional Oracle Reduction and Optimal Drone Share",
+            "Regional Oracle Reduction, Drone Share, and Province Lifecycle Baseline",
             fontsize=14,
             fontweight="bold",
         )
 
-    fig.tight_layout(w_pad=4.0)
+    fig.tight_layout()
 
     fig.canvas.draw()
     a_pos = ax_a.get_position()
