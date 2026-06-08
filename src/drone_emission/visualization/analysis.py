@@ -2898,32 +2898,50 @@ def plot_province_total_ebike_lifecycle(
     plot_title: bool = False,
     ax: "plt.Axes" = None,
 ):
-    """Province bar chart ranked by total annual e-bike emission, with reduction% boxplot overlay.
+    """Province bar chart ranked by total annual e-bike emission, with Oracle reduction overlay.
 
-    Bars (left axis) show summed total_ebike_lifecycle per province, sorted descending.
-    Boxplot (right axis) shows the per-city distribution of the preferred
-    weighted reduction metric within each province.
+    Bars (left axis) show summed annual-sales-weighted total_ebike_lifecycle
+    per province, sorted descending. Boxplot (right axis) shows the per-city
+    distribution of Oracle reduction versus the kappa-adjusted e-bike baseline.
 
     Args:
         df: all_region_stats DataFrame with province, total_ebike_lifecycle,
-            and a weighted reduction metric.
+            and oracle_min_lifecycle_kg.
         save_path: Path without extension. Saves PNG or PDF; shows interactively if None.
         figsize: Figure size tuple.
         for_latex: Save as PDF when True.
         plot_title: Add title when True.
+        ax: External axes. When provided, skips figure creation and save.
     """
-    try:
-        reduction_col = _weighted_reduction_column(df)
-    except KeyError as exc:
-        print(f"Province total ebike lifecycle skipped — {exc}")
+    needed = ["province", "total_ebike_lifecycle", "oracle_min_lifecycle_kg"]
+    missing = [col for col in needed if col not in df.columns]
+    if missing:
+        print(f"Province total ebike lifecycle skipped — missing columns {missing}")
         return
-    needed = ["province", "total_ebike_lifecycle", reduction_col]
-    sub = df[needed].dropna().copy()
+
+    sub = df[needed].copy()
+    sub["total_ebike_lifecycle"] = pd.to_numeric(
+        sub["total_ebike_lifecycle"], errors="coerce"
+    )
+    sub["oracle_min_lifecycle_kg"] = pd.to_numeric(
+        sub["oracle_min_lifecycle_kg"], errors="coerce"
+    )
+    sub["oracle_min_reduction_vs_ebike_pct"] = np.where(
+        sub["total_ebike_lifecycle"] > 0,
+        (
+            1.0
+            - sub["oracle_min_lifecycle_kg"] / sub["total_ebike_lifecycle"]
+        )
+        * 100.0,
+        np.nan,
+    )
+    sub = sub.dropna()
     if sub.empty:
         print("Province total ebike lifecycle skipped — no rows with required columns")
         return
 
     sub["province_en"] = sub["province"].map(PROVINCE_NAME_EN).fillna(sub["province"])
+    reduction_col = "oracle_min_reduction_vs_ebike_pct"
 
     prov = (
         sub.groupby("province_en")
@@ -2941,6 +2959,7 @@ def plot_province_total_ebike_lifecycle(
 
     x = np.arange(len(ordered))
     bar_color = "#B0B0B0"
+    bar_axis_color = "#4A4A4A"
     box_color = "#1F6E2D"
 
     _external_ax = ax is not None
@@ -2950,10 +2969,21 @@ def plot_province_total_ebike_lifecycle(
     else:
         fig, ax1 = plt.subplots(figsize=figsize)
 
-    ax1.bar(x, ebike_t, color=bar_color, alpha=0.85, zorder=2, label="Total e-bike emission")
+    ax1.bar(
+        x,
+        ebike_t,
+        color=bar_color,
+        alpha=0.85,
+        zorder=2,
+        label="Kappa-adjusted e-bike emission",
+    )
     ax1.set_xlabel("Province", fontsize=12)
-    ax1.set_ylabel("Total e-bike lifecycle emission (t CO₂eq / yr)", fontsize=12, color=bar_color)
-    ax1.tick_params(axis="y", labelcolor=bar_color)
+    ax1.set_ylabel(
+        "Kappa-adjusted e-bike lifecycle emission (t CO₂eq / yr)",
+        fontsize=12,
+        color=bar_axis_color,
+    )
+    ax1.tick_params(axis="y", labelcolor=bar_axis_color)
     ax1.set_xticks(x)
     ax1.set_xticklabels(ordered, rotation=45, ha="right", fontsize=9)
     ax1.yaxis.grid(True, linestyle="--", alpha=0.4)
@@ -2980,7 +3010,11 @@ def plot_province_total_ebike_lifecycle(
     for median in bp["medians"]:
         median.set_color(box_color)
         median.set_linewidth(1.5)
-    ax2.set_ylabel(VARIABLE_LABELS.get(reduction_col, reduction_col), fontsize=12, color=box_color)
+    ax2.set_ylabel(
+        "City Oracle reduction vs e-bike (%)",
+        fontsize=12,
+        color=box_color,
+    )
     ax2.tick_params(axis="y", labelcolor=box_color)
     ax2.set_xlim(ax1.get_xlim())
 
@@ -2991,15 +3025,15 @@ def plot_province_total_ebike_lifecycle(
     ax1.legend(
         handles,
         [
-            "Total e-bike emission",
-            f"{VARIABLE_LABELS.get(reduction_col, reduction_col)} (per-city)",
+            "Kappa-adjusted e-bike emission",
+            "Oracle reduction vs e-bike (per city)",
         ],
         loc="upper right",
         fontsize=10,
     )
 
     if plot_title:
-        title = "Province e-bike emission ranking with reduction-% distribution"
+        title = "Province e-bike emission ranking with Oracle reduction distribution"
         if _external_ax:
             ax1.set_title(title, fontsize=12, fontweight="bold")
         else:
