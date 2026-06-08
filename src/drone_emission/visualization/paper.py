@@ -437,7 +437,7 @@ def _render_shanghai_heatmap(data_dir, out, for_latex, plot_title):
     )
 
 
-def _plot_power_generation_mix_pie(ax, region_key):
+def _plot_power_generation_mix_pie(ax, region_key, legend_ax=None):
     """Draw the 2022 power generation mix pie for one region."""
     from matplotlib.patches import Patch
 
@@ -471,17 +471,30 @@ def _plot_power_generation_mix_pie(ax, region_key):
         )
         for name, pct in zip(components, percentages)
     ]
-    ax.legend(
-        handles=legend_handles,
-        loc="lower center",
-        bbox_to_anchor=(0.5, -0.24),
-        frameon=False,
-        fontsize=8.5,
-        ncol=1,
-        handlelength=1.1,
-        handletextpad=0.4,
-        borderaxespad=0.0,
-    )
+    if legend_ax is None:
+        ax.legend(
+            handles=legend_handles,
+            loc="lower center",
+            bbox_to_anchor=(0.5, -0.24),
+            frameon=False,
+            fontsize=8.5,
+            ncol=1,
+            handlelength=1.1,
+            handletextpad=0.4,
+            borderaxespad=0.0,
+        )
+    else:
+        legend_ax.legend(
+            handles=legend_handles,
+            loc="center left",
+            frameon=False,
+            fontsize=9,
+            ncol=1,
+            handlelength=1.2,
+            handletextpad=0.5,
+            borderaxespad=0.0,
+        )
+        legend_ax.set_axis_off()
     ax.set_aspect("equal")
     ax.set_axis_off()
 
@@ -519,9 +532,11 @@ def _render_shanghai_city_context(data_dir, out, for_latex, plot_title, city_df,
         _plot_reduction_absolute_scatter_panel,
         _plot_reduction_detour_panel,
     )
-    fig = plt.figure(figsize=(6.4, 12.6))
-    outer = fig.add_gridspec(3, 1, height_ratios=[1.0, 1.0, 0.85], hspace=0.50)
-    ax_power_mix = fig.add_subplot(outer[2])
+    fig = plt.figure(figsize=(6.4, 11.6))
+    outer = fig.add_gridspec(3, 1, height_ratios=[1.0, 1.0, 0.78], hspace=0.30)
+    power_grid = outer[2].subgridspec(1, 2, width_ratios=[1.0, 0.72], wspace=0.12)
+    ax_power_mix = fig.add_subplot(power_grid[0])
+    ax_power_legend = fig.add_subplot(power_grid[1])
 
     _, ax_reduction, _ = _plot_reduction_detour_panel(
         fig,
@@ -548,7 +563,7 @@ def _render_shanghai_city_context(data_dir, out, for_latex, plot_title, city_df,
         show_city_label=False,
     )
 
-    _plot_power_generation_mix_pie(ax_power_mix, region_key)
+    _plot_power_generation_mix_pie(ax_power_mix, region_key, legend_ax=ax_power_legend)
 
     for ax in (ax_reduction, ax_scatter):
         pos = ax.get_position()
@@ -560,6 +575,7 @@ def _render_shanghai_city_context(data_dir, out, for_latex, plot_title, city_df,
             new_height,
         ])
 
+    panel_label_x = ax_reduction.get_position().x0 - 0.055
     for label, ax in (
         ("a", ax_reduction),
         ("b", ax_scatter),
@@ -567,7 +583,7 @@ def _render_shanghai_city_context(data_dir, out, for_latex, plot_title, city_df,
     ):
         pos = ax.get_position()
         fig.text(
-            pos.x0 - 0.055,
+            panel_label_x,
             pos.y1 + 0.010,
             label,
             fontsize=13,
