@@ -911,8 +911,8 @@ def _render_city_context_group(
 
     from visualization._utils import _add_title_suffix
 
-    fig = plt.figure(figsize=(24.0, 8.8))
-    outer = fig.add_gridspec(1, 4, wspace=0.24)
+    fig = plt.figure(figsize=(24.0, 8.2))
+    outer = fig.add_gridspec(1, 4, wspace=0.32)
     reduction_axes = []
     absolute_axes = []
 
@@ -925,37 +925,15 @@ def _render_city_context_group(
             "chengdu",
         }
         block = outer[0, i].subgridspec(
-            3,
+            2,
             1,
-            height_ratios=[0.13, 1.55, 0.72],
-            hspace=0.38,
-        )
-        ax_heading = fig.add_subplot(block[0])
-        ax_heading.set_axis_off()
-        ax_heading.text(
-            -0.075,
-            0.60,
-            chr(ord("a") + i),
-            transform=ax_heading.transAxes,
-            fontsize=13,
-            fontweight="bold",
-            ha="left",
-            va="center",
-        )
-        ax_heading.text(
-            0.00,
-            0.60,
-            display_name,
-            transform=ax_heading.transAxes,
-            fontsize=12,
-            fontweight="bold",
-            ha="left",
-            va="center",
+            height_ratios=[1.55, 0.72],
+            hspace=0.34,
         )
 
         ax_reduction, ax_absolute = _plot_city_context_combined_ab_panel(
             fig,
-            block[1],
+            block[0],
             binned_by_city[region_key],
             labels.get(region_key, display_name),
             show_saturation_fit,
@@ -964,7 +942,27 @@ def _render_city_context_group(
         reduction_axes.append(ax_reduction)
         absolute_axes.append(ax_absolute)
 
-        power_grid = block[2].subgridspec(
+        pos = ax_reduction.get_position()
+        fig.text(
+            pos.x0 - 0.010,
+            pos.y1 + 0.012,
+            chr(ord("a") + i),
+            fontsize=13,
+            fontweight="bold",
+            ha="right",
+            va="bottom",
+        )
+        fig.text(
+            pos.x0 + 0.006,
+            pos.y1 + 0.012,
+            display_name,
+            fontsize=12,
+            fontweight="bold",
+            ha="left",
+            va="bottom",
+        )
+
+        power_grid = block[1].subgridspec(
             1,
             2,
             width_ratios=[1.0, 0.78],
