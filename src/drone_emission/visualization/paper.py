@@ -560,7 +560,9 @@ def _plot_power_generation_mix_pie(
     radius=1.18,
     legend_fontsize=9,
     legend_handlelength=1.2,
+    legend_handleheight=0.7,
     legend_handletextpad=0.5,
+    legend_labelspacing=0.5,
 ):
     """Draw the 2022 power generation mix pie for one region."""
     from matplotlib.patches import Patch
@@ -608,7 +610,9 @@ def _plot_power_generation_mix_pie(
             fontsize=legend_fontsize,
             ncol=1,
             handlelength=legend_handlelength,
+            handleheight=legend_handleheight,
             handletextpad=legend_handletextpad,
+            labelspacing=legend_labelspacing,
             borderaxespad=0.0,
         )
     else:
@@ -619,7 +623,9 @@ def _plot_power_generation_mix_pie(
             fontsize=legend_fontsize,
             ncol=1,
             handlelength=legend_handlelength,
+            handleheight=legend_handleheight,
             handletextpad=legend_handletextpad,
+            labelspacing=legend_labelspacing,
             borderaxespad=0.0,
         )
         legend_ax.set_axis_off()
@@ -905,7 +911,7 @@ def _render_city_context_group(
 
     from visualization._utils import _add_title_suffix
 
-    fig = plt.figure(figsize=(24.0, 7.8))
+    fig = plt.figure(figsize=(24.0, 8.8))
     outer = fig.add_gridspec(1, 4, wspace=0.24)
     reduction_axes = []
     absolute_axes = []
@@ -921,8 +927,8 @@ def _render_city_context_group(
         block = outer[0, i].subgridspec(
             3,
             1,
-            height_ratios=[0.13, 1.45, 0.72],
-            hspace=0.26,
+            height_ratios=[0.13, 1.90, 0.72],
+            hspace=0.42,
         )
         ax_heading = fig.add_subplot(block[0])
         ax_heading.set_axis_off()
@@ -970,19 +976,28 @@ def _render_city_context_group(
             power_region_key,
             legend_ax=ax_power_legend,
             radius=1.62,
-            legend_fontsize=9.8,
-            legend_handlelength=1.45,
-            legend_handletextpad=0.62,
+            legend_fontsize=12.0,
+            legend_handlelength=1.70,
+            legend_handleheight=0.95,
+            legend_handletextpad=0.72,
+            legend_labelspacing=0.62,
         )
         legend = ax_power_legend.get_legend()
         if legend is not None:
             for text in legend.get_texts():
-                text.set_fontsize(9.8)
+                text.set_fontsize(12.0)
 
         for ax in (ax_reduction, ax_absolute):
             ax.xaxis.label.set_size(8.5)
             ax.yaxis.label.set_size(8.5)
             ax.tick_params(axis="both", labelsize=7.5)
+        if i != 0:
+            ax_reduction.set_ylabel("")
+            ax_reduction.tick_params(axis="y", left=False, labelleft=False)
+        if i != len(available_contexts) - 1:
+            ax_absolute.set_ylabel("")
+            ax_absolute.tick_params(axis="y", right=False, labelright=False)
+            ax_absolute.spines["right"].set_visible(False)
 
     for axes in (reduction_axes, absolute_axes):
         if axes:

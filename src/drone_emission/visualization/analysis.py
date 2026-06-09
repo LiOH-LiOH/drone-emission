@@ -2231,7 +2231,7 @@ def plot_city_gef_scatter_components(
         2,
         1,
         figsize=figsize,
-        gridspec_kw={"height_ratios": [4.0, 1.0], "hspace": 0.22},
+        gridspec_kw={"height_ratios": [4.0, 1.0], "hspace": 0.0},
         sharex=True,
     )
     x_all = bin_edges[1:]
@@ -2369,14 +2369,14 @@ def plot_city_gef_scatter_components(
 
     ax_dist.fill_between(
         x_violin,
-        -density,
         0,
+        density,
         color="#7A7A7A",
         alpha=0.35,
         linewidth=0,
         zorder=1,
     )
-    ax_dist.plot(x_violin, -density, color="#555555", linewidth=0.8, zorder=2)
+    ax_dist.plot(x_violin, density, color="#555555", linewidth=0.8, zorder=2)
     ax_dist.scatter(
         density_x,
         np.zeros_like(density_x),
@@ -2388,7 +2388,7 @@ def plot_city_gef_scatter_components(
         zorder=3,
     )
     ax_dist.axhline(0, color="#555555", linewidth=0.8, zorder=2)
-    ax_dist.set_ylim(-1.15, 0.12)
+    ax_dist.set_ylim(-0.12, 1.15)
     ax_dist.set_yticks([])
     ax_dist.set_ylabel("Cities", fontsize=10)
     ax_dist.set_xlabel(gef_label, fontsize=12)
