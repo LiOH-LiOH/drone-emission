@@ -3340,11 +3340,11 @@ def plot_regions_map_city_rank_and_drone_share(
     df_stats: "pd.DataFrame",
     stats_csv_path: str,
     save_path: str = None,
-    figsize: tuple = (18, 13),
+    figsize: tuple = (18, 16),
     for_latex: bool = False,
     plot_title: bool = False,
 ):
-    """Maps for Oracle reduction and drone share, with province lifecycle ranking.
+    """Maps for Oracle reduction and drone share, with province lifecycle and concept panels.
 
     Args:
         df_stats: all_region_stats DataFrame.
@@ -3354,6 +3354,11 @@ def plot_regions_map_city_rank_and_drone_share(
         for_latex: If True, save as PDF.
         plot_title: If True, show title.
     """
+    from visualization.concepts import _draw_detour_ratio_concept, _draw_phase_per_km_barplot
+    from visualization.emission import (
+        _end_of_life_phase_parts_per_km,
+        _production_phase_parts_per_km,
+    )
     from visualization.regions import plot_regions_on_china_map
 
     map_df = pd.read_csv(stats_csv_path)
@@ -3394,15 +3399,34 @@ def plot_regions_map_city_rank_and_drone_share(
 
     fig = plt.figure(figsize=figsize)
     gs = fig.add_gridspec(
+        3,
         2,
-        2,
-        height_ratios=[1.0, 0.45],
-        hspace=0.28,
+        height_ratios=[1.0, 0.42, 0.50],
+        hspace=0.32,
         wspace=0.25,
     )
     ax_a = fig.add_subplot(gs[0, 0])
     ax_b = fig.add_subplot(gs[0, 1])
     ax_c = fig.add_subplot(gs[1, :])
+    concept_gs = gs[2, :].subgridspec(
+        1,
+        3,
+        width_ratios=[0.95, 3.0, 0.95],
+        wspace=0.18,
+    )
+    concept_left = concept_gs[0, 0].subgridspec(
+        3,
+        1,
+        height_ratios=[0.18, 0.64, 0.18],
+    )
+    concept_right = concept_gs[0, 2].subgridspec(
+        3,
+        1,
+        height_ratios=[0.18, 0.64, 0.18],
+    )
+    ax_d = fig.add_subplot(concept_left[1, 0])
+    ax_e = fig.add_subplot(concept_gs[0, 1])
+    ax_f = fig.add_subplot(concept_right[1, 0])
 
     plot_regions_on_china_map(
         df=map_df,
@@ -3475,9 +3499,39 @@ def plot_regions_map_city_rank_and_drone_share(
     ax_c.text(-0.03, 1.02, "c", transform=ax_c.transAxes,
               fontsize=16, fontweight="bold", va="bottom", ha="right")
 
+    production_df = _production_phase_parts_per_km(1.0)
+    eol_df = _end_of_life_phase_parts_per_km(1.0)
+    _draw_phase_per_km_barplot(
+        ax_d,
+        production_df,
+        ylabel="Production emission\n(g CO$_2$e / vehicle-km)",
+        body_label="Body",
+        battery_label="Battery",
+        body_color="#7f8c8d",
+        battery_color="#2ca25f",
+        distance_km=1.0,
+    )
+    _draw_detour_ratio_concept(ax_e, plot_title=plot_title)
+    _draw_phase_per_km_barplot(
+        ax_f,
+        eol_df,
+        ylabel="End-of-life emission\n(g CO$_2$e / vehicle-km)",
+        body_label="Body",
+        battery_label="Battery",
+        body_color="#8b8f97",
+        battery_color="#5b8db8",
+        distance_km=1.0,
+    )
+    ax_d.text(-0.03, 1.02, "d", transform=ax_d.transAxes,
+              fontsize=16, fontweight="bold", va="bottom", ha="right")
+    ax_e.text(-0.03, 1.02, "e", transform=ax_e.transAxes,
+              fontsize=16, fontweight="bold", va="bottom", ha="right")
+    ax_f.text(-0.03, 1.02, "f", transform=ax_f.transAxes,
+              fontsize=16, fontweight="bold", va="bottom", ha="right")
+
     if plot_title:
         fig.suptitle(
-            "Regional Oracle Reduction, Drone Share, and Province Lifecycle Baseline",
+            "Regional Oracle Reduction, Drone Share, and Lifecycle Mechanisms",
             fontsize=14,
             fontweight="bold",
         )
