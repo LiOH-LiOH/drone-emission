@@ -866,8 +866,11 @@ def _plot_city_context_group_panels(
     contexts,
     panel_start_letter="a",
     label_each_subplot=False,
+    show_city_panel_anchors=False,
 ):
     """Draw the grouped city context panels into a parent subplot spec."""
+    from matplotlib.lines import Line2D
+
     outer = subplot_spec.subgridspec(1, len(contexts), wspace=0.32)
     reduction_axes = []
     absolute_axes = []
@@ -974,12 +977,43 @@ def _plot_city_context_group_panels(
                 va="bottom",
             )
 
+        panel_anchor_points = None
+        if show_city_panel_anchors:
+            city_axes = (ax_power_mix, ax_power_legend, ax_reduction, ax_absolute)
+            positions = [ax.get_position() for ax in city_axes]
+            panel_x0 = min(pos.x0 for pos in positions)
+            panel_x1 = max(pos.x1 for pos in positions)
+            panel_y0 = min(pos.y0 for pos in positions)
+            panel_y1 = max(pos.y1 for pos in positions)
+            panel_x_center = (panel_x0 + panel_x1) / 2
+            panel_anchor_points = {
+                "top": (panel_x_center, panel_y1),
+                "bottom": (panel_x_center, panel_y0),
+            }
+            for x, y in panel_anchor_points.values():
+                fig.add_artist(
+                    Line2D(
+                        [x],
+                        [y],
+                        marker="o",
+                        markersize=5.2,
+                        markerfacecolor="none",
+                        markeredgecolor="#111111",
+                        markeredgewidth=1.0,
+                        linestyle="None",
+                        transform=fig.transFigure,
+                        zorder=95,
+                        clip_on=False,
+                    )
+                )
+
         panel_records.append(
             {
                 "context": context,
                 "panel_letter": power_panel_letter,
                 "power_panel_letter": power_panel_letter,
                 "reduction_panel_letter": reduction_panel_letter,
+                "panel_anchor_points": panel_anchor_points,
                 "power_mix_ax": ax_power_mix,
                 "power_legend_ax": ax_power_legend,
                 "reduction_ax": ax_reduction,
@@ -1341,6 +1375,17 @@ def _city_context_summary_report(binned_by_city, labels, panel_records):
                         record["power_mix_ax"].get_position().y1 + 0.035
                     ),
                 },
+                "panel_anchor_points": (
+                    {
+                        key: {
+                            "x_figure_fraction": _report_number(point[0]),
+                            "y_figure_fraction": _report_number(point[1]),
+                        }
+                        for key, point in record["panel_anchor_points"].items()
+                    }
+                    if record["panel_anchor_points"] is not None
+                    else None
+                ),
                 "region_key": region_key,
                 "city_label": labels.get(region_key, context["display_name"]),
                 "display_name": context["display_name"],
@@ -1387,6 +1432,128 @@ def _city_context_summary_report(binned_by_city, labels, panel_records):
             }
         )
     return reports
+
+
+def _add_city_gef_xaxis_markers(fig, axes, selected, contexts):
+    """Add selected city province-GEF markers to the top panel x-axis."""
+    _, ax_dist = axes
+    marker_records = []
+
+    for context in contexts:
+        region_key = context["region_key"]
+        city_rows = selected[selected["region_key"] == region_key]
+        if city_rows.empty or "gef" not in city_rows.columns:
+            continue
+
+        gef = pd.to_numeric(city_rows["gef"], errors="coerce").dropna()
+        if gef.empty:
+            continue
+
+        x = float(gef.iloc[0])
+        y = 0.0
+        ax_dist.scatter(
+            [x],
+            [y],
+            s=28,
+            marker="o",
+            facecolors="none",
+            edgecolors="#111111",
+            linewidths=1.0,
+            zorder=8,
+            clip_on=False,
+        )
+        display_point = ax_dist.transData.transform((x, y))
+        fig_point = fig.transFigure.inverted().transform(display_point)
+        marker_records.append(
+            {
+                "region_key": region_key,
+                "display_name": context["display_name"],
+                "power_region_key": context.get("power_region_key", region_key),
+                "province": _report_number(city_rows.iloc[0].get("province")),
+                "gef": _report_number(x),
+                "x_data": _report_number(x),
+                "y_data": _report_number(y),
+                "x_figure_fraction": _report_number(fig_point[0]),
+                "y_figure_fraction": _report_number(fig_point[1]),
+            }
+        )
+
+    return marker_records
+
+
+def _add_city_detour_reduction_markers(
+    fig,
+    axes,
+    df,
+    contexts,
+    reduction_col,
+    panel_letters=("f", "g"),
+):
+    """Add selected city markers to the bottom detour-reduction scatter panels."""
+    ax_low, _, ax_high = axes
+    feature_var = "detour_ratio"
+    group_var = "grid_emission_factor"
+    threshold = 0.3
+    axis_by_group = {
+        "low_gef": ax_low,
+        "high_gef": ax_high,
+    }
+    panel_letter_by_group = {
+        "low_gef": panel_letters[0],
+        "high_gef": panel_letters[1],
+    }
+    marker_records = []
+
+    needed = [feature_var, reduction_col, group_var]
+    if "region_key" not in df.columns or any(col not in df.columns for col in needed):
+        return marker_records
+
+    for context in contexts:
+        region_key = context["region_key"]
+        city_rows = df[df["region_key"] == region_key].copy()
+        if city_rows.empty:
+            continue
+
+        for col in needed:
+            city_rows[col] = pd.to_numeric(city_rows[col], errors="coerce")
+        city_rows = city_rows.dropna(subset=needed)
+        if city_rows.empty:
+            continue
+
+        row = city_rows.iloc[0]
+        x = float(row[feature_var])
+        y = float(row[reduction_col])
+        gef = float(row[group_var])
+        axis_name = "low_gef" if gef <= threshold else "high_gef"
+        ax = axis_by_group[axis_name]
+        ax.scatter(
+            [x],
+            [y],
+            s=34,
+            marker="o",
+            facecolors="none",
+            edgecolors="#111111",
+            linewidths=1.1,
+            zorder=35,
+            clip_on=False,
+        )
+        display_point = ax.transData.transform((x, y))
+        fig_point = fig.transFigure.inverted().transform(display_point)
+        marker_records.append(
+            {
+                "region_key": region_key,
+                "display_name": context["display_name"],
+                "axis_name": axis_name,
+                "panel_letter": panel_letter_by_group[axis_name],
+                "x_detour_ratio": _report_number(x),
+                "y_reduction_pct": _report_number(y),
+                "grid_emission_factor": _report_number(gef),
+                "x_figure_fraction": _report_number(fig_point[0]),
+                "y_figure_fraction": _report_number(fig_point[1]),
+            }
+        )
+
+    return marker_records
 
 
 def _detour_reduction_scatter_report(df, reduction_col, axes, panel_letters=("f", "g")):
@@ -1552,6 +1719,7 @@ def _write_city_gef_context_detour_report(
         f"- Bar count: {len(top_report.get('bars', []))}",
         f"- Density points: {len(top_report.get('density_curve', []))}",
         f"- City rug marks: {len(top_report.get('city_rug_marks', []))}",
+        f"- Selected city GEF markers: {len(top_report.get('selected_city_gef_markers', []))}",
         "",
         "Each bar entry in JSON records `x_center`, `width`, production+EOL segment bottom/height/top, use-phase segment bottom/height/top, and total label location.",
         "",
@@ -1582,6 +1750,7 @@ def _write_city_gef_context_detour_report(
             f"- Result variable: `{bottom_report['result_var']}`",
             f"- Group variable: `{bottom_report['group_var']}`",
             f"- Threshold: {bottom_report['threshold']}",
+            f"- Selected city scatter markers: {len(bottom_report.get('selected_city_scatter_markers', []))}",
         ]
     )
     for panel in bottom_report["panels"]:
@@ -1785,6 +1954,12 @@ def _render_city_gef_context_detour_summary(
         ha="right",
         va="bottom",
     )
+    top_city_gef_markers = _add_city_gef_xaxis_markers(
+        fig,
+        top_axes,
+        selected,
+        available_contexts,
+    )
 
     city_panel_records = _plot_city_context_group_panels(
         fig=fig,
@@ -1794,6 +1969,7 @@ def _render_city_gef_context_detour_summary(
         contexts=available_contexts,
         panel_start_letter="b",
         label_each_subplot=True,
+        show_city_panel_anchors=True,
     )
 
     bottom_start_ord = ord("b") + 2 * len(available_contexts)
@@ -1815,6 +1991,14 @@ def _render_city_gef_context_detour_summary(
     if bottom_axes is None:
         plt.close(fig)
         return
+    bottom_city_markers = _add_city_detour_reduction_markers(
+        fig,
+        bottom_axes,
+        df_enriched,
+        available_contexts,
+        reduction_col,
+        panel_letters=bottom_panel_letters,
+    )
 
     if plot_title:
         fig.suptitle(
@@ -1831,6 +2015,7 @@ def _render_city_gef_context_detour_summary(
     fig.canvas.draw()
     fig.savefig(save_path, dpi=300, bbox_inches="tight")
     top_report = _city_gef_components_report(df_enriched, top_axes)
+    top_report["selected_city_gef_markers"] = top_city_gef_markers
     city_reports = _city_context_summary_report(
         binned_by_city,
         labels,
@@ -1842,6 +2027,7 @@ def _render_city_gef_context_detour_summary(
         bottom_axes,
         panel_letters=bottom_panel_letters,
     )
+    bottom_report["selected_city_scatter_markers"] = bottom_city_markers
     _write_city_gef_context_detour_report(
         save_path=save_path,
         figure_name=figure_name,
