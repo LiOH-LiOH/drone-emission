@@ -581,37 +581,24 @@ def plot_grouped_scatter(
     plt.close(fig)
 
 
-def plot_grouped_scatter_split_panels(
+def _plot_grouped_scatter_split_panels_axes(
+    fig,
+    subplot_spec,
     df: pd.DataFrame,
     feature_var: str,
     result_var: str,
     group_var: str,
     threshold: float,
-    save_path: str = None,
-    figsize: tuple = (10, 4.8),
-    for_latex: bool = False,
     plot_title: bool = False,
     group_labels: tuple = None,
+    panel_letters: tuple = ("a", "b"),
 ):
-    """Plot threshold-split scatter panels with shared axes and one central colorbar.
-
-    Args:
-        df: DataFrame with region statistics.
-        feature_var: X-axis variable name.
-        result_var: Y-axis variable name.
-        group_var: Variable to split groups on.
-        threshold: Split threshold for group_var.
-        save_path: Path to save figure. Shows plot if None.
-        figsize: Figure size tuple.
-        for_latex: If True, save as PDF.
-        plot_title: If True, show title.
-        group_labels: Tuple of (low_label, high_label). Auto-generated if None.
-    """
+    """Draw threshold-split scatter panels into a parent subplot spec."""
     valid_mask = df[[feature_var, result_var, group_var]].notna().all(axis=1)
     plot_df = df.loc[valid_mask].copy()
     if plot_df.empty:
         print("Grouped scatter split panels skipped - no valid rows")
-        return
+        return None
 
     low_mask = plot_df[group_var] <= threshold
     high_mask = ~low_mask
@@ -642,15 +629,18 @@ def plot_grouped_scatter_split_panels(
     gef_vals = plot_df[group_var].values
     norm = Normalize(vmin=gef_vals.min(), vmax=gef_vals.max())
 
-    fig = plt.figure(figsize=figsize)
-    gs = fig.add_gridspec(1, 3, width_ratios=[1, 0.055, 1], wspace=0.22)
+    gs = subplot_spec.subgridspec(
+        1,
+        3,
+        width_ratios=[1, 0.055, 1],
+        wspace=0.22,
+    )
     ax_low = fig.add_subplot(gs[0, 0])
     cbar_ax = fig.add_subplot(gs[0, 1])
     ax_high = fig.add_subplot(gs[0, 2], sharex=ax_low, sharey=ax_low)
     axes = [ax_low, ax_high]
     masks = [low_mask, high_mask]
     line_colors = ["#006837", "#A50F15"]
-    panel_letters = ["a", "b"]
 
     for ax, mask, line_color, label, panel_letter in zip(
         axes, masks, line_colors, group_labels, panel_letters
@@ -729,6 +719,7 @@ def plot_grouped_scatter_split_panels(
         ax.grid(True, alpha=0.3, linestyle="--")
 
     ax_low.set_ylabel(VARIABLE_LABELS.get(result_var, result_var), fontsize=12)
+    ax_high.set_ylabel("")
     ax_high.tick_params(axis="y", left=False, labelleft=False)
 
     sm = ScalarMappable(norm=norm, cmap=cmap)
@@ -743,6 +734,52 @@ def plot_grouped_scatter_split_panels(
             fontsize=12,
             fontweight="bold",
         )
+
+    return ax_low, cbar_ax, ax_high
+
+
+def plot_grouped_scatter_split_panels(
+    df: pd.DataFrame,
+    feature_var: str,
+    result_var: str,
+    group_var: str,
+    threshold: float,
+    save_path: str = None,
+    figsize: tuple = (10, 4.8),
+    for_latex: bool = False,
+    plot_title: bool = False,
+    group_labels: tuple = None,
+):
+    """Plot threshold-split scatter panels with shared axes and one central colorbar.
+
+    Args:
+        df: DataFrame with region statistics.
+        feature_var: X-axis variable name.
+        result_var: Y-axis variable name.
+        group_var: Variable to split groups on.
+        threshold: Split threshold for group_var.
+        save_path: Path to save figure. Shows plot if None.
+        figsize: Figure size tuple.
+        for_latex: If True, save as PDF.
+        plot_title: If True, show title.
+        group_labels: Tuple of (low_label, high_label). Auto-generated if None.
+    """
+    fig = plt.figure(figsize=figsize)
+    gs = fig.add_gridspec(1, 1)
+    drawn = _plot_grouped_scatter_split_panels_axes(
+        fig=fig,
+        subplot_spec=gs[0],
+        df=df,
+        feature_var=feature_var,
+        result_var=result_var,
+        group_var=group_var,
+        threshold=threshold,
+        plot_title=plot_title,
+        group_labels=group_labels,
+    )
+    if drawn is None:
+        plt.close(fig)
+        return
 
     if save_path:
         if for_latex and not save_path.endswith(".pdf"):
@@ -2113,22 +2150,13 @@ def plot_city_gef_distribution(
     plt.close(fig)
 
 
-def plot_city_gef_scatter_components(
+def _plot_city_gef_scatter_components_axes(
+    fig,
+    subplot_spec,
     df: pd.DataFrame,
-    save_path: str = None,
-    figsize: tuple = (12, 4),
-    for_latex: bool = False,
     plot_title: bool = False,
 ):
-    """Plot GEF-binned per-order emission components as stacked bars.
-
-    Args:
-        df: DataFrame with city-level grid emission factor and component emissions.
-        save_path: Path to save figure. Shows plot if None.
-        figsize: Figure size tuple.
-        for_latex: If True, save as PDF.
-        plot_title: If True, show title.
-    """
+    """Draw GEF-binned per-order emission components into a parent subplot spec."""
     gef_col = None
     for candidate in ("grid_emission_factor", "gef"):
         if candidate in df.columns and df[candidate].notna().any():
@@ -2140,13 +2168,13 @@ def plot_city_gef_scatter_components(
             "City GEF stacked components skipped - "
             "missing grid_emission_factor or gef column"
         )
-        return
+        return None
     if "total_odpair_annual_sales" not in df.columns:
         print(
             "City GEF stacked components skipped - "
             "missing total_odpair_annual_sales column"
         )
-        return
+        return None
 
     vehicle_specs = [
         {
@@ -2173,7 +2201,7 @@ def plot_city_gef_scatter_components(
     missing = [col for col in required_cols if col not in df.columns]
     if missing:
         print(f"City GEF stacked components skipped - missing columns {missing}")
-        return
+        return None
 
     plot_df = df.copy()
     if "region_level" in plot_df.columns:
@@ -2201,7 +2229,7 @@ def plot_city_gef_scatter_components(
             "City GEF stacked components skipped - "
             "no valid city GEF/emission values"
         )
-        return
+        return None
 
     bin_width = 0.1
     bin_edges = np.linspace(0.0, 0.9, 10)
@@ -2225,15 +2253,16 @@ def plot_city_gef_scatter_components(
 
     if not bin_groups:
         print("City GEF stacked components skipped - no cities in GEF ranges")
-        return
+        return None
 
-    fig, (ax, ax_dist) = plt.subplots(
+    gs = subplot_spec.subgridspec(
         2,
         1,
-        figsize=figsize,
-        gridspec_kw={"height_ratios": [4.0, 1.0], "hspace": 0.0},
-        sharex=True,
+        height_ratios=[4.0, 1.0],
+        hspace=0.0,
     )
+    ax = fig.add_subplot(gs[0])
+    ax_dist = fig.add_subplot(gs[1], sharex=ax)
     x_all = (bin_edges[:-1] + bin_edges[1:]) / 2.0
     tick_labels = [f"{edge:.1f}" for edge in bin_edges]
     x = x_all[np.array(bin_positions, dtype=int)]
@@ -2407,6 +2436,37 @@ def plot_city_gef_scatter_components(
             fontsize=14,
             fontweight="bold",
         )
+
+    return ax, ax_dist
+
+
+def plot_city_gef_scatter_components(
+    df: pd.DataFrame,
+    save_path: str = None,
+    figsize: tuple = (12, 4),
+    for_latex: bool = False,
+    plot_title: bool = False,
+):
+    """Plot GEF-binned per-order emission components as stacked bars.
+
+    Args:
+        df: DataFrame with city-level grid emission factor and component emissions.
+        save_path: Path to save figure. Shows plot if None.
+        figsize: Figure size tuple.
+        for_latex: If True, save as PDF.
+        plot_title: If True, show title.
+    """
+    fig = plt.figure(figsize=figsize)
+    gs = fig.add_gridspec(1, 1)
+    drawn = _plot_city_gef_scatter_components_axes(
+        fig=fig,
+        subplot_spec=gs[0],
+        df=df,
+        plot_title=plot_title,
+    )
+    if drawn is None:
+        plt.close(fig)
+        return
 
     fig.subplots_adjust(left=0.11, right=0.98, bottom=0.17, top=0.96)
 

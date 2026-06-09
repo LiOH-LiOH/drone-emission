@@ -27,6 +27,7 @@ Available figures:
     city_reduction_rank_top10,
     city_gef_distribution,
     city_gef_scatter_components,
+    city_gef_context_detour_summary,
     regions_map,
     regions_map_optimal_drone_share,
     regions_map_city_rank_and_drone_share,
@@ -856,6 +857,112 @@ def _plot_city_context_combined_ab_panel(
     return ax_left, ax_right
 
 
+def _plot_city_context_group_panels(
+    fig,
+    subplot_spec,
+    binned_by_city,
+    labels,
+    contexts,
+    panel_start_letter="a",
+):
+    """Draw the grouped city context panels into a parent subplot spec."""
+    outer = subplot_spec.subgridspec(1, len(contexts), wspace=0.32)
+    reduction_axes = []
+    absolute_axes = []
+    panel_start_ord = ord(panel_start_letter)
+
+    for i, context in enumerate(contexts):
+        region_key = context["region_key"]
+        display_name = context["display_name"]
+        power_region_key = context.get("power_region_key", region_key)
+        show_saturation_fit = region_key not in {
+            "dalibaizuzizhizhou",
+            "chengdu",
+        }
+        block = outer[0, i].subgridspec(
+            2,
+            1,
+            height_ratios=[0.72, 1.55],
+            hspace=0.20,
+        )
+
+        power_grid = block[0].subgridspec(
+            1,
+            2,
+            width_ratios=[1.0, 0.78],
+            wspace=0.04,
+        )
+        ax_power_mix = fig.add_subplot(power_grid[0])
+        ax_power_legend = fig.add_subplot(power_grid[1])
+        _plot_power_generation_mix_pie(
+            ax_power_mix,
+            power_region_key,
+            legend_ax=ax_power_legend,
+            radius=1.62,
+            legend_fontsize=12.0,
+            legend_handlelength=1.70,
+            legend_handleheight=0.95,
+            legend_handletextpad=0.72,
+            legend_labelspacing=0.62,
+        )
+        legend = ax_power_legend.get_legend()
+        if legend is not None:
+            for text in legend.get_texts():
+                text.set_fontsize(12.0)
+
+        pos = ax_power_mix.get_position()
+        fig.text(
+            pos.x0 - 0.010,
+            pos.y1 + 0.035,
+            chr(panel_start_ord + i),
+            fontsize=13,
+            fontweight="bold",
+            ha="right",
+            va="bottom",
+        )
+        fig.text(
+            pos.x0 + 0.006,
+            pos.y1 + 0.035,
+            display_name,
+            fontsize=12,
+            fontweight="bold",
+            ha="left",
+            va="bottom",
+        )
+
+        ax_reduction, ax_absolute = _plot_city_context_combined_ab_panel(
+            fig,
+            block[1],
+            binned_by_city[region_key],
+            labels.get(region_key, display_name),
+            show_saturation_fit,
+            bin_width_km=0.2,
+        )
+        reduction_axes.append(ax_reduction)
+        absolute_axes.append(ax_absolute)
+
+        for ax in (ax_reduction, ax_absolute):
+            ax.xaxis.label.set_size(8.5)
+            ax.yaxis.label.set_size(8.5)
+            ax.tick_params(axis="both", labelsize=7.5)
+        if i != 0:
+            ax_reduction.set_ylabel("")
+            ax_reduction.tick_params(axis="y", left=False, labelleft=False)
+        if i != len(contexts) - 1:
+            ax_absolute.set_ylabel("")
+            ax_absolute.tick_params(axis="y", right=False, labelright=False)
+            ax_absolute.spines["right"].set_visible(False)
+
+    for axes in (reduction_axes, absolute_axes):
+        if axes:
+            y_min = min(ax.get_ylim()[0] for ax in axes)
+            y_max = max(ax.get_ylim()[1] for ax in axes)
+            for ax in axes:
+                ax.set_ylim(y_min, y_max)
+
+    return reduction_axes, absolute_axes
+
+
 def _render_city_context_group(
     data_dir,
     out,
@@ -912,98 +1019,15 @@ def _render_city_context_group(
     from visualization._utils import _add_title_suffix
 
     fig = plt.figure(figsize=(24.0, 8.2))
-    outer = fig.add_gridspec(1, 4, wspace=0.32)
-    reduction_axes = []
-    absolute_axes = []
-
-    for i, context in enumerate(available_contexts):
-        region_key = context["region_key"]
-        display_name = context["display_name"]
-        power_region_key = context.get("power_region_key", region_key)
-        show_saturation_fit = region_key not in {
-            "dalibaizuzizhizhou",
-            "chengdu",
-        }
-        block = outer[0, i].subgridspec(
-            2,
-            1,
-            height_ratios=[0.72, 1.55],
-            hspace=0.20,
-        )
-
-        power_grid = block[0].subgridspec(
-            1,
-            2,
-            width_ratios=[1.0, 0.78],
-            wspace=0.04,
-        )
-        ax_power_mix = fig.add_subplot(power_grid[0])
-        ax_power_legend = fig.add_subplot(power_grid[1])
-        _plot_power_generation_mix_pie(
-            ax_power_mix,
-            power_region_key,
-            legend_ax=ax_power_legend,
-            radius=1.62,
-            legend_fontsize=12.0,
-            legend_handlelength=1.70,
-            legend_handleheight=0.95,
-            legend_handletextpad=0.72,
-            legend_labelspacing=0.62,
-        )
-        legend = ax_power_legend.get_legend()
-        if legend is not None:
-            for text in legend.get_texts():
-                text.set_fontsize(12.0)
-
-        pos = ax_power_mix.get_position()
-        fig.text(
-            pos.x0 - 0.010,
-            pos.y1 + 0.035,
-            chr(ord("a") + i),
-            fontsize=13,
-            fontweight="bold",
-            ha="right",
-            va="bottom",
-        )
-        fig.text(
-            pos.x0 + 0.006,
-            pos.y1 + 0.035,
-            display_name,
-            fontsize=12,
-            fontweight="bold",
-            ha="left",
-            va="bottom",
-        )
-
-        ax_reduction, ax_absolute = _plot_city_context_combined_ab_panel(
-            fig,
-            block[1],
-            binned_by_city[region_key],
-            labels.get(region_key, display_name),
-            show_saturation_fit,
-            bin_width_km=0.2,
-        )
-        reduction_axes.append(ax_reduction)
-        absolute_axes.append(ax_absolute)
-
-        for ax in (ax_reduction, ax_absolute):
-            ax.xaxis.label.set_size(8.5)
-            ax.yaxis.label.set_size(8.5)
-            ax.tick_params(axis="both", labelsize=7.5)
-        if i != 0:
-            ax_reduction.set_ylabel("")
-            ax_reduction.tick_params(axis="y", left=False, labelleft=False)
-        if i != len(available_contexts) - 1:
-            ax_absolute.set_ylabel("")
-            ax_absolute.tick_params(axis="y", right=False, labelright=False)
-            ax_absolute.spines["right"].set_visible(False)
-
-    for axes in (reduction_axes, absolute_axes):
-        if axes:
-            y_min = min(ax.get_ylim()[0] for ax in axes)
-            y_max = max(ax.get_ylim()[1] for ax in axes)
-            for ax in axes:
-                ax.set_ylim(y_min, y_max)
+    gs = fig.add_gridspec(1, 1)
+    _plot_city_context_group_panels(
+        fig=fig,
+        subplot_spec=gs[0],
+        binned_by_city=binned_by_city,
+        labels=labels,
+        contexts=available_contexts,
+        panel_start_letter="a",
+    )
 
     if plot_title:
         fig.suptitle(
@@ -1020,6 +1044,145 @@ def _render_city_context_group(
     fig.savefig(save_path, dpi=300, bbox_inches="tight")
     plt.close(fig)
     print(f"Dali Chengdu Tianjin Guangzhou city context saved to {save_path}")
+
+
+def _render_city_gef_context_detour_summary(
+    data_dir,
+    out,
+    for_latex,
+    plot_title,
+    df_enriched,
+    city_df,
+    exp_config,
+):
+    """Render GEF components, selected city contexts, and detour-reduction scatter."""
+    figure_name = "city_gef_context_detour_summary"
+    contexts = CITY_CONTEXT_GROUP_FIGURES[
+        "dali_chengdu_tianjin_guangzhou_city_context"
+    ]
+    region_keys = [context["region_key"] for context in contexts]
+    selected = city_df[city_df["region_key"].isin(region_keys)].copy()
+    selected["_context_order"] = selected["region_key"].map(
+        {key: i for i, key in enumerate(region_keys)}
+    )
+    selected = selected.sort_values("_context_order")
+    if selected.empty:
+        print(f"{figure_name} skipped — selected city rows missing")
+        return
+
+    built = _build_reduction_detour_binned_by_city(
+        data_dir=data_dir,
+        selected=selected,
+        figure_name=figure_name,
+        exp_config=exp_config,
+        absolute_reduction_metric="per_order_g",
+        use_binned_cache=False,
+        bin_width_km=0.2,
+    )
+    if built is None:
+        return
+
+    binned_by_city, labels = built
+    available_contexts = [
+        context for context in contexts
+        if context["region_key"] in binned_by_city
+    ]
+    missing_names = [
+        context["display_name"] for context in contexts
+        if context["region_key"] not in binned_by_city
+    ]
+    if missing_names:
+        print(
+            f"{figure_name}: missing binned data for "
+            f"{', '.join(missing_names)}"
+        )
+    if not available_contexts:
+        print(f"{figure_name} skipped — no selected city binned data available")
+        return
+
+    import matplotlib.pyplot as plt
+
+    from visualization._utils import _add_title_suffix
+    from visualization.analysis import (
+        _plot_city_gef_scatter_components_axes,
+        _plot_grouped_scatter_split_panels_axes,
+        _weighted_reduction_column,
+    )
+
+    reduction_col = _weighted_reduction_column(df_enriched)
+
+    fig = plt.figure(figsize=(18.0, 18.5))
+    outer = fig.add_gridspec(
+        3,
+        1,
+        height_ratios=[1.05, 2.00, 1.05],
+        hspace=0.34,
+        left=0.06,
+        right=0.97,
+        bottom=0.04,
+        top=0.98,
+    )
+
+    top_axes = _plot_city_gef_scatter_components_axes(
+        fig=fig,
+        subplot_spec=outer[0],
+        df=df_enriched,
+        plot_title=plot_title,
+    )
+    if top_axes is None:
+        plt.close(fig)
+        return
+    ax_top, _ = top_axes
+    top_pos = ax_top.get_position()
+    fig.text(
+        top_pos.x0 - 0.035,
+        top_pos.y1 + 0.006,
+        "a",
+        fontsize=13,
+        fontweight="bold",
+        ha="right",
+        va="bottom",
+    )
+
+    _plot_city_context_group_panels(
+        fig=fig,
+        subplot_spec=outer[1],
+        binned_by_city=binned_by_city,
+        labels=labels,
+        contexts=available_contexts,
+        panel_start_letter="b",
+    )
+
+    bottom_axes = _plot_grouped_scatter_split_panels_axes(
+        fig=fig,
+        subplot_spec=outer[2],
+        df=df_enriched,
+        feature_var="detour_ratio",
+        result_var=reduction_col,
+        group_var="grid_emission_factor",
+        threshold=0.3,
+        plot_title=False,
+        panel_letters=("f", "g"),
+    )
+    if bottom_axes is None:
+        plt.close(fig)
+        return
+
+    if plot_title:
+        fig.suptitle(
+            "City Grid Intensity, Context, and Detour-reduction Relationships",
+            fontsize=14,
+        )
+
+    save_path = os.path.join(out, f"{figure_name}.png")
+    if for_latex and not save_path.endswith(".pdf"):
+        save_path = save_path.rsplit(".", 1)[0] + ".pdf"
+    if plot_title:
+        save_path = _add_title_suffix(save_path)
+    os.makedirs(os.path.dirname(save_path), exist_ok=True)
+    fig.savefig(save_path, dpi=300, bbox_inches="tight")
+    plt.close(fig)
+    print(f"City GEF context detour summary saved to {save_path}")
 
 
 def _render_shanghai_road_air_distance(data_dir, out, for_latex, plot_title):
@@ -1492,6 +1655,7 @@ def render_all(data_dir: str, figures_dir: str, for_latex: bool = False, plot_ti
     gef_figures = {
         "city_gef_distribution",
         "city_gef_scatter_components",
+        "city_gef_context_detour_summary",
         "scatter_detour_ratio_vs_reduction_by_gef",
         "regions_map_and_gef_scatter",
         *future_gef_figures,
@@ -1571,6 +1735,7 @@ def render_all(data_dir: str, figures_dir: str, for_latex: bool = False, plot_ti
             needs_reduction_detour_city_stats = (
                 any(_want(figure_name) for figure_name in CITY_CONTEXT_FIGURES)
                 or any(_want(figure_name) for figure_name in CITY_CONTEXT_GROUP_FIGURES)
+                or _want("city_gef_context_detour_summary")
                 or _want("top6_reduction_detour_grid")
                 or _want("top6_reduction_detour_grid_low_gef")
                 or _want("top6_reduction_detour_grid_random")
@@ -1761,6 +1926,16 @@ def render_all(data_dir: str, figures_dir: str, for_latex: bool = False, plot_ti
                             figsize=(16, 4),
                             for_latex=for_latex,
                             plot_title=plot_title,
+                        )
+                    if _want("city_gef_context_detour_summary"):
+                        _render_city_gef_context_detour_summary(
+                            data_dir=data_dir,
+                            out=out,
+                            for_latex=for_latex,
+                            plot_title=plot_title,
+                            df_enriched=df_enriched,
+                            city_df=city_df,
+                            exp_config=exp_config,
                         )
                     if _want("regions_map_and_gef_scatter"):
                         plot_regions_map_and_gef_scatter(
