@@ -553,7 +553,7 @@ def _render_shanghai_heatmap(data_dir, out, for_latex, plot_title):
     )
 
 
-def _plot_power_generation_mix_pie(ax, region_key, legend_ax=None):
+def _plot_power_generation_mix_pie(ax, region_key, legend_ax=None, radius=1.18):
     """Draw the 2022 power generation mix pie for one region."""
     from matplotlib.patches import Patch
 
@@ -580,8 +580,8 @@ def _plot_power_generation_mix_pie(ax, region_key, legend_ax=None):
         colors=pie_colors,
         startangle=92,
         counterclock=False,
-        radius=1.18,
-        wedgeprops=dict(width=0.42, edgecolor="white", linewidth=2.2),
+        radius=radius,
+        wedgeprops=dict(width=radius * 0.36, edgecolor="white", linewidth=2.2),
     )
     legend_handles = [
         Patch(
@@ -899,6 +899,8 @@ def _render_city_context_group(
 
     fig = plt.figure(figsize=(24.0, 7.8))
     outer = fig.add_gridspec(1, 4, wspace=0.24)
+    reduction_axes = []
+    absolute_axes = []
 
     for i, context in enumerate(available_contexts):
         region_key = context["region_key"]
@@ -944,6 +946,8 @@ def _render_city_context_group(
             labels.get(region_key, display_name),
             show_saturation_fit,
         )
+        reduction_axes.append(ax_reduction)
+        absolute_axes.append(ax_absolute)
 
         power_grid = block[2].subgridspec(
             1,
@@ -957,6 +961,7 @@ def _render_city_context_group(
             ax_power_mix,
             power_region_key,
             legend_ax=ax_power_legend,
+            radius=1.38,
         )
         legend = ax_power_legend.get_legend()
         if legend is not None:
@@ -967,6 +972,13 @@ def _render_city_context_group(
             ax.xaxis.label.set_size(8.5)
             ax.yaxis.label.set_size(8.5)
             ax.tick_params(axis="both", labelsize=7.5)
+
+    for axes in (reduction_axes, absolute_axes):
+        if axes:
+            y_min = min(ax.get_ylim()[0] for ax in axes)
+            y_max = max(ax.get_ylim()[1] for ax in axes)
+            for ax in axes:
+                ax.set_ylim(y_min, y_max)
 
     if plot_title:
         fig.suptitle(
