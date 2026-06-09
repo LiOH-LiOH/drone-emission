@@ -2320,7 +2320,7 @@ def plot_city_gef_scatter_components(
     ax.set_ylabel("Lifecycle emission\n(g CO2e/order)", fontsize=12)
     ax.set_xticks(bin_edges)
     ax.tick_params(axis="x", which="both", bottom=False, labelbottom=False)
-    ax.set_xlim(0.1, 0.9)
+    ax.set_xlim(0.05, 0.85)
     ax.set_ylim(0, max_total * 1.22)
     ax.grid(True, axis="y", alpha=0.3, linestyle="--")
     ax.set_axisbelow(True)
