@@ -729,7 +729,7 @@ def plot_grouped_scatter_split_panels(
         ax.grid(True, alpha=0.3, linestyle="--")
 
     ax_low.set_ylabel(VARIABLE_LABELS.get(result_var, result_var), fontsize=12)
-    ax_high.tick_params(labelleft=False)
+    ax_high.tick_params(axis="y", left=False, labelleft=False)
 
     sm = ScalarMappable(norm=norm, cmap=cmap)
     sm.set_array([])
