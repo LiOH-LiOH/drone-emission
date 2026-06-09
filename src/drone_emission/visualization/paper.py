@@ -1052,6 +1052,43 @@ def _report_array(values):
     return [_report_number(value) for value in values]
 
 
+def _summary_stats(values):
+    """Return compact summary statistics for an array-like numeric series."""
+    import numpy as np
+
+    arr = np.asarray(values, dtype=float)
+    arr = arr[np.isfinite(arr)]
+    if arr.size == 0:
+        return {
+            "count": 0,
+            "mean": None,
+            "median": None,
+            "q1": None,
+            "q3": None,
+            "min": None,
+            "max": None,
+            "whisker_low": None,
+            "whisker_high": None,
+        }
+    q1, median, q3 = np.percentile(arr, [25, 50, 75])
+    iqr = q3 - q1
+    low_limit = q1 - 1.5 * iqr
+    high_limit = q3 + 1.5 * iqr
+    whisker_low = arr[arr >= low_limit].min()
+    whisker_high = arr[arr <= high_limit].max()
+    return {
+        "count": int(arr.size),
+        "mean": _report_number(arr.mean()),
+        "median": _report_number(median),
+        "q1": _report_number(q1),
+        "q3": _report_number(q3),
+        "min": _report_number(arr.min()),
+        "max": _report_number(arr.max()),
+        "whisker_low": _report_number(whisker_low),
+        "whisker_high": _report_number(whisker_high),
+    }
+
+
 def _report_axis(ax):
     """Return figure-fraction position and data scale for an axis."""
     pos = ax.get_position()
@@ -1413,7 +1450,7 @@ def _city_context_summary_report(binned_by_city, labels, panel_records):
                         ),
                         "absolute_scatter_y_g_co2e_per_order": _report_number(abs_value),
                         "visible_in_panel": bool(is_visible),
-                        "detour_ratio_values": _report_array(detours),
+                        "detour_ratio_summary": _summary_stats(detours),
                     }
                     for center, pct, abs_value, detours, is_visible
                     in zip(centres, reduction_pct, reduction_abs, detour_by_bin, visible)
@@ -1809,7 +1846,7 @@ def _write_city_gef_context_detour_report(
                 f"- Region key: `{city['region_key']}`",
                 f"- Visible distance-bin count: {len(visible_bins)}",
                 f"- Power mix components: {', '.join(item['component'] for item in city['power_mix'])}",
-                "- JSON records every distance bin with air-distance x center, reduction bar height, absolute scatter y value, and detour-ratio values in that bin.",
+                "- JSON records every distance bin with air-distance x center, reduction bar height, absolute scatter y value, and compact detour-ratio summary statistics.",
                 "",
             ]
         )
