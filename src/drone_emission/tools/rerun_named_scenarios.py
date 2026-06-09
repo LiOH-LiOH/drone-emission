@@ -10,6 +10,7 @@ Usage:
     cd src/drone_emission
     ../../.venv/bin/python -m tools.rerun_named_scenarios
     ../../.venv/bin/python -m tools.rerun_named_scenarios --env remote
+    ../../.venv/bin/python -m tools.rerun_named_scenarios --env remote --level city
     ../../.venv/bin/python -m tools.rerun_named_scenarios --include-districts
 """
 
@@ -40,6 +41,14 @@ from utils.province import get_province_from_district  # noqa: E402
 from utils.region_config import RegionConfig, init_registry  # noqa: E402
 
 REGIONS_JSON = os.path.join(PROJECT_ROOT, "regions.json")
+
+
+def _count_od_csvs(data_dir: str) -> int:
+    """Count available OD-pair CSVs under a configured data directory."""
+    count = 0
+    for root, _dirs, files in os.walk(data_dir):
+        count += sum(1 for name in files if name.endswith("_od_pairs.csv"))
+    return count
 
 
 def _scan_districts(data_dir: str) -> list[RegionConfig]:
@@ -107,18 +116,63 @@ def _process(region_info, exp_config) -> tuple[str, str, float]:
         return region_key, "error", time.time() - t0
 
 
+def _select_regions(
+    registry,
+    data_dir: str,
+    level: str | None,
+    region: str | None,
+    include_districts: bool,
+) -> list[tuple[str, RegionConfig]]:
+    regions = list(registry.items())
+    if include_districts:
+        for rc in _scan_districts(data_dir):
+            regions.append((rc.region_name_en, rc))
+
+    if level is not None:
+        regions = [
+            (key, region_info)
+            for key, region_info in regions
+            if region_info.to_dict().get("region_level") == level
+        ]
+
+    if region is not None:
+        region_lower = region.lower()
+        regions = [
+            (key, region_info)
+            for key, region_info in regions
+            if key.lower() == region_lower
+            or region_info.to_dict().get("region_name_en", "").lower() == region_lower
+        ]
+
+    return regions
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--env", type=str, default=None)
     parser.add_argument("--include-districts", action="store_true")
+    parser.add_argument("--level", type=str, default=None, help="Only process one level, e.g. city or district")
+    parser.add_argument("--region", type=str, default=None, help="Only process one region key or English name")
     args = parser.parse_args()
 
     config = load_config(os.path.join(PROJECT_ROOT, "experiment.toml"), env=args.env)
     registry = init_registry(REGIONS_JSON, data_dir=config["data_dir"])
-    regions = list(registry.items())
-    if args.include_districts:
-        for rc in _scan_districts(config["data_dir"]):
-            regions.append((rc.region_name_en, rc))
+    od_count = _count_od_csvs(config["data_dir"]) if os.path.isdir(config["data_dir"]) else 0
+    print(f"env={args.env or config.get('active_env', 'config default')}, data_dir={config['data_dir']}")
+    print(f"Found {od_count} OD-pair CSVs under data_dir")
+    if od_count == 0 and args.env is None:
+        print(
+            "No OD files found for the default environment. If this is running "
+            "on hku-sto, rerun with --env remote."
+        )
+
+    regions = _select_regions(
+        registry=registry,
+        data_dir=config["data_dir"],
+        level=args.level,
+        region=args.region,
+        include_districts=args.include_districts,
+    )
 
     n = len(regions)
     print(f"Recomputing named scenarios for {n} regions...")
