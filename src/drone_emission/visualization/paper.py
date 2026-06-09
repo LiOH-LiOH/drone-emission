@@ -979,16 +979,11 @@ def _plot_city_context_group_panels(
 
         panel_anchor_points = None
         if show_city_panel_anchors:
-            city_axes = (ax_power_mix, ax_power_legend, ax_reduction, ax_absolute)
-            positions = [ax.get_position() for ax in city_axes]
-            panel_x0 = min(pos.x0 for pos in positions)
-            panel_x1 = max(pos.x1 for pos in positions)
-            panel_y0 = min(pos.y0 for pos in positions)
-            panel_y1 = max(pos.y1 for pos in positions)
-            panel_x_center = (panel_x0 + panel_x1) / 2
+            panel_pos = outer[0, i].get_position(fig)
+            panel_x_center = (panel_pos.x0 + panel_pos.x1) / 2
             panel_anchor_points = {
-                "top": (panel_x_center, panel_y1),
-                "bottom": (panel_x_center, panel_y0),
+                "top": (panel_x_center, panel_pos.y1),
+                "bottom": (panel_x_center, panel_pos.y0),
             }
             for x, y in panel_anchor_points.values():
                 fig.add_artist(
