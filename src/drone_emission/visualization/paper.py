@@ -742,6 +742,106 @@ def _render_city_context(
     print(f"{display_name} city context saved to {save_path}")
 
 
+def _plot_city_context_combined_ab_panel(
+    fig,
+    subplot_spec,
+    binned,
+    city_label,
+    show_saturation_fit,
+    bin_width_km=0.1,
+    min_air_km=0.2,
+    max_air_km=5.0,
+):
+    """Draw percent reduction and absolute reduction on one city-context panel."""
+    import numpy as np
+
+    from visualization.analysis import _plot_reduction_detour_panel
+
+    _, ax_left, _ = _plot_reduction_detour_panel(
+        fig,
+        subplot_spec,
+        binned,
+        city_label,
+        bin_width_km=bin_width_km,
+        min_air_km=min_air_km,
+        max_air_km=max_air_km,
+        absolute_reduction_metric="per_order_g",
+        show_detour_boxplot=False,
+        mark_reduction_break_even=True,
+        show_city_label=False,
+        bar_width_fraction=0.78,
+        show_absolute_axis=False,
+        show_saturation_fit=show_saturation_fit,
+    )
+
+    centres = np.asarray(binned["centres"], dtype=float)
+    reduction_abs = np.asarray(binned["reduction_abs"], dtype=float)
+    max_km = float(binned["max_km"])
+    x_max = min(max_air_km, max_km)
+    x_min = min(min_air_km, x_max)
+    visible = (centres >= x_min) & (centres <= x_max)
+    finite = visible & np.isfinite(centres) & np.isfinite(reduction_abs)
+    x = centres[finite]
+    y = reduction_abs[finite]
+
+    ax_right = ax_left.twinx()
+    ax_right.patch.set_visible(False)
+    ax_right.scatter(
+        x,
+        y,
+        color="#555555",
+        alpha=0.72,
+        s=14,
+        linewidth=0,
+        zorder=6,
+    )
+
+    ylim_values = y
+    if x.size >= 2:
+        slope, intercept = np.polyfit(x, y, deg=1)
+        x_fit = np.array([x_min, x_max], dtype=float)
+        y_fit = slope * x_fit + intercept
+        ax_right.plot(
+            x_fit,
+            y_fit,
+            color="#111111",
+            linewidth=1.2,
+            alpha=0.85,
+            zorder=7,
+        )
+        sign = "+" if intercept >= 0 else "-"
+        equation = f"y = {slope:.1f}x {sign} {abs(intercept):.1f}"
+        ax_right.text(
+            0.97,
+            0.94,
+            equation,
+            transform=ax_right.transAxes,
+            fontsize=7.2,
+            ha="right",
+            va="top",
+            color="#111111",
+            bbox=dict(facecolor="white", edgecolor="none", alpha=0.72, pad=1.6),
+            zorder=8,
+        )
+        ylim_values = np.concatenate([ylim_values, y_fit])
+
+    ax_right.axhline(0, color="#555555", linewidth=0.5, alpha=0.35)
+    finite_ylim = ylim_values[np.isfinite(ylim_values)]
+    if finite_ylim.size:
+        y_min = float(np.min(finite_ylim))
+        y_max = float(np.max(finite_ylim))
+        pad = (
+            (y_max - y_min) * 0.12
+            if y_max > y_min
+            else max(abs(y_min) * 0.12, 1.0)
+        )
+        ax_right.set_ylim(y_min - pad, y_max + pad)
+
+    ax_right.set_ylabel("E-bike - Drone (g CO2e/order)", fontsize=9, color="#555555")
+    ax_right.tick_params(axis="y", labelsize=8, labelcolor="#555555")
+    return ax_left, ax_right
+
+
 def _render_city_context_group(
     data_dir,
     out,
@@ -796,24 +896,23 @@ def _render_city_context_group(
     import matplotlib.pyplot as plt
 
     from visualization._utils import _add_title_suffix
-    from visualization.analysis import (
-        _plot_reduction_absolute_scatter_panel,
-        _plot_reduction_detour_panel,
-    )
 
-    fig = plt.figure(figsize=(13.8, 14.2))
-    outer = fig.add_gridspec(2, 2, hspace=0.32, wspace=0.26)
+    fig = plt.figure(figsize=(24.0, 7.8))
+    outer = fig.add_gridspec(1, 4, wspace=0.24)
 
     for i, context in enumerate(available_contexts):
         region_key = context["region_key"]
         display_name = context["display_name"]
         power_region_key = context.get("power_region_key", region_key)
-        row, col = divmod(i, 2)
-        block = outer[row, col].subgridspec(
-            4,
+        show_saturation_fit = region_key not in {
+            "dalibaizuzizhizhou",
+            "chengdu",
+        }
+        block = outer[0, i].subgridspec(
+            3,
             1,
-            height_ratios=[0.13, 1.0, 1.0, 0.72],
-            hspace=0.24,
+            height_ratios=[0.13, 1.45, 0.72],
+            hspace=0.26,
         )
         ax_heading = fig.add_subplot(block[0])
         ax_heading.set_axis_off()
@@ -838,32 +937,15 @@ def _render_city_context_group(
             va="center",
         )
 
-        _, ax_reduction, _ = _plot_reduction_detour_panel(
+        ax_reduction, ax_absolute = _plot_city_context_combined_ab_panel(
             fig,
             block[1],
             binned_by_city[region_key],
             labels.get(region_key, display_name),
-            bin_width_km=0.1,
-            min_air_km=0.2,
-            absolute_reduction_metric="per_order_g",
-            show_detour_boxplot=False,
-            mark_reduction_break_even=True,
-            show_city_label=False,
-            bar_width_fraction=0.78,
-            show_absolute_axis=False,
-            show_saturation_fit=True,
-        )
-        ax_scatter = _plot_reduction_absolute_scatter_panel(
-            fig,
-            block[2],
-            binned_by_city[region_key],
-            labels.get(region_key, display_name),
-            min_air_km=0.2,
-            absolute_reduction_metric="per_order_g",
-            show_city_label=False,
+            show_saturation_fit,
         )
 
-        power_grid = block[3].subgridspec(
+        power_grid = block[2].subgridspec(
             1,
             2,
             width_ratios=[1.0, 0.78],
@@ -881,7 +963,7 @@ def _render_city_context_group(
             for text in legend.get_texts():
                 text.set_fontsize(7.5)
 
-        for ax in (ax_reduction, ax_scatter):
+        for ax in (ax_reduction, ax_absolute):
             ax.xaxis.label.set_size(8.5)
             ax.yaxis.label.set_size(8.5)
             ax.tick_params(axis="both", labelsize=7.5)

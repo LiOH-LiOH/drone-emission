@@ -3401,8 +3401,8 @@ def plot_regions_map_city_rank_and_drone_share(
     gs = fig.add_gridspec(
         3,
         2,
-        height_ratios=[1.0, 0.42, 0.50],
-        hspace=0.32,
+        height_ratios=[1.0, 0.40, 0.50],
+        hspace=0.22,
         wspace=0.25,
     )
     ax_a = fig.add_subplot(gs[0, 0])
