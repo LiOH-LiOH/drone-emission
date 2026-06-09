@@ -40,6 +40,7 @@ Available figures:
 """
 
 import argparse
+import json
 import os
 import pickle
 import sys
@@ -869,6 +870,7 @@ def _plot_city_context_group_panels(
     outer = subplot_spec.subgridspec(1, len(contexts), wspace=0.32)
     reduction_axes = []
     absolute_axes = []
+    panel_records = []
     panel_start_ord = ord(panel_start_letter)
 
     for i, context in enumerate(contexts):
@@ -952,6 +954,16 @@ def _plot_city_context_group_panels(
             ax_absolute.set_ylabel("")
             ax_absolute.tick_params(axis="y", right=False, labelright=False)
             ax_absolute.spines["right"].set_visible(False)
+        panel_records.append(
+            {
+                "context": context,
+                "panel_letter": chr(panel_start_ord + i),
+                "power_mix_ax": ax_power_mix,
+                "power_legend_ax": ax_power_legend,
+                "reduction_ax": ax_reduction,
+                "absolute_ax": ax_absolute,
+            }
+        )
 
     for axes in (reduction_axes, absolute_axes):
         if axes:
@@ -960,7 +972,602 @@ def _plot_city_context_group_panels(
             for ax in axes:
                 ax.set_ylim(y_min, y_max)
 
-    return reduction_axes, absolute_axes
+    return panel_records
+
+
+def _report_number(value):
+    """Return a JSON-safe scalar with NaN/Inf represented as None."""
+    import numpy as np
+
+    if value is None:
+        return None
+    try:
+        if pd.isna(value):
+            return None
+    except (TypeError, ValueError):
+        pass
+    if isinstance(value, (np.integer,)):
+        return int(value)
+    if isinstance(value, (np.floating, float)):
+        value = float(value)
+        return value if np.isfinite(value) else None
+    if isinstance(value, (np.bool_, bool)):
+        return bool(value)
+    return value
+
+
+def _report_array(values):
+    """Return a JSON-safe list from an array-like object."""
+    return [_report_number(value) for value in values]
+
+
+def _report_axis(ax):
+    """Return figure-fraction position and data scale for an axis."""
+    pos = ax.get_position()
+    return {
+        "bbox_figure_fraction": {
+            "x0": _report_number(pos.x0),
+            "y0": _report_number(pos.y0),
+            "x1": _report_number(pos.x1),
+            "y1": _report_number(pos.y1),
+            "width": _report_number(pos.width),
+            "height": _report_number(pos.height),
+        },
+        "xlim_data": _report_array(ax.get_xlim()),
+        "ylim_data": _report_array(ax.get_ylim()),
+        "xlabel": ax.get_xlabel(),
+        "ylabel": ax.get_ylabel(),
+        "xticks_data": _report_array(ax.get_xticks()),
+        "yticks_data": _report_array(ax.get_yticks()),
+    }
+
+
+def _city_gef_components_report(df, axes):
+    """Return exact plotted data for the GEF component panel."""
+    import numpy as np
+
+    ax, ax_dist = axes
+    gef_col = None
+    for candidate in ("grid_emission_factor", "gef"):
+        if candidate in df.columns and df[candidate].notna().any():
+            gef_col = candidate
+            break
+    if gef_col is None or "total_odpair_annual_sales" not in df.columns:
+        return {"status": "skipped", "reason": "missing GEF or sales column"}
+
+    vehicle_specs = [
+        {
+            "label": "E-bike",
+            "color": "#4C8CBF",
+            "offset": -0.18,
+            "use_col": "total_ebike_use_phase_emission_kg",
+            "production_col": "total_ebike_production_emission_kg",
+            "eol_col": "total_ebike_end_of_life_emission_kg",
+        },
+        {
+            "label": "Drone",
+            "color": "#E05C2B",
+            "offset": 0.18,
+            "use_col": "total_drone_use_phase_emission_kg",
+            "production_col": "total_drone_production_emission_kg",
+            "eol_col": "total_drone_end_of_life_emission_kg",
+        },
+    ]
+    required_cols = ["total_odpair_annual_sales"]
+    for spec in vehicle_specs:
+        required_cols.extend([spec["use_col"], spec["production_col"], spec["eol_col"]])
+
+    plot_df = df.copy()
+    if "region_level" in plot_df.columns:
+        plot_df = plot_df[plot_df["region_level"] == "city"]
+    for col in [gef_col, *required_cols]:
+        plot_df[col] = pd.to_numeric(plot_df[col], errors="coerce")
+    plot_df = plot_df.dropna(subset=[gef_col, *required_cols])
+    valid_positive = (
+        (plot_df[gef_col] > 0)
+        & (plot_df[gef_col] <= 0.9)
+        & (plot_df["total_odpair_annual_sales"] > 0)
+    )
+    for spec in vehicle_specs:
+        valid_positive = (
+            valid_positive
+            & (plot_df[spec["use_col"]] > 0)
+            & (plot_df[spec["production_col"]] >= 0)
+            & (plot_df[spec["eol_col"]] >= 0)
+        )
+    plot_df = plot_df[valid_positive]
+
+    bin_width = 0.1
+    bin_edges = np.linspace(0.0, 0.9, 10)
+    labels = [f"{right:.1f}" for right in bin_edges[1:]]
+    plot_df["gef_range"] = pd.cut(
+        plot_df[gef_col],
+        bins=bin_edges,
+        labels=labels,
+        include_lowest=True,
+        right=True,
+    )
+    x_all = (bin_edges[:-1] + bin_edges[1:]) / 2.0
+
+    bars = []
+    bins = []
+    for idx, label in enumerate(labels):
+        group = plot_df[plot_df["gef_range"] == label]
+        if group.empty:
+            continue
+        orders_sum = group["total_odpair_annual_sales"].sum()
+        bin_record = {
+            "label_right_edge": label,
+            "bin_left": _report_number(bin_edges[idx]),
+            "bin_right": _report_number(bin_edges[idx + 1]),
+            "bin_center": _report_number(x_all[idx]),
+            "city_count": int(len(group)),
+            "orders_sum": _report_number(orders_sum),
+        }
+        bins.append(bin_record)
+        for spec in vehicle_specs:
+            fixed = (
+                (group[spec["production_col"]].sum() + group[spec["eol_col"]].sum())
+                / orders_sum
+                * 1000.0
+            )
+            use = group[spec["use_col"]].sum() / orders_sum * 1000.0
+            x_center = x_all[idx] + spec["offset"] * bin_width
+            bars.append(
+                {
+                    "vehicle": spec["label"],
+                    "color": spec["color"],
+                    "bin_label_right_edge": label,
+                    "x_center": _report_number(x_center),
+                    "width": _report_number(bin_width * 0.28),
+                    "production_eol_segment": {
+                        "bottom": 0.0,
+                        "height_g_co2e_per_order": _report_number(fixed),
+                        "top": _report_number(fixed),
+                        "alpha": 0.38,
+                    },
+                    "use_phase_segment": {
+                        "bottom": _report_number(fixed),
+                        "height_g_co2e_per_order": _report_number(use),
+                        "top": _report_number(fixed + use),
+                        "alpha": 0.88,
+                    },
+                    "total_label": {
+                        "x": _report_number(x_center),
+                        "y": _report_number(fixed + use),
+                        "text": f"{fixed + use:.1f}",
+                        "rotation": 90,
+                    },
+                    "orders_sum": _report_number(orders_sum),
+                    "city_count": int(len(group)),
+                }
+            )
+
+    density_x = plot_df[gef_col].to_numpy(dtype=float)
+    if len(density_x) > 5 and np.unique(density_x).size > 1:
+        from scipy.stats import gaussian_kde
+
+        x_violin = np.linspace(bin_edges[0], bin_edges[-1], 240)
+        density = gaussian_kde(density_x)(x_violin)
+    else:
+        x_violin = x_all
+        density = np.array(
+            [len(plot_df[plot_df["gef_range"] == label]) for label in labels],
+            dtype=float,
+        )
+    if density.size and density.max() > 0:
+        density = density / density.max()
+
+    return {
+        "status": "drawn",
+        "panel_letter": "a",
+        "panel_label": {
+            "text": "a",
+            "x_figure_fraction": _report_number(ax.get_position().x0 - 0.035),
+            "y_figure_fraction": _report_number(ax.get_position().y1 + 0.006),
+        },
+        "axes": {
+            "stacked_bars": _report_axis(ax),
+            "gef_density": _report_axis(ax_dist),
+        },
+        "gef_column": gef_col,
+        "bin_width": bin_width,
+        "bin_edges": _report_array(bin_edges),
+        "bins": bins,
+        "bars": bars,
+        "density_curve": [
+            {"x": _report_number(x), "y": _report_number(y)}
+            for x, y in zip(x_violin, density)
+        ],
+        "city_rug_marks": [
+            {"x": _report_number(x), "y": 0.0}
+            for x in density_x
+        ],
+    }
+
+
+def _city_context_summary_report(binned_by_city, labels, panel_records):
+    """Return exact plotted data for the grouped city context row."""
+    import numpy as np
+
+    reports = []
+    for record in panel_records:
+        context = record["context"]
+        region_key = context["region_key"]
+        binned = binned_by_city[region_key]
+        centres = np.asarray(binned["centres"], dtype=float)
+        reduction_pct = np.asarray(binned["reduction_pct"], dtype=float)
+        reduction_abs = np.asarray(binned["reduction_abs"], dtype=float)
+        detour_by_bin = binned.get("detour_by_bin") or [np.array([]) for _ in centres]
+        max_km = float(binned["max_km"])
+        x_min = min(0.2, max_km)
+        x_max = min(5.0, max_km)
+        visible = (centres >= x_min) & (centres <= x_max)
+        finite_abs = visible & np.isfinite(centres) & np.isfinite(reduction_abs)
+        x_abs = centres[finite_abs]
+        y_abs = reduction_abs[finite_abs]
+
+        linear_fit = None
+        if x_abs.size >= 2:
+            slope, intercept = np.polyfit(x_abs, y_abs, deg=1)
+            x_fit = np.array([x_min, x_max], dtype=float)
+            linear_fit = {
+                "slope": _report_number(slope),
+                "intercept": _report_number(intercept),
+                "line_points": [
+                    {
+                        "x": _report_number(x),
+                        "y": _report_number(slope * x + intercept),
+                    }
+                    for x in x_fit
+                ],
+                "equation": (
+                    f"y = {slope:.1f}x "
+                    f"{'+' if intercept >= 0 else '-'} {abs(intercept):.1f}"
+                ),
+            }
+
+        show_saturation_fit = region_key not in {"dalibaizuzizhizhou", "chengdu"}
+        saturation_fit = None
+        if show_saturation_fit:
+            fit_mask = visible & np.isfinite(centres) & np.isfinite(reduction_pct)
+            x_fit_data = centres[fit_mask]
+            y_fit_data = reduction_pct[fit_mask]
+            if x_fit_data.size >= 4:
+                try:
+                    from scipy.optimize import curve_fit
+
+                    x0 = float(x_min)
+
+                    def saturation_model(x, y0, amplitude, rate):
+                        return y0 + amplitude * (1.0 - np.exp(-rate * (x - x0)))
+
+                    initial = [
+                        float(y_fit_data[0]),
+                        float(y_fit_data[-1] - y_fit_data[0]),
+                        0.8,
+                    ]
+                    params, _ = curve_fit(
+                        saturation_model,
+                        x_fit_data,
+                        y_fit_data,
+                        p0=initial,
+                        bounds=([-np.inf, -np.inf, 0.0], [np.inf, np.inf, np.inf]),
+                        maxfev=10000,
+                    )
+                    x_fit = np.linspace(x_min, x_max, 160)
+                    y_fit = saturation_model(x_fit, *params)
+                    y0, amplitude, rate = params
+                    saturation_fit = {
+                        "y0": _report_number(y0),
+                        "amplitude": _report_number(amplitude),
+                        "rate": _report_number(rate),
+                        "x0": _report_number(x0),
+                        "line_points": [
+                            {"x": _report_number(x), "y": _report_number(y)}
+                            for x, y in zip(x_fit, y_fit)
+                        ],
+                        "equation": (
+                            f"y = {y0:.1f} "
+                            f"{'+' if amplitude >= 0 else '-'} {abs(amplitude):.1f}"
+                            f"(1 - e^(-{rate:.2f}(x - {x0:.1f})))"
+                        ),
+                    }
+                except Exception as exc:
+                    saturation_fit = {"status": "fit_failed", "error": str(exc)}
+
+        generation = POWER_GENERATION_2022_100M_KWH[context.get("power_region_key", region_key)]
+        total = generation["total"]
+        components = ["Hydro", "Thermal", "Wind", "Solar"]
+        values = [generation[name] for name in components]
+        remainder = total - sum(values)
+        if remainder / total > 0.005:
+            components.append("Other")
+            values.append(remainder)
+
+        reports.append(
+            {
+                "panel_letter": record["panel_letter"],
+                "panel_label": {
+                    "text": record["panel_letter"],
+                    "x_figure_fraction": _report_number(
+                        record["power_mix_ax"].get_position().x0 - 0.010
+                    ),
+                    "y_figure_fraction": _report_number(
+                        record["power_mix_ax"].get_position().y1 + 0.035
+                    ),
+                },
+                "city_label_position": {
+                    "text": context["display_name"],
+                    "x_figure_fraction": _report_number(
+                        record["power_mix_ax"].get_position().x0 + 0.006
+                    ),
+                    "y_figure_fraction": _report_number(
+                        record["power_mix_ax"].get_position().y1 + 0.035
+                    ),
+                },
+                "region_key": region_key,
+                "city_label": labels.get(region_key, context["display_name"]),
+                "display_name": context["display_name"],
+                "axes": {
+                    "power_mix": _report_axis(record["power_mix_ax"]),
+                    "power_legend": _report_axis(record["power_legend_ax"]),
+                    "reduction_bars": _report_axis(record["reduction_ax"]),
+                    "absolute_scatter": _report_axis(record["absolute_ax"]),
+                },
+                "power_mix": [
+                    {
+                        "component": name,
+                        "value_100m_kwh": _report_number(value),
+                        "share_pct": _report_number(value / total * 100.0),
+                        "color": POWER_MIX_COLORS[name],
+                    }
+                    for name, value in zip(components, values)
+                ],
+                "distance_bins": [
+                    {
+                        "x_center_air_km": _report_number(center),
+                        "bar_width_km": 0.2 * 0.78,
+                        "reduction_pct_height": _report_number(pct),
+                        "reduction_bar_bottom": 0.0,
+                        "reduction_bar_top": _report_number(pct),
+                        "reduction_bar_color": (
+                            "#2ca02c"
+                            if (np.isfinite(pct) and pct >= 0)
+                            else "#d62728"
+                        ),
+                        "absolute_scatter_y_g_co2e_per_order": _report_number(abs_value),
+                        "visible_in_panel": bool(is_visible),
+                        "detour_ratio_values": _report_array(detours),
+                    }
+                    for center, pct, abs_value, detours, is_visible
+                    in zip(centres, reduction_pct, reduction_abs, detour_by_bin, visible)
+                ],
+                "absolute_scatter_points": [
+                    {"x_air_km": _report_number(x), "y_g_co2e_per_order": _report_number(y)}
+                    for x, y in zip(x_abs, y_abs)
+                ],
+                "absolute_linear_fit": linear_fit,
+                "reduction_saturation_fit": saturation_fit,
+            }
+        )
+    return reports
+
+
+def _detour_reduction_scatter_report(df, reduction_col, axes):
+    """Return exact plotted data for the bottom detour-reduction scatter panels."""
+    import numpy as np
+    from scipy import stats
+
+    ax_low, cbar_ax, ax_high = axes
+    feature_var = "detour_ratio"
+    group_var = "grid_emission_factor"
+    threshold = 0.3
+    valid_mask = df[[feature_var, reduction_col, group_var]].notna().all(axis=1)
+    plot_df = df.loc[valid_mask].copy()
+    low_mask = plot_df[group_var] <= threshold
+    masks = [low_mask, ~low_mask]
+    labels = (f"Low GEF ($\\leq$ {threshold})", f"High GEF (> {threshold})")
+    line_colors = ["#006837", "#A50F15"]
+    panel_letters = ["f", "g"]
+    axis_names = ["low_gef", "high_gef"]
+    axis_objs = [ax_low, ax_high]
+
+    x_data_min = plot_df[feature_var].min()
+    x_data_max = plot_df[feature_var].max()
+    y_data_min = plot_df[reduction_col].min()
+    y_data_max = plot_df[reduction_col].max()
+    x_pad = (x_data_max - x_data_min) * 0.03 or 0.1
+    y_pad = (y_data_max - y_data_min) * 0.06 or 1.0
+    x_global_min = x_data_min - x_pad
+    x_global_max = x_data_max + x_pad
+
+    panels = []
+    for axis_name, ax, mask, label, color, panel_letter in zip(
+        axis_names, axis_objs, masks, labels, line_colors, panel_letters
+    ):
+        panel_df = plot_df.loc[mask]
+        points = []
+        for _, row in panel_df.iterrows():
+            points.append(
+                {
+                    "region_key": _report_number(row.get("region_key")),
+                    "region_name_en": _report_number(row.get("region_name_en")),
+                    "region_name": _report_number(row.get("region_name")),
+                    "x_detour_ratio": _report_number(row[feature_var]),
+                    "y_reduction_pct": _report_number(row[reduction_col]),
+                    "grid_emission_factor": _report_number(row[group_var]),
+                }
+            )
+
+        regression = None
+        x = panel_df[feature_var].to_numpy(dtype=float)
+        y = panel_df[reduction_col].to_numpy(dtype=float)
+        if len(x) >= 3 and np.sum((x - np.mean(x)) ** 2) > 0:
+            slope, intercept, r_value, p_value, stderr = stats.linregress(x, y)
+            x_line = np.linspace(x_global_min, x_global_max, 100)
+            y_line = slope * x_line + intercept
+            n = len(x)
+            se = np.sqrt(np.sum((y - (slope * x + intercept)) ** 2) / (n - 2))
+            t_val = stats.t.ppf(0.975, n - 2)
+            x_mean = np.mean(x)
+            ci = t_val * se * np.sqrt(
+                1.0 / n + (x_line - x_mean) ** 2 / np.sum((x - x_mean) ** 2)
+            )
+            regression = {
+                "slope": _report_number(slope),
+                "intercept": _report_number(intercept),
+                "r_value": _report_number(r_value),
+                "p_value": _report_number(p_value),
+                "stderr": _report_number(stderr),
+                "line_color": color,
+                "line_points": [
+                    {
+                        "x": _report_number(xv),
+                        "y": _report_number(yv),
+                        "ci_low": _report_number(yv - civ),
+                        "ci_high": _report_number(yv + civ),
+                    }
+                    for xv, yv, civ in zip(x_line, y_line, ci)
+                ],
+            }
+
+        panels.append(
+            {
+                "panel_letter": panel_letter,
+                "axis_name": axis_name,
+                "label_text": label,
+                "axes": _report_axis(ax),
+                "panel_label": {
+                    "text": panel_letter,
+                    "x_axes_fraction": -0.10,
+                    "y_axes_fraction": 1.02,
+                },
+                "group_label": {
+                    "text": label,
+                    "x_axes_fraction": 0.03,
+                    "y_axes_fraction": 0.96,
+                },
+                "scatter_style": {
+                    "size": 24,
+                    "alpha": 0.68,
+                    "edgecolors": "none",
+                    "zorder": 10,
+                },
+                "points": points,
+                "regression": regression,
+            }
+        )
+
+    return {
+        "axes": {
+            "colorbar": _report_axis(cbar_ax),
+        },
+        "feature_var": feature_var,
+        "result_var": reduction_col,
+        "group_var": group_var,
+        "threshold": threshold,
+        "panels": panels,
+    }
+
+
+def _write_city_gef_context_detour_report(
+    save_path,
+    figure_name,
+    figure_size,
+    top_report,
+    city_reports,
+    bottom_report,
+):
+    """Write JSON and Markdown reports for the city GEF context figure."""
+    report_base = save_path.rsplit(".", 1)[0] + "_report"
+    json_path = report_base + ".json"
+    md_path = report_base + ".md"
+    payload = {
+        "figure_name": figure_name,
+        "figure_path": save_path,
+        "figure_size_inches": {
+            "width": figure_size[0],
+            "height": figure_size[1],
+        },
+        "coordinate_convention": (
+            "All x/y values are in Matplotlib data coordinates for the stated axis; "
+            "axis bbox values are figure-fraction coordinates."
+        ),
+        "panels": {
+            "top_city_gef_scatter_components": top_report,
+            "middle_city_context": city_reports,
+            "bottom_detour_ratio_vs_reduction_by_gef": bottom_report,
+        },
+    }
+    with open(json_path, "w", encoding="utf-8") as f:
+        json.dump(payload, f, indent=2, ensure_ascii=False, allow_nan=False)
+
+    lines = [
+        f"# {figure_name} Figure Report",
+        "",
+        f"- Figure path: `{save_path}`",
+        f"- JSON data path: `{json_path}`",
+        f"- Figure size: {figure_size[0]} x {figure_size[1]} inches",
+        "- Coordinate convention: data coordinates for plotted elements; figure-fraction coordinates for axes.",
+        "",
+        "## Top: city_gef_scatter_components",
+        "",
+        f"- GEF column: `{top_report.get('gef_column')}`",
+        f"- Bin edges: {top_report.get('bin_edges')}",
+        f"- Bar count: {len(top_report.get('bars', []))}",
+        f"- Density points: {len(top_report.get('density_curve', []))}",
+        f"- City rug marks: {len(top_report.get('city_rug_marks', []))}",
+        "",
+        "Each bar entry in JSON records `x_center`, `width`, production+EOL segment bottom/height/top, use-phase segment bottom/height/top, and total label location.",
+        "",
+        "## Middle: dali_chengdu_tianjin_guangzhou_city_context",
+        "",
+    ]
+    for city in city_reports:
+        visible_bins = [
+            item for item in city["distance_bins"]
+            if item["visible_in_panel"]
+        ]
+        lines.extend(
+            [
+                f"### Panel {city['panel_letter']}: {city['display_name']}",
+                "",
+                f"- Region key: `{city['region_key']}`",
+                f"- Visible distance-bin count: {len(visible_bins)}",
+                f"- Power mix components: {', '.join(item['component'] for item in city['power_mix'])}",
+                "- JSON records every distance bin with air-distance x center, reduction bar height, absolute scatter y value, and detour-ratio values in that bin.",
+                "",
+            ]
+        )
+    lines.extend(
+        [
+            "## Bottom: scatter_detour_ratio_vs_reduction_by_gef",
+            "",
+            f"- Feature variable: `{bottom_report['feature_var']}`",
+            f"- Result variable: `{bottom_report['result_var']}`",
+            f"- Group variable: `{bottom_report['group_var']}`",
+            f"- Threshold: {bottom_report['threshold']}",
+        ]
+    )
+    for panel in bottom_report["panels"]:
+        lines.extend(
+            [
+                f"- Panel {panel['panel_letter']} ({panel['axis_name']}): {len(panel['points'])} scatter points.",
+            ]
+        )
+    lines.extend(
+        [
+            "",
+            "The JSON file is the authoritative element-level record for writing: it includes every scatter point coordinate, every bar x/height/bottom/top, fitted line points, confidence intervals, axes limits, tick positions, and axes locations.",
+            "",
+        ]
+    )
+    with open(md_path, "w", encoding="utf-8") as f:
+        f.write("\n".join(lines))
+    print(f"City GEF context detour summary report saved to {md_path}")
+    print(f"City GEF context detour summary report data saved to {json_path}")
+    return md_path, json_path
 
 
 def _render_city_context_group(
@@ -1111,7 +1718,8 @@ def _render_city_gef_context_detour_summary(
 
     reduction_col = _weighted_reduction_column(df_enriched)
 
-    fig = plt.figure(figsize=(18.0, 18.5))
+    figure_size = (18.0, 18.5)
+    fig = plt.figure(figsize=figure_size)
     outer = fig.add_gridspec(
         3,
         1,
@@ -1144,7 +1752,7 @@ def _render_city_gef_context_detour_summary(
         va="bottom",
     )
 
-    _plot_city_context_group_panels(
+    city_panel_records = _plot_city_context_group_panels(
         fig=fig,
         subplot_spec=outer[1],
         binned_by_city=binned_by_city,
@@ -1180,7 +1788,27 @@ def _render_city_gef_context_detour_summary(
     if plot_title:
         save_path = _add_title_suffix(save_path)
     os.makedirs(os.path.dirname(save_path), exist_ok=True)
+    fig.canvas.draw()
     fig.savefig(save_path, dpi=300, bbox_inches="tight")
+    top_report = _city_gef_components_report(df_enriched, top_axes)
+    city_reports = _city_context_summary_report(
+        binned_by_city,
+        labels,
+        city_panel_records,
+    )
+    bottom_report = _detour_reduction_scatter_report(
+        df_enriched,
+        reduction_col,
+        bottom_axes,
+    )
+    _write_city_gef_context_detour_report(
+        save_path=save_path,
+        figure_name=figure_name,
+        figure_size=figure_size,
+        top_report=top_report,
+        city_reports=city_reports,
+        bottom_report=bottom_report,
+    )
     plt.close(fig)
     print(f"City GEF context detour summary saved to {save_path}")
 

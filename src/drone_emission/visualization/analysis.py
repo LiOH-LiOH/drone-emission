@@ -1,5 +1,6 @@
 """Visualization functions for cross-region correlation and emission analysis."""
 
+import json
 import os
 
 import matplotlib.pyplot as plt
@@ -3398,6 +3399,503 @@ def plot_regions_map_city_rank_inset(
     plt.close(fig)
 
 
+def _json_safe_scalar(value):
+    """Return a JSON-safe scalar with missing numeric values represented as None."""
+    if value is None:
+        return None
+    try:
+        if pd.isna(value):
+            return None
+    except (TypeError, ValueError):
+        pass
+    if isinstance(value, (np.integer,)):
+        return int(value)
+    if isinstance(value, (np.floating, float)):
+        value = float(value)
+        return value if np.isfinite(value) else None
+    if isinstance(value, (np.bool_, bool)):
+        return bool(value)
+    return value
+
+
+def _json_safe_array(values):
+    """Return a JSON-safe list from an array-like object."""
+    return [_json_safe_scalar(value) for value in values]
+
+
+def _axis_report(ax):
+    """Return final axis position and scale metadata."""
+    pos = ax.get_position()
+    return {
+        "bbox_figure_fraction": {
+            "x0": _json_safe_scalar(pos.x0),
+            "y0": _json_safe_scalar(pos.y0),
+            "x1": _json_safe_scalar(pos.x1),
+            "y1": _json_safe_scalar(pos.y1),
+            "width": _json_safe_scalar(pos.width),
+            "height": _json_safe_scalar(pos.height),
+        },
+        "xlim_data": _json_safe_array(ax.get_xlim()),
+        "ylim_data": _json_safe_array(ax.get_ylim()),
+        "xlabel": ax.get_xlabel(),
+        "ylabel": ax.get_ylabel(),
+        "xticks_data": _json_safe_array(ax.get_xticks()),
+        "yticks_data": _json_safe_array(ax.get_yticks()),
+    }
+
+
+def _color_for_value(value, cmap, norm):
+    """Return plotted hex color for a mapped scalar value."""
+    from matplotlib.colors import to_hex
+
+    value = _json_safe_scalar(value)
+    if value is None:
+        return "#cccccc"
+    return to_hex(cmap(norm(value)))
+
+
+def _bin_label_for_value(value, bin_edges):
+    """Return the interval label used by a discrete color scale."""
+    value = _json_safe_scalar(value)
+    if value is None:
+        return "Unstudied"
+    edges = np.asarray(bin_edges, dtype=float)
+    idx = int(np.searchsorted(edges, value, side="right") - 1)
+    idx = int(np.clip(idx, 0, len(edges) - 2))
+    return f"[{edges[idx]:g}, {edges[idx + 1]:g})"
+
+
+def _colorbar_report(ax, bin_edges, tick_edges, label_text, cmap):
+    """Return colorbar axis and discrete scale metadata."""
+    from matplotlib.colors import to_hex
+
+    return {
+        "axis": _axis_report(ax),
+        "label": label_text,
+        "bin_edges": _json_safe_array(bin_edges),
+        "tick_edges": _json_safe_array(tick_edges),
+        "colors": [to_hex(cmap(i)) for i in range(cmap.N)],
+        "unstudied_band": {
+            "label": "Unstudied",
+            "color": "#cccccc",
+            "bin_index": 0,
+        },
+    }
+
+
+def _map_panel_report(df, color_col, cmap, norm, bin_edges, ax, panel_letter):
+    """Return row-level values used by one map panel."""
+    rows = []
+    for _, row in df.iterrows():
+        value = row.get(color_col)
+        rows.append(
+            {
+                "region_key": _json_safe_scalar(row.get("region_key")),
+                "region_name_cn": _json_safe_scalar(row.get("region_name_cn")),
+                "region_name_en": _json_safe_scalar(row.get("region_name_en")),
+                "region_level": _json_safe_scalar(row.get("region_level")),
+                "province": _json_safe_scalar(row.get("province")),
+                color_col: _json_safe_scalar(value),
+                "fill_color": _color_for_value(value, cmap, norm),
+                "color_bin": _bin_label_for_value(value, bin_edges),
+            }
+        )
+    return {
+        "panel_letter": panel_letter,
+        "axis": _axis_report(ax),
+        "color_by": color_col,
+        "rows": rows,
+    }
+
+
+def _city_oracle_rank_report(df, ax, n=10, invert_vertical=True, compact=True):
+    """Return plotted bar data for the city Oracle-reduction inset."""
+    base_cols = ["region_name_en", "total_ebike_lifecycle"]
+    has_oracle = "oracle_min_lifecycle_kg" in df.columns
+    fallback_cols = [col for col in WEIGHTED_REDUCTION_COLUMNS if col in df.columns]
+    metric_cols = ["oracle_min_lifecycle_kg"] if has_oracle else fallback_cols
+    sub = df[base_cols + metric_cols].copy()
+    reduction_col = _oracle_reduction_tonnes_column(sub)
+    sub = sub.dropna(subset=[reduction_col])
+    ranked = sub.sort_values(reduction_col, ascending=False).head(n)
+    ranked = ranked.sort_values(reduction_col, ascending=True).reset_index(drop=True)
+    if invert_vertical:
+        ranked = ranked.iloc[::-1].reset_index(drop=True)
+
+    bars = []
+    for y, (_, row) in enumerate(ranked.iterrows()):
+        bars.append(
+            {
+                "city": _json_safe_scalar(row.get("region_name_en")),
+                "y_center": y,
+                "height": 0.6,
+                "x_left": 0.0,
+                "width_t_co2e_per_year": _json_safe_scalar(row[reduction_col]),
+                "color": "#1F6E2D",
+                "alpha": 0.88,
+            }
+        )
+    return {
+        "axis": _axis_report(ax),
+        "reduction_col": reduction_col,
+        "compact": compact,
+        "invert_vertical": invert_vertical,
+        "bars": bars,
+    }
+
+
+def _drone_share_distribution_report(df, drone_share_col, ax):
+    """Return histogram bars and smoothed curve for the drone-share inset."""
+    values = pd.to_numeric(df[drone_share_col], errors="coerce").dropna()
+    if values.empty:
+        return {"axis": _axis_report(ax), "status": "skipped", "reason": "no values"}
+
+    bins = np.arange(0, 101, 10, dtype=float)
+    clipped = values.clip(lower=0, upper=100)
+    counts, edges = np.histogram(clipped, bins=bins)
+    centres = (edges[:-1] + edges[1:]) / 2
+    x_curve = np.linspace(float(centres.min()), float(centres.max()), 200)
+    if len(centres) >= 4:
+        from scipy.interpolate import make_interp_spline
+
+        spline = make_interp_spline(centres, counts, k=3)
+        y_curve = np.clip(spline(x_curve), 0, None)
+    else:
+        y_curve = np.interp(x_curve, centres, counts)
+
+    return {
+        "axis": _axis_report(ax),
+        "drone_share_col": drone_share_col,
+        "bars": [
+            {
+                "bin_left": _json_safe_scalar(edges[i]),
+                "bin_right": _json_safe_scalar(edges[i + 1]),
+                "x_center": _json_safe_scalar(centres[i]),
+                "width": 8.5,
+                "height_city_count": int(counts[i]),
+                "color": "#91bfdb",
+                "edgecolor": "#08306b",
+                "alpha": 0.85,
+            }
+            for i in range(len(counts))
+        ],
+        "curve_points": [
+            {"x": _json_safe_scalar(x), "y": _json_safe_scalar(y)}
+            for x, y in zip(x_curve, y_curve)
+        ],
+    }
+
+
+def _province_lifecycle_panel_report(df, ax_main, ax_secondary):
+    """Return bar and boxplot data for the province lifecycle panel."""
+    needed = ["province", "total_ebike_lifecycle", "oracle_min_lifecycle_kg"]
+    sub = df[needed].copy()
+    sub["total_ebike_lifecycle"] = pd.to_numeric(
+        sub["total_ebike_lifecycle"], errors="coerce"
+    )
+    sub["oracle_min_lifecycle_kg"] = pd.to_numeric(
+        sub["oracle_min_lifecycle_kg"], errors="coerce"
+    )
+    sub["oracle_min_reduction_vs_ebike_pct"] = np.where(
+        sub["total_ebike_lifecycle"] > 0,
+        (
+            1.0
+            - sub["oracle_min_lifecycle_kg"] / sub["total_ebike_lifecycle"]
+        )
+        * 100.0,
+        np.nan,
+    )
+    sub = sub.dropna()
+    sub["province_en"] = sub["province"].map(PROVINCE_NAME_EN).fillna(sub["province"])
+    reduction_col = "oracle_min_reduction_vs_ebike_pct"
+    prov = (
+        sub.groupby("province_en")
+        .agg(total_ebike=("total_ebike_lifecycle", "sum"))
+        .reset_index()
+        .sort_values("total_ebike", ascending=False)
+    )
+    ordered = prov["province_en"].tolist()
+    ebike_t = prov["total_ebike"].values / 1e3
+
+    bars = []
+    boxes = []
+    for x, (province, height) in enumerate(zip(ordered, ebike_t)):
+        values = sub.loc[sub["province_en"] == province, reduction_col].to_numpy(dtype=float)
+        finite = values[np.isfinite(values)]
+        if finite.size:
+            q1, median, q3 = np.percentile(finite, [25, 50, 75])
+            iqr = q3 - q1
+            low_limit = q1 - 1.5 * iqr
+            high_limit = q3 + 1.5 * iqr
+            whisker_low = finite[finite >= low_limit].min()
+            whisker_high = finite[finite <= high_limit].max()
+        else:
+            q1 = median = q3 = whisker_low = whisker_high = np.nan
+        bars.append(
+            {
+                "province": province,
+                "x_center": x,
+                "height_total_ebike_t_co2e_per_year": _json_safe_scalar(height),
+                "color": "#B0B0B0",
+                "alpha": 0.85,
+            }
+        )
+        boxes.append(
+            {
+                "province": province,
+                "x_center": x,
+                "width": 0.5,
+                "city_values_pct": _json_safe_array(finite),
+                "q1": _json_safe_scalar(q1),
+                "median": _json_safe_scalar(median),
+                "q3": _json_safe_scalar(q3),
+                "whisker_low": _json_safe_scalar(whisker_low),
+                "whisker_high": _json_safe_scalar(whisker_high),
+                "showfliers": False,
+                "color": "#1F6E2D",
+                "alpha": 0.35,
+            }
+        )
+    return {
+        "axis_left": _axis_report(ax_main),
+        "axis_right": _axis_report(ax_secondary) if ax_secondary is not None else None,
+        "bars": bars,
+        "boxplots": boxes,
+    }
+
+
+def _phase_per_km_panel_report(df, ax, ylabel, body_label, battery_label,
+                               body_color, battery_color, distance_km):
+    """Return stacked body/battery bar data for a phase-per-km panel."""
+    x = np.arange(len(df))
+    body = df["body_g_per_km"].to_numpy(dtype=float)
+    battery = df["battery_g_per_km"].to_numpy(dtype=float)
+    totals = body + battery
+    return {
+        "axis": _axis_report(ax),
+        "ylabel": ylabel,
+        "distance_km": distance_km,
+        "bars": [
+            {
+                "vehicle": _json_safe_scalar(vehicle),
+                "x_center": int(x_pos),
+                "width": 0.56,
+                "body_segment": {
+                    "label": body_label,
+                    "bottom": 0.0,
+                    "height_g_per_vehicle_km": _json_safe_scalar(body_value),
+                    "top": _json_safe_scalar(body_value),
+                    "color": body_color,
+                },
+                "battery_segment": {
+                    "label": battery_label,
+                    "bottom": _json_safe_scalar(body_value),
+                    "height_g_per_vehicle_km": _json_safe_scalar(battery_value),
+                    "top": _json_safe_scalar(body_value + battery_value),
+                    "color": battery_color,
+                },
+                "total_label": {
+                    "x": int(x_pos),
+                    "y": _json_safe_scalar(
+                        body_value + battery_value + np.nanmax(totals) * 0.035
+                    ),
+                    "text": f"{body_value + battery_value:.1f}",
+                },
+            }
+            for x_pos, vehicle, body_value, battery_value
+            in zip(x, df["vehicle"], body, battery)
+        ],
+    }
+
+
+def _detour_concept_panel_report(ax):
+    """Return geometry and label data for the detour-ratio concept panel."""
+    import math
+
+    grid_x = [1.0, 3.5, 6.0, 8.5]
+    grid_y = [1.0, 3.0, 5.0]
+    cruise_alt = 1.3
+
+    def project(x, y, z=0.0):
+        return x + 0.42 * y, 0.58 * y + z
+
+    origin = (grid_x[0], grid_y[0])
+    destination = (grid_x[3], grid_y[2])
+    bike_route = [
+        origin,
+        (grid_x[1], grid_y[0]),
+        (grid_x[1], grid_y[1]),
+        (grid_x[2], grid_y[1]),
+        (grid_x[2], grid_y[2]),
+        destination,
+    ]
+    road_distance = sum(
+        math.dist(a, b) for a, b in zip(bike_route[:-1], bike_route[1:])
+    )
+    straight_distance = math.dist(origin, destination)
+    return {
+        "axis": _axis_report(ax),
+        "world_coordinates": {
+            "origin": list(origin),
+            "destination": list(destination),
+            "bike_route": [list(point) for point in bike_route],
+            "drone_route": [list(origin), list(destination)],
+            "cruise_altitude": cruise_alt,
+        },
+        "projected_coordinates": {
+            "origin": _json_safe_array(project(*origin)),
+            "destination": _json_safe_array(project(*destination)),
+            "bike_route": [
+                _json_safe_array(project(point[0], point[1]))
+                for point in bike_route
+            ],
+            "drone_route": [
+                _json_safe_array(project(origin[0], origin[1], cruise_alt)),
+                _json_safe_array(project(destination[0], destination[1], cruise_alt)),
+            ],
+        },
+        "distances": {
+            "road_distance_world_units": _json_safe_scalar(road_distance),
+            "straight_distance_world_units": _json_safe_scalar(straight_distance),
+            "detour_ratio": _json_safe_scalar(road_distance / straight_distance),
+        },
+        "labels": [
+            {"text": "Merchant", "anchor": "origin"},
+            {"text": "Customer", "anchor": "destination"},
+            {"text": "E-bike route on roads", "color": "#d95f35"},
+            {"text": "Drone route on air space", "color": "#1f77b4"},
+            {"text": "takeoff", "color": "#1f77b4"},
+            {"text": "cruise", "color": "#1f77b4"},
+            {"text": "land", "color": "#1f77b4"},
+            {"text": "Straight-line distance", "color": "#1f77b4"},
+            {"text": "Road distance", "color": "#d95f35"},
+        ],
+    }
+
+
+def _find_overlay_axis(fig, reference_ax):
+    """Return another axis sharing the same figure position, usually a twinx axis."""
+    ref_pos = reference_ax.get_position()
+    for candidate in fig.axes:
+        if candidate is reference_ax:
+            continue
+        pos = candidate.get_position()
+        if (
+            abs(pos.x0 - ref_pos.x0) < 1e-6
+            and abs(pos.y0 - ref_pos.y0) < 1e-6
+            and abs(pos.width - ref_pos.width) < 1e-6
+            and abs(pos.height - ref_pos.height) < 1e-6
+        ):
+            return candidate
+    return None
+
+
+def _write_regions_map_city_rank_and_drone_share_report(
+    save_path,
+    figsize,
+    stats_csv_path,
+    map_df,
+    drone_df,
+    reduction_col,
+    drone_share_col,
+    axes,
+    color_scales,
+    production_df,
+    eol_df,
+):
+    """Write a JSON report for regions_map_city_rank_and_drone_share."""
+    report_path = save_path.rsplit(".", 1)[0] + "_report.json"
+    (
+        ax_a,
+        ax_b,
+        ax_c,
+        ax_d,
+        ax_e,
+        ax_f,
+        inset_ax,
+        share_dist_ax,
+        cbar_a_ax,
+        cbar_b_ax,
+    ) = axes
+    reduction_cmap, reduction_norm, reduction_bins, reduction_edges = color_scales["reduction"]
+    drone_cmap, drone_norm, drone_bins, drone_edges = color_scales["drone_share"]
+    ax_c_secondary = _find_overlay_axis(ax_c.get_figure(), ax_c)
+
+    payload = {
+        "figure_name": "regions_map_city_rank_and_drone_share",
+        "figure_path": save_path,
+        "source_stats_csv_path": stats_csv_path,
+        "figure_size_inches": {"width": figsize[0], "height": figsize[1]},
+        "coordinate_convention": (
+            "Plotted x/y values are Matplotlib data coordinates for the stated "
+            "axis. Axis bbox values are figure-fraction coordinates."
+        ),
+        "panels": {
+            "a_oracle_reduction_map": {
+                **_map_panel_report(
+                    map_df, reduction_col, reduction_cmap, reduction_norm,
+                    reduction_bins, ax_a, "a",
+                ),
+                "inset_city_rank": _city_oracle_rank_report(map_df, inset_ax),
+                "colorbar": _colorbar_report(
+                    cbar_a_ax,
+                    reduction_bins,
+                    reduction_edges,
+                    "E-bike - Oracle (t CO2eq / yr)",
+                    reduction_cmap,
+                ),
+            },
+            "b_drone_share_map": {
+                **_map_panel_report(
+                    drone_df, drone_share_col, drone_cmap, drone_norm,
+                    drone_bins, ax_b, "b",
+                ),
+                "inset_drone_share_distribution": _drone_share_distribution_report(
+                    drone_df,
+                    drone_share_col,
+                    share_dist_ax,
+                ),
+                "colorbar": _colorbar_report(
+                    cbar_b_ax,
+                    drone_bins,
+                    drone_edges,
+                    "Drone share at minimum lifecycle emission (%)",
+                    drone_cmap,
+                ),
+            },
+            "c_province_lifecycle_and_reduction": _province_lifecycle_panel_report(
+                drone_df,
+                ax_c,
+                ax_c_secondary,
+            ),
+            "d_production_phase_per_km": _phase_per_km_panel_report(
+                production_df,
+                ax_d,
+                "Production emission\n(g CO2e / vehicle-km)",
+                "Body",
+                "Battery",
+                "#7f8c8d",
+                "#2ca25f",
+                1.0,
+            ),
+            "e_detour_ratio_concept": _detour_concept_panel_report(ax_e),
+            "f_end_of_life_phase_per_km": _phase_per_km_panel_report(
+                eol_df,
+                ax_f,
+                "End-of-life emission\n(g CO2e / vehicle-km)",
+                "Body",
+                "Battery",
+                "#8b8f97",
+                "#5b8db8",
+                1.0,
+            ),
+        },
+    }
+    with open(report_path, "w", encoding="utf-8") as f:
+        json.dump(payload, f, indent=2, ensure_ascii=False, allow_nan=False)
+    print(f"Regions map city rank and drone share report saved to {report_path}")
+
+
 def plot_regions_map_city_rank_and_drone_share(
     df_stats: "pd.DataFrame",
     stats_csv_path: str,
@@ -3642,6 +4140,44 @@ def plot_regions_map_city_rank_and_drone_share(
         if plot_title:
             save_path = _add_title_suffix(save_path)
         os.makedirs(os.path.dirname(save_path), exist_ok=True)
+        fig.canvas.draw()
+        _write_regions_map_city_rank_and_drone_share_report(
+            save_path=save_path,
+            figsize=figsize,
+            stats_csv_path=stats_csv_path,
+            map_df=map_df,
+            drone_df=drone_df,
+            reduction_col=reduction_col,
+            drone_share_col=drone_share_col,
+            axes=(
+                ax_a,
+                ax_b,
+                ax_c,
+                ax_d,
+                ax_e,
+                ax_f,
+                inset_ax,
+                share_dist_ax,
+                cbar_a_ax,
+                cbar_b_ax,
+            ),
+            color_scales={
+                "reduction": (
+                    reduction_cmap,
+                    reduction_norm,
+                    reduction_bins,
+                    reduction_edges,
+                ),
+                "drone_share": (
+                    drone_cmap,
+                    drone_norm,
+                    drone_bins,
+                    drone_edges,
+                ),
+            },
+            production_df=production_df,
+            eol_df=eol_df,
+        )
         plt.savefig(save_path, dpi=300, bbox_inches="tight")
         print(f"Regions map city rank and drone share saved to {save_path}")
     else:
