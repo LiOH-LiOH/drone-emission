@@ -927,42 +927,11 @@ def _render_city_context_group(
         block = outer[0, i].subgridspec(
             2,
             1,
-            height_ratios=[1.55, 0.72],
+            height_ratios=[0.72, 1.55],
             hspace=0.34,
         )
 
-        ax_reduction, ax_absolute = _plot_city_context_combined_ab_panel(
-            fig,
-            block[0],
-            binned_by_city[region_key],
-            labels.get(region_key, display_name),
-            show_saturation_fit,
-            bin_width_km=0.2,
-        )
-        reduction_axes.append(ax_reduction)
-        absolute_axes.append(ax_absolute)
-
-        pos = ax_reduction.get_position()
-        fig.text(
-            pos.x0 - 0.010,
-            pos.y1 + 0.012,
-            chr(ord("a") + i),
-            fontsize=13,
-            fontweight="bold",
-            ha="right",
-            va="bottom",
-        )
-        fig.text(
-            pos.x0 + 0.006,
-            pos.y1 + 0.012,
-            display_name,
-            fontsize=12,
-            fontweight="bold",
-            ha="left",
-            va="bottom",
-        )
-
-        power_grid = block[1].subgridspec(
+        power_grid = block[0].subgridspec(
             1,
             2,
             width_ratios=[1.0, 0.78],
@@ -985,6 +954,37 @@ def _render_city_context_group(
         if legend is not None:
             for text in legend.get_texts():
                 text.set_fontsize(12.0)
+
+        pos = ax_power_mix.get_position()
+        fig.text(
+            pos.x0 - 0.010,
+            pos.y1 + 0.012,
+            chr(ord("a") + i),
+            fontsize=13,
+            fontweight="bold",
+            ha="right",
+            va="bottom",
+        )
+        fig.text(
+            pos.x0 + 0.006,
+            pos.y1 + 0.012,
+            display_name,
+            fontsize=12,
+            fontweight="bold",
+            ha="left",
+            va="bottom",
+        )
+
+        ax_reduction, ax_absolute = _plot_city_context_combined_ab_panel(
+            fig,
+            block[1],
+            binned_by_city[region_key],
+            labels.get(region_key, display_name),
+            show_saturation_fit,
+            bin_width_km=0.2,
+        )
+        reduction_axes.append(ax_reduction)
+        absolute_axes.append(ax_absolute)
 
         for ax in (ax_reduction, ax_absolute):
             ax.xaxis.label.set_size(8.5)
