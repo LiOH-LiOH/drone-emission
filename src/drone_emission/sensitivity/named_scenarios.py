@@ -34,7 +34,7 @@ from .vectorized_lca import (
     compute_ebike_per_order_g,
 )
 
-COMPARISON_KAPPA = 0.7
+COMPARISON_KAPPA = 0.65
 GEF_MULT_2030 = 0.5  # TODO replace with IEA WEO 2024 STEPS China power-sector multiplier
 GEF_MULT_2060 = 0.2  # TODO same
 

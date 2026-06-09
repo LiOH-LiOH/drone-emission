@@ -204,7 +204,7 @@ def _named_baseline_kappa(named: pd.DataFrame) -> float:
     kappas = np.array(sorted(named["kappa"].dropna().unique()), dtype=float)
     if kappas.size == 0:
         return 1.0
-    non_comparison = kappas[~np.isclose(kappas, 0.7)]
+    non_comparison = kappas[~np.isclose(kappas, 0.65)]
     if non_comparison.size:
         return float(non_comparison.max())
     return float(kappas.max())
@@ -1214,8 +1214,8 @@ def plot_regions_map_pathway_scenarios(
     Panels (all from `all_sensitivity_named.csv`):
         (a) today                    baseline kappa, gef_mult=1.0, optimal_mixed
         (b) halved GEF               baseline kappa, gef_mult=0.5, optimal_mixed_2030
-        (c) operator bundling        kappa=0.7, gef_mult=1.0, optimal_mixed
-        (d) halved GEF + bundling    kappa=0.7, gef_mult=0.5, optimal_mixed_2030
+        (c) operator bundling        kappa=0.65, gef_mult=1.0, optimal_mixed
+        (d) halved GEF + bundling    kappa=0.65, gef_mult=0.5, optimal_mixed_2030
 
     Reduction values (map fill) prefer annual lifecycle totals against the
     weighted all-ebike city baseline from `all_region_stats.csv`, falling back
@@ -1239,8 +1239,8 @@ def plot_regions_map_pathway_scenarios(
     panels = [
         ("a", "Today",                    baseline_kappa, 1.0, "optimal_mixed"),
         ("b", "Halved GEF",               baseline_kappa, 0.5, "optimal_mixed_2030"),
-        ("c", "Operator bundling",        0.7, 1.0, "optimal_mixed"),
-        ("d", "Halved GEF + bundling",    0.7, 0.5, "optimal_mixed_2030"),
+        ("c", "Operator bundling",        0.65, 1.0, "optimal_mixed"),
+        ("d", "Halved GEF + bundling",    0.65, 0.5, "optimal_mixed_2030"),
     ]
 
     reduction_col = "reduction_vs_anchor_ebike_pct"
