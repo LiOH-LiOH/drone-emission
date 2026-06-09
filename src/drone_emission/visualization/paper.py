@@ -884,7 +884,7 @@ def _render_city_context_group(
         exp_config=exp_config,
         absolute_reduction_metric="per_order_g",
         use_binned_cache=False,
-        bin_width_km=0.1,
+        bin_width_km=0.2,
     )
     if built is None:
         return
@@ -927,8 +927,8 @@ def _render_city_context_group(
         block = outer[0, i].subgridspec(
             3,
             1,
-            height_ratios=[0.13, 1.90, 0.72],
-            hspace=0.28,
+            height_ratios=[0.13, 1.55, 0.72],
+            hspace=0.38,
         )
         ax_heading = fig.add_subplot(block[0])
         ax_heading.set_axis_off()
@@ -959,6 +959,7 @@ def _render_city_context_group(
             binned_by_city[region_key],
             labels.get(region_key, display_name),
             show_saturation_fit,
+            bin_width_km=0.2,
         )
         reduction_axes.append(ax_reduction)
         absolute_axes.append(ax_absolute)

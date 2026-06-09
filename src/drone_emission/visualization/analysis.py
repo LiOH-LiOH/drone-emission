@@ -2352,7 +2352,7 @@ def plot_city_gef_scatter_components(
         title_fontsize=9,
     )
 
-    density_x = plot_df[gef_col].to_numpy(dtype=float) / bin_width - 1.0
+    density_x = plot_df[gef_col].to_numpy(dtype=float) / bin_width - 0.5
     if len(density_x) > 5 and np.unique(density_x).size > 1:
         from scipy.stats import gaussian_kde
 
