@@ -1551,6 +1551,79 @@ def _add_city_detour_reduction_markers(
     return marker_records
 
 
+def _add_city_panel_connector_lines(
+    fig,
+    top_marker_records,
+    city_panel_records,
+    bottom_marker_records,
+):
+    """Connect selected city markers to their virtual city-panel anchors."""
+    from matplotlib.lines import Line2D
+
+    top_by_region = {
+        record["region_key"]: record for record in top_marker_records
+    }
+    bottom_by_region = {
+        record["region_key"]: record for record in bottom_marker_records
+    }
+    connector_records = []
+
+    for panel_record in city_panel_records:
+        context = panel_record["context"]
+        region_key = context["region_key"]
+        anchors = panel_record.get("panel_anchor_points")
+        if anchors is None:
+            continue
+
+        city_connectors = {
+            "region_key": region_key,
+            "display_name": context["display_name"],
+            "lines": [],
+        }
+        for line_type, marker_record, anchor_key in (
+            ("top_to_city_upper_center", top_by_region.get(region_key), "top"),
+            ("bottom_to_city_lower_center", bottom_by_region.get(region_key), "bottom"),
+        ):
+            if marker_record is None:
+                continue
+
+            start = (
+                marker_record["x_figure_fraction"],
+                marker_record["y_figure_fraction"],
+            )
+            end = anchors[anchor_key]
+            fig.add_artist(
+                Line2D(
+                    [start[0], end[0]],
+                    [start[1], end[1]],
+                    color="#111111",
+                    linewidth=0.8,
+                    alpha=0.42,
+                    linestyle="-",
+                    transform=fig.transFigure,
+                    zorder=58,
+                    clip_on=False,
+                )
+            )
+            city_connectors["lines"].append(
+                {
+                    "type": line_type,
+                    "start": {
+                        "x_figure_fraction": _report_number(start[0]),
+                        "y_figure_fraction": _report_number(start[1]),
+                    },
+                    "end": {
+                        "x_figure_fraction": _report_number(end[0]),
+                        "y_figure_fraction": _report_number(end[1]),
+                    },
+                }
+            )
+
+        connector_records.append(city_connectors)
+
+    return connector_records
+
+
 def _detour_reduction_scatter_report(df, reduction_col, axes, panel_letters=("f", "g")):
     """Return exact plotted data for the bottom detour-reduction scatter panels."""
     import numpy as np
@@ -1674,6 +1747,7 @@ def _write_city_gef_context_detour_report(
     top_report,
     city_reports,
     bottom_report,
+    connector_lines,
 ):
     """Write JSON and Markdown reports for the city GEF context figure."""
     report_base = save_path.rsplit(".", 1)[0] + "_report"
@@ -1695,6 +1769,7 @@ def _write_city_gef_context_detour_report(
             "middle_city_context": city_reports,
             "bottom_detour_ratio_vs_reduction_by_gef": bottom_report,
         },
+        "connector_lines": connector_lines,
     }
     with open(json_path, "w", encoding="utf-8") as f:
         json.dump(payload, f, indent=2, ensure_ascii=False, allow_nan=False)
@@ -1706,6 +1781,7 @@ def _write_city_gef_context_detour_report(
         f"- JSON data path: `{json_path}`",
         f"- Figure size: {figure_size[0]} x {figure_size[1]} inches",
         "- Coordinate convention: data coordinates for plotted elements; figure-fraction coordinates for axes.",
+        f"- Connector line groups: {len(connector_lines)}",
         "",
         "## Top: city_gef_scatter_components",
         "",
@@ -1994,6 +2070,12 @@ def _render_city_gef_context_detour_summary(
         reduction_col,
         panel_letters=bottom_panel_letters,
     )
+    connector_lines = _add_city_panel_connector_lines(
+        fig,
+        top_city_gef_markers,
+        city_panel_records,
+        bottom_city_markers,
+    )
 
     if plot_title:
         fig.suptitle(
@@ -2030,6 +2112,7 @@ def _render_city_gef_context_detour_summary(
         top_report=top_report,
         city_reports=city_reports,
         bottom_report=bottom_report,
+        connector_lines=connector_lines,
     )
     plt.close(fig)
     print(f"City GEF context detour summary saved to {save_path}")
