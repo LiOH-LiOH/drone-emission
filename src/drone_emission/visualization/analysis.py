@@ -3414,19 +3414,9 @@ def plot_regions_map_city_rank_and_drone_share(
         width_ratios=[0.95, 3.0, 0.95],
         wspace=0.18,
     )
-    concept_left = concept_gs[0, 0].subgridspec(
-        3,
-        1,
-        height_ratios=[0.18, 0.64, 0.18],
-    )
-    concept_right = concept_gs[0, 2].subgridspec(
-        3,
-        1,
-        height_ratios=[0.18, 0.64, 0.18],
-    )
-    ax_d = fig.add_subplot(concept_left[1, 0])
+    ax_d = fig.add_subplot(concept_gs[0, 0])
     ax_e = fig.add_subplot(concept_gs[0, 1])
-    ax_f = fig.add_subplot(concept_right[1, 0])
+    ax_f = fig.add_subplot(concept_gs[0, 2])
 
     plot_regions_on_china_map(
         df=map_df,
@@ -3496,6 +3486,25 @@ def plot_regions_map_city_rank_and_drone_share(
         ax=ax_c,
         plot_title=plot_title,
     )
+    ax_c.set_ylabel("E-bike LCA\n(t CO$_2$e / yr)", fontsize=10)
+    c_pos = ax_c.get_position()
+    for candidate_ax in fig.axes:
+        if candidate_ax is ax_c:
+            continue
+        pos = candidate_ax.get_position()
+        if (
+            abs(pos.x0 - c_pos.x0) < 1e-6
+            and abs(pos.y0 - c_pos.y0) < 1e-6
+            and abs(pos.width - c_pos.width) < 1e-6
+            and abs(pos.height - c_pos.height) < 1e-6
+        ):
+            candidate_ax.set_ylabel("Oracle reduction\n(%)", fontsize=10)
+            break
+    legend = ax_c.get_legend()
+    if legend is not None:
+        for text, label in zip(legend.get_texts(), ["E-bike LCA", "Oracle reduction"]):
+            text.set_text(label)
+            text.set_fontsize(9)
     ax_c.text(-0.03, 1.02, "c", transform=ax_c.transAxes,
               fontsize=16, fontweight="bold", va="bottom", ha="right")
 

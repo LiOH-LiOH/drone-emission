@@ -18,7 +18,7 @@ Available figures:
     shanghai_emission_by_distance, shanghai_reduction_detour_by_distance,
     shanghai_city_context, chongqing_city_context, chengdu_city_context,
     guangzhou_city_context, tianjin_city_context, dali_city_context,
-    kunming_city_context,
+    kunming_city_context, dali_chengdu_tianjin_guangzhou_city_context,
     top6_reduction_detour_grid, top6_reduction_detour_grid_low_gef,
     top6_reduction_detour_grid_random,
     province_orders_emission, province_orders_both_emissions,
@@ -87,6 +87,14 @@ CITY_CONTEXT_FIGURES = {
         "display_name": "Kunming",
         "power_region_key": "yunnan",
     },
+}
+CITY_CONTEXT_GROUP_FIGURES = {
+    "dali_chengdu_tianjin_guangzhou_city_context": (
+        CITY_CONTEXT_FIGURES["dali_city_context"],
+        CITY_CONTEXT_FIGURES["chengdu_city_context"],
+        CITY_CONTEXT_FIGURES["tianjin_city_context"],
+        CITY_CONTEXT_FIGURES["guangzhou_city_context"],
+    ),
 }
 
 REDUCTION_DETOUR_CACHE_VERSION = 2
@@ -734,6 +742,167 @@ def _render_city_context(
     print(f"{display_name} city context saved to {save_path}")
 
 
+def _render_city_context_group(
+    data_dir,
+    out,
+    for_latex,
+    plot_title,
+    city_df,
+    exp_config,
+    figure_name,
+    contexts,
+):
+    """Render a grouped city context figure."""
+    region_keys = [context["region_key"] for context in contexts]
+    selected = city_df[city_df["region_key"].isin(region_keys)].copy()
+    selected["_context_order"] = selected["region_key"].map(
+        {key: i for i, key in enumerate(region_keys)}
+    )
+    selected = selected.sort_values("_context_order")
+    if selected.empty:
+        print(f"{figure_name} skipped — selected city rows missing")
+        return
+
+    built = _build_reduction_detour_binned_by_city(
+        data_dir=data_dir,
+        selected=selected,
+        figure_name=figure_name,
+        exp_config=exp_config,
+        absolute_reduction_metric="per_order_g",
+        use_binned_cache=False,
+        bin_width_km=0.1,
+    )
+    if built is None:
+        return
+
+    binned_by_city, labels = built
+    available_contexts = [
+        context for context in contexts
+        if context["region_key"] in binned_by_city
+    ]
+    missing_names = [
+        context["display_name"] for context in contexts
+        if context["region_key"] not in binned_by_city
+    ]
+    if missing_names:
+        print(
+            f"{figure_name}: missing binned data for "
+            f"{', '.join(missing_names)}"
+        )
+    if not available_contexts:
+        print(f"{figure_name} skipped — no selected city binned data available")
+        return
+
+    import matplotlib.pyplot as plt
+
+    from visualization._utils import _add_title_suffix
+    from visualization.analysis import (
+        _plot_reduction_absolute_scatter_panel,
+        _plot_reduction_detour_panel,
+    )
+
+    fig = plt.figure(figsize=(13.8, 14.2))
+    outer = fig.add_gridspec(2, 2, hspace=0.32, wspace=0.26)
+
+    for i, context in enumerate(available_contexts):
+        region_key = context["region_key"]
+        display_name = context["display_name"]
+        power_region_key = context.get("power_region_key", region_key)
+        row, col = divmod(i, 2)
+        block = outer[row, col].subgridspec(
+            4,
+            1,
+            height_ratios=[0.13, 1.0, 1.0, 0.72],
+            hspace=0.24,
+        )
+        ax_heading = fig.add_subplot(block[0])
+        ax_heading.set_axis_off()
+        ax_heading.text(
+            -0.075,
+            0.60,
+            chr(ord("a") + i),
+            transform=ax_heading.transAxes,
+            fontsize=13,
+            fontweight="bold",
+            ha="left",
+            va="center",
+        )
+        ax_heading.text(
+            0.00,
+            0.60,
+            display_name,
+            transform=ax_heading.transAxes,
+            fontsize=12,
+            fontweight="bold",
+            ha="left",
+            va="center",
+        )
+
+        _, ax_reduction, _ = _plot_reduction_detour_panel(
+            fig,
+            block[1],
+            binned_by_city[region_key],
+            labels.get(region_key, display_name),
+            bin_width_km=0.1,
+            min_air_km=0.2,
+            absolute_reduction_metric="per_order_g",
+            show_detour_boxplot=False,
+            mark_reduction_break_even=True,
+            show_city_label=False,
+            bar_width_fraction=0.78,
+            show_absolute_axis=False,
+            show_saturation_fit=True,
+        )
+        ax_scatter = _plot_reduction_absolute_scatter_panel(
+            fig,
+            block[2],
+            binned_by_city[region_key],
+            labels.get(region_key, display_name),
+            min_air_km=0.2,
+            absolute_reduction_metric="per_order_g",
+            show_city_label=False,
+        )
+
+        power_grid = block[3].subgridspec(
+            1,
+            2,
+            width_ratios=[1.0, 0.78],
+            wspace=0.04,
+        )
+        ax_power_mix = fig.add_subplot(power_grid[0])
+        ax_power_legend = fig.add_subplot(power_grid[1])
+        _plot_power_generation_mix_pie(
+            ax_power_mix,
+            power_region_key,
+            legend_ax=ax_power_legend,
+        )
+        legend = ax_power_legend.get_legend()
+        if legend is not None:
+            for text in legend.get_texts():
+                text.set_fontsize(7.5)
+
+        for ax in (ax_reduction, ax_scatter):
+            ax.xaxis.label.set_size(8.5)
+            ax.yaxis.label.set_size(8.5)
+            ax.tick_params(axis="both", labelsize=7.5)
+
+    if plot_title:
+        fig.suptitle(
+            "Selected City Emission Reduction by Distance and Power Mix",
+            fontsize=14,
+        )
+
+    save_path = os.path.join(out, f"{figure_name}.png")
+    if for_latex and not save_path.endswith(".pdf"):
+        save_path = save_path.rsplit(".", 1)[0] + ".pdf"
+    if plot_title:
+        save_path = _add_title_suffix(save_path)
+    os.makedirs(os.path.dirname(save_path), exist_ok=True)
+    fig.savefig(save_path, dpi=300, bbox_inches="tight")
+    plt.close(fig)
+    print(f"Dali Chengdu Tianjin Guangzhou city context saved to {save_path}")
+
+
 def _render_shanghai_road_air_distance(data_dir, out, for_latex, plot_title):
     """Load Shanghai OD pairs and render the road/air distance figure."""
     region_key = "shanghai"
@@ -1223,6 +1392,7 @@ def render_all(data_dir: str, figures_dir: str, for_latex: bool = False, plot_ti
         "regions_map_kappa_panels",
         "regions_map_pathway_scenarios",
         *CITY_CONTEXT_FIGURES,
+        *CITY_CONTEXT_GROUP_FIGURES,
     } | gef_figures | TOP6_REDUCTION_DETOUR_FIGURES
     if only is None or only & stats_figures:
         stats_path = os.path.join(data_dir, "all_region_stats.csv")
@@ -1281,6 +1451,7 @@ def render_all(data_dir: str, figures_dir: str, for_latex: bool = False, plot_ti
 
             needs_reduction_detour_city_stats = (
                 any(_want(figure_name) for figure_name in CITY_CONTEXT_FIGURES)
+                or any(_want(figure_name) for figure_name in CITY_CONTEXT_GROUP_FIGURES)
                 or _want("top6_reduction_detour_grid")
                 or _want("top6_reduction_detour_grid_low_gef")
                 or _want("top6_reduction_detour_grid_random")
@@ -1305,6 +1476,20 @@ def render_all(data_dir: str, figures_dir: str, for_latex: bool = False, plot_ti
                         exp_config=exp_config,
                         figure_name=figure_name,
                         **context,
+                    )
+
+                for figure_name, contexts in CITY_CONTEXT_GROUP_FIGURES.items():
+                    if not _want(figure_name):
+                        continue
+                    _render_city_context_group(
+                        data_dir=data_dir,
+                        out=out,
+                        for_latex=for_latex,
+                        plot_title=plot_title,
+                        city_df=city_df,
+                        exp_config=exp_config,
+                        figure_name=figure_name,
+                        contexts=contexts,
                     )
 
             if _want("top6_reduction_detour_grid") or _want("top6_reduction_detour_grid_low_gef") or _want("top6_reduction_detour_grid_random"):
