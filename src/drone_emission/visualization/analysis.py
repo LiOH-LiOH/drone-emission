@@ -2234,9 +2234,9 @@ def plot_city_gef_scatter_components(
         gridspec_kw={"height_ratios": [4.0, 1.0], "hspace": 0.0},
         sharex=True,
     )
-    x_all = bin_edges[1:]
+    x_all = np.arange(len(labels), dtype=float)
     x = x_all[np.array(bin_positions, dtype=int)]
-    width = bin_width * 0.28
+    width = 0.28
     max_total = 0.0
     legend_handles = [
         plt.Rectangle(
@@ -2260,7 +2260,7 @@ def plot_city_gef_scatter_components(
     ]
 
     for spec in vehicle_specs:
-        positions = x + spec["offset"] * bin_width
+        positions = x + spec["offset"]
         fixed_values = []
         use_values = []
         for group in bin_groups:
@@ -2319,7 +2319,7 @@ def plot_city_gef_scatter_components(
     ax.set_ylabel("Lifecycle emission\n(g CO2e/order)", fontsize=12)
     ax.set_xticks(x_all)
     ax.tick_params(axis="x", which="both", bottom=False, labelbottom=False)
-    ax.set_xlim(0.1, 0.9)
+    ax.set_xlim(-0.5, len(labels) - 0.5)
     ax.set_ylim(0, max_total * 1.22)
     ax.grid(True, axis="y", alpha=0.3, linestyle="--")
     ax.set_axisbelow(True)
@@ -2352,11 +2352,11 @@ def plot_city_gef_scatter_components(
         title_fontsize=9,
     )
 
-    density_x = plot_df[gef_col].to_numpy(dtype=float)
+    density_x = plot_df[gef_col].to_numpy(dtype=float) / bin_width - 1.0
     if len(density_x) > 5 and np.unique(density_x).size > 1:
         from scipy.stats import gaussian_kde
 
-        x_violin = np.linspace(0.1, 0.9, 240)
+        x_violin = np.linspace(-0.5, len(labels) - 0.5, 240)
         density = gaussian_kde(density_x)(x_violin)
     else:
         x_violin = x_all

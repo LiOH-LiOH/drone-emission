@@ -928,7 +928,7 @@ def _render_city_context_group(
             3,
             1,
             height_ratios=[0.13, 1.90, 0.72],
-            hspace=0.42,
+            hspace=0.28,
         )
         ax_heading = fig.add_subplot(block[0])
         ax_heading.set_axis_off()
