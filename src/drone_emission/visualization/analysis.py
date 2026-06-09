@@ -3399,16 +3399,16 @@ def plot_regions_map_city_rank_and_drone_share(
 
     fig = plt.figure(figsize=figsize)
     gs = fig.add_gridspec(
-        3,
+        5,
         2,
-        height_ratios=[1.0, 0.40, 0.50],
-        hspace=0.22,
+        height_ratios=[1.0, 0.03, 0.40, 0.14, 0.50],
+        hspace=0.0,
         wspace=0.25,
     )
     ax_a = fig.add_subplot(gs[0, 0])
     ax_b = fig.add_subplot(gs[0, 1])
-    ax_c = fig.add_subplot(gs[1, :])
-    concept_gs = gs[2, :].subgridspec(
+    ax_c = fig.add_subplot(gs[2, :])
+    concept_gs = gs[4, :].subgridspec(
         1,
         3,
         width_ratios=[0.95, 3.0, 0.95],
