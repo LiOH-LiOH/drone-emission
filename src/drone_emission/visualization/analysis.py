@@ -2396,6 +2396,7 @@ def plot_city_gef_scatter_components(
     ax_dist.set_xticks(bin_edges)
     ax_dist.set_xticklabels(tick_labels)
     ax_dist.tick_params(axis="x", which="both", bottom=True, labelbottom=True, pad=2)
+    ax_dist.set_xlim(0.05, 0.85)
     ax_dist.spines["left"].set_visible(False)
     ax_dist.spines["right"].set_visible(False)
     ax_dist.grid(False)

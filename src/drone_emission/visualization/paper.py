@@ -928,7 +928,7 @@ def _render_city_context_group(
             2,
             1,
             height_ratios=[0.72, 1.55],
-            hspace=0.34,
+            hspace=0.20,
         )
 
         power_grid = block[0].subgridspec(
@@ -958,7 +958,7 @@ def _render_city_context_group(
         pos = ax_power_mix.get_position()
         fig.text(
             pos.x0 - 0.010,
-            pos.y1 + 0.012,
+            pos.y1 + 0.035,
             chr(ord("a") + i),
             fontsize=13,
             fontweight="bold",
@@ -967,7 +967,7 @@ def _render_city_context_group(
         )
         fig.text(
             pos.x0 + 0.006,
-            pos.y1 + 0.012,
+            pos.y1 + 0.035,
             display_name,
             fontsize=12,
             fontweight="bold",
