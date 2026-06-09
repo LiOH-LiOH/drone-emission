@@ -210,6 +210,79 @@ def _named_baseline_kappa(named: pd.DataFrame) -> float:
     return float(kappas.max())
 
 
+def _baseline_kappa_for_pathway(named: pd.DataFrame, stats_df: pd.DataFrame) -> float:
+    """Infer the pathway baseline kappa, preferring weighted city stats."""
+    named_kappas = np.array(sorted(named["kappa"].dropna().unique()), dtype=float)
+    if "ebike_kappa" in stats_df.columns:
+        stats_kappas = pd.to_numeric(stats_df["ebike_kappa"], errors="coerce").dropna()
+        if not stats_kappas.empty:
+            stats_kappa = float(stats_kappas.median())
+            if named_kappas.size and np.any(np.isclose(named_kappas, stats_kappa)):
+                return stats_kappa
+            fallback = _named_baseline_kappa(named)
+            print(
+                "plot_regions_map_pathway_scenarios: named scenarios do not "
+                f"include weighted stats kappa={stats_kappa:.6g}; using "
+                f"kappa={fallback:.6g}. Re-run named scenarios for the updated baseline."
+            )
+            return fallback
+    return _named_baseline_kappa(named)
+
+
+def _format_kappa_value(value: float) -> str:
+    """Format kappa compactly without hiding configured non-round values."""
+    return f"{value:.3f}".rstrip("0").rstrip(".")
+
+
+def _scenario_drone_share_column(df: pd.DataFrame) -> str:
+    """Return the preferred drone-share column for named scenario rows."""
+    return _first_available_column(
+        df,
+        (
+            "drone_order_ratio_pct",
+            "weighted_drone_ratio_pct",
+            "oracle_drone_order_ratio_pct",
+            "drone_ratio_pct",
+        ),
+        "scenario drone share",
+    )
+
+
+def _pathway_anchor_annual_kg(
+    named: pd.DataFrame,
+    stats_df: pd.DataFrame,
+    baseline_kappa: float,
+) -> pd.DataFrame:
+    """Return region-level all-ebike annual lifecycle anchor in kg CO2e."""
+    if {"region_key", "total_ebike_lifecycle"}.issubset(stats_df.columns):
+        stats_anchor = stats_df[["region_key", "total_ebike_lifecycle"]].copy()
+        stats_anchor["anchor_annual_kg"] = pd.to_numeric(
+            stats_anchor["total_ebike_lifecycle"], errors="coerce"
+        )
+        if "ebike_kappa" in stats_df.columns:
+            stats_anchor["ebike_kappa"] = pd.to_numeric(
+                stats_df["ebike_kappa"], errors="coerce"
+            )
+            stats_anchor = stats_anchor[
+                stats_anchor["ebike_kappa"].isna()
+                | np.isclose(stats_anchor["ebike_kappa"], baseline_kappa)
+            ]
+        stats_anchor = stats_anchor[["region_key", "anchor_annual_kg"]].dropna()
+        if not stats_anchor.empty:
+            return stats_anchor
+
+    if "annual_lifecycle_kg" not in named.columns:
+        return pd.DataFrame(columns=["region_key", "anchor_annual_kg"])
+
+    return named[
+        np.isclose(named["kappa"], baseline_kappa)
+        & np.isclose(named["gef_mult"], 1.0)
+        & (named["strategy"] == "all_ebike")
+    ][["region_key", "annual_lifecycle_kg"]].rename(
+        columns={"annual_lifecycle_kg": "anchor_annual_kg"}
+    )
+
+
 def plot_correlation_heatmap(
     corr_df: pd.DataFrame,
     save_path: str = None,
@@ -1135,8 +1208,8 @@ def plot_regions_map_pathway_scenarios(
 
     Each of four scenarios occupies a (map, boxplot) pair, with the boxplot
     directly under its map. The boxplot has one box per province (drone-share
-    distribution across cities within that province). Provinces ordered by the
-    today-baseline median drone share, consistent across all four panels.
+    distribution across cities within that province). Provinces are ordered by
+    the weighted all-ebike annual lifecycle baseline, consistent across panels.
 
     Panels (all from `all_sensitivity_named.csv`):
         (a) today                    baseline kappa, gef_mult=1.0, optimal_mixed
@@ -1144,8 +1217,10 @@ def plot_regions_map_pathway_scenarios(
         (c) operator bundling        kappa=0.7, gef_mult=1.0, optimal_mixed
         (d) halved GEF + bundling    kappa=0.7, gef_mult=0.5, optimal_mixed_2030
 
-    Reduction values (map fill) use `reduction_vs_anchor_ebike_pct` (vs today's
-    no-bundling all-ebike anchor). Boxplot y-axis is drone_ratio_pct in 0..100.
+    Reduction values (map fill) prefer annual lifecycle totals against the
+    weighted all-ebike city baseline from `all_region_stats.csv`, falling back
+    to `reduction_vs_anchor_ebike_pct` when annual scenario totals are missing.
+    Boxplot y-axis is drone order share in 0..100.
 
     Args:
         named_csv_path: Path to all_sensitivity_named.csv.
@@ -1160,7 +1235,7 @@ def plot_regions_map_pathway_scenarios(
     named = pd.read_csv(named_csv_path)
     base = pd.read_csv(stats_csv_path)
 
-    baseline_kappa = _named_baseline_kappa(named)
+    baseline_kappa = _baseline_kappa_for_pathway(named, base)
     panels = [
         ("a", "Today",                    baseline_kappa, 1.0, "optimal_mixed"),
         ("b", "Halved GEF",               baseline_kappa, 0.5, "optimal_mixed_2030"),
@@ -1170,13 +1245,11 @@ def plot_regions_map_pathway_scenarios(
 
     reduction_col = "reduction_vs_anchor_ebike_pct"
     has_annual = "annual_lifecycle_kg" in named.columns
-    if has_annual:
-        anchor_rows = named[
-            np.isclose(named["kappa"], baseline_kappa)
-            & np.isclose(named["gef_mult"], 1.0)
-            & (named["strategy"] == "all_ebike")
-        ][["region_key", "annual_lifecycle_kg"]].rename(
-            columns={"annual_lifecycle_kg": "anchor_annual_kg"}
+    anchor_rows = _pathway_anchor_annual_kg(named, base, baseline_kappa)
+    if has_annual and anchor_rows.empty:
+        print(
+            "plot_regions_map_pathway_scenarios: annual scenario totals are present "
+            "but no weighted all-ebike anchor was found; falling back to named reductions."
         )
     panel_dfs = {}
     panel_named = {}
@@ -1191,16 +1264,32 @@ def plot_regions_map_pathway_scenarios(
         ].copy()
         rows["province_en"] = rows["province"].map(PROVINCE_NAME_EN).fillna(rows["province"])
         panel_named[label] = rows
-        sub = rows[["region_key", reduction_col]].rename(
-            columns={reduction_col: "max_lifecycle_reduction_pct"}
-        )
+        share_col = _scenario_drone_share_column(rows) if not rows.empty else "drone_ratio_pct"
+        if has_annual and not anchor_rows.empty:
+            sub = rows[["region_key", "annual_lifecycle_kg"]].merge(
+                anchor_rows, on="region_key", how="left"
+            )
+            sub["max_lifecycle_reduction_pct"] = np.where(
+                sub["anchor_annual_kg"] > 0,
+                (
+                    1.0
+                    - pd.to_numeric(sub["annual_lifecycle_kg"], errors="coerce")
+                    / sub["anchor_annual_kg"]
+                ) * 100.0,
+                np.nan,
+            )
+            sub = sub[["region_key", "max_lifecycle_reduction_pct"]]
+        else:
+            sub = rows[["region_key", reduction_col]].rename(
+                columns={reduction_col: "max_lifecycle_reduction_pct"}
+            )
         merged = base.drop(columns=["max_lifecycle_reduction_pct"], errors="ignore").merge(
             sub, on="region_key", how="left"
         )
         panel_dfs[label] = merged
         all_values.extend(merged["max_lifecycle_reduction_pct"].dropna().tolist())
-        drone_share_median[label] = float(rows["drone_ratio_pct"].median()) if len(rows) else float("nan")
-        if has_annual:
+        drone_share_median[label] = float(rows[share_col].median()) if len(rows) else float("nan")
+        if has_annual and not anchor_rows.empty:
             joined = rows[["region_key", "annual_lifecycle_kg"]].merge(anchor_rows, on="region_key", how="inner")
             annual_saved_total_kg[label] = float((joined["anchor_annual_kg"] - joined["annual_lifecycle_kg"]).sum())
 
@@ -1215,22 +1304,32 @@ def plot_regions_map_pathway_scenarios(
 
     # Province order: total annual lifecycle emission under today's all-ebike
     # baseline (configured kappa, gef=1, strategy=all_ebike). Largest emitters on the left.
-    anchor_named = named[
-        np.isclose(named["kappa"], baseline_kappa)
-        & np.isclose(named["gef_mult"], 1.0)
-        & (named["strategy"] == "all_ebike")
-    ].copy()
+    anchor_named = anchor_rows.merge(
+        base[["region_key", "province"]],
+        on="region_key",
+        how="left",
+    )
     anchor_named["province_en"] = anchor_named["province"].map(PROVINCE_NAME_EN).fillna(anchor_named["province"])
     province_emission_baseline_kt = (
-        anchor_named.groupby("province_en")["annual_lifecycle_kg"].sum() / 1e6
+        anchor_named.groupby("province_en")["anchor_annual_kg"].sum() / 1e6
     )
     province_order = province_emission_baseline_kt.sort_values(ascending=False).index.tolist()
+    if not province_order:
+        province_order = sorted(
+            base["province"].map(PROVINCE_NAME_EN).fillna(base["province"]).dropna().unique()
+        )
 
     # Per-panel province totals (kt CO2/yr) for the overlay line.
-    panel_province_emission_kt = {
-        lbl: panel_named[lbl].groupby("province_en")["annual_lifecycle_kg"].sum() / 1e6
-        for lbl in panel_named
-    }
+    if has_annual:
+        panel_province_emission_kt = {
+            lbl: panel_named[lbl].groupby("province_en")["annual_lifecycle_kg"].sum() / 1e6
+            for lbl in panel_named
+        }
+    else:
+        panel_province_emission_kt = {
+            lbl: pd.Series(dtype=float)
+            for lbl in panel_named
+        }
     line_y_max = max(
         float(s.max()) if len(s) else 0.0 for s in panel_province_emission_kt.values()
     ) if panel_province_emission_kt else 0.0
@@ -1270,7 +1369,7 @@ def plot_regions_map_pathway_scenarios(
 
         from matplotlib.patches import Rectangle
         table_rows = [
-            (r"$\kappa$", f"{k:.1f}"),
+            (r"$\kappa$", _format_kappa_value(k)),
             ("gef", f"{g:.1f}"),
             ("Drone share", f"{drone_share_median[label]:.0f}%"),
         ]
@@ -1311,7 +1410,8 @@ def plot_regions_map_pathway_scenarios(
             )
 
         rows = panel_named[label]
-        data = [rows.loc[rows["province_en"] == p, "drone_ratio_pct"].values for p in province_order]
+        share_col = _scenario_drone_share_column(rows) if not rows.empty else "drone_ratio_pct"
+        data = [rows.loc[rows["province_en"] == p, share_col].values for p in province_order]
         bp = ax_box.boxplot(
             data, positions=range(len(province_order)), widths=0.65,
             patch_artist=True, showfliers=False,
