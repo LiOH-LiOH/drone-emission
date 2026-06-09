@@ -2116,7 +2116,7 @@ def plot_city_gef_distribution(
 def plot_city_gef_scatter_components(
     df: pd.DataFrame,
     save_path: str = None,
-    figsize: tuple = (8, 5),
+    figsize: tuple = (12, 4),
     for_latex: bool = False,
     plot_title: bool = False,
 ):
@@ -3401,7 +3401,7 @@ def plot_regions_map_city_rank_and_drone_share(
     gs = fig.add_gridspec(
         5,
         2,
-        height_ratios=[1.0, 0.03, 0.40, 0.14, 0.50],
+        height_ratios=[1.0, 0.03, 0.40, 0.24, 0.50],
         hspace=0.0,
         wspace=0.25,
     )

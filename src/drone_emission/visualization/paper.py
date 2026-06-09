@@ -553,7 +553,15 @@ def _render_shanghai_heatmap(data_dir, out, for_latex, plot_title):
     )
 
 
-def _plot_power_generation_mix_pie(ax, region_key, legend_ax=None, radius=1.18):
+def _plot_power_generation_mix_pie(
+    ax,
+    region_key,
+    legend_ax=None,
+    radius=1.18,
+    legend_fontsize=9,
+    legend_handlelength=1.2,
+    legend_handletextpad=0.5,
+):
     """Draw the 2022 power generation mix pie for one region."""
     from matplotlib.patches import Patch
 
@@ -597,10 +605,10 @@ def _plot_power_generation_mix_pie(ax, region_key, legend_ax=None, radius=1.18):
             loc="lower center",
             bbox_to_anchor=(0.5, -0.24),
             frameon=False,
-            fontsize=8.5,
+            fontsize=legend_fontsize,
             ncol=1,
-            handlelength=1.1,
-            handletextpad=0.4,
+            handlelength=legend_handlelength,
+            handletextpad=legend_handletextpad,
             borderaxespad=0.0,
         )
     else:
@@ -608,10 +616,10 @@ def _plot_power_generation_mix_pie(ax, region_key, legend_ax=None, radius=1.18):
             handles=legend_handles,
             loc="center left",
             frameon=False,
-            fontsize=9,
+            fontsize=legend_fontsize,
             ncol=1,
-            handlelength=1.2,
-            handletextpad=0.5,
+            handlelength=legend_handlelength,
+            handletextpad=legend_handletextpad,
             borderaxespad=0.0,
         )
         legend_ax.set_axis_off()
@@ -961,12 +969,15 @@ def _render_city_context_group(
             ax_power_mix,
             power_region_key,
             legend_ax=ax_power_legend,
-            radius=1.38,
+            radius=1.62,
+            legend_fontsize=9.8,
+            legend_handlelength=1.45,
+            legend_handletextpad=0.62,
         )
         legend = ax_power_legend.get_legend()
         if legend is not None:
             for text in legend.get_texts():
-                text.set_fontsize(7.5)
+                text.set_fontsize(9.8)
 
         for ax in (ax_reduction, ax_absolute):
             ax.xaxis.label.set_size(8.5)
