@@ -865,6 +865,7 @@ def _plot_city_context_group_panels(
     labels,
     contexts,
     panel_start_letter="a",
+    label_each_subplot=False,
 ):
     """Draw the grouped city context panels into a parent subplot spec."""
     outer = subplot_spec.subgridspec(1, len(contexts), wspace=0.32)
@@ -912,26 +913,6 @@ def _plot_city_context_group_panels(
             for text in legend.get_texts():
                 text.set_fontsize(12.0)
 
-        pos = ax_power_mix.get_position()
-        fig.text(
-            pos.x0 - 0.010,
-            pos.y1 + 0.035,
-            chr(panel_start_ord + i),
-            fontsize=13,
-            fontweight="bold",
-            ha="right",
-            va="bottom",
-        )
-        fig.text(
-            pos.x0 + 0.006,
-            pos.y1 + 0.035,
-            display_name,
-            fontsize=12,
-            fontweight="bold",
-            ha="left",
-            va="bottom",
-        )
-
         ax_reduction, ax_absolute = _plot_city_context_combined_ab_panel(
             fig,
             block[1],
@@ -954,10 +935,51 @@ def _plot_city_context_group_panels(
             ax_absolute.set_ylabel("")
             ax_absolute.tick_params(axis="y", right=False, labelright=False)
             ax_absolute.spines["right"].set_visible(False)
+
+        if label_each_subplot:
+            power_panel_letter = chr(panel_start_ord + 2 * i)
+            reduction_panel_letter = chr(panel_start_ord + 2 * i + 1)
+        else:
+            power_panel_letter = chr(panel_start_ord + i)
+            reduction_panel_letter = None
+
+        power_pos = ax_power_mix.get_position()
+        fig.text(
+            power_pos.x0 - 0.010,
+            power_pos.y1 + 0.035,
+            power_panel_letter,
+            fontsize=13,
+            fontweight="bold",
+            ha="right",
+            va="bottom",
+        )
+        fig.text(
+            power_pos.x0 + 0.006,
+            power_pos.y1 + 0.035,
+            display_name,
+            fontsize=12,
+            fontweight="bold",
+            ha="left",
+            va="bottom",
+        )
+        if reduction_panel_letter is not None:
+            reduction_pos = ax_reduction.get_position()
+            fig.text(
+                reduction_pos.x0 - 0.010,
+                reduction_pos.y1 + 0.012,
+                reduction_panel_letter,
+                fontsize=13,
+                fontweight="bold",
+                ha="right",
+                va="bottom",
+            )
+
         panel_records.append(
             {
                 "context": context,
-                "panel_letter": chr(panel_start_ord + i),
+                "panel_letter": power_panel_letter,
+                "power_panel_letter": power_panel_letter,
+                "reduction_panel_letter": reduction_panel_letter,
                 "power_mix_ax": ax_power_mix,
                 "power_legend_ax": ax_power_legend,
                 "reduction_ax": ax_reduction,
@@ -1289,7 +1311,7 @@ def _city_context_summary_report(binned_by_city, labels, panel_records):
             {
                 "panel_letter": record["panel_letter"],
                 "panel_label": {
-                    "text": record["panel_letter"],
+                    "text": record["power_panel_letter"],
                     "x_figure_fraction": _report_number(
                         record["power_mix_ax"].get_position().x0 - 0.010
                     ),
@@ -1297,6 +1319,19 @@ def _city_context_summary_report(binned_by_city, labels, panel_records):
                         record["power_mix_ax"].get_position().y1 + 0.035
                     ),
                 },
+                "reduction_panel_label": (
+                    {
+                        "text": record["reduction_panel_letter"],
+                        "x_figure_fraction": _report_number(
+                            record["reduction_ax"].get_position().x0 - 0.010
+                        ),
+                        "y_figure_fraction": _report_number(
+                            record["reduction_ax"].get_position().y1 + 0.012
+                        ),
+                    }
+                    if record["reduction_panel_letter"] is not None
+                    else None
+                ),
                 "city_label_position": {
                     "text": context["display_name"],
                     "x_figure_fraction": _report_number(
@@ -1354,7 +1389,7 @@ def _city_context_summary_report(binned_by_city, labels, panel_records):
     return reports
 
 
-def _detour_reduction_scatter_report(df, reduction_col, axes):
+def _detour_reduction_scatter_report(df, reduction_col, axes, panel_letters=("f", "g")):
     """Return exact plotted data for the bottom detour-reduction scatter panels."""
     import numpy as np
     from scipy import stats
@@ -1369,7 +1404,6 @@ def _detour_reduction_scatter_report(df, reduction_col, axes):
     masks = [low_mask, ~low_mask]
     labels = (f"Low GEF ($\\leq$ {threshold})", f"High GEF (> {threshold})")
     line_colors = ["#006837", "#A50F15"]
-    panel_letters = ["f", "g"]
     axis_names = ["low_gef", "high_gef"]
     axis_objs = [ax_low, ax_high]
 
@@ -1759,8 +1793,14 @@ def _render_city_gef_context_detour_summary(
         labels=labels,
         contexts=available_contexts,
         panel_start_letter="b",
+        label_each_subplot=True,
     )
 
+    bottom_start_ord = ord("b") + 2 * len(available_contexts)
+    bottom_panel_letters = (
+        chr(bottom_start_ord),
+        chr(bottom_start_ord + 1),
+    )
     bottom_axes = _plot_grouped_scatter_split_panels_axes(
         fig=fig,
         subplot_spec=outer[2],
@@ -1770,7 +1810,7 @@ def _render_city_gef_context_detour_summary(
         group_var="grid_emission_factor",
         threshold=0.3,
         plot_title=False,
-        panel_letters=("f", "g"),
+        panel_letters=bottom_panel_letters,
     )
     if bottom_axes is None:
         plt.close(fig)
@@ -1800,6 +1840,7 @@ def _render_city_gef_context_detour_summary(
         df_enriched,
         reduction_col,
         bottom_axes,
+        panel_letters=bottom_panel_letters,
     )
     _write_city_gef_context_detour_report(
         save_path=save_path,
