@@ -89,8 +89,8 @@ OAT_MECHANISM_COLORS = {
 }
 OAT_MECHANISM_LABELS = {
     "operation":      "Drone operation",
-    "production_eol": "Production / EOL parameters",
-    "amortization":   "Lifespan / utilization",
+    "production_eol": "Production and end-of-life",
+    "amortization":   "Amortization",
     "anchor":         "Baseline",
 }
 
@@ -676,12 +676,12 @@ def plot_sobol_by_mechanism(
 def plot_drone_tech_sensitivity_panels(
     sobol: pd.DataFrame,
     save_path: str | None = None,
-    figsize: tuple = (11, 3.8),
+    figsize: tuple = (12, 7.8),
     dpi: int = 150,
     for_latex: bool = False,
     plot_title: bool = False,
 ):
-    """Three-panel Sobol summary for drone-technology uncertainty classes.
+    """Four-panel Sobol summary for drone-technology uncertainty classes.
 
     Args:
         sobol: Long-format Sobol DataFrame from ``all_sensitivity_sobol.csv``.
@@ -696,70 +696,123 @@ def plot_drone_tech_sensitivity_panels(
         return None
 
     feature_to_class = {f: c for c, feats in SOBOL_MECHANISM_GROUPS.items() for f in feats}
+    si = si[si["feature"].isin(feature_to_class)].copy()
     si["class"] = si["feature"].map(feature_to_class)
-    si = si.dropna(subset=["class"])
     if si.empty:
         print("  plot_drone_tech_sensitivity_panels: no drone-tech features; skipping")
         return None
 
+    class_order = ("operation", "production_eol", "amortization")
     grouped = si.groupby("feature")
     st_median = grouped["ST"].median()
     st_p25 = grouped["ST"].quantile(0.25)
     st_p75 = grouped["ST"].quantile(0.75)
     s1_median = np.clip(grouped["S1"].median(), 0, None)
 
-    class_order = ("operation", "production_eol", "amortization")
-    panel_letters = ("a", "b", "c")
-    fig, axes = plt.subplots(1, 3, figsize=figsize, sharex=True)
-    axes = np.atleast_1d(axes)
+    per_city_class = si.groupby(["region_key", "class"])["ST"].sum().reset_index()
+    class_grouped = per_city_class.groupby("class")["ST"]
+    class_median = class_grouped.median().reindex(class_order)
+    class_p25 = class_grouped.quantile(0.25).reindex(class_order)
+    class_p75 = class_grouped.quantile(0.75).reindex(class_order)
 
-    for ax, cls, letter in zip(axes, class_order, panel_letters):
+    fig = plt.figure(figsize=figsize)
+    gs = fig.add_gridspec(2, 2, width_ratios=(1.0, 1.35), hspace=0.32, wspace=0.28)
+    ax_a = fig.add_subplot(gs[0, 0])
+    ax_b = fig.add_subplot(gs[0, 1])
+    ax_c = fig.add_subplot(gs[1, 0])
+    ax_d = fig.add_subplot(gs[1, 1])
+
+    panel_axes = {
+        "operation": (ax_b, "B"),
+        "production_eol": (ax_c, "C"),
+        "amortization": (ax_d, "D"),
+    }
+    panel_notes = {
+        "operation": "Energy, headwind, and hover terms dominate use-phase variation.",
+        "production_eol": "Mass terms separate from embodied-carbon coefficients.",
+        "amortization": "Lower aggregate influence across cities.",
+    }
+
+    class_y = np.arange(len(class_order))
+    class_vals = class_median.values.astype(float)
+    class_err_lower = np.clip(class_vals - class_p25.values.astype(float), 0, None)
+    class_err_upper = np.clip(class_p75.values.astype(float) - class_vals, 0, None)
+    class_colors = [OAT_MECHANISM_COLORS[cls] for cls in class_order]
+
+    ax_a.barh(class_y, class_vals, color=class_colors, alpha=0.75,
+              edgecolor="black", linewidth=0.9)
+    ax_a.errorbar(class_vals, class_y, xerr=[class_err_lower, class_err_upper], fmt="none",
+                  ecolor="black", capsize=3, linewidth=0.9)
+    ax_a.set_yticks(class_y)
+    ax_a.set_yticklabels([OAT_MECHANISM_LABELS[cls] for cls in class_order], fontsize=9)
+    ax_a.invert_yaxis()
+    ax_a.grid(axis="x", linestyle=":", alpha=0.45)
+    ax_a.axvline(0, color="black", linewidth=0.5)
+    ax_a.set_xlabel("Aggregate total-order importance")
+    ax_a.text(0.0, 1.04, "A", transform=ax_a.transAxes, fontsize=11,
+              fontweight="bold", ha="left", va="bottom")
+    ax_a.text(0.07, 1.04, "Class-level overview", transform=ax_a.transAxes,
+              fontsize=10, fontweight="bold", ha="left", va="bottom")
+
+    class_xmax = float(np.nanmax(class_p75.values.astype(float))) if len(class_p75) else 0.0
+    class_label_pad = max(class_xmax * 0.02, 0.01)
+    for yi, val, upper in zip(class_y, class_vals, class_err_upper):
+        ax_a.text(val + upper + class_label_pad, yi, f"{val:.2f}",
+                  va="center", ha="left", fontsize=8)
+    ax_a.set_xlim(0, max(0.2, class_xmax * 1.25))
+
+    feature_xmax = float(st_p75.max()) if len(st_p75) else 0.0
+    feature_xlim = max(0.05, feature_xmax * 1.18)
+    feature_label_pad = max(feature_xlim * 0.015, 0.004)
+
+    for cls in class_order:
+        ax, letter = panel_axes[cls]
         features = [f for f in SOBOL_MECHANISM_GROUPS[cls] if f in st_median.index]
-        features.sort(key=lambda f: -st_median[f])
+        features.sort(key=lambda f: (-st_median[f], OAT_FEATURE_LABELS.get(f, f)))
         if not features:
             ax.axis("off")
             continue
 
         y = np.arange(len(features))
-        st_vals = np.array([st_median[f] for f in features])
-        s1_vals = np.array([s1_median[f] for f in features])
-        p25_vals = np.array([st_p25[f] for f in features])
-        p75_vals = np.array([st_p75[f] for f in features])
+        st_vals = np.array([st_median[f] for f in features], dtype=float)
+        s1_vals = np.array([s1_median[f] for f in features], dtype=float)
+        p25_vals = np.array([st_p25[f] for f in features], dtype=float)
+        p75_vals = np.array([st_p75[f] for f in features], dtype=float)
         err_lower = np.clip(st_vals - p25_vals, 0, None)
         err_upper = np.clip(p75_vals - st_vals, 0, None)
         color = OAT_MECHANISM_COLORS[cls]
 
         ax.barh(y, st_vals, color=color, alpha=0.42, edgecolor="black",
-                linewidth=0.8, label="$S_T$")
+                linewidth=0.8, zorder=2)
         ax.barh(y, s1_vals, color=color, alpha=0.95, edgecolor="black",
-                linewidth=0.8, label="$S_1$")
+                linewidth=0.8, zorder=3)
         ax.errorbar(st_vals, y, xerr=[err_lower, err_upper], fmt="none",
-                    ecolor="black", capsize=3, linewidth=0.8)
+                    ecolor="black", capsize=3, linewidth=0.8, zorder=4)
         ax.set_yticks(y)
         ax.set_yticklabels([OAT_FEATURE_LABELS.get(f, f) for f in features], fontsize=8)
         ax.invert_yaxis()
         ax.grid(axis="x", linestyle=":", alpha=0.45)
         ax.axvline(0, color="black", linewidth=0.5)
+        ax.set_xlim(0, feature_xlim)
+        ax.set_xlabel("Sobol index")
         ax.text(0.0, 1.04, letter, transform=ax.transAxes, fontsize=11,
                 fontweight="bold", ha="left", va="bottom")
         ax.text(0.07, 1.04, OAT_MECHANISM_LABELS[cls], transform=ax.transAxes,
                 fontsize=10, fontweight="bold", ha="left", va="bottom")
-
-        total = (
-            si[si["class"] == cls]
-            .groupby("region_key")["ST"]
-            .sum()
-            .median()
+        ax.text(
+            0.98,
+            0.02,
+            panel_notes[cls],
+            transform=ax.transAxes,
+            ha="right",
+            va="bottom",
+            fontsize=7.5,
+            bbox=dict(facecolor="white", edgecolor="0.75", pad=2, alpha=0.92),
         )
-        ax.text(0.97, 0.05, rf"$\sum S_T$ = {total:.2f}",
-                transform=ax.transAxes, ha="right", va="bottom", fontsize=8,
-                bbox=dict(facecolor="white", edgecolor="0.7", pad=2, alpha=0.9))
 
-    x_max = float(si.groupby("feature")["ST"].quantile(0.75).max())
-    for ax in axes:
-        if ax.has_data():
-            ax.set_xlim(0, max(0.05, x_max * 1.18))
-            ax.set_xlabel("Sobol index")
+        for yi, st_val, upper in zip(y, st_vals, err_upper):
+            ax.text(st_val + upper + feature_label_pad, yi, f"{st_val:.2f}",
+                    va="center", ha="left", fontsize=7.5)
 
     handles = [
         Patch(facecolor="lightgray", edgecolor="black", alpha=0.42,
@@ -767,11 +820,14 @@ def plot_drone_tech_sensitivity_panels(
         Patch(facecolor="lightgray", edgecolor="black", alpha=0.95,
               label="$S_1$ (main effect)"),
     ]
-    axes[-1].legend(handles=handles, loc="lower right", fontsize=8, frameon=True)
+    ax_a.legend(handles=handles, loc="lower right", fontsize=8, frameon=True)
 
     if plot_title:
         n_cities = si["region_key"].nunique()
-        fig.suptitle(f"Drone-technology sensitivity across {n_cities} cities", y=1.04)
+        fig.suptitle(
+            f"Drone-technology sensitivity across {n_cities} cities",
+            y=0.99,
+        )
     fig.tight_layout()
     return _finalize(save_path, dpi, for_latex, plot_title)
 
