@@ -3637,14 +3637,24 @@ def _map_panel_report(df, color_col, cmap, norm, bin_edges, ax, panel_letter):
     }
 
 
-def _city_oracle_rank_report(df, ax, n=10, invert_vertical=True, compact=True):
+def _city_oracle_rank_report(
+    df,
+    ax,
+    n=10,
+    invert_vertical=True,
+    compact=True,
+    reduction_metric="absolute_t",
+):
     """Return plotted bar data for the city Oracle-reduction inset."""
     base_cols = ["region_name_en", "total_ebike_lifecycle"]
     has_oracle = "oracle_min_lifecycle_kg" in df.columns
     fallback_cols = [col for col in WEIGHTED_REDUCTION_COLUMNS if col in df.columns]
     metric_cols = ["oracle_min_lifecycle_kg"] if has_oracle else fallback_cols
     sub = df[base_cols + metric_cols].copy()
-    reduction_col = _oracle_reduction_tonnes_column(sub)
+    if reduction_metric == "percentage":
+        reduction_col = _weighted_reduction_column(sub)
+    else:
+        reduction_col = _oracle_reduction_tonnes_column(sub)
     sub = sub.dropna(subset=[reduction_col])
     ranked = sub.sort_values(reduction_col, ascending=False).head(n)
     ranked = ranked.sort_values(reduction_col, ascending=True).reset_index(drop=True)
@@ -3659,7 +3669,11 @@ def _city_oracle_rank_report(df, ax, n=10, invert_vertical=True, compact=True):
                 "y_center": y,
                 "height": 0.6,
                 "x_left": 0.0,
-                "width_t_co2e_per_year": _json_safe_scalar(row[reduction_col]),
+                (
+                    "width_reduction_pct"
+                    if reduction_metric == "percentage"
+                    else "width_t_co2e_per_year"
+                ): _json_safe_scalar(row[reduction_col]),
                 "color": "#1F6E2D",
                 "alpha": 0.88,
             }
@@ -3667,20 +3681,20 @@ def _city_oracle_rank_report(df, ax, n=10, invert_vertical=True, compact=True):
     return {
         "axis": _axis_report(ax),
         "reduction_col": reduction_col,
+        "reduction_metric": reduction_metric,
         "compact": compact,
         "invert_vertical": invert_vertical,
         "bars": bars,
     }
 
 
-def _drone_share_distribution_report(df, drone_share_col, ax):
-    """Return histogram bars and smoothed curve for the drone-share inset."""
-    values = pd.to_numeric(df[drone_share_col], errors="coerce").dropna()
+def _distribution_inset_report(df, value_col, ax, bins, bar_width, label):
+    """Return histogram bars and smoothed curve for a compact distribution inset."""
+    values = pd.to_numeric(df[value_col], errors="coerce").dropna()
     if values.empty:
         return {"axis": _axis_report(ax), "status": "skipped", "reason": "no values"}
 
-    bins = np.arange(0, 101, 10, dtype=float)
-    clipped = values.clip(lower=0, upper=100)
+    clipped = values.clip(lower=float(bins[0]), upper=float(bins[-1]))
     counts, edges = np.histogram(clipped, bins=bins)
     centres = (edges[:-1] + edges[1:]) / 2
     x_curve = np.linspace(float(centres.min()), float(centres.max()), 200)
@@ -3694,13 +3708,14 @@ def _drone_share_distribution_report(df, drone_share_col, ax):
 
     return {
         "axis": _axis_report(ax),
-        "drone_share_col": drone_share_col,
+        "value_col": value_col,
+        "label": label,
         "bars": [
             {
                 "bin_left": _json_safe_scalar(edges[i]),
                 "bin_right": _json_safe_scalar(edges[i + 1]),
                 "x_center": _json_safe_scalar(centres[i]),
-                "width": 8.5,
+                "width": bar_width,
                 "height_city_count": int(counts[i]),
                 "color": "#91bfdb",
                 "edgecolor": "#08306b",
@@ -3713,6 +3728,18 @@ def _drone_share_distribution_report(df, drone_share_col, ax):
             for x, y in zip(x_curve, y_curve)
         ],
     }
+
+
+def _drone_share_distribution_report(df, drone_share_col, ax):
+    """Return histogram bars and smoothed curve for the drone-share inset."""
+    return _distribution_inset_report(
+        df,
+        drone_share_col,
+        ax,
+        bins=np.arange(0, 101, 10, dtype=float),
+        bar_width=8.5,
+        label="Drone share (%)",
+    )
 
 
 def _province_lifecycle_panel_report(df, ax_main, ax_secondary):
@@ -3927,7 +3954,6 @@ def _write_regions_map_city_rank_and_drone_share_report(
     drone_df,
     reduction_col,
     reduction_pct_col,
-    drone_share_col,
     axes,
     color_scales,
     production_df,
@@ -3970,7 +3996,11 @@ def _write_regions_map_city_rank_and_drone_share_report(
                     map_df, reduction_col, reduction_cmap, reduction_norm,
                     reduction_bins, ax_a, "a",
                 ),
-                "inset_city_rank": _city_oracle_rank_report(map_df, inset_ax),
+                "inset_city_rank": _city_oracle_rank_report(
+                    map_df,
+                    inset_ax,
+                    reduction_metric="percentage",
+                ),
                 "colorbar": _colorbar_report(
                     cbar_a_ax,
                     reduction_bins,
@@ -3984,10 +4014,13 @@ def _write_regions_map_city_rank_and_drone_share_report(
                     drone_df, reduction_pct_col, reduction_pct_cmap, reduction_pct_norm,
                     reduction_pct_bins, ax_b, "b",
                 ),
-                "inset_drone_share_distribution": _drone_share_distribution_report(
+                "inset_reduction_pct_distribution": _distribution_inset_report(
                     drone_df,
-                    drone_share_col,
+                    reduction_pct_col,
                     share_dist_ax,
+                    bins=reduction_pct_edges,
+                    bar_width=float(np.diff(reduction_pct_edges).min()) * 0.85,
+                    label="Oracle reduction vs e-bike (%)",
                 ),
                 "colorbar": _colorbar_report(
                     cbar_b_ax,
@@ -4072,7 +4105,6 @@ def plot_regions_map_city_rank_and_drone_share(
         reduction_col = _oracle_reduction_tonnes_column(map_df)
         drone_df = df_stats.copy()
         reduction_pct_col = _weighted_reduction_column(drone_df)
-        drone_share_col = _weighted_drone_share_column(drone_df)
     except KeyError as exc:
         print(f"Regions map city rank and drone share skipped — {exc}")
         return
@@ -4090,11 +4122,6 @@ def plot_regions_map_city_rank_and_drone_share(
             "Regions map city rank and drone share skipped — "
             "no valid reduction-percentage values"
         )
-        return
-
-    drone_df[drone_share_col] = pd.to_numeric(drone_df[drone_share_col], errors="coerce")
-    if drone_df[drone_share_col].dropna().empty:
-        print("Regions map city rank and drone share skipped — no valid drone-share values")
         return
 
     reduction_cmap, reduction_norm, reduction_bins, reduction_edges = (
@@ -4151,6 +4178,7 @@ def plot_regions_map_city_rank_and_drone_share(
         ax=inset_ax,
         invert_vertical=True,
         compact=True,
+        reduction_metric="percentage",
     )
     inset_ax.set_facecolor("none")
     inset_ax.patch.set_alpha(0.0)
@@ -4178,10 +4206,12 @@ def plot_regions_map_city_rank_and_drone_share(
         spine.set_visible(False)
 
     share_dist_ax = ax_b.inset_axes([0.03, 0.04, 0.34, 0.30], zorder=10)
-    _plot_drone_share_distribution_inset(
+    _plot_distribution_inset(
         drone_df,
-        drone_share_col,
+        reduction_pct_col,
         ax=share_dist_ax,
+        bins=reduction_pct_edges,
+        xlabel="Oracle reduction (%)",
     )
 
     ax_a.text(-0.03, 1.02, "a", transform=ax_a.transAxes,
@@ -4297,7 +4327,6 @@ def plot_regions_map_city_rank_and_drone_share(
             drone_df=drone_df,
             reduction_col=reduction_col,
             reduction_pct_col=reduction_pct_col,
-            drone_share_col=drone_share_col,
             axes=(
                 ax_a,
                 ax_b,
@@ -4335,26 +4364,28 @@ def plot_regions_map_city_rank_and_drone_share(
     plt.close(fig)
 
 
-def _plot_drone_share_distribution_inset(
+def _plot_distribution_inset(
     df: pd.DataFrame,
-    drone_share_col: str,
+    value_col: str,
     ax: "plt.Axes",
+    bins: np.ndarray,
+    xlabel: str,
 ):
-    """Draw compact city-count distribution by optimal drone-share bin."""
-    values = pd.to_numeric(df[drone_share_col], errors="coerce").dropna()
+    """Draw compact city-count distribution for a percentage metric."""
+    values = pd.to_numeric(df[value_col], errors="coerce").dropna()
     if values.empty:
         ax.axis("off")
         return
 
-    bins = np.arange(0, 101, 10, dtype=float)
-    clipped = values.clip(lower=0, upper=100)
+    clipped = values.clip(lower=float(bins[0]), upper=float(bins[-1]))
     counts, edges = np.histogram(clipped, bins=bins)
     centres = (edges[:-1] + edges[1:]) / 2
+    bar_width = float(np.diff(edges).min()) * 0.85
 
     ax.bar(
         centres,
         counts,
-        width=8.5,
+        width=bar_width,
         color="#91bfdb",
         edgecolor="#08306b",
         linewidth=0.5,
@@ -4372,11 +4403,12 @@ def _plot_drone_share_distribution_inset(
         y_curve = np.interp(x_curve, centres, counts)
     ax.plot(x_curve, y_curve, color="#08306b", linewidth=1.2, zorder=3)
 
-    ax.set_xlim(0, 100)
+    ax.set_xlim(float(edges[0]), float(edges[-1]))
     ax.set_ylim(0, max(counts.max() * 1.18, 1))
-    ax.set_xlabel("Drone share (%)", fontsize=7, labelpad=1)
+    ax.set_xlabel(xlabel, fontsize=7, labelpad=1)
     ax.set_ylabel("Cities", fontsize=7, labelpad=1)
-    ax.set_xticks([0, 50, 100])
+    if len(edges) > 2:
+        ax.set_xticks([float(edges[0]), float(edges[len(edges) // 2]), float(edges[-1])])
     ax.tick_params(axis="both", labelsize=6, length=2, pad=1)
     ax.grid(False)
     ax.set_axisbelow(True)
@@ -4386,6 +4418,21 @@ def _plot_drone_share_distribution_inset(
         spine.set_visible(name in {"left", "bottom"})
         spine.set_edgecolor("#666666")
         spine.set_linewidth(0.6)
+
+
+def _plot_drone_share_distribution_inset(
+    df: pd.DataFrame,
+    drone_share_col: str,
+    ax: "plt.Axes",
+):
+    """Draw compact city-count distribution by optimal drone-share bin."""
+    _plot_distribution_inset(
+        df,
+        drone_share_col,
+        ax=ax,
+        bins=np.arange(0, 101, 10, dtype=float),
+        xlabel="Drone share (%)",
+    )
 
 
 def _plot_city_oracle_reduction_rank(
@@ -4398,8 +4445,9 @@ def _plot_city_oracle_reduction_rank(
     ax: "plt.Axes" = None,
     invert_vertical: bool = False,
     compact: bool = False,
+    reduction_metric: str = "absolute_t",
 ):
-    """Shared horizontal bar plot for top cities by absolute Oracle reduction."""
+    """Shared horizontal bar plot for top cities by Oracle reduction."""
     base_cols = ["region_name_en", "total_ebike_lifecycle"]
     missing = [col for col in base_cols if col not in df.columns]
     has_oracle = "oracle_min_lifecycle_kg" in df.columns
@@ -4412,7 +4460,10 @@ def _plot_city_oracle_reduction_rank(
     metric_cols = ["oracle_min_lifecycle_kg"] if has_oracle else fallback_cols
     sub = df[base_cols + metric_cols].copy()
     try:
-        reduction_col = _oracle_reduction_tonnes_column(sub)
+        if reduction_metric == "percentage":
+            reduction_col = _weighted_reduction_column(sub)
+        else:
+            reduction_col = _oracle_reduction_tonnes_column(sub)
     except KeyError as exc:
         print(f"City Oracle reduction rank skipped — {exc}")
         return
@@ -4427,7 +4478,7 @@ def _plot_city_oracle_reduction_rank(
         ranked = ranked.iloc[::-1].reset_index(drop=True)
 
     cities = ranked["region_name_en"].tolist()
-    reductions_t = ranked[reduction_col].to_numpy(dtype=float)
+    reductions = ranked[reduction_col].to_numpy(dtype=float)
     y = np.arange(len(cities))
     bar_color = "#1F6E2D"
 
@@ -4437,10 +4488,15 @@ def _plot_city_oracle_reduction_rank(
     else:
         fig, ax = plt.subplots(figsize=figsize)
 
-    ax.barh(y, reductions_t, height=0.6, color=bar_color, alpha=0.88, zorder=2)
+    ax.barh(y, reductions, height=0.6, color=bar_color, alpha=0.88, zorder=2)
     ax.set_yticks(y)
     ax.set_yticklabels(cities, fontsize=7 if compact else 10)
-    ax.set_xlabel("E-bike - Oracle (t CO₂eq / yr)", fontsize=7 if compact else 12)
+    xlabel = (
+        "Oracle reduction (%)"
+        if reduction_metric == "percentage"
+        else "E-bike - Oracle (t CO₂eq / yr)"
+    )
+    ax.set_xlabel(xlabel, fontsize=7 if compact else 12)
     if compact:
         ax.grid(False)
     else:
@@ -4449,19 +4505,27 @@ def _plot_city_oracle_reduction_rank(
     ax.tick_params(axis="x", labelsize=7 if compact else 10, pad=1 if compact else 3)
     ax.tick_params(axis="y", pad=1 if compact else 3)
 
-    xmax = max(float(np.nanmax(reductions_t)), 1.0)
+    xmax = max(float(np.nanmax(reductions)), 1.0)
     ax.set_xlim(0, xmax * (1.04 if compact else 1.18))
     if not compact:
         pad = xmax * 0.01
-        for i, value in enumerate(reductions_t):
-            fmt = "{:,.2f}" if value < 10 else ("{:,.1f}" if value < 100 else "{:,.0f}")
+        for i, value in enumerate(reductions):
+            if reduction_metric == "percentage":
+                label = f"{value:.1f}%"
+            else:
+                fmt = "{:,.2f}" if value < 10 else ("{:,.1f}" if value < 100 else "{:,.0f}")
+                label = fmt.format(value)
             ax.text(
-                value + pad, i, fmt.format(value),
+                value + pad, i, label,
                 va="center", ha="left", fontsize=9, color="black", zorder=4,
             )
 
     if plot_title:
-        title = f"Top {n} Cities by E-bike - Oracle Lifecycle Emission"
+        title = (
+            f"Top {n} Cities by Oracle Reduction Percentage"
+            if reduction_metric == "percentage"
+            else f"Top {n} Cities by E-bike - Oracle Lifecycle Emission"
+        )
         if _external_ax:
             ax.set_title(title, fontsize=12, fontweight="bold")
         else:

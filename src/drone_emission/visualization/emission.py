@@ -420,22 +420,32 @@ def plot_median_trip_emission_process(
 
         air_km = float(sample["distance_km"])
         road_km = float(sample["road_distance_m"]) / 1000.0
-        drone_cycle_total = float(sample["drone_emission_kg"]) * 1000.0
-        ebike_cycle_total = float(sample["ebike_emission_kg"]) * 1000.0
+        drone_use_cycle_total = float(sample["drone_emission_kg"]) * 1000.0
+        ebike_use_cycle_total = float(sample["ebike_emission_kg"]) * 1000.0
 
-        def _drone_delivery_leg_profile(distance_km, cycle_total_g):
-            """Scale modeled drone phase shares to the cached OD total."""
+        def _drone_delivery_leg_profile(distance_km, use_cycle_total_g):
+            """Scale modeled drone use-phase shares to the cached OD total."""
             try:
-                from emission.cal_single_delivery import LifeCycleEmissions
+                from emission.cal_single_delivery import DroneEnergyModel
 
-                lca = LifeCycleEmissions()
-                result = lca.calculate_drone_use_phase_emissions(distance_km, 1.0)
-                parts = result["energy_breakdown"]
+                energy = DroneEnergyModel().calculate_energy_consumption(
+                    distance_km,
+                    payload_kg=1.0,
+                )
+                parts = {
+                    "takeoff": energy["energy_takeoff_kwh"],
+                    "level_out": energy["energy_level_out_kwh"],
+                    "landing_out": energy["energy_landing_out_kwh"],
+                    "hover": energy["energy_hover_kwh"],
+                    "takeoff_return": energy["energy_takeoff_return_kwh"],
+                    "level_return": energy["energy_level_return_kwh"],
+                    "landing_return": energy["energy_landing_return_kwh"],
+                }
                 cycle_energy = sum(parts.values())
                 if cycle_energy <= 0:
                     raise ValueError("non-positive drone cycle energy")
 
-                scale = cycle_total_g / cycle_energy
+                scale = use_cycle_total_g / cycle_energy
                 takeoff_g = parts["takeoff"] * scale
                 cruise_g = parts["level_out"] * scale
                 landing_g = (parts["landing_out"] + parts["hover"]) * scale
@@ -448,20 +458,19 @@ def plot_median_trip_emission_process(
                     {"takeoff_g": takeoff_g, "landing_g": landing_g},
                 )
             except Exception:
-                outbound_g = cycle_total_g / 2.0
+                outbound_g = use_cycle_total_g / 2.0
                 return (
                     np.array([0.0, distance_km]),
                     np.array([0.0, outbound_g]),
                     {"takeoff_g": 0.0, "landing_g": 0.0},
                 )
 
-        def _ebike_delivery_leg_profile(distance_km, cycle_total_g):
-            """Scale modeled e-bike outbound share to the cached OD total."""
+        def _ebike_delivery_leg_profile(distance_km, use_cycle_total_g):
+            """Scale modeled e-bike outbound use-phase share to the cached OD total."""
             try:
-                from emission.cal_single_delivery import LifeCycleEmissions
+                from emission.cal_single_delivery import EbikeEnergyModel
 
-                lca = LifeCycleEmissions()
-                energy = lca.ebike_energy.calculate_energy_consumption(
+                energy = EbikeEnergyModel().calculate_energy_consumption(
                     distance_km,
                     payload_kg=1.0,
                     rider_weight=70,
@@ -470,18 +479,18 @@ def plot_median_trip_emission_process(
                 total_energy = energy["energy_kwh"]
                 if total_energy <= 0:
                     raise ValueError("non-positive e-bike cycle energy")
-                outbound_g = cycle_total_g * energy_go / total_energy
+                outbound_g = use_cycle_total_g * energy_go / total_energy
             except Exception:
-                outbound_g = cycle_total_g / 2.0
+                outbound_g = use_cycle_total_g / 2.0
             return np.array([0.0, distance_km]), np.array([0.0, outbound_g])
 
         drone_x, drone_y, drone_parts = _drone_delivery_leg_profile(
             air_km,
-            drone_cycle_total,
+            drone_use_cycle_total,
         )
         ebike_x, ebike_y = _ebike_delivery_leg_profile(
             road_km,
-            ebike_cycle_total,
+            ebike_use_cycle_total,
         )
         max_x = max(air_km, road_km)
         max_y = max(drone_y.max(), ebike_y.max(), 1e-6)
