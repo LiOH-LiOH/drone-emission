@@ -3844,17 +3844,26 @@ def _province_lifecycle_panel_report(df, ax_main, ax_secondary):
     }
 
 
-def _phase_per_km_panel_report(df, ax, ylabel, body_label, battery_label,
-                               body_color, battery_color, distance_km):
-    """Return stacked body/battery bar data for a phase-per-km panel."""
+def _phase_bar_panel_report(
+    df,
+    ax,
+    ylabel,
+    body_label,
+    battery_label,
+    body_color,
+    battery_color,
+    distance_context,
+):
+    """Return stacked body/battery bar data for a selected-trip phase panel."""
     x = np.arange(len(df))
-    body = df["body_g_per_km"].to_numpy(dtype=float)
-    battery = df["battery_g_per_km"].to_numpy(dtype=float)
+    body = df["body_g"].to_numpy(dtype=float)
+    battery = df["battery_g"].to_numpy(dtype=float)
     totals = body + battery
+    max_total = float(np.nanmax(totals)) if totals.size else 0.0
     return {
         "axis": _axis_report(ax),
         "ylabel": ylabel,
-        "distance_km": distance_km,
+        "distance_context": distance_context,
         "bars": [
             {
                 "vehicle": _json_safe_scalar(vehicle),
@@ -3863,29 +3872,204 @@ def _phase_per_km_panel_report(df, ax, ylabel, body_label, battery_label,
                 "body_segment": {
                     "label": body_label,
                     "bottom": 0.0,
-                    "height_g_per_vehicle_km": _json_safe_scalar(body_value),
+                    "height_g_per_order": _json_safe_scalar(body_value),
                     "top": _json_safe_scalar(body_value),
                     "color": body_color,
                 },
                 "battery_segment": {
                     "label": battery_label,
                     "bottom": _json_safe_scalar(body_value),
-                    "height_g_per_vehicle_km": _json_safe_scalar(battery_value),
-                    "top": _json_safe_scalar(body_value + battery_value),
+                    "height_g_per_order": _json_safe_scalar(battery_value),
+                    "top": _json_safe_scalar(component_sum),
                     "color": battery_color,
+                },
+                "component_sum_check": {
+                    "component_sum_g": _json_safe_scalar(component_sum),
+                    "cached_total_g": _json_safe_scalar(cached_total),
+                    "difference_g": _json_safe_scalar(component_sum - cached_total),
+                    "is_close": bool(np.isclose(component_sum, cached_total, rtol=1e-9, atol=1e-9)),
                 },
                 "total_label": {
                     "x": int(x_pos),
-                    "y": _json_safe_scalar(
-                        body_value + battery_value + np.nanmax(totals) * 0.035
-                    ),
-                    "text": f"{body_value + battery_value:.1f}",
+                    "y": _json_safe_scalar(component_sum + max_total * 0.035),
+                    "text": f"{component_sum:.1f}",
                 },
             }
-            for x_pos, vehicle, body_value, battery_value
-            in zip(x, df["vehicle"], body, battery)
+            for x_pos, vehicle, body_value, battery_value, component_sum, cached_total
+            in zip(
+                x,
+                df["vehicle"],
+                body,
+                battery,
+                totals,
+                df["cached_total_g"].to_numpy(dtype=float),
+            )
         ],
     }
+
+
+def _draw_trip_phase_barplot(
+    ax,
+    df,
+    ylabel,
+    body_label,
+    battery_label,
+    body_color,
+    battery_color,
+    distance_label,
+):
+    """Draw stacked body/battery phase emissions for one selected OD trip."""
+    x = np.arange(len(df))
+    body = df["body_g"].to_numpy(dtype=float)
+    battery = df["battery_g"].to_numpy(dtype=float)
+    totals = body + battery
+    edge_color = "#2f3437"
+
+    ax.bar(
+        x,
+        body,
+        width=0.56,
+        color=body_color,
+        edgecolor=edge_color,
+        linewidth=0.8,
+        label=body_label,
+    )
+    ax.bar(
+        x,
+        battery,
+        width=0.56,
+        bottom=body,
+        color=battery_color,
+        edgecolor=edge_color,
+        linewidth=0.8,
+        label=battery_label,
+    )
+
+    max_total = max(float(np.nanmax(totals)), 1e-6)
+    for i, total in enumerate(totals):
+        ax.text(
+            x[i],
+            total + max_total * 0.035,
+            f"{total:.1f}",
+            ha="center",
+            va="bottom",
+            fontsize=9,
+            color="#222222",
+        )
+
+    ax.set_xticks(x)
+    ax.set_xticklabels(df["vehicle"])
+    ax.set_xlabel(distance_label)
+    ax.set_ylabel(ylabel)
+    ax.set_ylim(0, max_total * 1.25)
+    ax.grid(axis="y", alpha=0.25, linewidth=0.8)
+    ax.set_axisbelow(True)
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+    ax.legend(
+        frameon=False,
+        loc="upper center",
+        bbox_to_anchor=(0.5, 1.15),
+        ncol=2,
+        fontsize=9,
+    )
+
+
+def _model_phase_component_shares(distance_km, vehicle, phase):
+    """Return body/battery shares for a vehicle phase at the selected trip distance."""
+    from emission.cal_single_delivery import LifeCycleEmissions
+
+    lca = LifeCycleEmissions()
+    if vehicle == "E-bike":
+        p = lca.ebike_p
+        prod = lca.calculate_ebike_production_emissions()
+        speed = p.velocity
+    elif vehicle == "Drone":
+        p = lca.drone_p
+        prod = lca.calculate_drone_production_emissions()
+        speed = p.v_level
+    else:
+        raise ValueError(f"Unknown vehicle: {vehicle}")
+
+    delivery_time_min = (2 * distance_km / speed) * 60 + p.loading_time_min
+    deliveries_per_day = p.working_hours_per_day * 60 / delivery_time_min
+    lifetime_deliveries = deliveries_per_day * p.working_days_per_year * p.lifespan
+
+    if phase == "production":
+        body_kg = prod["body_production_kg"] / p.lifespan
+        battery_kg = prod["battery_production_kg"] / p.battery_lifespan
+    elif phase == "eol":
+        body_kg = prod["body_disposal_kg"] / p.lifespan
+        battery_kg = prod["battery_disposal_kg"] / p.battery_lifespan
+    else:
+        raise ValueError(f"Unknown phase: {phase}")
+
+    body_g = body_kg * p.lifespan / lifetime_deliveries * 1000
+    battery_g = battery_kg * p.lifespan / lifetime_deliveries * 1000
+    total_g = body_g + battery_g
+    if total_g <= 0:
+        return 0.5, 0.5
+    return body_g / total_g, battery_g / total_g
+
+
+def _selected_trip_phase_parts(sample, phase):
+    """Return body/battery production or EOL parts for the selected OD row."""
+    if sample is None:
+        return None
+
+    if phase == "production":
+        drone_col = "drone_lifecycle_production_g"
+        ebike_col = "ebike_lifecycle_production_g"
+    elif phase == "eol":
+        drone_col = "drone_lifecycle_eol_g"
+        ebike_col = "ebike_lifecycle_eol_g"
+    else:
+        raise ValueError(f"Unknown phase: {phase}")
+
+    required = {drone_col, ebike_col, "distance_km", "road_distance_m"}
+    if not required.issubset(sample.index):
+        return None
+
+    ebike_total = pd.to_numeric(pd.Series([sample[ebike_col]]), errors="coerce").iloc[0]
+    drone_total = pd.to_numeric(pd.Series([sample[drone_col]]), errors="coerce").iloc[0]
+    if not np.isfinite(ebike_total) or not np.isfinite(drone_total):
+        return None
+
+    air_km = float(sample["distance_km"])
+    road_km = float(sample["road_distance_m"]) / 1000.0
+    ebike_distance_km = road_km
+    if "ebike_kappa" in sample.index and pd.notna(sample["ebike_kappa"]):
+        ebike_distance_km *= float(sample["ebike_kappa"])
+
+    ebike_body_share, ebike_battery_share = _model_phase_component_shares(
+        ebike_distance_km,
+        "E-bike",
+        phase,
+    )
+    drone_body_share, drone_battery_share = _model_phase_component_shares(
+        air_km,
+        "Drone",
+        phase,
+    )
+
+    return pd.DataFrame(
+        [
+            {
+                "vehicle": "E-bike",
+                "body_g": float(ebike_total) * ebike_body_share,
+                "battery_g": float(ebike_total) * ebike_battery_share,
+                "cached_total_g": float(ebike_total),
+                "distance_km": ebike_distance_km,
+            },
+            {
+                "vehicle": "Drone",
+                "body_g": float(drone_total) * drone_body_share,
+                "battery_g": float(drone_total) * drone_battery_share,
+                "cached_total_g": float(drone_total),
+                "distance_km": air_km,
+            },
+        ]
+    )
 
 
 def _detour_concept_panel_report(ax):
@@ -3982,6 +4166,9 @@ def _write_regions_map_city_rank_and_drone_share_report(
     color_scales,
     production_df,
     eol_df,
+    production_distance_context,
+    eol_distance_context,
+    median_trip_report,
 ):
     """Write a JSON report for regions_map_city_rank_and_drone_share."""
     report_path = save_path.rsplit(".", 1)[0] + "_report.json"
@@ -4059,26 +4246,26 @@ def _write_regions_map_city_rank_and_drone_share_report(
                 ax_c,
                 ax_c_secondary,
             ),
-            "d_production_phase_per_km": _phase_per_km_panel_report(
+            "d_production_phase_selected_trip": _phase_bar_panel_report(
                 production_df,
                 ax_d,
-                "Production emission\n(g CO2e / vehicle-km)",
+                "Production emission\n(g CO2e / order)",
                 "Body",
                 "Battery",
                 "#7f8c8d",
                 "#2ca25f",
-                1.0,
+                production_distance_context,
             ),
-            "e_detour_ratio_concept": _detour_concept_panel_report(ax_e),
-            "f_end_of_life_phase_per_km": _phase_per_km_panel_report(
+            "e_beijing_median_trip_emission_process": median_trip_report,
+            "f_end_of_life_phase_selected_trip": _phase_bar_panel_report(
                 eol_df,
                 ax_f,
-                "End-of-life emission\n(g CO2e / vehicle-km)",
+                "End-of-life emission\n(g CO2e / order)",
                 "Body",
                 "Battery",
                 "#8b8f97",
                 "#5b8db8",
-                1.0,
+                eol_distance_context,
             ),
         },
     }
@@ -4090,6 +4277,7 @@ def _write_regions_map_city_rank_and_drone_share_report(
 def plot_regions_map_city_rank_and_drone_share(
     df_stats: "pd.DataFrame",
     stats_csv_path: str,
+    beijing_od_df: "pd.DataFrame" = None,
     save_path: str = None,
     figsize: tuple = (18, 16),
     for_latex: bool = False,
@@ -4100,15 +4288,15 @@ def plot_regions_map_city_rank_and_drone_share(
     Args:
         df_stats: all_region_stats DataFrame.
         stats_csv_path: Path to all_region_stats.csv (for map function).
+        beijing_od_df: Beijing OD pairs DataFrame for the median-trip use-phase panel.
         save_path: Path to save figure. Shows plot if None.
         figsize: Figure size tuple.
         for_latex: If True, save as PDF.
         plot_title: If True, show title.
     """
-    from visualization.concepts import _draw_detour_ratio_concept, _draw_phase_per_km_barplot
     from visualization.emission import (
-        _end_of_life_phase_parts_per_km,
-        _production_phase_parts_per_km,
+        _draw_median_trip_emission_process,
+        _select_median_trip_emission_sample,
     )
     from visualization.regions import plot_regions_on_china_map
 
@@ -4270,29 +4458,130 @@ def plot_regions_map_city_rank_and_drone_share(
     ax_c.text(-0.03, 1.02, "c", transform=ax_c.transAxes,
               fontsize=16, fontweight="bold", va="bottom", ha="right")
 
-    production_df = _production_phase_parts_per_km(1.0)
-    eol_df = _end_of_life_phase_parts_per_km(1.0)
-    _draw_phase_per_km_barplot(
-        ax_d,
-        production_df,
-        ylabel="Production emission\n(g CO$_2$e / vehicle-km)",
-        body_label="Body",
-        battery_label="Battery",
-        body_color="#7f8c8d",
-        battery_color="#2ca25f",
-        distance_km=1.0,
+    selected_trip = (
+        _select_median_trip_emission_sample(beijing_od_df)
+        if beijing_od_df is not None
+        else None
     )
-    _draw_detour_ratio_concept(ax_e, plot_title=plot_title)
-    _draw_phase_per_km_barplot(
-        ax_f,
-        eol_df,
-        ylabel="End-of-life emission\n(g CO$_2$e / vehicle-km)",
-        body_label="Body",
-        battery_label="Battery",
-        body_color="#8b8f97",
-        battery_color="#5b8db8",
-        distance_km=1.0,
-    )
+    production_df = _selected_trip_phase_parts(selected_trip, "production")
+    eol_df = _selected_trip_phase_parts(selected_trip, "eol")
+
+    if selected_trip is not None:
+        air_km = float(selected_trip["distance_km"])
+        road_km = float(selected_trip["road_distance_m"]) / 1000.0
+        ebike_km = road_km
+        if "ebike_kappa" in selected_trip.index and pd.notna(selected_trip["ebike_kappa"]):
+            ebike_km *= float(selected_trip["ebike_kappa"])
+        distance_context = {
+            "city": "beijing",
+            "air_distance_km_for_drone": _json_safe_scalar(air_km),
+            "road_distance_km_for_ebike": _json_safe_scalar(road_km),
+            "ebike_emission_distance_km": _json_safe_scalar(ebike_km),
+        }
+        distance_label = f"Beijing median trip: air {air_km:.2f} km; road {road_km:.2f} km"
+    else:
+        distance_context = {"city": "beijing", "status": "missing_selected_trip"}
+        distance_label = "Beijing median trip"
+
+    production_distance_context = distance_context
+    eol_distance_context = distance_context
+    if production_df is None:
+        ax_d.text(
+            0.5,
+            0.5,
+            "Beijing median trip production data\nnot available",
+            transform=ax_d.transAxes,
+            ha="center",
+            va="center",
+            fontsize=10,
+            color="#777777",
+        )
+        ax_d.tick_params(left=False, bottom=False, labelleft=False, labelbottom=False)
+        production_df = pd.DataFrame(
+            columns=["vehicle", "body_g", "battery_g", "cached_total_g"]
+        )
+    else:
+        _draw_trip_phase_barplot(
+            ax_d,
+            production_df,
+            ylabel="Production emission\n(g CO$_2$e / order)",
+            body_label="Body",
+            battery_label="Battery",
+            body_color="#7f8c8d",
+            battery_color="#2ca25f",
+            distance_label=distance_label,
+        )
+    if beijing_od_df is None:
+        ax_e.text(
+            0.5,
+            0.5,
+            "Beijing median trip emission data\nnot available",
+            transform=ax_e.transAxes,
+            ha="center",
+            va="center",
+            fontsize=10,
+            color="#777777",
+        )
+        ax_e.tick_params(left=False, bottom=False, labelleft=False, labelbottom=False)
+        median_trip_report = {"axis": _axis_report(ax_e), "status": "missing_beijing_od"}
+    else:
+        median_trip_data = _draw_median_trip_emission_process(
+            ax_e,
+            beijing_od_df,
+            plot_title=plot_title,
+        )
+        median_trip_report = {
+            "axis": _axis_report(ax_e),
+            "status": "ok" if median_trip_data is not None else "no_valid_rows",
+        }
+        if median_trip_data is not None:
+            median_trip_report.update(
+                {
+                    "city": "beijing",
+                    "air_km": _json_safe_scalar(median_trip_data["air_km"]),
+                    "road_km": _json_safe_scalar(median_trip_data["road_km"]),
+                    "drone_curve": [
+                        {"x_km": _json_safe_scalar(x), "y_g": _json_safe_scalar(y)}
+                        for x, y in zip(
+                            median_trip_data["drone_x"],
+                            median_trip_data["drone_y"],
+                        )
+                    ],
+                    "ebike_curve": [
+                        {"x_km": _json_safe_scalar(x), "y_g": _json_safe_scalar(y)}
+                        for x, y in zip(
+                            median_trip_data["ebike_x"],
+                            median_trip_data["ebike_y"],
+                        )
+                    ],
+                }
+            )
+    if eol_df is None:
+        ax_f.text(
+            0.5,
+            0.5,
+            "Beijing median trip EOL data\nnot available",
+            transform=ax_f.transAxes,
+            ha="center",
+            va="center",
+            fontsize=10,
+            color="#777777",
+        )
+        ax_f.tick_params(left=False, bottom=False, labelleft=False, labelbottom=False)
+        eol_df = pd.DataFrame(
+            columns=["vehicle", "body_g", "battery_g", "cached_total_g"]
+        )
+    else:
+        _draw_trip_phase_barplot(
+            ax_f,
+            eol_df,
+            ylabel="End-of-life emission\n(g CO$_2$e / order)",
+            body_label="Body",
+            battery_label="Battery",
+            body_color="#8b8f97",
+            battery_color="#5b8db8",
+            distance_label=distance_label,
+        )
     ax_d.text(-0.03, 1.02, "d", transform=ax_d.transAxes,
               fontsize=16, fontweight="bold", va="bottom", ha="right")
     ax_e.text(-0.03, 1.02, "e", transform=ax_e.transAxes,
@@ -4379,6 +4668,9 @@ def plot_regions_map_city_rank_and_drone_share(
             },
             production_df=production_df,
             eol_df=eol_df,
+            production_distance_context=production_distance_context,
+            eol_distance_context=eol_distance_context,
+            median_trip_report=median_trip_report,
         )
         plt.savefig(save_path, dpi=300, bbox_inches="tight")
         print(f"Regions map city rank and drone share saved to {save_path}")

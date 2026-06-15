@@ -2853,9 +2853,24 @@ def render_all(data_dir: str, figures_dir: str, for_latex: bool = False, plot_ti
                 )
 
             if _want("regions_map_city_rank_and_drone_share"):
+                beijing_od_path = os.path.join(
+                    data_dir,
+                    "city",
+                    "beijing",
+                    "beijing_od_pairs.csv",
+                )
+                beijing_od_df = None
+                if os.path.exists(beijing_od_path):
+                    beijing_od_df = pd.read_csv(beijing_od_path)
+                else:
+                    print(
+                        "regions_map_city_rank_and_drone_share: "
+                        f"Beijing OD missing, panel e will show placeholder ({beijing_od_path})"
+                    )
                 plot_regions_map_city_rank_and_drone_share(
                     df_stats=df,
                     stats_csv_path=stats_path,
+                    beijing_od_df=beijing_od_df,
                     save_path=os.path.join(out, "regions_map_city_rank_and_drone_share.png"),
                     for_latex=for_latex,
                     plot_title=plot_title,
