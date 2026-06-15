@@ -330,6 +330,56 @@ def _draw_distance_panel(
             "max_lng": max(lng for _, lng in corners),
         }
 
+        try:
+            from matplotlib.transforms import Affine2D
+
+            configure_contextily_cache()
+            img, basemap_extent = ctx.bounds2img(
+                query_bounds["min_lng"],
+                query_bounds["min_lat"],
+                query_bounds["max_lng"],
+                query_bounds["max_lat"],
+                zoom=16,
+                source=ctx.providers.OpenStreetMap.Mapnik,
+                ll=True,
+            )
+
+            def _mercator_to_lng_lat(x, y):
+                radius = 6378137.0
+                lng = np.degrees(x / radius)
+                lat = np.degrees(2 * np.arctan(np.exp(y / radius)) - np.pi / 2)
+                return lng, lat
+
+            west_m, east_m, south_m, north_m = basemap_extent
+            west, south = _mercator_to_lng_lat(west_m, south_m)
+            east, north = _mercator_to_lng_lat(east_m, north_m)
+            sw = _transform(south, west)
+            se = _transform(south, east)
+            nw = _transform(north, west)
+            v_x = se - sw
+            v_y = nw - sw
+            image_transform = (
+                Affine2D.from_values(
+                    v_x[0] / img.shape[1],
+                    v_x[1] / img.shape[1],
+                    v_y[0] / img.shape[0],
+                    v_y[1] / img.shape[0],
+                    sw[0],
+                    sw[1],
+                )
+                + ax.transData
+            )
+            ax.imshow(
+                np.flipud(img),
+                extent=(0, img.shape[1], 0, img.shape[0]),
+                origin="lower",
+                transform=image_transform,
+                alpha=0.5,
+                zorder=0,
+            )
+        except Exception as e:
+            print(f"Could not add rotated basemap: {e}")
+
         edge_coords = graph.get_local_edges(query_bounds)
         if len(edge_coords) > 0:
             segments = [

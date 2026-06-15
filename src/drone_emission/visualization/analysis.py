@@ -4167,7 +4167,7 @@ def _selected_trip_distance_comparison_report(ax, sample):
         "axis": _axis_report(ax),
         "city": "beijing",
         "panel_type": "distance_comparison",
-        "target_display_aspect_width_over_height": 1.5,
+        "target_display_aspect_width_over_height": 2.0,
     }
     if sample is None:
         report["selected_trip"] = {"status": "missing_or_unplottable_selected_trip"}
@@ -4423,7 +4423,7 @@ def plot_regions_map_city_rank_and_drone_share(
     )
     ax_c = fig.add_subplot(mechanism_gs[0, 0])
     ax_d = fig.add_subplot(mechanism_gs[0, 1])
-    ax_d.set_box_aspect(1 / 1.5)
+    ax_d.set_box_aspect(1 / 2.0)
     phase_gs = gs[4, :].subgridspec(
         1,
         3,
@@ -4513,7 +4513,7 @@ def plot_regions_map_city_rank_and_drone_share(
         selected_trip,
         beijing_router,
     )
-    d_target_aspect = 1.5
+    d_target_aspect = 2.0
     if distance_comparison_sample is not None and beijing_graph is not None:
         from visualization.roadnet import _draw_distance_panel
 
