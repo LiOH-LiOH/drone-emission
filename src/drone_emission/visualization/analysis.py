@@ -1115,27 +1115,27 @@ def plot_regions_map_optimal_drone_share(
 
 
 def plot_regions_map_kappa_panels(
-    oat_csv_path: str,
+    named_csv_path: str,
     stats_csv_path: str,
-    kappas: tuple = (0.9, 0.8, 0.7, 0.6),
+    kappas: tuple | None = None,
     save_path: str = None,
-    figsize: tuple = (16, 12),
+    figsize: tuple = (16, 7),
     for_latex: bool = False,
     plot_title: bool = False,
 ):
     """2x2 panel grid: China region choropleth of drone-vs-ebike reduction across kappa.
 
-    Reduction values come from `all_sensitivity_oat.csv` rows where
-    `feature_varied == "kappa"`, using `reduction_vs_scenario_ebike_pct` —
-    i.e. the optimal mix vs all-ebike at the SAME kappa. This isolates the
-    drone-substitution benefit from the e-bike bundling benefit. All four
-    panels share a single diverging colour scale and one figure-level
-    colorbar so the maps are directly comparable.
+    Reduction values come from `all_sensitivity_named.csv` rows for the
+    current-grid optimal mixed strategy, using same-kappa all-ebike as the
+    denominator. This keeps kappa as an operator pathway scenario rather than
+    a drone-technology sensitivity feature. Panels share one diverging colour
+    scale so the maps are directly comparable.
 
     Args:
-        oat_csv_path: Path to all_sensitivity_oat.csv.
+        named_csv_path: Path to all_sensitivity_named.csv.
         stats_csv_path: Path to all_region_stats.csv (provides region_name_cn lookup).
-        kappas: Four kappa values to render (one per panel, row-major order).
+        kappas: Optional kappa values to render. Defaults to the modeled kappa
+            values available in the named-scenario table.
         save_path: Path to save figure. Shows plot if None.
         figsize: Figure size tuple.
         for_latex: If True, save as PDF.
@@ -1146,18 +1146,26 @@ def plot_regions_map_kappa_panels(
 
     from visualization.regions import plot_regions_on_china_map
 
-    if len(kappas) != 4:
-        raise ValueError(f"plot_regions_map_kappa_panels expects 4 kappa values, got {len(kappas)}")
-
-    oat = pd.read_csv(oat_csv_path)
+    named = pd.read_csv(named_csv_path)
     base = pd.read_csv(stats_csv_path)
+    if kappas is None:
+        kappas = tuple(sorted(named["kappa"].dropna().unique()))
+    else:
+        kappas = tuple(kappas)
+    if not kappas:
+        print("plot_regions_map_kappa_panels: no kappa values in named scenarios; skipping")
+        return
 
-    reduction_col = "reduction_vs_scenario_ebike_pct"
+    reduction_col = "reduction_vs_all_ebike_same_kappa_pct"
     kappa_dfs = {}
     drone_share_median = {}
     all_values = []
     for k in kappas:
-        kappa_rows = oat[(oat["feature_varied"] == "kappa") & (np.isclose(oat["kappa"], k))]
+        kappa_rows = named[
+            np.isclose(named["kappa"], k)
+            & np.isclose(named["gef_mult"], 1.0)
+            & (named["strategy"] == "optimal_mixed")
+        ].copy()
         sub = kappa_rows[["region_key", reduction_col]].rename(
             columns={reduction_col: "max_lifecycle_reduction_pct"}
         )
@@ -1166,11 +1174,12 @@ def plot_regions_map_kappa_panels(
         )
         kappa_dfs[k] = merged
         all_values.extend(merged["max_lifecycle_reduction_pct"].dropna().tolist())
-        drone_share_median[k] = float(kappa_rows["optimal_drone_ratio_pct"].median())
+        share_col = _scenario_drone_share_column(kappa_rows) if not kappa_rows.empty else "drone_ratio_pct"
+        drone_share_median[k] = float(kappa_rows[share_col].median()) if len(kappa_rows) else float("nan")
 
     if not all_values:
-        print("plot_regions_map_kappa_panels: no kappa OAT values matched any region in stats — "
-              "rendering empty maps. Run sensitivity across all regions to populate.")
+        print("plot_regions_map_kappa_panels: no named kappa scenario values matched any region in stats — "
+              "rendering empty maps. Run sensitivity --stages named first.")
         max_abs = 1.0
     else:
         max_abs = max(abs(min(all_values)), abs(max(all_values)))
@@ -1179,8 +1188,11 @@ def plot_regions_map_kappa_panels(
         "#d7191c", "#fdae61", "#ffffbf", "#a6d96a", "#1a9641",
     ])
 
-    fig, axes = plt.subplots(2, 2, figsize=figsize)
-    panel_labels = ("a", "b", "c", "d")
+    n = len(kappas)
+    ncols = min(2, n)
+    nrows = int(np.ceil(n / ncols))
+    fig, axes = plt.subplots(nrows, ncols, figsize=figsize, squeeze=False)
+    panel_labels = tuple(chr(ord("a") + i) for i in range(n))
 
     for ax, k, label in zip(axes.flat, kappas, panel_labels):
         plot_regions_on_china_map(
@@ -1192,17 +1204,19 @@ def plot_regions_map_kappa_panels(
             draw_colorbar=False,
             draw_legend=False,
         )
-        ax.set_title(f"$\\kappa = {k}$", fontsize=13)
+        ax.set_title(f"$\\kappa = {_format_kappa_value(k)}$", fontsize=13)
         ax.text(-0.02, 1.02, label, transform=ax.transAxes,
                 fontsize=14, fontweight="bold", va="bottom", ha="right")
         ax.text(
             0.02, 0.98,
-            f"Median drone share: {drone_share_median[k]:.0f}%",
+            f"Median drone share: {drone_share_median[k]:.0f}%" if np.isfinite(drone_share_median[k]) else "Median drone share: n/a",
             transform=ax.transAxes,
             fontsize=10, va="top", ha="left",
             bbox=dict(facecolor="white", edgecolor="gray", alpha=0.85,
                       boxstyle="round,pad=0.3"),
         )
+    for ax in axes.flat[n:]:
+        ax.axis("off")
 
     fig.tight_layout(rect=(0, 0.06, 0.92, 1.0))
 
@@ -1219,7 +1233,7 @@ def plot_regions_map_kappa_panels(
     )
 
     if plot_title:
-        fig.suptitle("Lifecycle reduction across drone-share $\\kappa$", fontsize=14, fontweight="bold")
+        fig.suptitle("Lifecycle reduction across e-bike bundling scenarios", fontsize=14, fontweight="bold")
 
     if save_path:
         if for_latex and not save_path.endswith(".pdf"):

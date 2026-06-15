@@ -195,12 +195,13 @@ def run_sensitivity(region_info, exp_config, stages=None) -> None:
     if "_sobol.csv" in missing:
         sobol_n = int(sens_cfg.get("sobol_n", 512))
         sobol_seed = int(sens_cfg.get("sobol_seed", 42))
+        sobol_num_resamples = int(sens_cfg.get("sobol_num_resamples", 100))
         sobol_df = run_sobol_for_region(
             od_df, region_key=region_key, province=province,
             province_gef_kwh=province_gef,
             ebike_params=ebike_params, drone_params=drone_params,
             rider_weight=rider_weight, payload_kg=payload_kg,
-            n=sobol_n, seed=sobol_seed,
+            n=sobol_n, seed=sobol_seed, num_resamples=sobol_num_resamples,
         )
         sobol_path = os.path.join(out_dir, f"{region_name_en}_sobol.csv")
         sobol_df.to_csv(sobol_path, index=False)

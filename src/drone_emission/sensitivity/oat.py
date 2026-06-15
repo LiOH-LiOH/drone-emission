@@ -1,7 +1,9 @@
-"""One-at-a-time (OAT) sensitivity sweep, per region.
+"""One-at-a-time (OAT) drone-technology sensitivity sweep, per region.
 
-Produces one row per (region, scenario_id) — a baseline plus deviations on
-13 drone-tech features plus κ (e-bike bundling anchor-assumption):
+Produces one row per (region, scenario_id): a baseline plus deviations on
+12 drone-side features. E-bike bundling (kappa) and grid carbon intensity are
+held fixed here because they are pathway/scenario levers rather than uncertain
+drone-technology parameters.
 
 Production:
 * drone_body_kg                         levels: 9.0, 11.5 (baseline 10.1; ±10% MD4-3000 spec)
@@ -21,14 +23,9 @@ Lifespan / amortization:
 * drone_battery_lifespan_yr             levels: 1, 3 (baseline 2)
 * drone_utilization_rate                levels: 0.5, 1.2 (baseline 1.0; multiplier on annual deliveries)
 
-Anchor assumption (separate from drone-tech):
-* kappa (e-bike bundling)               levels: 0.7, 0.8, 0.9
-                                        (baseline from experiment.toml)
-
-The gef_mult and ebike_lifespan_yr keys remain in BASELINE (anchor still uses
-them at gef_mult=1.0, ebike_lifespan_yr=4) but are no longer perturbed in
-FEATURE_LEVELS — GEF is measured (not new-tech uncertainty, moves to §5) and
-e-bike lifespan is mature tech (< 1 pp swing).
+The kappa, gef_mult and ebike_lifespan_yr keys remain in BASELINE because the
+anchor still uses configured e-bike bundling, measured grid intensity, and the
+mature e-bike lifespan. They are not perturbed in FEATURE_LEVELS.
 
 For each scenario the threshold sweep matches ``emission/api.py``: 12 points
 (-0.01, p5..p95 of road distances, +inf). Reductions are reported against:
@@ -93,13 +90,6 @@ BASELINE = {
 
 # Deviating levels per feature (baseline value omitted)
 FEATURE_LEVELS = {
-    # Anchor-assumption (e-bike side). κ=0.6 dropped 2026-05-20 — that level
-    # corresponded to "aggressive bundling" (40% discount) which is at the
-    # extreme tail of the Eleme empirical range, not a realistic operating
-    # point. Remaining levels [0.7, 0.8, 0.9] cover the empirically plausible
-    # bundling range; the baseline comes from experiment.toml.
-    "kappa": [0.7, 0.8, 0.9],
-
     # Tightened 2026-05-20: ±15% physics-model validation envelope, NOT the
     # ad-hoc ±25/+50% from the pre-pivot version. Multirotor energy models
     # (Stolaroff 2018, D'Andrea 2014, Doole 2023) typically validate within
@@ -137,7 +127,8 @@ FEATURE_LEVELS = {
     # NEW (lifespan / amortization): unchanged
     "drone_utilization_rate": [0.5, 1.2],
 
-    # DROPPED: gef_mult (measured, §5 lever), ebike_lifespan_yr (mature, < 1 pp)
+    # DROPPED: kappa (operator/e-bike pathway variable), gef_mult (measured,
+    # §5 lever), ebike_lifespan_yr (mature, non-drone parameter)
 }
 
 

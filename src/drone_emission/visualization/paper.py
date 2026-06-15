@@ -37,6 +37,7 @@ Available figures:
     regions_map_city_province_ranks,
     regions_map_city_rank_inset,
     regions_map_kappa_panels,
+    drone_tech_sensitivity,
     oat_tornado_story, oat_tornado_full
 """
 
@@ -2879,12 +2880,12 @@ def render_all(data_dir: str, figures_dir: str, for_latex: bool = False, plot_ti
                 )
 
             if _want("regions_map_kappa_panels"):
-                oat_path = os.path.join(data_dir, "all_sensitivity_oat.csv")
-                if not os.path.exists(oat_path):
-                    print(f"regions_map_kappa_panels skipped — missing {oat_path}; run sensitivity first")
+                named_path = os.path.join(data_dir, "all_sensitivity_named.csv")
+                if not os.path.exists(named_path):
+                    print(f"regions_map_kappa_panels skipped — missing {named_path}; run sensitivity --stages named first")
                 else:
                     plot_regions_map_kappa_panels(
-                        oat_csv_path=oat_path,
+                        named_csv_path=named_path,
                         stats_csv_path=stats_path,
                         save_path=os.path.join(out, "regions_map_kappa_panels.png"),
                         for_latex=for_latex,
@@ -2976,7 +2977,7 @@ def render_all(data_dir: str, figures_dir: str, for_latex: bool = False, plot_ti
                             named_csv_path=named_path,
                         )
 
-    # OAT tornado figures (Fig. 5a story + SI full): independent of
+    # OAT tornado diagnostics (compact + SI full): independent of
     # all_region_stats.csv; only need all_sensitivity_oat.csv. Kept outside
     # the stats-gated block so --only oat_tornado_* works standalone.
     if _want("oat_tornado_story") or _want("oat_tornado_full"):
@@ -3007,11 +3008,13 @@ def render_all(data_dir: str, figures_dir: str, for_latex: bool = False, plot_ti
     # Sobol + Monte Carlo figures (global SA, replaces Shapley in main text).
     # Independent of all_region_stats.csv; only need all_sensitivity_sobol.csv.
     sobol_figures = {
+        "drone_tech_sensitivity",
         "sobol_indices", "sobol_by_mechanism", "sobol_grouped", "sobol_strip",
         "mc_uncertainty", "mc_anchor_forest", "mc_anchor_scatter",
     }
     if only is None or only & sobol_figures:
         from visualization.sensitivity import (
+            plot_drone_tech_sensitivity_panels,
             plot_mc_anchor_forest, plot_mc_anchor_scatter, plot_mc_uncertainty,
             plot_sobol_by_mechanism, plot_sobol_grouped, plot_sobol_indices,
             plot_sobol_strip,
@@ -3021,6 +3024,13 @@ def render_all(data_dir: str, figures_dir: str, for_latex: bool = False, plot_ti
             print(f"Sobol/MC figures skipped — missing {sobol_path}; run sensitivity + consolidate_sensitivity first")
         else:
             sobol_df = pd.read_csv(sobol_path)
+            if _want("drone_tech_sensitivity"):
+                plot_drone_tech_sensitivity_panels(
+                    sobol_df,
+                    save_path=os.path.join(out, "drone_tech_sensitivity.png"),
+                    for_latex=for_latex,
+                    plot_title=plot_title,
+                )
             if _want("sobol_indices"):
                 plot_sobol_indices(
                     sobol_df,

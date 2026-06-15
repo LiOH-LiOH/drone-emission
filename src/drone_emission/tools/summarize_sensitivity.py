@@ -1,7 +1,6 @@
-"""Summarize consolidated sensitivity results across all cities.
+"""Summarize consolidated sensitivity and pathway results across all cities.
 
-Compares actual 312-city numbers against the projected ranges in
-notes/expected_sensitivity_results.md. Run after consolidate_sensitivity.
+Run after consolidate_sensitivity.
 
 Usage:
     cd src/drone_emission
@@ -19,6 +18,25 @@ PROJECT_ROOT = os.path.dirname(
     os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 )
 DATA_DIR = os.path.join(PROJECT_ROOT, "data")
+
+DRONE_TECH_GROUPS = {
+    "operation": (
+        "drone_energy_mult", "drone_cruise_kmh", "drone_hover_s",
+        "headwind_mps", "payload_kg",
+    ),
+    "production_eol": (
+        "drone_body_kg", "drone_battery_mass",
+        "drone_production_co2_per_kg", "drone_battery_co2_per_kwh",
+    ),
+    "amortization": (
+        "drone_lifespan_yr", "drone_battery_lifespan_yr",
+        "drone_utilization_rate",
+    ),
+}
+
+DRONE_TECH_FEATURES = {
+    feature for features in DRONE_TECH_GROUPS.values() for feature in features
+}
 
 
 def _q(s: pd.Series, qs=(0.25, 0.5, 0.75)) -> tuple:
@@ -48,12 +66,12 @@ def summarize_oat(df: pd.DataFrame) -> None:
     print(f"  beneficial-city share at anchor: {share:.1f}%")
     print()
 
-    # Tornado: median |Δreduction-pct| per feature
-    print("--- Tornado: median |Δreduction-pct| per feature (OAT, anchor as ref) ---")
+    # Tornado: median |Δreduction-pct| per drone-technology feature
+    print("--- Drone-tech tornado: median |Δreduction-pct| per feature (OAT, anchor as ref) ---")
     base_by_city = base.set_index("region_key")["reduction_vs_anchor_ebike_pct"]
     tornado = []
     for feat in df["feature_varied"].unique():
-        if feat == "baseline":
+        if feat == "baseline" or feat not in DRONE_TECH_FEATURES:
             continue
         sub = df[df["feature_varied"] == feat].copy()
         sub["delta"] = (
@@ -67,20 +85,6 @@ def summarize_oat(df: pd.DataFrame) -> None:
     print(f"  {'feature':<22} {'med|Δ|':>8} {'med Δ':>8}")
     for feat, ma, ms in tornado:
         print(f"  {feat:<22} {ma:>8.2f} {ms:>+8.2f}")
-    print()
-
-    # Beneficial-city share by κ
-    print("--- Beneficial-city share by κ (κ-only OAT rows) ---")
-    kappa_rows = df[df["feature_varied"] == "kappa"].copy()
-    kappa_rows = pd.concat([kappa_rows, base.assign(feature_varied="kappa")], ignore_index=True)
-    grp = kappa_rows.groupby("kappa").agg(
-        n=("region_key", "nunique"),
-        share_pos=("reduction_vs_scenario_ebike_pct", lambda s: float((s > 0).mean()) * 100),
-        med_red=("reduction_vs_scenario_ebike_pct", "median"),
-    )
-    print(f"  {'κ':>4} {'n':>5} {'%>0':>7} {'medRed':>8}")
-    for k, row in grp.iterrows():
-        print(f"  {k:>4} {int(row['n']):>5} {row['share_pos']:>6.1f}% {row['med_red']:>8.2f}")
     print()
 
 
@@ -121,43 +125,100 @@ def summarize_named(df: pd.DataFrame) -> None:
         print(f"  {k:>4} {strat:<22} {a:>+14.2f} {b:>+14.2f}")
     print()
 
-    # 2060 upside
-    sub_2060 = df[(df["strategy"] == "optimal_mixed_2060") & (df["kappa"] == 0.7)]
-    if not sub_2060.empty:
-        q1, q2, q3 = _q(sub_2060["reduction_vs_anchor_ebike_pct"])
-        print(f"  optimal_mixed_2060 @ κ=0.7  P25/P50/P75: {q1} / {q2} / {q3}")
+    comparison_kappas = sorted(df["kappa"].dropna().unique())
+    comparison_kappa = comparison_kappas[0] if comparison_kappas else None
 
-    sub_2030 = df[(df["strategy"] == "optimal_mixed_2030") & (df["kappa"] == 0.7)]
-    if not sub_2030.empty:
+    # 2060 upside
+    sub_2060 = df[(df["strategy"] == "optimal_mixed_2060")]
+    if comparison_kappa is not None:
+        sub_2060 = sub_2060[np.isclose(sub_2060["kappa"], comparison_kappa)]
+    if comparison_kappa is not None and not sub_2060.empty:
+        q1, q2, q3 = _q(sub_2060["reduction_vs_anchor_ebike_pct"])
+        print(f"  optimal_mixed_2060 @ κ={comparison_kappa:g}  P25/P50/P75: {q1} / {q2} / {q3}")
+
+    sub_2030 = df[(df["strategy"] == "optimal_mixed_2030")]
+    if comparison_kappa is not None:
+        sub_2030 = sub_2030[np.isclose(sub_2030["kappa"], comparison_kappa)]
+    if comparison_kappa is not None and not sub_2030.empty:
         q1, q2, q3 = _q(sub_2030["reduction_vs_anchor_ebike_pct"])
-        print(f"  optimal_mixed_2030 @ κ=0.7  P25/P50/P75: {q1} / {q2} / {q3}")
+        print(f"  optimal_mixed_2030 @ κ={comparison_kappa:g}  P25/P50/P75: {q1} / {q2} / {q3}")
     print()
 
 
-def compare_to_projections(oat: pd.DataFrame, shap: pd.DataFrame, named: pd.DataFrame) -> None:
+def summarize_sobol(df: pd.DataFrame) -> None:
     print("=" * 70)
-    print("ACTUAL vs PROJECTED (notes/expected_sensitivity_results.md)")
+    print("SOBOL DRONE-TECH SENSITIVITY")
+    print("=" * 70)
+    si = df[df["row_kind"] == "sobol_index"].copy()
+    si = si[si["feature"].isin(DRONE_TECH_FEATURES)]
+    n_cities = si["region_key"].nunique()
+    print(f"Cities covered: {n_cities}")
+    print()
+
+    print("--- Median Sobol index per drone-tech feature ---")
+    med = si.groupby("feature").agg(S1=("S1", "median"), ST=("ST", "median"))
+    med = med.sort_values("ST", ascending=False)
+    print(f"  {'feature':<34} {'S1':>8} {'ST':>8}")
+    for feat, row in med.iterrows():
+        print(f"  {feat:<34} {row['S1']:>8.3f} {row['ST']:>8.3f}")
+    print()
+
+    print("--- Median class total ΣST ---")
+    feature_to_group = {
+        feature: group for group, features in DRONE_TECH_GROUPS.items() for feature in features
+    }
+    si["class"] = si["feature"].map(feature_to_group)
+    per_city = si.groupby(["region_key", "class"])["ST"].sum().reset_index()
+    grouped = per_city.groupby("class")["ST"].median().sort_values(ascending=False)
+    for group, value in grouped.items():
+        print(f"  {group:<18} {value:>8.3f}")
+    print()
+
+    mc = df[df["row_kind"] == "mc_summary"].pivot_table(
+        index="region_key", columns="feature", values="value", aggfunc="first"
+    )
+    baseline_col = "baseline_drone_tech_reduction_pct"
+    if baseline_col in mc.columns:
+        q1, q2, q3 = _q(mc[baseline_col])
+        print(f"  baseline_drone_tech_reduction_pct P25/P50/P75: {q1} / {q2} / {q3}")
+    if "mc_median_reduction_pct" in mc.columns:
+        q1, q2, q3 = _q(mc["mc_median_reduction_pct"])
+        print(f"  MC median reduction pct           P25/P50/P75: {q1} / {q2} / {q3}")
+    print()
+
+
+def compare_outputs(oat: pd.DataFrame, shap: pd.DataFrame, named: pd.DataFrame, sobol: pd.DataFrame) -> None:
+    print("=" * 70)
+    print("OUTPUT CROSS-CHECK")
     print("=" * 70)
 
     base = oat[oat["feature_varied"] == "baseline"]
     actual_anchor = float(base["reduction_vs_anchor_ebike_pct"].median())
     actual_share = float((base["reduction_vs_anchor_ebike_pct"] > 0).mean()) * 100
-    print(f"  Anchor median reduction:      actual {actual_anchor:.1f}%   projected ~25% (15–35%)")
-    print(f"  Beneficial-city share @ anchor κ: actual {actual_share:.1f}%    projected >95%")
+    print(f"  OAT baseline median reduction:       {actual_anchor:.1f}%")
+    print(f"  OAT beneficial-city share @ baseline: {actual_share:.1f}%")
 
-    # Tornado top-1 feature
+    sobol_features = set(sobol.loc[sobol["row_kind"] == "sobol_index", "feature"].dropna())
+    unexpected_sobol = sorted(sobol_features - DRONE_TECH_FEATURES)
+    missing_sobol = sorted(DRONE_TECH_FEATURES - sobol_features)
+    print(f"  Sobol sampled drone-tech features:    {len(sobol_features & DRONE_TECH_FEATURES)} / {len(DRONE_TECH_FEATURES)}")
+    if unexpected_sobol:
+        print(f"  Unexpected Sobol features:            {', '.join(unexpected_sobol)}")
+    if missing_sobol:
+        print(f"  Missing Sobol features:               {', '.join(missing_sobol)}")
+
+    # Tornado top features
     base_by_city = base.set_index("region_key")["reduction_vs_anchor_ebike_pct"]
     tornado = []
     for feat in oat["feature_varied"].unique():
-        if feat == "baseline":
+        if feat == "baseline" or feat not in DRONE_TECH_FEATURES:
             continue
         sub = oat[oat["feature_varied"] == feat].copy()
         sub["delta"] = sub["reduction_vs_anchor_ebike_pct"] - sub["region_key"].map(base_by_city)
         tornado.append((feat, float(sub["delta"].abs().median())))
     tornado.sort(key=lambda r: -r[1])
     top = ", ".join(f"{f}({v:.1f})" for f, v in tornado[:3])
-    print(f"  Top-3 OAT levers (med|Δ|):    actual {top}")
-    print(f"                                projected: kappa, drone_energy_mult, gef_mult")
+    print(f"  Top-3 OAT drone-tech levers:          {top}")
 
     # Shapley signs / order
     shap_med = shap.groupby("mechanism")["shapley_pct_pts"].median()
@@ -166,18 +227,23 @@ def compare_to_projections(oat: pd.DataFrame, shap: pd.DataFrame, named: pd.Data
     for m in ["M1_routing", "M2_bundling", "M3_production", "M4_gef"]:
         if m in shap_med.index:
             print(f"    {m:<18} actual {shap_med[m]:+.2f}")
-    print(f"    projected: M3 ≈ +25..+30, M1 ≈ +6..+12, M2 ≈ -8..-12, M4 ≈ -20..-28")
 
     # 2060 upside
-    sub_2060 = named[(named["strategy"] == "optimal_mixed_2060") & (named["kappa"] == 0.7)]
-    if not sub_2060.empty:
+    comparison_kappas = sorted(named["kappa"].dropna().unique())
+    comparison_kappa = comparison_kappas[0] if comparison_kappas else None
+    sub_2060 = named[named["strategy"] == "optimal_mixed_2060"]
+    if comparison_kappa is not None:
+        sub_2060 = sub_2060[np.isclose(sub_2060["kappa"], comparison_kappa)]
+    if comparison_kappa is not None and not sub_2060.empty:
         a = float(sub_2060["reduction_vs_anchor_ebike_pct"].median())
         print()
-        print(f"  optimal_mixed_2060 @ κ=0.7:   actual {a:.1f}%   projected ~80–90%")
-    sub_2030 = named[(named["strategy"] == "optimal_mixed_2030") & (named["kappa"] == 0.7)]
-    if not sub_2030.empty:
+        print(f"  optimal_mixed_2060 @ κ={comparison_kappa:g}:   {a:.1f}%")
+    sub_2030 = named[named["strategy"] == "optimal_mixed_2030"]
+    if comparison_kappa is not None:
+        sub_2030 = sub_2030[np.isclose(sub_2030["kappa"], comparison_kappa)]
+    if comparison_kappa is not None and not sub_2030.empty:
         a = float(sub_2030["reduction_vs_anchor_ebike_pct"].median())
-        print(f"  optimal_mixed_2030 @ κ=0.7:   actual {a:.1f}%   projected ~45–55%")
+        print(f"  optimal_mixed_2030 @ κ={comparison_kappa:g}:   {a:.1f}%")
     print()
 
 
@@ -185,10 +251,12 @@ def main():
     oat = pd.read_csv(os.path.join(DATA_DIR, "all_sensitivity_oat.csv"))
     shap = pd.read_csv(os.path.join(DATA_DIR, "all_sensitivity_shapley.csv"))
     named = pd.read_csv(os.path.join(DATA_DIR, "all_sensitivity_named.csv"))
+    sobol = pd.read_csv(os.path.join(DATA_DIR, "all_sensitivity_sobol.csv"))
     summarize_oat(oat)
     summarize_shapley(shap)
     summarize_named(named)
-    compare_to_projections(oat, shap, named)
+    summarize_sobol(sobol)
+    compare_outputs(oat, shap, named, sobol)
 
 
 if __name__ == "__main__":

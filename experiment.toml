@@ -24,8 +24,9 @@ min_sales = 5             # Minimum annual sales threshold per building
 [sensitivity]
 enable = true            # Set false to skip the sensitivity stage entirely
 skip_if_done = true      # If all 4 output CSVs exist, skip recomputation
-sobol_n = 512            # Saltelli sample size (yields N*(d+2) per-city LCA runs)
+sobol_n = 64             # Draft Saltelli sample size (yields N*(d+2) per-city LCA runs)
 sobol_seed = 42          # Seed for reproducible Saltelli draws
+sobol_num_resamples = 50 # Draft bootstrap resamples for Sobol confidence intervals
 
 # Equity analysis parameters
 [equity_params]

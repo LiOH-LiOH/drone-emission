@@ -1,9 +1,8 @@
 """Exploratory plots from the consolidated sensitivity outputs.
 
 Reads ``data/all_sensitivity_oat.csv``, ``data/all_sensitivity_shapley.csv``,
-and ``data/all_sensitivity_named.csv``. Produces ~12 candidate figures into
-``figures/sensitivity/``. The user picks the final paper figures from this
-set later.
+``data/all_sensitivity_sobol.csv``, and ``data/all_sensitivity_named.csv``.
+Produces candidate figures into ``figures/sensitivity/``.
 
 Each plot function follows the project's standard signature
 ``(..., save_path=None, dpi=150, for_latex=False, plot_title=False)``:
@@ -32,27 +31,20 @@ from matplotlib.patches import Patch
 from ._utils import _add_title_suffix
 
 OAT_FEATURES = (
-    "kappa", "gef_mult", "drone_energy_mult", "payload_kg",
-    "drone_lifespan_yr", "ebike_lifespan_yr",
+    "drone_energy_mult", "payload_kg", "drone_lifespan_yr",
     "drone_cruise_kmh", "drone_body_kg", "drone_hover_s",
     "drone_battery_lifespan_yr", "headwind_mps",
-    # Added 2026-05-20: drone-tech expansion for §4 LCA-stage tornado
-    # (production-intensity + utilization). gef_mult and ebike_lifespan_yr
-    # are still in the list for backwards-compat but no longer perturbed by
-    # oat.py:FEATURE_LEVELS, so they appear as empty subs in plot_oat_tornado.
     "drone_battery_mass",
     "drone_production_co2_per_kg",
     "drone_battery_co2_per_kwh",
     "drone_utilization_rate",
 )
 
-# Curated subset for the §4 story tornado: rule = median city-level swing
-# exceeds 1 pp, plus kappa regardless (narrative continuity with §1). Five
-# features are excluded by this rule: payload_kg, drone_lifespan_yr,
-# ebike_lifespan_yr (below 1 pp) — the remaining nine carry the story.
+# Curated subset for supplementary OAT diagnostics. The main paper robustness
+# figure now uses class-specific Sobol panels below.
 OAT_FEATURES_STORY = (
-    "gef_mult", "drone_energy_mult", "drone_body_kg",
-    "kappa", "drone_hover_s", "headwind_mps",
+    "drone_energy_mult", "drone_body_kg",
+    "drone_hover_s", "headwind_mps",
     "drone_cruise_kmh", "drone_battery_lifespan_yr", "payload_kg",
 )
 
@@ -74,49 +66,32 @@ OAT_FEATURE_LABELS = {
     "drone_utilization_rate": "Drone utilization rate",
 }
 
-# Feature → mechanism mapping for the §4 LCA-stage tornado (2026-05-20).
-# Five mechanisms aligned with the LCA-stage classification:
-#
-#   - anchor:               e-bike-side bundling assumption (κ)
-#   - production_mass:      embodied carbon driven by drone mass
-#   - production_intensity: embodied carbon intensity (per-kg / per-kWh)
-#   - use:                  in-flight energy + operating environment
-#   - lifespan:             production amortization denominator
-#
-# Splitting production into mass vs intensity is justified by the Sobol
-# finding that ΣST(mass) ≈ 0.155 while ΣST(intensity) ≈ 0.006 — they
-# behave very differently and deserve separate bars/colors.
-#
-# gef_mult and ebike_lifespan_yr are dropped: gef moves to §5 (forward
-# pathway), ebike_lifespan is a mature-tech parameter held at baseline.
+# Feature → class mapping for drone-technology robustness.
 OAT_FEATURE_MECHANISM = {
-    "kappa":                       "anchor",
-    "drone_body_kg":               "production_mass",
-    "drone_battery_mass":          "production_mass",
-    "drone_production_co2_per_kg": "production_intensity",
-    "drone_battery_co2_per_kwh":   "production_intensity",
-    "drone_energy_mult":           "use",
-    "drone_cruise_kmh":            "use",
-    "drone_hover_s":               "use",
-    "headwind_mps":                "use",
-    "payload_kg":                  "use",
-    "drone_lifespan_yr":           "lifespan",
-    "drone_battery_lifespan_yr":   "lifespan",
-    "drone_utilization_rate":      "lifespan",
+    "drone_body_kg":               "production_eol",
+    "drone_battery_mass":          "production_eol",
+    "drone_production_co2_per_kg": "production_eol",
+    "drone_battery_co2_per_kwh":   "production_eol",
+    "drone_energy_mult":           "operation",
+    "drone_cruise_kmh":            "operation",
+    "drone_hover_s":               "operation",
+    "headwind_mps":                "operation",
+    "payload_kg":                  "operation",
+    "drone_lifespan_yr":           "amortization",
+    "drone_battery_lifespan_yr":   "amortization",
+    "drone_utilization_rate":      "amortization",
 }
 OAT_MECHANISM_COLORS = {
-    "production_mass":      "#55A467",   # green
-    "production_intensity": "#94C490",   # light green (same hue, less saturated)
-    "use":                  "#4C72B0",   # blue
-    "lifespan":             "#8172B2",   # purple
-    "anchor":               "#DD8452",   # orange (kept from old bundling color)
+    "operation":       "#4C72B0",
+    "production_eol":  "#55A467",
+    "amortization":    "#8172B2",
+    "anchor":          "#DD8452",  # legacy MC baseline color
 }
 OAT_MECHANISM_LABELS = {
-    "production_mass":      "Production (mass)",
-    "production_intensity": "Production (intensity)",
-    "use":                  "Use phase",
-    "lifespan":             "Lifespan / amortization",
-    "anchor":               "E-bike bundling",
+    "operation":      "Drone operation",
+    "production_eol": "Production / EOL parameters",
+    "amortization":   "Lifespan / utilization",
+    "anchor":         "Baseline",
 }
 
 MECHANISM_ORDER = ("M1_routing", "M2_bundling", "M3_production", "M4_gef")
@@ -181,21 +156,20 @@ def plot_oat_tornado(
 ):
     """OAT tornado: median absolute swing per feature with IQR whiskers.
 
-    Bars are coloured by the Shapley mechanism each feature maps to, so the
-    Fig. 5 tornado and the Fig. 5 Shapley stacked bar read jointly without
-    re-explanation. ``feature_whitelist`` restricts the bars to a named
-    subset (in any order; bars are still sorted by descending median swing).
+    Bars are coloured by the drone-technology class each feature maps to.
+    ``feature_whitelist`` restricts the bars to a named subset (in any order;
+    bars are still sorted by descending median swing).
     If ``None``, every feature present in ``oat`` is plotted.
 
     Args:
         oat: Long-format OAT DataFrame from ``all_sensitivity_oat.csv``.
         save_path: Path to save figure. Shows plot if None.
         figsize: Figure size tuple. Defaults to (8, 5.5); pass a taller size
-            for the full 11-feature tornado.
+            for the full drone-tech tornado.
         for_latex: If True, save as PDF.
         plot_title: If True, show title.
         feature_whitelist: Optional ordered iterable of feature names to
-            include. Use ``OAT_FEATURES_STORY`` for the main-text figure.
+            include. Use ``OAT_FEATURES_STORY`` for a compact diagnostic figure.
         metric: Which reduction column to compute swings against. Use
             ``"vs_scenario"`` (default, §4 substitution-efficiency reading)
             or ``"vs_anchor"`` (§5 headline-reduction reading, kept for
@@ -228,12 +202,11 @@ def plot_oat_tornado(
     p25 = [np.percentile(diffs[f], 25) for f in sorted_features]
     p75 = [np.percentile(diffs[f], 75) for f in sorted_features]
     bar_colors = [
-        OAT_MECHANISM_COLORS[OAT_FEATURE_MECHANISM.get(f, "use")]
+        OAT_MECHANISM_COLORS[OAT_FEATURE_MECHANISM.get(f, "operation")]
         for f in sorted_features
     ]
 
-    # Honour caller's figsize. Default (8, 5.5) suits the 9-feature story
-    # tornado; for the 11-feature full tornado pass figsize=(8, 6.5).
+    # Honour caller's figsize. Default (8, 5.5) suits the story tornado.
     fig, ax = plt.subplots(figsize=figsize)
     y = np.arange(len(sorted_features))
     ax.barh(y, medians, height=0.65, color=bar_colors, alpha=0.9, edgecolor="white")
@@ -246,10 +219,10 @@ def plot_oat_tornado(
     ax.invert_yaxis()
     ax.set_xlabel("Median absolute swing in reduction (pp), with IQR across cities")
 
-    # Mechanism legend (only show mechanisms actually present)
+    # Class legend (only show classes actually present)
     present_mechs = []
     for f in sorted_features:
-        m = OAT_FEATURE_MECHANISM.get(f, "use")
+        m = OAT_FEATURE_MECHANISM.get(f, "operation")
         if m not in present_mechs:
             present_mechs.append(m)
     handles = [
@@ -258,7 +231,7 @@ def plot_oat_tornado(
     ]
     labels = [OAT_MECHANISM_LABELS[m] for m in present_mechs]
     ax.legend(handles, labels, loc="lower right", frameon=False, fontsize=9,
-              title="Shapley mechanism", title_fontsize=9)
+              title="Sensitivity class", title_fontsize=9)
 
     if plot_title:
         ax.set_title("OAT sensitivity tornado")
@@ -370,54 +343,6 @@ def plot_oat_beneficial_share_panels(
             ax.set_ylabel("% of cities with reduction > 0")
     if plot_title:
         fig.suptitle("Beneficial-city share — OAT response")
-    fig.tight_layout()
-    return _finalize(save_path, dpi, for_latex, plot_title)
-
-
-def plot_oat_gef_kappa_heatmap(
-    oat: pd.DataFrame,
-    save_path: str | None = None,
-    dpi: int = 150,
-    for_latex: bool = False,
-    plot_title: bool = False,
-):
-    base_row = oat[oat["scenario_id"] == "baseline"].iloc[0]
-    kappa_base = float(base_row["kappa"])
-    gef_base = float(base_row["gef_mult"])
-    kappa_levels = sorted(set(oat[oat["feature_varied"] == "kappa"]["kappa"].unique().tolist() + [kappa_base]))
-    gef_levels = sorted(set(oat[oat["feature_varied"] == "gef_mult"]["gef_mult"].unique().tolist() + [gef_base]))
-
-    M = np.full((len(kappa_levels), len(gef_levels)), np.nan)
-    for i, k in enumerate(kappa_levels):
-        for j, g in enumerate(gef_levels):
-            if k == kappa_base and g == gef_base:
-                vals = oat[oat["scenario_id"] == "baseline"]["reduction_vs_anchor_ebike_pct"]
-            elif g == gef_base and k != kappa_base:
-                vals = oat[(oat["feature_varied"] == "kappa") & (oat["kappa"] == k)]["reduction_vs_anchor_ebike_pct"]
-            elif k == kappa_base and g != gef_base:
-                vals = oat[(oat["feature_varied"] == "gef_mult") & (oat["gef_mult"] == g)]["reduction_vs_anchor_ebike_pct"]
-            else:
-                vals = pd.Series([], dtype=float)
-            if len(vals):
-                M[i, j] = vals.median()
-
-    fig, ax = plt.subplots(figsize=(7, 5))
-    im = ax.imshow(M, aspect="auto", cmap="viridis", origin="lower")
-    ax.set_xticks(range(len(gef_levels)))
-    ax.set_xticklabels([f"{g}" for g in gef_levels])
-    ax.set_yticks(range(len(kappa_levels)))
-    ax.set_yticklabels([f"{k}" for k in kappa_levels])
-    ax.set_xlabel("gef_mult")
-    ax.set_ylabel("kappa")
-    cbar = fig.colorbar(im, ax=ax, label="median reduction-pct (vs anchor)")
-    for i in range(M.shape[0]):
-        for j in range(M.shape[1]):
-            v = M[i, j]
-            if not np.isnan(v):
-                ax.text(j, i, f"{v:.1f}", ha="center", va="center",
-                         color="white" if v < (np.nanmin(M) + np.nanmax(M)) / 2 else "black", fontsize=9)
-    if plot_title:
-        ax.set_title("OAT cross-section: median reduction-pct (kappa × gef_mult)")
     fig.tight_layout()
     return _finalize(save_path, dpi, for_latex, plot_title)
 
@@ -555,16 +480,20 @@ def plot_shapley_dominance_scatter(
 # Sobol + Monte Carlo plots (global SA, replaces Shapley in main text)
 # ---------------------------------------------------------------------------
 
-# Feature → 5-mechanism mapping for the Sobol aggregation figure.
-# Mirrors OAT_FEATURE_MECHANISM exactly (LCA-stage classification, 2026-05-20).
+# Feature → 3-class mapping for the Sobol aggregation figures.
 SOBOL_MECHANISM_GROUPS = {
-    "production_mass":      ("drone_body_kg", "drone_battery_mass"),
-    "production_intensity": ("drone_production_co2_per_kg", "drone_battery_co2_per_kwh"),
-    "use":                  ("drone_energy_mult", "drone_cruise_kmh", "drone_hover_s",
-                             "headwind_mps", "payload_kg"),
-    "lifespan":             ("drone_lifespan_yr", "drone_battery_lifespan_yr",
-                             "drone_utilization_rate"),
-    "anchor":               ("kappa",),
+    "operation": (
+        "drone_energy_mult", "drone_cruise_kmh", "drone_hover_s",
+        "headwind_mps", "payload_kg",
+    ),
+    "production_eol": (
+        "drone_body_kg", "drone_battery_mass",
+        "drone_production_co2_per_kg", "drone_battery_co2_per_kwh",
+    ),
+    "amortization": (
+        "drone_lifespan_yr", "drone_battery_lifespan_yr",
+        "drone_utilization_rate",
+    ),
 }
 
 
@@ -575,11 +504,14 @@ def _pivot_mc_summary(sobol: pd.DataFrame) -> pd.DataFrame | None:
         return None
     wide = mc.pivot_table(index="region_key", columns="feature", values="value")
     old_anchor_col = "anchor_kappa1_reduction_pct"
-    anchor_col = "anchor_baseline_kappa_reduction_pct"
-    if anchor_col not in wide.columns and old_anchor_col in wide.columns:
-        wide[anchor_col] = wide[old_anchor_col]
+    old_baseline_kappa_col = "anchor_baseline_kappa_reduction_pct"
+    baseline_col = "baseline_drone_tech_reduction_pct"
+    if baseline_col not in wide.columns and old_baseline_kappa_col in wide.columns:
+        wide[baseline_col] = wide[old_baseline_kappa_col]
+    if baseline_col not in wide.columns and old_anchor_col in wide.columns:
+        wide[baseline_col] = wide[old_anchor_col]
     needed = ["mc_median_reduction_pct", "mc_p2.5", "mc_p97.5",
-              anchor_col, "mc_mean_reduction_pct"]
+              baseline_col, "mc_mean_reduction_pct"]
     missing = [c for c in needed if c not in wide.columns]
     if missing:
         print(f"  _pivot_mc_summary: missing columns {missing}")
@@ -597,11 +529,9 @@ def plot_sobol_indices(
 ):
     """Sobol S1 and ST per feature, median across cities with IQR whiskers.
 
-    Bars colored by the same Shapley-mechanism palette as the OAT tornado so
-    the OAT tornado and the Sobol decomposition read jointly. S1 plotted as
-    dark bar inset over the lighter ST so the interaction share is visually
-    the gap between the two. Numeric ST median is annotated to the right of
-    each bar.
+    Bars are colored by drone-technology class. S1 is plotted as a dark inset
+    over the lighter ST so the interaction share is visually the gap between
+    the two. Numeric ST median is annotated to the right of each bar.
 
     Args:
         sobol: Long-format Sobol DataFrame from ``all_sensitivity_sobol.csv``.
@@ -614,6 +544,11 @@ def plot_sobol_indices(
     if si.empty:
         print("  plot_sobol_indices: no sobol_index rows; skipping")
         return None
+    feature_to_class = {f: c for c, feats in SOBOL_MECHANISM_GROUPS.items() for f in feats}
+    si = si[si["feature"].isin(feature_to_class)].copy()
+    if si.empty:
+        print("  plot_sobol_indices: no drone-tech features; skipping")
+        return None
 
     grouped = si.groupby("feature")
     feature_medians = grouped["ST"].median().sort_values(ascending=True)
@@ -625,7 +560,7 @@ def plot_sobol_indices(
     s1_median = np.clip(grouped["S1"].median().reindex(features).values, 0, None)
 
     bar_colors = [
-        OAT_MECHANISM_COLORS[OAT_FEATURE_MECHANISM.get(f, "use")]
+        OAT_MECHANISM_COLORS[OAT_FEATURE_MECHANISM.get(f, "operation")]
         for f in features
     ]
 
@@ -654,7 +589,7 @@ def plot_sobol_indices(
     legend_handles = [
         Patch(facecolor=OAT_MECHANISM_COLORS[m], edgecolor="black",
               label=OAT_MECHANISM_LABELS[m])
-        for m in ("production_mass", "production_intensity", "use", "lifespan", "anchor")
+        for m in ("operation", "production_eol", "amortization")
     ]
     legend_handles.append(Patch(facecolor="lightgray", edgecolor="black", alpha=0.45,
                                  label="$S_T$ (incl. interactions)"))
@@ -664,7 +599,7 @@ def plot_sobol_indices(
 
     if plot_title:
         n_cities = si["region_key"].nunique()
-        ax.set_title(f"Sobol global SA: 9-feature variance decomposition "
+        ax.set_title(f"Sobol global SA: drone-technology variance decomposition "
                      f"(n={n_cities} cities, median ± IQR)")
     fig.tight_layout()
     return _finalize(save_path, dpi, for_latex, plot_title)
@@ -678,11 +613,10 @@ def plot_sobol_by_mechanism(
     for_latex: bool = False,
     plot_title: bool = False,
 ):
-    """Sobol total-order indices aggregated to the 4 Shapley mechanisms.
+    """Sobol total-order indices aggregated to drone-technology classes.
 
-    Sums ST across features within each mechanism per city, then plots median
-    + IQR across cities. Provides the direct Sobol↔Shapley bridge §4 needs to
-    compare the new global SA to the old 4-mechanism decomposition.
+    Sums ST across features within each class per city, then plots median
+    + IQR across cities.
 
     Args:
         sobol: Long-format Sobol DataFrame from ``all_sensitivity_sobol.csv``.
@@ -696,16 +630,20 @@ def plot_sobol_by_mechanism(
         print("  plot_sobol_by_mechanism: no sobol_index rows; skipping")
         return None
 
-    feature_to_mech = {f: m for m, feats in SOBOL_MECHANISM_GROUPS.items() for f in feats}
-    si["mechanism"] = si["feature"].map(feature_to_mech)
-    si = si.dropna(subset=["mechanism"])
-    # Sum ST per (region, mechanism), then aggregate across regions.
-    per_city = si.groupby(["region_key", "mechanism"])["ST"].sum().reset_index()
-    grouped = per_city.groupby("mechanism")["ST"]
+    feature_to_class = {f: c for c, feats in SOBOL_MECHANISM_GROUPS.items() for f in feats}
+    si["class"] = si["feature"].map(feature_to_class)
+    si = si.dropna(subset=["class"])
+    if si.empty:
+        print("  plot_sobol_by_mechanism: no drone-tech features; skipping")
+        return None
+
+    # Sum ST per (region, class), then aggregate across regions.
+    per_city = si.groupby(["region_key", "class"])["ST"].sum().reset_index()
+    grouped = per_city.groupby("class")["ST"]
     medians = grouped.median()
     p25 = grouped.quantile(0.25)
     p75 = grouped.quantile(0.75)
-    order = ("production_mass", "production_intensity", "use", "lifespan", "anchor")
+    order = ("operation", "production_eol", "amortization")
     medians = medians.reindex(order)
     p25 = p25.reindex(order)
     p75 = p75.reindex(order)
@@ -729,8 +667,111 @@ def plot_sobol_by_mechanism(
 
     if plot_title:
         n_cities = si["region_key"].nunique()
-        ax.set_title(f"Sobol aggregated to 4 Shapley mechanisms "
+        ax.set_title(f"Sobol aggregated to drone-technology classes "
                      f"(n={n_cities} cities, median ± IQR)")
+    fig.tight_layout()
+    return _finalize(save_path, dpi, for_latex, plot_title)
+
+
+def plot_drone_tech_sensitivity_panels(
+    sobol: pd.DataFrame,
+    save_path: str | None = None,
+    figsize: tuple = (11, 3.8),
+    dpi: int = 150,
+    for_latex: bool = False,
+    plot_title: bool = False,
+):
+    """Three-panel Sobol summary for drone-technology uncertainty classes.
+
+    Args:
+        sobol: Long-format Sobol DataFrame from ``all_sensitivity_sobol.csv``.
+        save_path: Path to save figure. Shows plot if None.
+        figsize: Figure size tuple.
+        for_latex: If True, save as PDF.
+        plot_title: If True, show title.
+    """
+    si = sobol[sobol["row_kind"] == "sobol_index"].copy()
+    if si.empty:
+        print("  plot_drone_tech_sensitivity_panels: no sobol_index rows; skipping")
+        return None
+
+    feature_to_class = {f: c for c, feats in SOBOL_MECHANISM_GROUPS.items() for f in feats}
+    si["class"] = si["feature"].map(feature_to_class)
+    si = si.dropna(subset=["class"])
+    if si.empty:
+        print("  plot_drone_tech_sensitivity_panels: no drone-tech features; skipping")
+        return None
+
+    grouped = si.groupby("feature")
+    st_median = grouped["ST"].median()
+    st_p25 = grouped["ST"].quantile(0.25)
+    st_p75 = grouped["ST"].quantile(0.75)
+    s1_median = np.clip(grouped["S1"].median(), 0, None)
+
+    class_order = ("operation", "production_eol", "amortization")
+    panel_letters = ("a", "b", "c")
+    fig, axes = plt.subplots(1, 3, figsize=figsize, sharex=True)
+    axes = np.atleast_1d(axes)
+
+    for ax, cls, letter in zip(axes, class_order, panel_letters):
+        features = [f for f in SOBOL_MECHANISM_GROUPS[cls] if f in st_median.index]
+        features.sort(key=lambda f: -st_median[f])
+        if not features:
+            ax.axis("off")
+            continue
+
+        y = np.arange(len(features))
+        st_vals = np.array([st_median[f] for f in features])
+        s1_vals = np.array([s1_median[f] for f in features])
+        p25_vals = np.array([st_p25[f] for f in features])
+        p75_vals = np.array([st_p75[f] for f in features])
+        err_lower = np.clip(st_vals - p25_vals, 0, None)
+        err_upper = np.clip(p75_vals - st_vals, 0, None)
+        color = OAT_MECHANISM_COLORS[cls]
+
+        ax.barh(y, st_vals, color=color, alpha=0.42, edgecolor="black",
+                linewidth=0.8, label="$S_T$")
+        ax.barh(y, s1_vals, color=color, alpha=0.95, edgecolor="black",
+                linewidth=0.8, label="$S_1$")
+        ax.errorbar(st_vals, y, xerr=[err_lower, err_upper], fmt="none",
+                    ecolor="black", capsize=3, linewidth=0.8)
+        ax.set_yticks(y)
+        ax.set_yticklabels([OAT_FEATURE_LABELS.get(f, f) for f in features], fontsize=8)
+        ax.invert_yaxis()
+        ax.grid(axis="x", linestyle=":", alpha=0.45)
+        ax.axvline(0, color="black", linewidth=0.5)
+        ax.text(0.0, 1.04, letter, transform=ax.transAxes, fontsize=11,
+                fontweight="bold", ha="left", va="bottom")
+        ax.text(0.07, 1.04, OAT_MECHANISM_LABELS[cls], transform=ax.transAxes,
+                fontsize=10, fontweight="bold", ha="left", va="bottom")
+
+        total = (
+            si[si["class"] == cls]
+            .groupby("region_key")["ST"]
+            .sum()
+            .median()
+        )
+        ax.text(0.97, 0.05, rf"$\sum S_T$ = {total:.2f}",
+                transform=ax.transAxes, ha="right", va="bottom", fontsize=8,
+                bbox=dict(facecolor="white", edgecolor="0.7", pad=2, alpha=0.9))
+
+    x_max = float(si.groupby("feature")["ST"].quantile(0.75).max())
+    for ax in axes:
+        if ax.has_data():
+            ax.set_xlim(0, max(0.05, x_max * 1.18))
+            ax.set_xlabel("Sobol index")
+
+    handles = [
+        Patch(facecolor="lightgray", edgecolor="black", alpha=0.42,
+              label="$S_T$ (incl. interactions)"),
+        Patch(facecolor="lightgray", edgecolor="black", alpha=0.95,
+              label="$S_1$ (main effect)"),
+    ]
+    axes[-1].legend(handles=handles, loc="lower right", fontsize=8, frameon=True)
+
+    if plot_title:
+        n_cities = si["region_key"].nunique()
+        fig.suptitle(f"Drone-technology sensitivity across {n_cities} cities", y=1.04)
     fig.tight_layout()
     return _finalize(save_path, dpi, for_latex, plot_title)
 
@@ -743,14 +784,14 @@ def plot_sobol_grouped(
     for_latex: bool = False,
     plot_title: bool = False,
 ):
-    """Sobol indices grouped by mechanism, with a mechanism-total overlay.
+    """Sobol indices grouped by drone-technology class, with a total overlay.
 
     Vertical bar chart, one bar per feature. Features are arranged in
-    mechanism groups; mechanisms are ordered by descending ΣS_T (sum within
-    mechanism, median across cities). Within each group, features are sorted
-    by descending median S_T. A polyline overlays the mechanism totals at
+    class groups; classes are ordered by descending ΣS_T (sum within
+    class, median across cities). Within each group, features are sorted
+    by descending median S_T. A polyline overlays the class totals at
     the center x-position of each group, so the reader sees both the per-
-    feature breakdown and the per-mechanism aggregate in one panel.
+    feature breakdown and the per-class aggregate in one panel.
 
     Args:
         sobol: Long-format Sobol DataFrame from ``all_sensitivity_sobol.csv``.
@@ -764,9 +805,12 @@ def plot_sobol_grouped(
         print("  plot_sobol_grouped: no sobol_index rows; skipping")
         return None
 
-    feature_to_mech = {f: m for m, feats in SOBOL_MECHANISM_GROUPS.items() for f in feats}
-    si["mechanism"] = si["feature"].map(feature_to_mech)
-    si = si.dropna(subset=["mechanism"])
+    feature_to_class = {f: c for c, feats in SOBOL_MECHANISM_GROUPS.items() for f in feats}
+    si["class"] = si["feature"].map(feature_to_class)
+    si = si.dropna(subset=["class"])
+    if si.empty:
+        print("  plot_sobol_grouped: no drone-tech features; skipping")
+        return None
 
     # Per-feature median ST + median S1 across cities.
     feat_st = si.groupby("feature")["ST"].median()
@@ -774,23 +818,23 @@ def plot_sobol_grouped(
     feat_st_p25 = si.groupby("feature")["ST"].quantile(0.25)
     feat_st_p75 = si.groupby("feature")["ST"].quantile(0.75)
 
-    # Per-mechanism aggregate ST (sum per city, then median across cities).
-    per_city_mech = si.groupby(["region_key", "mechanism"])["ST"].sum().reset_index()
-    mech_total = per_city_mech.groupby("mechanism")["ST"].median().sort_values(ascending=False)
-    mech_order = mech_total.index.tolist()
+    # Per-class aggregate ST (sum per city, then median across cities).
+    per_city_class = si.groupby(["region_key", "class"])["ST"].sum().reset_index()
+    class_total = per_city_class.groupby("class")["ST"].median().sort_values(ascending=False)
+    class_order = class_total.index.tolist()
 
-    # Feature ordering: by mechanism (sorted by total), within mechanism by ST desc.
+    # Feature ordering: by class (sorted by total), within class by ST desc.
     feature_order: list[str] = []
-    mech_x_centers: list[float] = []
+    class_x_centers: list[float] = []
     group_boundaries: list[float] = [0.0]
-    for m in mech_order:
-        feats = [f for f in feat_st.index if feature_to_mech.get(f) == m]
+    for cls in class_order:
+        feats = [f for f in feat_st.index if feature_to_class.get(f) == cls]
         feats.sort(key=lambda f: -feat_st[f])
         start = len(feature_order)
         feature_order.extend(feats)
         end = len(feature_order)
         if end > start:
-            mech_x_centers.append((start + end - 1) / 2.0)
+            class_x_centers.append((start + end - 1) / 2.0)
         group_boundaries.append(float(end))
 
     x = np.arange(len(feature_order))
@@ -798,7 +842,7 @@ def plot_sobol_grouped(
     s1_vals = np.array([feat_s1[f] for f in feature_order])
     p25_vals = np.array([feat_st_p25[f] for f in feature_order])
     p75_vals = np.array([feat_st_p75[f] for f in feature_order])
-    colors = [OAT_MECHANISM_COLORS[feature_to_mech[f]] for f in feature_order]
+    colors = [OAT_MECHANISM_COLORS[feature_to_class[f]] for f in feature_order]
 
     fig, ax = plt.subplots(figsize=figsize)
 
@@ -816,34 +860,34 @@ def plot_sobol_grouped(
 
     # Numeric ST annotation above each bar (rounded to 3 dp; show "<0.01" for tiny)
     y_max = max(float(np.max(p75_vals)) if len(p75_vals) else 0.0,
-                float(mech_total.max()))
+                float(class_total.max()))
     label_pad = y_max * 0.015
     for xi, v in zip(x, st_vals):
         label = f"{v:.2f}" if v >= 0.005 else "<.01"
         ax.text(xi, v + label_pad, label, ha="center", va="bottom", fontsize=7.5)
 
-    # Mechanism-total polyline overlay.
-    line_y = [float(mech_total[m]) for m in mech_order]
-    ax.plot(mech_x_centers, line_y, "-o", color="black", linewidth=1.6,
+    # Class-total polyline overlay.
+    line_y = [float(class_total[cls]) for cls in class_order]
+    ax.plot(class_x_centers, line_y, "-o", color="black", linewidth=1.6,
             markersize=7, markerfacecolor="white", markeredgewidth=1.6,
-            zorder=5, label=r"Mechanism total $\sum S_T$")
+            zorder=5, label=r"Class total $\sum S_T$")
 
-    # Annotate each mechanism-total point
-    for xc, yv in zip(mech_x_centers, line_y):
+    # Annotate each class-total point
+    for xc, yv in zip(class_x_centers, line_y):
         ax.annotate(f"{yv:.2f}", xy=(xc, yv), xytext=(0, 11),
                     textcoords="offset points", ha="center", fontsize=9,
                     fontweight="bold")
 
-    # Vertical separators between mechanism groups
+    # Vertical separators between class groups
     for b in group_boundaries[1:-1]:
         ax.axvline(b - 0.5, color="gray", linestyle=":", alpha=0.55, zorder=1)
 
-    # Mechanism labels on a second header row above the plot
+    # Class labels on a second header row above the plot
     ax_top = ax.twiny()
     ax_top.set_xlim(ax.get_xlim())
-    ax_top.set_xticks(mech_x_centers)
+    ax_top.set_xticks(class_x_centers)
     ax_top.set_xticklabels(
-        [OAT_MECHANISM_LABELS[m] for m in mech_order],
+        [OAT_MECHANISM_LABELS[cls] for cls in class_order],
         fontsize=9,
     )
     ax_top.tick_params(axis="x", which="both", length=0, pad=4)
@@ -859,11 +903,11 @@ def plot_sobol_grouped(
     ax.set_ylim(0, y_max * 1.30)
     ax.set_ylabel("Sobol total-order index $S_T$ (variance share)")
 
-    # Full legend: 5 mechanism color patches + S1/ST shading + mechanism-total marker.
+    # Full legend: class color patches + S1/ST shading + class-total marker.
     legend_handles = [
         Patch(facecolor=OAT_MECHANISM_COLORS[m], edgecolor="black",
               label=OAT_MECHANISM_LABELS[m])
-        for m in mech_order
+        for m in class_order
     ]
     legend_handles.append(Patch(facecolor="lightgray", edgecolor="black",
                                  alpha=0.45, label="$S_T$ (incl. interactions)"))
@@ -872,14 +916,14 @@ def plot_sobol_grouped(
     legend_handles.append(plt.Line2D([], [], color="black", marker="o",
                                       markerfacecolor="white", markersize=7,
                                       linewidth=1.6,
-                                      label=r"Mechanism total $\sum S_T$"))
+                                      label=r"Class total $\sum S_T$"))
     ax.legend(handles=legend_handles, loc="upper right", fontsize=8,
               frameon=True, ncol=1)
 
     if plot_title:
         n_cities = si["region_key"].nunique()
-        ax.set_title(f"Sobol global SA: per-feature S_T grouped by LCA mechanism, "
-                     f"with mechanism aggregates (n={n_cities} cities)")
+        ax.set_title(f"Sobol global SA: per-feature S_T grouped by drone-tech class, "
+                     f"with class aggregates (n={n_cities} cities)")
     fig.tight_layout()
     return _finalize(save_path, dpi, for_latex, plot_title)
 
@@ -910,6 +954,11 @@ def plot_sobol_strip(
     if si.empty:
         print("  plot_sobol_strip: no sobol_index rows; skipping")
         return None
+    feature_to_class = {f: c for c, feats in SOBOL_MECHANISM_GROUPS.items() for f in feats}
+    si = si[si["feature"].isin(feature_to_class)].copy()
+    if si.empty:
+        print("  plot_sobol_strip: no drone-tech features; skipping")
+        return None
 
     medians = si.groupby("feature")["ST"].median().sort_values(ascending=False)
     top_features = list(medians.head(top_n).index)
@@ -918,7 +967,7 @@ def plot_sobol_strip(
     for i, f in enumerate(top_features):
         vals = si[si["feature"] == f]["ST"].to_numpy()
         jitter = rng.uniform(-0.18, 0.18, size=len(vals))
-        color = OAT_MECHANISM_COLORS[OAT_FEATURE_MECHANISM.get(f, "use")]
+        color = OAT_MECHANISM_COLORS[OAT_FEATURE_MECHANISM.get(f, "operation")]
         ax.scatter(vals, np.full_like(vals, i) + jitter, color=color, alpha=0.45,
                    s=14, edgecolor="none")
         med = np.median(vals)
@@ -945,17 +994,17 @@ def plot_mc_uncertainty(
     for_latex: bool = False,
     plot_title: bool = False,
 ):
-    """Cross-city distribution of MC reduction% vs the baseline-κ anchor.
+    """Cross-city distribution of MC reduction% vs the baseline technology case.
 
     Two panels framing the headline robustness finding: the Saltelli uniform
-    sample (which includes drone-uncompetitive corners) gives a much lower
-    median reduction than the policy-relevant baseline-κ anchor.
+    sample gives a lower median reduction than the baseline drone-technology
+    case with all sampled drone assumptions at their configured values.
 
     Left: CDF of per-city MC medians with the 95% MC band as a ribbon, and
-    the CDF of per-city anchor reductions overlaid for direct comparison.
+    the CDF of per-city baseline reductions overlaid for direct comparison.
 
-    Right: paired histogram of MC median (skewed left) and anchor (centered
-    on ~27%) with their cross-city means annotated.
+    Right: paired histogram of MC median and baseline reduction with their
+    cross-city means annotated.
 
     Args:
         sobol: Long-format Sobol DataFrame from ``all_sensitivity_sobol.csv``.
@@ -970,13 +1019,14 @@ def plot_mc_uncertainty(
         return None
 
     n = len(wide)
+    baseline_col = "baseline_drone_tech_reduction_pct"
     by_mc = wide.sort_values("mc_median_reduction_pct").reset_index(drop=True)
-    by_anchor = wide.sort_values("anchor_baseline_kappa_reduction_pct").reset_index(drop=True)
+    by_anchor = wide.sort_values(baseline_col).reset_index(drop=True)
     rank = np.arange(1, n + 1) / n * 100.0
     mc_color = "#C44E52"  # fixed red for MC distribution (was OAT_MECHANISM_COLORS["grid"])
     anchor_color = OAT_MECHANISM_COLORS["anchor"]
-    anchor_mean = float(wide["anchor_baseline_kappa_reduction_pct"].mean())
-    anchor_median = float(wide["anchor_baseline_kappa_reduction_pct"].median())
+    anchor_mean = float(wide[baseline_col].mean())
+    anchor_median = float(wide[baseline_col].median())
     mc_median_overall = float(wide["mc_median_reduction_pct"].median())
 
     fig, (ax_l, ax_r) = plt.subplots(1, 2, figsize=figsize)
@@ -988,23 +1038,23 @@ def plot_mc_uncertainty(
     ax_l.plot(by_mc["mc_median_reduction_pct"], rank,
               color=mc_color, linewidth=1.8,
               label=f"MC median (cross-city median {mc_median_overall:.1f}%)")
-    ax_l.plot(by_anchor["anchor_baseline_kappa_reduction_pct"], rank,
+    ax_l.plot(by_anchor[baseline_col], rank,
               color=anchor_color, linewidth=1.8, linestyle="--",
-              label=f"Anchor baseline κ (cross-city median {anchor_median:.1f}%)")
+              label=f"Baseline drone tech (cross-city median {anchor_median:.1f}%)")
     ax_l.set_xlabel("Reduction vs e-bike-only (%)")
     ax_l.set_ylabel("City percentile")
     ax_l.set_xlim(left=min(-5, float(by_mc["mc_p2.5"].min()) - 2))
     ax_l.legend(loc="lower right", fontsize=8, frameon=True)
 
-    # Right: paired histogram of MC median (left-skewed) and anchor
-    bins = np.linspace(0, max(float(wide["anchor_baseline_kappa_reduction_pct"].max()),
+    # Right: paired histogram of MC median and baseline
+    bins = np.linspace(0, max(float(wide[baseline_col].max()),
                               float(wide["mc_p97.5"].max())) + 2, 40)
     ax_r.hist(wide["mc_median_reduction_pct"].dropna(), bins=bins,
               color=mc_color, alpha=0.55, edgecolor="black", linewidth=0.4,
               label=f"MC median (mean {wide['mc_median_reduction_pct'].mean():.1f}%)")
-    ax_r.hist(wide["anchor_baseline_kappa_reduction_pct"].dropna(), bins=bins,
+    ax_r.hist(wide[baseline_col].dropna(), bins=bins,
               color=anchor_color, alpha=0.55, edgecolor="black", linewidth=0.4,
-              label=f"Anchor baseline κ (mean {anchor_mean:.1f}%)")
+              label=f"Baseline drone tech (mean {anchor_mean:.1f}%)")
     ax_r.axvline(anchor_mean, color=anchor_color, linestyle=":", linewidth=1.2)
     ax_r.set_xlabel("Reduction vs e-bike-only (%)")
     ax_r.set_ylabel("Number of cities")
@@ -1025,12 +1075,12 @@ def plot_mc_anchor_forest(
     plot_title: bool = False,
     show_every: int = 1,
 ):
-    """Per-city anchor reduction with the MC 95% band as vertical whiskers.
+    """Per-city baseline reduction with the MC 95% band as vertical whiskers.
 
-    Cities ordered along x by anchor reduction. Each city gets a dot for the
-    anchor (baseline κ) reduction and a vertical [p2.5, p97.5] MC whisker. The
+    Cities ordered along x by baseline reduction. Each city gets a dot for the
+    all-baseline drone-technology reduction and a vertical [p2.5, p97.5] MC whisker. The
     line plot of the MC median across the same ordering is overlaid so the
-    reader sees whether the policy-relevant anchor sits inside the naive MC
+    reader sees whether the baseline case sits inside the naive MC
     band for every city.
 
     Args:
@@ -1039,13 +1089,14 @@ def plot_mc_anchor_forest(
         figsize: Figure size tuple.
         for_latex: If True, save as PDF.
         plot_title: If True, show title.
-        show_every: Plot every Nth city (after sorting by anchor) to thin a
+        show_every: Plot every Nth city (after sorting by baseline) to thin a
             dense forest. Default 1 keeps every city.
     """
     wide = _pivot_mc_summary(sobol)
     if wide is None:
         return None
-    wide = wide.sort_values("anchor_baseline_kappa_reduction_pct").reset_index(drop=True)
+    baseline_col = "baseline_drone_tech_reduction_pct"
+    wide = wide.sort_values(baseline_col).reset_index(drop=True)
     if show_every > 1:
         wide = wide.iloc[::show_every].reset_index(drop=True)
     n = len(wide)
@@ -1059,17 +1110,17 @@ def plot_mc_anchor_forest(
               label="95% MC band")
     ax.plot(x, wide["mc_median_reduction_pct"], color=mc_color,
             linewidth=1.4, alpha=0.85, label="MC median")
-    ax.scatter(x, wide["anchor_baseline_kappa_reduction_pct"],
+    ax.scatter(x, wide[baseline_col],
                color=anchor_color, s=10, zorder=4,
-               label="Anchor baseline κ")
-    ax.set_xlabel("City (ordered by anchor reduction)")
+               label="Baseline drone tech")
+    ax.set_xlabel("City (ordered by baseline reduction)")
     ax.set_ylabel("Reduction vs e-bike-only (%)")
     ax.set_xlim(-1, n)
     ax.axhline(0, color="black", linewidth=0.5)
     ax.legend(loc="upper left", fontsize=8, frameon=True)
 
     if plot_title:
-        ax.set_title(f"Per-city MC band vs baseline-κ anchor (n={n} cities)")
+        ax.set_title(f"Per-city MC band vs baseline drone tech (n={n} cities)")
     fig.tight_layout()
     return _finalize(save_path, dpi, for_latex, plot_title)
 
@@ -1082,11 +1133,10 @@ def plot_mc_anchor_scatter(
     for_latex: bool = False,
     plot_title: bool = False,
 ):
-    """Scatter of anchor reduction (x) vs MC median reduction (y), per city.
+    """Scatter of baseline reduction (x) vs MC median reduction (y), per city.
 
-    y = x diagonal drawn for reference. Cities above the diagonal: MC sample
-    happens to land above the baseline-κ anchor (rare). Cities below: the naive
-    uniform MC understates the policy-relevant reduction.
+    y = x diagonal drawn for reference. Cities below the diagonal have an MC
+    median lower than the all-baseline drone-technology reduction.
 
     Args:
         sobol: Long-format Sobol DataFrame from ``all_sensitivity_sobol.csv``.
@@ -1099,7 +1149,8 @@ def plot_mc_anchor_scatter(
     if wide is None:
         return None
 
-    anchor = wide["anchor_baseline_kappa_reduction_pct"].to_numpy()
+    baseline_col = "baseline_drone_tech_reduction_pct"
+    anchor = wide[baseline_col].to_numpy()
     mc_med = wide["mc_median_reduction_pct"].to_numpy()
     lo = float(min(np.nanmin(anchor), np.nanmin(mc_med)))
     hi = float(max(np.nanmax(anchor), np.nanmax(mc_med)))
@@ -1111,7 +1162,7 @@ def plot_mc_anchor_scatter(
             linewidth=0.8, linestyle="--", alpha=0.7, label="$y = x$")
     ax.scatter(anchor, mc_med, color=mc_color, alpha=0.55, s=18,
                edgecolor="none")
-    ax.set_xlabel("Anchor baseline κ reduction (%)")
+    ax.set_xlabel("Baseline drone-tech reduction (%)")
     ax.set_ylabel("MC median reduction (%)")
     ax.set_xlim(lo - pad, hi + pad)
     ax.set_ylim(lo - pad, hi + pad)
@@ -1126,7 +1177,7 @@ def plot_mc_anchor_scatter(
             bbox=dict(facecolor="white", edgecolor="black", alpha=0.85, pad=4))
 
     if plot_title:
-        ax.set_title("MC median vs baseline-κ anchor per city")
+        ax.set_title("MC median vs baseline drone tech per city")
     fig.tight_layout()
     return _finalize(save_path, dpi, for_latex, plot_title)
 
@@ -1246,7 +1297,7 @@ def render_all(data_dir: str, figures_dir: str,
     if os.path.exists(oat_path):
         oat = pd.read_csv(oat_path)
         print(f"OAT: {len(oat)} rows from {oat_path}")
-        # Full tornado (all 11 features) — for supplementary material.
+        # Full tornado (all drone-tech features) — for supplementary material.
         plot_oat_tornado(oat, save_path=_resolve_path(out, "oat_tornado_full", for_latex),
                          figsize=(8, 6.5), for_latex=for_latex, plot_title=plot_title)
         # Story tornado (curated subset) — for main-text Fig. 5a.
@@ -1261,8 +1312,6 @@ def render_all(data_dir: str, figures_dir: str,
                                      dpi=dpi, for_latex=for_latex, plot_title=plot_title)
         plot_oat_beneficial_share_panels(oat, save_path=_resolve_path(out, "oat_beneficial_share", for_latex),
                                           dpi=dpi, for_latex=for_latex, plot_title=plot_title)
-        plot_oat_gef_kappa_heatmap(oat, save_path=_resolve_path(out, "oat_gef_kappa_heatmap", for_latex),
-                                    dpi=dpi, for_latex=for_latex, plot_title=plot_title)
     else:
         print(f"  missing {oat_path}; skipping OAT plots")
 
@@ -1287,6 +1336,9 @@ def render_all(data_dir: str, figures_dir: str,
     if os.path.exists(sb_path):
         sb = pd.read_csv(sb_path)
         print(f"Sobol: {len(sb)} rows from {sb_path}")
+        plot_drone_tech_sensitivity_panels(
+            sb, save_path=_resolve_path(out, "drone_tech_sensitivity", for_latex),
+            dpi=dpi, for_latex=for_latex, plot_title=plot_title)
         plot_sobol_indices(sb, save_path=_resolve_path(out, "sobol_indices", for_latex),
                             dpi=dpi, for_latex=for_latex, plot_title=plot_title)
         plot_sobol_by_mechanism(sb, save_path=_resolve_path(out, "sobol_by_mechanism", for_latex),

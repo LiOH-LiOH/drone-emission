@@ -3,8 +3,7 @@
 Replaces the 4-mechanism Shapley decomposition as the main-text §4 robustness
 artifact. Where ``shapley.py`` runs a 2^4 coalition enumeration of binary
 mechanism toggles, this module performs Saltelli sampling over a continuous
-13-parameter design (mirroring OAT FEATURE_LEVELS after the 2026-05-20
-pivot) and reports:
+12-parameter drone-technology design and reports:
 
 * **Sobol first-order index (S1)** per parameter — fraction of the city's
   reduction-% variance attributable to that parameter alone.
@@ -13,34 +12,32 @@ pivot) and reports:
 * **Monte Carlo bounds** on the reduction itself — mean, median, and 2.5/97.5
   percentiles taken across the Saltelli sample for each city.
 
-The 13 features mirror ``oat.py:FEATURE_LEVELS`` exactly:
-- 8 drone-tech use/lifespan features (energy_mult, body_kg, battery_mass,
-  hover, cruise, headwind, payload, drone/battery lifespans, utilization)
-- 2 production-intensity features (e_body, e_battery)
-- 1 anchor assumption (κ) and 1 lifespan-amortization (drone_lifespan_yr)
+The 12 features mirror the drone-side entries in ``oat.py:FEATURE_LEVELS``:
+- 5 drone-operation features (energy_mult, cruise, hover, headwind, payload)
+- 4 production / end-of-life parameter features (body/battery mass and
+  production intensities)
+- 3 lifespan / utilization features (drone/battery lifespans, utilization)
 
-Notably **gef_mult is excluded** — it's a measured value (provincial grid
-data), not a new-tech uncertainty, and is treated as a §5 forward-pathway
-lever instead. Ranges match OAT FEATURE_LEVELS, with Sobol extending
-asymmetric ranges (e.g. hover, headwind) down to the baseline so that
-uniform Saltelli sampling covers the full operating envelope.
+Notably **kappa** and **gef_mult** are excluded: kappa is an operator/e-bike
+dispatch scenario variable, and GEF is a measured grid value treated as a §5
+forward-pathway lever. Ranges match OAT FEATURE_LEVELS, with Sobol extending
+asymmetric ranges (e.g. hover, headwind) down to the baseline so that uniform
+Saltelli sampling covers the full operating envelope.
 
-A separate anchor row reports the configured all-baseline κ reduction so the §2
-headline reconciles with the Sobol/MC summary without the κ=0.7
-inconsistency that plagued the Shapley decomposition.
+A separate baseline row reports the configured all-baseline drone-technology
+reduction so the §2 headline reconciles with the Sobol/MC summary.
 
 Output CSV schema (per region)::
 
     row_kind     mechanism/feature        S1   S1_conf  ST   ST_conf  value
-    sobol_index  gef_mult                 ...  ...      ...  ...
     sobol_index  drone_energy_mult        ...  ...      ...  ...
-    ...                                                                    (9 rows)
+    ...                                                                    (12 rows)
     mc_summary   mc_mean_reduction_pct                                 ...
     mc_summary   mc_median_reduction_pct                               ...
     mc_summary   mc_p2.5                                               ...
     mc_summary   mc_p97.5                                              ...
     mc_summary   mc_n_samples                                          ...
-    mc_summary   anchor_baseline_kappa_reduction_pct                   ...
+    mc_summary   baseline_drone_tech_reduction_pct                     ...
 """
 
 from __future__ import annotations
@@ -64,35 +61,30 @@ from .vectorized_lca import (
 )
 
 
-# 13-feature Sobol input space (2026-05-20): mirrors OAT exactly under the
-# new §4 framing (drone-tech parametric uncertainty + κ anchor robustness;
-# gef_mult moved to §5 as a forward-pathway lever, not §4 robustness).
+# 12-feature Sobol input space for §4 drone-technology robustness. Kappa is an
+# e-bike/operator scenario lever, and gef_mult is a grid pathway lever, so both
+# are fixed here rather than sampled.
 # Ranges match OAT FEATURE_LEVELS; where OAT levels exclude baseline (e.g.
 # headwind, hover), Sobol extends the range down to the baseline so that
 # uniform sampling covers the full operating envelope.
 SOBOL_RANGES: dict[str, tuple[float, float]] = {
-    # Anchor assumption (e-bike side)
-    "kappa":                       (0.7, 1.0),
-
-    # Use phase
+    # Drone operation
     "drone_energy_mult":           (0.85, 1.15),
     "drone_cruise_kmh":            (50.0, 70.0),
     "drone_hover_s":               (10.0, 60.0),   # baseline 10s included
     "headwind_mps":                (0.0, 7.0),    # baseline 0 included
     "payload_kg":                  (0.7, 1.3),
 
-    # Production (mass)
+    # Production / end-of-life parameters
     "drone_body_kg":               (9.0, 11.5),
-    "drone_battery_mass":          (2.7, 3.3),    # NEW (w_battery)
-
-    # Production (intensity) — NEW
-    "drone_production_co2_per_kg": (7.0, 11.6),   # NEW (e_body)
-    "drone_battery_co2_per_kwh":   (100.0, 180.0), # NEW (e_battery)
+    "drone_battery_mass":          (2.7, 3.3),
+    "drone_production_co2_per_kg": (7.0, 11.6),
+    "drone_battery_co2_per_kwh":   (100.0, 180.0),
 
     # Lifespan / amortization
     "drone_lifespan_yr":           (2.0, 6.0),
     "drone_battery_lifespan_yr":   (1.0, 3.0),
-    "drone_utilization_rate":      (0.5, 1.2),    # NEW (utilization_mult)
+    "drone_utilization_rate":      (0.5, 1.2),
 }
 
 
@@ -137,7 +129,7 @@ def _reduction_for_sample(
     """Optimal mixed-strategy reduction (%) for one Saltelli row.
 
     ``fixed`` carries baseline values for features that are NOT in
-    SOBOL_RANGES (notably gef_mult, ebike_lifespan_yr). They are held at
+    SOBOL_RANGES (notably kappa, gef_mult, ebike_lifespan_yr). They are held at
     baseline through the entire Sobol sweep.
     """
     # Build effective DroneParams overrides for params that flow through
@@ -201,10 +193,11 @@ def run_sobol_for_region(
     payload_kg: float = 1.0,
     n: int = 512,
     seed: int = 42,
+    num_resamples: int = 100,
 ) -> pd.DataFrame:
     """Saltelli/Sobol global SA + MC bounds for a single region.
 
-    Returns a DataFrame with rows for the 9 Sobol indices plus 6 MC-summary
+    Returns a DataFrame with rows for the 12 Sobol indices plus 6 MC-summary
     rows. See module docstring for the schema.
     """
     road_distances_km = od_df["road_distance_m"].to_numpy(dtype=float) / 1000.0
@@ -217,11 +210,10 @@ def run_sobol_for_region(
     thresholds = threshold_sweep_km(road_distances_km)
 
     # Features held constant across the Sobol sweep at their OAT baseline.
-    # gef_mult is fixed (it moved to §5 as a pathway lever, not a §4
-    # robustness feature). ebike_lifespan_yr is fixed (mature tech, sub-1pp).
-    # The other entries shadow SOBOL_RANGES keys so that sample_values.get(...)
-    # always has a fallback — features inside SOBOL_RANGES overwrite the
-    # fixed value via sample_values on each Saltelli row.
+    # kappa is fixed because bundling is an operator/e-bike pathway variable,
+    # not drone-technology uncertainty. gef_mult is fixed because measured grid
+    # intensity is handled by the pathway scenarios. ebike_lifespan_yr is fixed
+    # because this robustness test is drone-side only.
     fixed = {
         "kappa":                float(getattr(ebike_params, "kappa", BASELINE["kappa"])),
         "gef_mult":             BASELINE["gef_mult"],
@@ -262,7 +254,7 @@ def run_sobol_for_region(
         )
 
     Si = sobol_analyze.analyze(
-        problem, Y, calc_second_order=False, num_resamples=100,
+        problem, Y, calc_second_order=False, num_resamples=num_resamples,
         conf_level=0.95, seed=seed, print_to_console=False,
     )
 
@@ -280,10 +272,9 @@ def run_sobol_for_region(
             "value": float("nan"),
         })
 
-    # Anchor (all-baseline, configured κ) reduction for reconciling with the §2
+    # All-baseline drone-technology reduction for reconciling with the §2
     # headline. Same call as a Sobol sample with all values at baseline.
     anchor_sample = {f: _resolve_baseline(f, drone_pp) for f in feature_names}
-    anchor_sample["kappa"] = fixed["kappa"]
     anchor_red = _reduction_for_sample(
         anchor_sample,
         road_distances_km, straight_distances_km,
@@ -297,7 +288,7 @@ def run_sobol_for_region(
         ("mc_p2.5",                     float(np.percentile(Y, 2.5))),
         ("mc_p97.5",                    float(np.percentile(Y, 97.5))),
         ("mc_n_samples",                float(Y.size)),
-        ("anchor_baseline_kappa_reduction_pct", float(anchor_red)),
+        ("baseline_drone_tech_reduction_pct", float(anchor_red)),
     ]
     for name, val in mc_rows:
         rows.append({
