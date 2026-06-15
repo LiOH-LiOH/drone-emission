@@ -227,8 +227,10 @@ def _draw_distance_panel(
     sample,
     graph,
     show_legend=False,
+    show_stats_box=True,
     padding=0.003,
     target_aspect=1.0,
+    rotate_air_diagonal=False,
 ):
     """Draw one distance comparison sample onto *ax*."""
     from matplotlib.collections import LineCollection
@@ -252,6 +254,132 @@ def _draw_distance_panel(
         "min_lng": min(lngs) - padding,
         "max_lng": max(lngs) + padding,
     }
+
+    if rotate_air_diagonal:
+        lat_center = (local_bounds["min_lat"] + local_bounds["max_lat"]) / 2
+        lng_center = (local_bounds["min_lng"] + local_bounds["max_lng"]) / 2
+        cos_lat = max(float(np.cos(np.radians(lat_center))), 1e-6)
+        target_aspect = max(float(target_aspect), 1e-6)
+
+        def _project(lat, lng):
+            return np.array([(lng - lng_center) * cos_lat, lat - lat_center])
+
+        origin_xy = _project(origin[0], origin[1])
+        dest_xy = _project(destination[0], destination[1])
+        air_vec = dest_xy - origin_xy
+        target_angle = np.arctan2(1.0, target_aspect)
+        current_angle = (
+            np.arctan2(air_vec[1], air_vec[0])
+            if np.hypot(air_vec[0], air_vec[1]) > 0
+            else target_angle
+        )
+        theta = target_angle - current_angle
+        cos_t, sin_t = np.cos(theta), np.sin(theta)
+
+        def _rotate_xy(xy):
+            return np.array([
+                xy[0] * cos_t - xy[1] * sin_t,
+                xy[0] * sin_t + xy[1] * cos_t,
+            ])
+
+        def _transform(lat, lng):
+            return _rotate_xy(_project(lat, lng))
+
+        def _inverse_transform(x, y):
+            xr = x * cos_t + y * sin_t
+            yr = -x * sin_t + y * cos_t
+            return yr + lat_center, xr / cos_lat + lng_center
+
+        primary_points = [
+            _transform(origin[0], origin[1]),
+            _transform(destination[0], destination[1]),
+        ]
+        if path_result.get("success") and len(path_result.get("path_coordinates", [])) > 1:
+            primary_points.extend(
+                _transform(lat, lng)
+                for lat, lng in path_result["path_coordinates"]
+            )
+        primary_points = np.vstack(primary_points)
+        x_min, y_min = primary_points.min(axis=0)
+        x_max, y_max = primary_points.max(axis=0)
+        pad = max(max(x_max - x_min, y_max - y_min) * 0.12, padding)
+        x_min, x_max = x_min - pad, x_max + pad
+        y_min, y_max = y_min - pad, y_max + pad
+        x_span = x_max - x_min
+        y_span = y_max - y_min
+        current_aspect = x_span / y_span if y_span > 0 else target_aspect
+        if current_aspect < target_aspect:
+            extra = (target_aspect * y_span - x_span) / 2
+            x_min -= extra
+            x_max += extra
+        else:
+            extra = (x_span / target_aspect - y_span) / 2
+            y_min -= extra
+            y_max += extra
+
+        corners = [
+            _inverse_transform(x_min, y_min),
+            _inverse_transform(x_min, y_max),
+            _inverse_transform(x_max, y_min),
+            _inverse_transform(x_max, y_max),
+        ]
+        query_bounds = {
+            "min_lat": min(lat for lat, _ in corners),
+            "max_lat": max(lat for lat, _ in corners),
+            "min_lng": min(lng for _, lng in corners),
+            "max_lng": max(lng for _, lng in corners),
+        }
+
+        edge_coords = graph.get_local_edges(query_bounds)
+        if len(edge_coords) > 0:
+            segments = [
+                [
+                    tuple(_transform(ec[1], ec[0])),
+                    tuple(_transform(ec[3], ec[2])),
+                ]
+                for ec in edge_coords
+            ]
+            lc = LineCollection(segments, colors="#ddd", linewidths=0.3, zorder=1)
+            ax.add_collection(lc)
+
+        if path_result.get("success") and len(path_result.get("path_coordinates", [])) > 1:
+            path_xy = np.array([
+                _transform(lat, lng)
+                for lat, lng in path_result["path_coordinates"]
+            ])
+            ax.plot(path_xy[:, 0], path_xy[:, 1], color="#d95f35", linewidth=2.5,
+                    alpha=0.9, zorder=10, label="E-bike (road)")
+
+        origin_rot = _transform(origin[0], origin[1])
+        dest_rot = _transform(destination[0], destination[1])
+        ax.plot(
+            [origin_rot[0], dest_rot[0]], [origin_rot[1], dest_rot[1]],
+            color="#1f77b4", linewidth=2, linestyle="--", alpha=0.9, zorder=20,
+            label="Drone (straight)",
+        )
+        ax.scatter(origin_rot[0], origin_rot[1], c="#2f6f4e", s=90, marker="o",
+                   zorder=25, edgecolors="white", linewidth=1.5, label="Merchant")
+        ax.scatter(dest_rot[0], dest_rot[1], c="#3f4b64", s=90, marker="s",
+                   zorder=25, edgecolors="white", linewidth=1.5, label="Customer")
+
+        ax.set_xlim(x_min, x_max)
+        ax.set_ylim(y_min, y_max)
+        ax.set_aspect("equal", adjustable="box")
+        ax.set_facecolor("#f7f7f7")
+        ax.set_xlabel("")
+        ax.set_ylabel("")
+        ax.tick_params(left=False, bottom=False, labelleft=False, labelbottom=False)
+
+        if show_stats_box:
+            ax.text(
+                0.97, 0.03,
+                f"Straight: {straight_dist:.0f} m\nRoad: {road_dist:.0f} m\nDetour: {detour:.2f}",
+                transform=ax.transAxes, fontsize=9, va="bottom", ha="right", zorder=80,
+                bbox=dict(boxstyle="round,pad=0.4", facecolor="white", edgecolor="#d3d8d5", alpha=0.92),
+            )
+        if show_legend:
+            ax.legend(loc="upper left", fontsize=9, framealpha=0.9)
+        return
 
     # Expand the tighter axis to match the target display shape while keeping
     # longitude foreshortening at this latitude, so the map is not stretched.
@@ -309,16 +437,18 @@ def _draw_distance_panel(
     ax.set_xlim(local_bounds["min_lng"], local_bounds["max_lng"])
     ax.set_ylim(local_bounds["min_lat"], local_bounds["max_lat"])
     ax.set_aspect(1 / cos_lat, adjustable="box")
+
     ax.set_xlabel("")
     ax.set_ylabel("")
     ax.tick_params(left=False, bottom=False, labelleft=False, labelbottom=False)
 
-    ax.text(
-        0.97, 0.03,
-        f"Straight: {straight_dist:.0f} m\nRoad: {road_dist:.0f} m\nDetour: {detour:.2f}",
-        transform=ax.transAxes, fontsize=9, va="bottom", ha="right", zorder=80,
-        bbox=dict(boxstyle="round,pad=0.4", facecolor="white", edgecolor="#d3d8d5", alpha=0.92),
-    )
+    if show_stats_box:
+        ax.text(
+            0.97, 0.03,
+            f"Straight: {straight_dist:.0f} m\nRoad: {road_dist:.0f} m\nDetour: {detour:.2f}",
+            transform=ax.transAxes, fontsize=9, va="bottom", ha="right", zorder=80,
+            bbox=dict(boxstyle="round,pad=0.4", facecolor="white", edgecolor="#d3d8d5", alpha=0.92),
+        )
     if show_legend:
         ax.legend(loc="upper left", fontsize=9, framealpha=0.9)
 

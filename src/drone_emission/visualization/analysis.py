@@ -4163,14 +4163,11 @@ def _selected_trip_distance_sample(selected_trip, router):
 
 def _selected_trip_distance_comparison_report(ax, sample):
     """Return plotted data for the selected-trip distance-comparison panel."""
-    pos = ax.get_position()
     report = {
         "axis": _axis_report(ax),
         "city": "beijing",
         "panel_type": "distance_comparison",
-        "target_display_aspect_width_over_height": (
-            _json_safe_scalar(pos.width / pos.height) if pos.height > 0 else None
-        ),
+        "target_display_aspect_width_over_height": 1.5,
     }
     if sample is None:
         report["selected_trip"] = {"status": "missing_or_unplottable_selected_trip"}
@@ -4412,7 +4409,7 @@ def plot_regions_map_city_rank_and_drone_share(
     gs = fig.add_gridspec(
         5,
         2,
-        height_ratios=[1.0, 0.03, 0.40, 0.24, 0.50],
+        height_ratios=[1.0, 0.03, 0.40, 0.10, 0.50],
         hspace=0.0,
         wspace=0.25,
     )
@@ -4421,11 +4418,12 @@ def plot_regions_map_city_rank_and_drone_share(
     mechanism_gs = gs[2, :].subgridspec(
         1,
         2,
-        width_ratios=[1.05, 1.35],
+        width_ratios=[1.45, 1.0],
         wspace=0.18,
     )
     ax_c = fig.add_subplot(mechanism_gs[0, 0])
     ax_d = fig.add_subplot(mechanism_gs[0, 1])
+    ax_d.set_box_aspect(1 / 1.5)
     phase_gs = gs[4, :].subgridspec(
         1,
         3,
@@ -4515,8 +4513,7 @@ def plot_regions_map_city_rank_and_drone_share(
         selected_trip,
         beijing_router,
     )
-    d_pos = ax_d.get_position()
-    d_target_aspect = float(d_pos.width / d_pos.height) if d_pos.height > 0 else 2.0
+    d_target_aspect = 1.5
     if distance_comparison_sample is not None and beijing_graph is not None:
         from visualization.roadnet import _draw_distance_panel
 
@@ -4525,7 +4522,9 @@ def plot_regions_map_city_rank_and_drone_share(
             distance_comparison_sample,
             beijing_graph,
             show_legend=True,
+            show_stats_box=False,
             target_aspect=d_target_aspect,
+            rotate_air_diagonal=True,
         )
     else:
         ax_d.text(
