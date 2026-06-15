@@ -4163,10 +4163,14 @@ def _selected_trip_distance_sample(selected_trip, router):
 
 def _selected_trip_distance_comparison_report(ax, sample):
     """Return plotted data for the selected-trip distance-comparison panel."""
+    pos = ax.get_position()
     report = {
         "axis": _axis_report(ax),
         "city": "beijing",
         "panel_type": "distance_comparison",
+        "target_display_aspect_width_over_height": (
+            _json_safe_scalar(pos.width / pos.height) if pos.height > 0 else None
+        ),
     }
     if sample is None:
         report["selected_trip"] = {"status": "missing_or_unplottable_selected_trip"}
@@ -4511,6 +4515,8 @@ def plot_regions_map_city_rank_and_drone_share(
         selected_trip,
         beijing_router,
     )
+    d_pos = ax_d.get_position()
+    d_target_aspect = float(d_pos.width / d_pos.height) if d_pos.height > 0 else 2.0
     if distance_comparison_sample is not None and beijing_graph is not None:
         from visualization.roadnet import _draw_distance_panel
 
@@ -4519,6 +4525,7 @@ def plot_regions_map_city_rank_and_drone_share(
             distance_comparison_sample,
             beijing_graph,
             show_legend=True,
+            target_aspect=d_target_aspect,
         )
     else:
         ax_d.text(

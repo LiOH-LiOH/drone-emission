@@ -222,7 +222,14 @@ def _compute_distance_samples_extreme(od_df, router, n_samples, extreme,
     return sample_paths
 
 
-def _draw_distance_panel(ax, sample, graph, show_legend=False, padding=0.003):
+def _draw_distance_panel(
+    ax,
+    sample,
+    graph,
+    show_legend=False,
+    padding=0.003,
+    target_aspect=1.0,
+):
     """Draw one distance comparison sample onto *ax*."""
     from matplotlib.collections import LineCollection
     from ._utils import configure_contextily_cache
@@ -246,6 +253,25 @@ def _draw_distance_panel(ax, sample, graph, show_legend=False, padding=0.003):
         "max_lng": max(lngs) + padding,
     }
 
+    # Expand the tighter axis to match the target display shape while keeping
+    # longitude foreshortening at this latitude, so the map is not stretched.
+    lat_center = (local_bounds["min_lat"] + local_bounds["max_lat"]) / 2
+    cos_lat = max(float(np.cos(np.radians(lat_center))), 1e-6)
+    target_aspect = max(float(target_aspect), 1e-6)
+    lat_span = local_bounds["max_lat"] - local_bounds["min_lat"]
+    lon_span = local_bounds["max_lng"] - local_bounds["min_lng"]
+    current_aspect = lon_span * cos_lat / lat_span if lat_span > 0 else target_aspect
+    if current_aspect < target_aspect:
+        target_lon_span = target_aspect * lat_span / cos_lat
+        extra = (target_lon_span - lon_span) / 2
+        local_bounds["min_lng"] -= extra
+        local_bounds["max_lng"] += extra
+    else:
+        target_lat_span = lon_span * cos_lat / target_aspect
+        extra = (target_lat_span - lat_span) / 2
+        local_bounds["min_lat"] -= extra
+        local_bounds["max_lat"] += extra
+
     edge_coords = graph.get_local_edges(local_bounds)
     if len(edge_coords) > 0:
         segments = [[(ec[1], ec[0]), (ec[3], ec[2])] for ec in edge_coords]
@@ -268,25 +294,9 @@ def _draw_distance_panel(ax, sample, graph, show_legend=False, padding=0.003):
     ax.scatter(destination[1], destination[0], c="#3f4b64", s=90, marker="s",
                zorder=25, edgecolors="white", linewidth=1.5, label="Customer")
 
-    # Expand the tighter axis so the panel is square in display space,
-    # accounting for longitude foreshortening at this latitude.
-    lat_center = (local_bounds["min_lat"] + local_bounds["max_lat"]) / 2
-    cos_lat = np.cos(np.radians(lat_center))
-    lat_span = local_bounds["max_lat"] - local_bounds["min_lat"]
-    lon_span = local_bounds["max_lng"] - local_bounds["min_lng"]
-    lat_disp = lat_span
-    lon_disp = lon_span * cos_lat
-    if lon_disp < lat_disp:
-        extra = (lat_disp - lon_disp) / cos_lat / 2
-        local_bounds["min_lng"] -= extra
-        local_bounds["max_lng"] += extra
-    else:
-        extra = (lon_disp - lat_disp) / 2
-        local_bounds["min_lat"] -= extra
-        local_bounds["max_lat"] += extra
-
     ax.set_xlim(local_bounds["min_lng"], local_bounds["max_lng"])
     ax.set_ylim(local_bounds["min_lat"], local_bounds["max_lat"])
+    ax.set_aspect(1 / cos_lat, adjustable="box")
 
     try:
         configure_contextily_cache()
@@ -298,6 +308,7 @@ def _draw_distance_panel(ax, sample, graph, show_legend=False, padding=0.003):
 
     ax.set_xlim(local_bounds["min_lng"], local_bounds["max_lng"])
     ax.set_ylim(local_bounds["min_lat"], local_bounds["max_lat"])
+    ax.set_aspect(1 / cos_lat, adjustable="box")
     ax.set_xlabel("")
     ax.set_ylabel("")
     ax.tick_params(left=False, bottom=False, labelleft=False, labelbottom=False)
