@@ -142,6 +142,16 @@ def _build_blue_reduction_cmap(v_max: float):
     return cmap, norm, bin_edges, reduction_edges
 
 
+def _finer_percentage_bins(reference_edges: np.ndarray, subdivisions: int = 2):
+    """Return finer bins spanning the same range as a percentage color scale."""
+    reference_edges = np.asarray(reference_edges, dtype=float)
+    if len(reference_edges) < 2:
+        return reference_edges
+    base_step = float(np.diff(reference_edges).min())
+    step = base_step / max(int(subdivisions), 1)
+    return np.arange(reference_edges[0], reference_edges[-1] + step * 0.5, step)
+
+
 def _build_absolute_reduction_log_cmap(values):
     """Discrete sequential cmap with log-spaced absolute reduction bins."""
     from matplotlib.colors import BoundaryNorm, ListedColormap
@@ -3979,6 +3989,7 @@ def _write_regions_map_city_rank_and_drone_share_report(
     reduction_pct_cmap, reduction_pct_norm, reduction_pct_bins, reduction_pct_edges = (
         color_scales["reduction_pct"]
     )
+    reduction_pct_hist_bins = _finer_percentage_bins(reduction_pct_edges)
     ax_c_secondary = _find_overlay_axis(ax_c.get_figure(), ax_c)
 
     payload = {
@@ -4018,8 +4029,8 @@ def _write_regions_map_city_rank_and_drone_share_report(
                     drone_df,
                     reduction_pct_col,
                     share_dist_ax,
-                    bins=reduction_pct_edges,
-                    bar_width=float(np.diff(reduction_pct_edges).min()) * 0.85,
+                    bins=reduction_pct_hist_bins,
+                    bar_width=float(np.diff(reduction_pct_hist_bins).min()) * 0.85,
                     label="Oracle reduction vs e-bike (%)",
                 ),
                 "colorbar": _colorbar_report(
@@ -4131,6 +4142,7 @@ def plot_regions_map_city_rank_and_drone_share(
     reduction_pct_cmap, reduction_pct_norm, reduction_pct_bins, reduction_pct_edges = (
         _build_blue_reduction_cmap(v_max)
     )
+    reduction_pct_hist_bins = _finer_percentage_bins(reduction_pct_edges)
 
     fig = plt.figure(figsize=figsize)
     gs = fig.add_gridspec(
@@ -4170,7 +4182,7 @@ def plot_regions_map_city_rank_and_drone_share(
     for spine in ax_a.spines.values():
         spine.set_visible(False)
 
-    inset_ax = ax_a.inset_axes([0.03, 0.04, 0.34, 0.38], zorder=10)
+    inset_ax = ax_a.inset_axes([0.03, 0.04, 0.34, 0.38], zorder=50)
     _plot_city_oracle_reduction_rank(
         map_df,
         10,
@@ -4180,10 +4192,11 @@ def plot_regions_map_city_rank_and_drone_share(
         compact=True,
         reduction_metric="percentage",
     )
-    inset_ax.set_facecolor("none")
-    inset_ax.patch.set_alpha(0.0)
+    inset_ax.set_zorder(50)
+    inset_ax.set_facecolor("white")
+    inset_ax.patch.set_alpha(0.92)
     for name, spine in inset_ax.spines.items():
-        spine.set_visible(name in {"left", "bottom"})
+        spine.set_visible(True)
         spine.set_edgecolor("#666666")
         spine.set_linewidth(0.6)
 
@@ -4210,7 +4223,7 @@ def plot_regions_map_city_rank_and_drone_share(
         drone_df,
         reduction_pct_col,
         ax=share_dist_ax,
-        bins=reduction_pct_edges,
+        bins=reduction_pct_hist_bins,
         xlabel="Oracle reduction (%)",
     )
 
