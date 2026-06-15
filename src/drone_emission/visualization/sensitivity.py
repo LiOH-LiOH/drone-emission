@@ -715,7 +715,7 @@ def plot_drone_tech_sensitivity_panels(
     class_p25 = class_grouped.quantile(0.25).reindex(class_order)
     class_p75 = class_grouped.quantile(0.75).reindex(class_order)
 
-    fig = plt.figure(figsize=figsize)
+    fig = plt.figure(figsize=figsize, constrained_layout=True)
     gs = fig.add_gridspec(2, 2, width_ratios=(1.0, 1.35), hspace=0.32, wspace=0.28)
     ax_a = fig.add_subplot(gs[0, 0])
     ax_b = fig.add_subplot(gs[0, 1])
@@ -828,7 +828,8 @@ def plot_drone_tech_sensitivity_panels(
             f"Drone-technology sensitivity across {n_cities} cities",
             y=0.99,
         )
-    fig.tight_layout()
+    if not fig.get_constrained_layout():
+        fig.tight_layout()
     return _finalize(save_path, dpi, for_latex, plot_title)
 
 
