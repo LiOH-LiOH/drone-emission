@@ -610,7 +610,7 @@ def plot_median_trip_emission_process(
 
         if plot_title:
             ax.set_title(
-                "Median-Air-Distance Shanghai Delivery-Leg Emission Process",
+                "Median-Air-Distance Delivery-Leg Emission Process",
                 fontsize=14,
             )
 

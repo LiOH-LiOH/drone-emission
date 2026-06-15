@@ -4010,7 +4010,6 @@ def _write_regions_map_city_rank_and_drone_share_report(
                 "inset_city_rank": _city_oracle_rank_report(
                     map_df,
                     inset_ax,
-                    reduction_metric="percentage",
                 ),
                 "colorbar": _colorbar_report(
                     cbar_a_ax,
@@ -4182,7 +4181,7 @@ def plot_regions_map_city_rank_and_drone_share(
     for spine in ax_a.spines.values():
         spine.set_visible(False)
 
-    inset_ax = ax_a.inset_axes([0.03, 0.04, 0.34, 0.38], zorder=50)
+    inset_ax = ax_a.inset_axes([0.03, 0.04, 0.34, 0.38], zorder=10)
     _plot_city_oracle_reduction_rank(
         map_df,
         10,
@@ -4190,13 +4189,11 @@ def plot_regions_map_city_rank_and_drone_share(
         ax=inset_ax,
         invert_vertical=True,
         compact=True,
-        reduction_metric="percentage",
     )
-    inset_ax.set_zorder(50)
-    inset_ax.set_facecolor("white")
-    inset_ax.patch.set_alpha(0.92)
+    inset_ax.set_facecolor("none")
+    inset_ax.patch.set_alpha(0.0)
     for name, spine in inset_ax.spines.items():
-        spine.set_visible(True)
+        spine.set_visible(name in {"left", "bottom"})
         spine.set_edgecolor("#666666")
         spine.set_linewidth(0.6)
 

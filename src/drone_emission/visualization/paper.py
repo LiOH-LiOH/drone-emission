@@ -16,7 +16,7 @@ Available figures:
     shanghai_heatmap, shanghai_road_air_distance, shanghai_road_detour,
     shanghai_air_detour, shanghai_air_road_joint, shanghai_emission_reduction,
     shanghai_emission_by_distance, shanghai_reduction_detour_by_distance,
-    shanghai_median_trip_emission_process,
+    beijing_median_trip_emission_process,
     shanghai_city_context, chongqing_city_context, chengdu_city_context,
     guangzhou_city_context, tianjin_city_context, dali_city_context,
     kunming_city_context, dali_chengdu_tianjin_guangzhou_city_context,
@@ -2301,14 +2301,14 @@ def _render_shanghai_reduction_detour_by_distance(data_dir, out, for_latex, plot
     )
 
 
-def _render_shanghai_median_trip_emission_process(data_dir, out, for_latex, plot_title):
-    """Load Shanghai OD pairs and render the median-trip emission process figure."""
-    region_key = "shanghai"
+def _render_beijing_median_trip_emission_process(data_dir, out, for_latex, plot_title):
+    """Load Beijing OD pairs and render the median-trip emission process figure."""
+    region_key = "beijing"
     region_level = "city"
     od_path = os.path.join(data_dir, region_level, region_key, f"{region_key}_od_pairs.csv")
 
     if not os.path.exists(od_path):
-        print(f"Median trip emission process skipped — missing {od_path}")
+        print(f"Beijing median trip emission process skipped — missing {od_path}")
         return
 
     from visualization.emission import plot_median_trip_emission_process
@@ -2322,12 +2322,12 @@ def _render_shanghai_median_trip_emission_process(data_dir, out, for_latex, plot
     }
     if not required.issubset(df.columns):
         missing = required - set(df.columns)
-        print(f"Median trip emission process skipped — {od_path} missing columns {missing}")
+        print(f"Beijing median trip emission process skipped — {od_path} missing columns {missing}")
         return
 
     plot_median_trip_emission_process(
         df,
-        save_path=os.path.join(out, "shanghai_median_trip_emission_process.png"),
+        save_path=os.path.join(out, "beijing_median_trip_emission_process.png"),
         for_latex=for_latex,
         plot_title=plot_title,
     )
@@ -2618,8 +2618,8 @@ def render_all(data_dir: str, figures_dir: str, for_latex: bool = False, plot_ti
             plot_title=plot_title,
         )
 
-    if _want("shanghai_median_trip_emission_process"):
-        _render_shanghai_median_trip_emission_process(
+    if _want("beijing_median_trip_emission_process"):
+        _render_beijing_median_trip_emission_process(
             data_dir=data_dir,
             out=out,
             for_latex=for_latex,
