@@ -4137,6 +4137,44 @@ def _detour_concept_panel_report(ax):
     }
 
 
+def _selected_trip_route_factor_report(ax, cbar_ax, selected_trip):
+    """Return plotted marker data for the selected-trip route-factor panel."""
+    report = {
+        "axis": _axis_report(ax),
+        "colorbar_axis": _axis_report(cbar_ax) if cbar_ax is not None else None,
+        "city": "beijing",
+        "order_distribution_label": "Order distribution (Beijing)",
+        "heatmap": {
+            "x": "air_distance_km",
+            "y": "detour_ratio",
+            "z": "drone emissions relative to e-bike (%)",
+        },
+    }
+    if selected_trip is None:
+        report["selected_trip_marker"] = {"status": "missing_selected_trip"}
+        return report
+
+    air_km = float(selected_trip["distance_km"])
+    road_km = float(selected_trip["road_distance_m"]) / 1000.0
+    detour_ratio = road_km / air_km if np.isfinite(air_km) and air_km > 0 else np.nan
+    xlim = ax.get_xlim()
+    ylim = ax.get_ylim()
+    report["selected_trip_marker"] = {
+        "status": "ok",
+        "marker": "D",
+        "air_distance_km": _json_safe_scalar(air_km),
+        "road_distance_km": _json_safe_scalar(road_km),
+        "detour_ratio": _json_safe_scalar(detour_ratio),
+        "visible_in_panel": bool(
+            np.isfinite(air_km)
+            and np.isfinite(detour_ratio)
+            and min(xlim) <= air_km <= max(xlim)
+            and min(ylim) <= detour_ratio <= max(ylim)
+        ),
+    }
+    return report
+
+
 def _find_overlay_axis(fig, reference_ax):
     """Return another axis sharing the same figure position, usually a twinx axis."""
     ref_pos = reference_ax.get_position()
@@ -4168,6 +4206,7 @@ def _write_regions_map_city_rank_and_drone_share_report(
     eol_df,
     production_distance_context,
     eol_distance_context,
+    selected_trip,
     median_trip_report,
 ):
     """Write a JSON report for regions_map_city_rank_and_drone_share."""
@@ -4179,6 +4218,8 @@ def _write_regions_map_city_rank_and_drone_share_report(
         ax_d,
         ax_e,
         ax_f,
+        ax_g,
+        lifecycle_cbar_ax,
         inset_ax,
         share_dist_ax,
         cbar_a_ax,
@@ -4191,7 +4232,6 @@ def _write_regions_map_city_rank_and_drone_share_report(
         color_scales["reduction_pct"]
     )
     reduction_pct_hist_bins = _finer_percentage_bins(reduction_pct_edges)
-    ax_c_secondary = _find_overlay_axis(ax_c.get_figure(), ax_c)
 
     payload = {
         "figure_name": "regions_map_city_rank_and_drone_share",
@@ -4241,14 +4281,15 @@ def _write_regions_map_city_rank_and_drone_share_report(
                     reduction_pct_cmap,
                 ),
             },
-            "c_province_lifecycle_and_reduction": _province_lifecycle_panel_report(
-                drone_df,
-                ax_c,
-                ax_c_secondary,
-            ),
-            "d_production_phase_selected_trip": _phase_bar_panel_report(
-                production_df,
+            "c_detour_ratio_concept": _detour_concept_panel_report(ax_c),
+            "d_lifecycle_distance_route_factor": _selected_trip_route_factor_report(
                 ax_d,
+                lifecycle_cbar_ax,
+                selected_trip,
+            ),
+            "e_production_phase_selected_trip": _phase_bar_panel_report(
+                production_df,
+                ax_e,
                 "Production emission\n(g CO2e / order)",
                 "Body",
                 "Battery",
@@ -4256,10 +4297,10 @@ def _write_regions_map_city_rank_and_drone_share_report(
                 "#2ca25f",
                 production_distance_context,
             ),
-            "e_beijing_median_trip_emission_process": median_trip_report,
-            "f_end_of_life_phase_selected_trip": _phase_bar_panel_report(
+            "f_beijing_median_trip_emission_process": median_trip_report,
+            "g_end_of_life_phase_selected_trip": _phase_bar_panel_report(
                 eol_df,
-                ax_f,
+                ax_g,
                 "End-of-life emission\n(g CO2e / order)",
                 "Body",
                 "Battery",
@@ -4294,7 +4335,9 @@ def plot_regions_map_city_rank_and_drone_share(
         for_latex: If True, save as PDF.
         plot_title: If True, show title.
     """
+    from visualization.concepts import _draw_detour_ratio_concept
     from visualization.emission import (
+        _draw_lifecycle_distance_route_factor,
         _draw_median_trip_emission_process,
         _select_median_trip_emission_sample,
     )
@@ -4355,16 +4398,24 @@ def plot_regions_map_city_rank_and_drone_share(
     )
     ax_a = fig.add_subplot(gs[0, 0])
     ax_b = fig.add_subplot(gs[0, 1])
-    ax_c = fig.add_subplot(gs[2, :])
-    concept_gs = gs[4, :].subgridspec(
+    mechanism_gs = gs[2, :].subgridspec(
+        1,
+        3,
+        width_ratios=[1.05, 1.35, 0.04],
+        wspace=0.18,
+    )
+    ax_c = fig.add_subplot(mechanism_gs[0, 0])
+    ax_d = fig.add_subplot(mechanism_gs[0, 1])
+    lifecycle_cbar_ax = fig.add_subplot(mechanism_gs[0, 2])
+    phase_gs = gs[4, :].subgridspec(
         1,
         3,
         width_ratios=[0.95, 3.0, 0.95],
         wspace=0.18,
     )
-    ax_d = fig.add_subplot(concept_gs[0, 0])
-    ax_e = fig.add_subplot(concept_gs[0, 1])
-    ax_f = fig.add_subplot(concept_gs[0, 2])
+    ax_e = fig.add_subplot(phase_gs[0, 0])
+    ax_f = fig.add_subplot(phase_gs[0, 1])
+    ax_g = fig.add_subplot(phase_gs[0, 2])
 
     plot_regions_on_china_map(
         df=map_df,
@@ -4431,38 +4482,42 @@ def plot_regions_map_city_rank_and_drone_share(
     ax_b.text(-0.03, 1.02, "b", transform=ax_b.transAxes,
               fontsize=16, fontweight="bold", va="bottom", ha="right")
 
-    plot_province_total_ebike_lifecycle(
-        df_stats,
-        ax=ax_c,
-        plot_title=plot_title,
-    )
-    ax_c.set_ylabel("E-bike LCA\n(t CO$_2$e / yr)", fontsize=10)
-    c_pos = ax_c.get_position()
-    for candidate_ax in fig.axes:
-        if candidate_ax is ax_c:
-            continue
-        pos = candidate_ax.get_position()
-        if (
-            abs(pos.x0 - c_pos.x0) < 1e-6
-            and abs(pos.y0 - c_pos.y0) < 1e-6
-            and abs(pos.width - c_pos.width) < 1e-6
-            and abs(pos.height - c_pos.height) < 1e-6
-        ):
-            candidate_ax.set_ylabel("Oracle reduction\n(%)", fontsize=10)
-            break
-    legend = ax_c.get_legend()
-    if legend is not None:
-        for text, label in zip(legend.get_texts(), ["E-bike LCA", "Oracle reduction"]):
-            text.set_text(label)
-            text.set_fontsize(9)
-    ax_c.text(-0.03, 1.02, "c", transform=ax_c.transAxes,
-              fontsize=16, fontweight="bold", va="bottom", ha="right")
-
     selected_trip = (
         _select_median_trip_emission_sample(beijing_od_df)
         if beijing_od_df is not None
         else None
     )
+
+    _draw_detour_ratio_concept(ax_c, plot_title=plot_title)
+    ax_c.text(-0.03, 1.02, "c", transform=ax_c.transAxes,
+              fontsize=16, fontweight="bold", va="bottom", ha="right")
+
+    _draw_lifecycle_distance_route_factor(
+        ax=ax_d,
+        fig=fig,
+        od_df=beijing_od_df,
+        plot_title=plot_title,
+        cax=lifecycle_cbar_ax,
+        order_distribution_label="Order distribution (Beijing)",
+    )
+    if selected_trip is not None:
+        selected_air_km = float(selected_trip["distance_km"])
+        selected_road_km = float(selected_trip["road_distance_m"]) / 1000.0
+        if np.isfinite(selected_air_km) and selected_air_km > 0:
+            selected_detour_ratio = selected_road_km / selected_air_km
+            ax_d.scatter(
+                selected_air_km,
+                selected_detour_ratio,
+                s=58,
+                marker="D",
+                facecolor="#fdae61",
+                edgecolor="#1f1f1f",
+                linewidth=0.9,
+                zorder=8,
+                label="Beijing median trip",
+            )
+            ax_d.legend(loc="upper right", fontsize=8, framealpha=0.72)
+
     production_df = _selected_trip_phase_parts(selected_trip, "production")
     eol_df = _selected_trip_phase_parts(selected_trip, "eol")
 
@@ -4486,23 +4541,23 @@ def plot_regions_map_city_rank_and_drone_share(
     production_distance_context = distance_context
     eol_distance_context = distance_context
     if production_df is None:
-        ax_d.text(
+        ax_e.text(
             0.5,
             0.5,
             "Beijing median trip production data\nnot available",
-            transform=ax_d.transAxes,
+            transform=ax_e.transAxes,
             ha="center",
             va="center",
             fontsize=10,
             color="#777777",
         )
-        ax_d.tick_params(left=False, bottom=False, labelleft=False, labelbottom=False)
+        ax_e.tick_params(left=False, bottom=False, labelleft=False, labelbottom=False)
         production_df = pd.DataFrame(
             columns=["vehicle", "body_g", "battery_g", "cached_total_g"]
         )
     else:
         _draw_trip_phase_barplot(
-            ax_d,
+            ax_e,
             production_df,
             ylabel="Production emission\n(g CO$_2$e / order)",
             body_label="Body",
@@ -4512,26 +4567,26 @@ def plot_regions_map_city_rank_and_drone_share(
             distance_label=distance_label,
         )
     if beijing_od_df is None:
-        ax_e.text(
+        ax_f.text(
             0.5,
             0.5,
             "Beijing median trip emission data\nnot available",
-            transform=ax_e.transAxes,
+            transform=ax_f.transAxes,
             ha="center",
             va="center",
             fontsize=10,
             color="#777777",
         )
-        ax_e.tick_params(left=False, bottom=False, labelleft=False, labelbottom=False)
-        median_trip_report = {"axis": _axis_report(ax_e), "status": "missing_beijing_od"}
+        ax_f.tick_params(left=False, bottom=False, labelleft=False, labelbottom=False)
+        median_trip_report = {"axis": _axis_report(ax_f), "status": "missing_beijing_od"}
     else:
         median_trip_data = _draw_median_trip_emission_process(
-            ax_e,
+            ax_f,
             beijing_od_df,
             plot_title=plot_title,
         )
         median_trip_report = {
-            "axis": _axis_report(ax_e),
+            "axis": _axis_report(ax_f),
             "status": "ok" if median_trip_data is not None else "no_valid_rows",
         }
         if median_trip_data is not None:
@@ -4557,23 +4612,23 @@ def plot_regions_map_city_rank_and_drone_share(
                 }
             )
     if eol_df is None:
-        ax_f.text(
+        ax_g.text(
             0.5,
             0.5,
             "Beijing median trip EOL data\nnot available",
-            transform=ax_f.transAxes,
+            transform=ax_g.transAxes,
             ha="center",
             va="center",
             fontsize=10,
             color="#777777",
         )
-        ax_f.tick_params(left=False, bottom=False, labelleft=False, labelbottom=False)
+        ax_g.tick_params(left=False, bottom=False, labelleft=False, labelbottom=False)
         eol_df = pd.DataFrame(
             columns=["vehicle", "body_g", "battery_g", "cached_total_g"]
         )
     else:
         _draw_trip_phase_barplot(
-            ax_f,
+            ax_g,
             eol_df,
             ylabel="End-of-life emission\n(g CO$_2$e / order)",
             body_label="Body",
@@ -4587,6 +4642,8 @@ def plot_regions_map_city_rank_and_drone_share(
     ax_e.text(-0.03, 1.02, "e", transform=ax_e.transAxes,
               fontsize=16, fontweight="bold", va="bottom", ha="right")
     ax_f.text(-0.03, 1.02, "f", transform=ax_f.transAxes,
+              fontsize=16, fontweight="bold", va="bottom", ha="right")
+    ax_g.text(-0.03, 1.02, "g", transform=ax_g.transAxes,
               fontsize=16, fontweight="bold", va="bottom", ha="right")
 
     if plot_title:
@@ -4647,6 +4704,8 @@ def plot_regions_map_city_rank_and_drone_share(
                 ax_d,
                 ax_e,
                 ax_f,
+                ax_g,
+                lifecycle_cbar_ax,
                 inset_ax,
                 share_dist_ax,
                 cbar_a_ax,
@@ -4670,6 +4729,7 @@ def plot_regions_map_city_rank_and_drone_share(
             eol_df=eol_df,
             production_distance_context=production_distance_context,
             eol_distance_context=eol_distance_context,
+            selected_trip=selected_trip,
             median_trip_report=median_trip_report,
         )
         plt.savefig(save_path, dpi=300, bbox_inches="tight")
