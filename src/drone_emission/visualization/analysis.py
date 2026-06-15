@@ -4215,7 +4215,7 @@ def plot_regions_map_city_rank_and_drone_share(
     for spine in ax_b.spines.values():
         spine.set_visible(False)
 
-    share_dist_ax = ax_b.inset_axes([0.03, 0.04, 0.34, 0.30], zorder=10)
+    share_dist_ax = ax_b.inset_axes([0.03, 0.04, 0.42, 0.38], zorder=10)
     _plot_distribution_inset(
         drone_df,
         reduction_pct_col,
