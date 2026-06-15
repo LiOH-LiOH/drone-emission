@@ -113,6 +113,35 @@ def _build_drone_share_cmap():
     return cmap, norm, bin_edges, drone_share_edges
 
 
+def _build_blue_reduction_cmap(v_max: float):
+    """Return reduction-percentage bins using the existing blue map style."""
+    from matplotlib.colors import BoundaryNorm, ListedColormap
+
+    step = 5 if v_max <= 25 else (10 if v_max <= 80 else 15)
+    top = max(int(np.ceil(v_max / step) * step), step * 5)
+    reduction_edges = np.arange(0, top + step, step, dtype=float)
+    bin_edges = np.concatenate([[-step], reduction_edges])
+    base_colors = [
+        "#eef5fc",
+        "#d6e6f5",
+        "#91bfdb",
+        "#4292c6",
+        "#08519c",
+        "#08306b",
+    ]
+    if len(reduction_edges) - 1 <= len(base_colors):
+        value_colors = base_colors[:len(reduction_edges) - 1]
+    else:
+        base = plt.get_cmap("Blues")
+        value_colors = [
+            base(x)
+            for x in np.linspace(0.15, 0.95, len(reduction_edges) - 1)
+        ]
+    cmap = ListedColormap(["#cccccc", *value_colors])
+    norm = BoundaryNorm(bin_edges, ncolors=cmap.N, clip=True)
+    return cmap, norm, bin_edges, reduction_edges
+
+
 def _build_absolute_reduction_log_cmap(values):
     """Discrete sequential cmap with log-spaced absolute reduction bins."""
     from matplotlib.colors import BoundaryNorm, ListedColormap
@@ -4071,8 +4100,9 @@ def plot_regions_map_city_rank_and_drone_share(
     reduction_cmap, reduction_norm, reduction_bins, reduction_edges = (
         _build_absolute_reduction_log_cmap(reduction_values)
     )
+    v_max = max(float(drone_df[reduction_pct_col].max(skipna=True)), 0.0)
     reduction_pct_cmap, reduction_pct_norm, reduction_pct_bins, reduction_pct_edges = (
-        _build_drone_share_cmap()
+        _build_blue_reduction_cmap(v_max)
     )
 
     fig = plt.figure(figsize=figsize)
