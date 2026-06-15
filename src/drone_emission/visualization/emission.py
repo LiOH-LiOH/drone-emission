@@ -2269,7 +2269,6 @@ def _draw_lifecycle_distance_route_factor(
     draw_heatmap: bool = True,
     contour_percentiles=None,
     mark_center: bool = False,
-    order_distribution_label: str = "Order distribution (Shanghai)",
 ) -> None:
     """Draw lifecycle distance/route-factor comparison onto *ax*."""
     distances = np.linspace(0.5, 4, 30)
@@ -2314,11 +2313,7 @@ def _draw_lifecycle_distance_route_factor(
     ax.set_xlabel("Air distance (km)", fontsize=12)
     ax.set_ylabel("Detour ratio (road / air distance)", fontsize=12)
     if plot_title:
-        title = (
-            "Emission comparison: drone vs e-bike"
-            if draw_heatmap
-            else order_distribution_label
-        )
+        title = "Emission comparison: drone vs e-bike" if draw_heatmap else "Shanghai order distribution"
         ax.set_title(title, fontsize=14)
 
     if od_df is not None:
@@ -2381,7 +2376,7 @@ def _draw_lifecycle_distance_route_factor(
                 )
 
             ax.plot([], [], color="black", linewidth=1.0, linestyle="solid",
-                    label=order_distribution_label)
+                    label="Order distribution (Shanghai)")
             ax.legend(loc="upper right", fontsize=9, framealpha=0.7)
 
 

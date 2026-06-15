@@ -4137,40 +4137,53 @@ def _detour_concept_panel_report(ax):
     }
 
 
-def _selected_trip_route_factor_report(ax, cbar_ax, selected_trip):
-    """Return plotted marker data for the selected-trip route-factor panel."""
+def _selected_trip_distance_sample(selected_trip, router):
+    """Return a distance-comparison sample for the selected OD row."""
+    if selected_trip is None:
+        return None
+    required = {"from_lat", "from_lng", "to_lat", "to_lng", "distance_km", "road_distance_m"}
+    if not required.issubset(selected_trip.index):
+        return None
+
+    origin = (float(selected_trip["from_lat"]), float(selected_trip["from_lng"]))
+    destination = (float(selected_trip["to_lat"]), float(selected_trip["to_lng"]))
+    path_result = (
+        router.find_shortest_path(origin, destination)
+        if router is not None
+        else {"success": False, "path_coordinates": [], "message": "router_missing"}
+    )
+    return {
+        "origin": origin,
+        "destination": destination,
+        "straight_distance": float(selected_trip["distance_km"]) * 1000.0,
+        "road_distance": float(selected_trip["road_distance_m"]),
+        "path_result": path_result,
+    }
+
+
+def _selected_trip_distance_comparison_report(ax, sample):
+    """Return plotted data for the selected-trip distance-comparison panel."""
     report = {
         "axis": _axis_report(ax),
-        "colorbar_axis": _axis_report(cbar_ax) if cbar_ax is not None else None,
         "city": "beijing",
-        "order_distribution_label": "Order distribution (Beijing)",
-        "heatmap": {
-            "x": "air_distance_km",
-            "y": "detour_ratio",
-            "z": "drone emissions relative to e-bike (%)",
-        },
+        "panel_type": "distance_comparison",
     }
-    if selected_trip is None:
-        report["selected_trip_marker"] = {"status": "missing_selected_trip"}
+    if sample is None:
+        report["selected_trip"] = {"status": "missing_or_unplottable_selected_trip"}
         return report
 
-    air_km = float(selected_trip["distance_km"])
-    road_km = float(selected_trip["road_distance_m"]) / 1000.0
-    detour_ratio = road_km / air_km if np.isfinite(air_km) and air_km > 0 else np.nan
-    xlim = ax.get_xlim()
-    ylim = ax.get_ylim()
-    report["selected_trip_marker"] = {
+    straight_m = float(sample["straight_distance"])
+    road_m = float(sample["road_distance"])
+    path_result = sample.get("path_result", {})
+    report["selected_trip"] = {
         "status": "ok",
-        "marker": "D",
-        "air_distance_km": _json_safe_scalar(air_km),
-        "road_distance_km": _json_safe_scalar(road_km),
-        "detour_ratio": _json_safe_scalar(detour_ratio),
-        "visible_in_panel": bool(
-            np.isfinite(air_km)
-            and np.isfinite(detour_ratio)
-            and min(xlim) <= air_km <= max(xlim)
-            and min(ylim) <= detour_ratio <= max(ylim)
-        ),
+        "origin": _json_safe_array(sample["origin"]),
+        "destination": _json_safe_array(sample["destination"]),
+        "straight_distance_m": _json_safe_scalar(straight_m),
+        "road_distance_m": _json_safe_scalar(road_m),
+        "detour_ratio": _json_safe_scalar(road_m / straight_m if straight_m > 0 else np.nan),
+        "path_success": bool(path_result.get("success", False)),
+        "path_message": path_result.get("message"),
     }
     return report
 
@@ -4206,7 +4219,7 @@ def _write_regions_map_city_rank_and_drone_share_report(
     eol_df,
     production_distance_context,
     eol_distance_context,
-    selected_trip,
+    distance_comparison_sample,
     median_trip_report,
 ):
     """Write a JSON report for regions_map_city_rank_and_drone_share."""
@@ -4219,7 +4232,6 @@ def _write_regions_map_city_rank_and_drone_share_report(
         ax_e,
         ax_f,
         ax_g,
-        lifecycle_cbar_ax,
         inset_ax,
         share_dist_ax,
         cbar_a_ax,
@@ -4282,10 +4294,11 @@ def _write_regions_map_city_rank_and_drone_share_report(
                 ),
             },
             "c_detour_ratio_concept": _detour_concept_panel_report(ax_c),
-            "d_lifecycle_distance_route_factor": _selected_trip_route_factor_report(
-                ax_d,
-                lifecycle_cbar_ax,
-                selected_trip,
+            "d_beijing_median_trip_distance_comparison": (
+                _selected_trip_distance_comparison_report(
+                    ax_d,
+                    distance_comparison_sample,
+                )
             ),
             "e_production_phase_selected_trip": _phase_bar_panel_report(
                 production_df,
@@ -4319,6 +4332,8 @@ def plot_regions_map_city_rank_and_drone_share(
     df_stats: "pd.DataFrame",
     stats_csv_path: str,
     beijing_od_df: "pd.DataFrame" = None,
+    beijing_graph=None,
+    beijing_router=None,
     save_path: str = None,
     figsize: tuple = (18, 16),
     for_latex: bool = False,
@@ -4330,6 +4345,8 @@ def plot_regions_map_city_rank_and_drone_share(
         df_stats: all_region_stats DataFrame.
         stats_csv_path: Path to all_region_stats.csv (for map function).
         beijing_od_df: Beijing OD pairs DataFrame for the median-trip use-phase panel.
+        beijing_graph: Beijing road network graph for the median-trip distance panel.
+        beijing_router: Router for drawing the Beijing median-trip road path.
         save_path: Path to save figure. Shows plot if None.
         figsize: Figure size tuple.
         for_latex: If True, save as PDF.
@@ -4337,7 +4354,6 @@ def plot_regions_map_city_rank_and_drone_share(
     """
     from visualization.concepts import _draw_detour_ratio_concept
     from visualization.emission import (
-        _draw_lifecycle_distance_route_factor,
         _draw_median_trip_emission_process,
         _select_median_trip_emission_sample,
     )
@@ -4400,13 +4416,12 @@ def plot_regions_map_city_rank_and_drone_share(
     ax_b = fig.add_subplot(gs[0, 1])
     mechanism_gs = gs[2, :].subgridspec(
         1,
-        3,
-        width_ratios=[1.05, 1.35, 0.04],
+        2,
+        width_ratios=[1.05, 1.35],
         wspace=0.18,
     )
     ax_c = fig.add_subplot(mechanism_gs[0, 0])
     ax_d = fig.add_subplot(mechanism_gs[0, 1])
-    lifecycle_cbar_ax = fig.add_subplot(mechanism_gs[0, 2])
     phase_gs = gs[4, :].subgridspec(
         1,
         3,
@@ -4492,31 +4507,33 @@ def plot_regions_map_city_rank_and_drone_share(
     ax_c.text(-0.03, 1.02, "c", transform=ax_c.transAxes,
               fontsize=16, fontweight="bold", va="bottom", ha="right")
 
-    _draw_lifecycle_distance_route_factor(
-        ax=ax_d,
-        fig=fig,
-        od_df=beijing_od_df,
-        plot_title=plot_title,
-        cax=lifecycle_cbar_ax,
-        order_distribution_label="Order distribution (Beijing)",
+    distance_comparison_sample = _selected_trip_distance_sample(
+        selected_trip,
+        beijing_router,
     )
-    if selected_trip is not None:
-        selected_air_km = float(selected_trip["distance_km"])
-        selected_road_km = float(selected_trip["road_distance_m"]) / 1000.0
-        if np.isfinite(selected_air_km) and selected_air_km > 0:
-            selected_detour_ratio = selected_road_km / selected_air_km
-            ax_d.scatter(
-                selected_air_km,
-                selected_detour_ratio,
-                s=58,
-                marker="D",
-                facecolor="#fdae61",
-                edgecolor="#1f1f1f",
-                linewidth=0.9,
-                zorder=8,
-                label="Beijing median trip",
-            )
-            ax_d.legend(loc="upper right", fontsize=8, framealpha=0.72)
+    if distance_comparison_sample is not None and beijing_graph is not None:
+        from visualization.roadnet import _draw_distance_panel
+
+        _draw_distance_panel(
+            ax_d,
+            distance_comparison_sample,
+            beijing_graph,
+            show_legend=True,
+        )
+    else:
+        ax_d.text(
+            0.5,
+            0.5,
+            "Beijing median trip distance comparison\nnot available",
+            transform=ax_d.transAxes,
+            ha="center",
+            va="center",
+            fontsize=10,
+            color="#777777",
+        )
+        ax_d.tick_params(left=False, bottom=False, labelleft=False, labelbottom=False)
+        for spine in ax_d.spines.values():
+            spine.set_visible(False)
 
     production_df = _selected_trip_phase_parts(selected_trip, "production")
     eol_df = _selected_trip_phase_parts(selected_trip, "eol")
@@ -4705,7 +4722,6 @@ def plot_regions_map_city_rank_and_drone_share(
                 ax_e,
                 ax_f,
                 ax_g,
-                lifecycle_cbar_ax,
                 inset_ax,
                 share_dist_ax,
                 cbar_a_ax,
@@ -4729,7 +4745,7 @@ def plot_regions_map_city_rank_and_drone_share(
             eol_df=eol_df,
             production_distance_context=production_distance_context,
             eol_distance_context=eol_distance_context,
-            selected_trip=selected_trip,
+            distance_comparison_sample=distance_comparison_sample,
             median_trip_report=median_trip_report,
         )
         plt.savefig(save_path, dpi=300, bbox_inches="tight")
