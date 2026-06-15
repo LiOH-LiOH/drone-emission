@@ -4071,9 +4071,8 @@ def plot_regions_map_city_rank_and_drone_share(
     reduction_cmap, reduction_norm, reduction_bins, reduction_edges = (
         _build_absolute_reduction_log_cmap(reduction_values)
     )
-    v_max = max(float(drone_df[reduction_pct_col].max(skipna=True)), 0.0)
     reduction_pct_cmap, reduction_pct_norm, reduction_pct_bins, reduction_pct_edges = (
-        _build_reduction_cmap(v_max)
+        _build_drone_share_cmap()
     )
 
     fig = plt.figure(figsize=figsize)
