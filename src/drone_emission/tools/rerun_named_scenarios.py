@@ -41,6 +41,7 @@ from utils.province import get_province_from_district  # noqa: E402
 from utils.region_config import RegionConfig, init_registry  # noqa: E402
 
 REGIONS_JSON = os.path.join(PROJECT_ROOT, "regions.json")
+REQUIRED_OD_COLUMNS = ("road_distance_m", "distance_km")
 
 
 def _count_od_csvs(data_dir: str) -> int:
@@ -92,6 +93,9 @@ def _process(region_info, exp_config) -> tuple[str, str, float]:
         od_df = pd.read_csv(od_path)
         if len(od_df) == 0:
             return region_key, "empty_od", time.time() - t0
+        missing = [col for col in REQUIRED_OD_COLUMNS if col not in od_df.columns]
+        if missing:
+            return region_key, f"missing_columns:{','.join(missing)}", time.time() - t0
         province = _resolve_province(region_info, exp_config)
         emission_cfg = get_emission_params(exp_config)
         gef_path = exp_config.get("gef_path")
@@ -180,7 +184,7 @@ def main():
     elapsed_total = 0.0
     for i, (_, region_info) in enumerate(regions, 1):
         rk, status, elapsed = _process(region_info, config)
-        counts[status] += 1
+        counts[status] = counts.get(status, 0) + 1
         elapsed_total += elapsed
         if status != "ok" or i % 25 == 0:
             print(f"[{i}/{n}] {rk}: {status} ({elapsed:.2f}s)", flush=True)
