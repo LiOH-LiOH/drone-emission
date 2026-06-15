@@ -10,6 +10,7 @@ Usage:
 from __future__ import annotations
 
 import os
+import sys
 
 import numpy as np
 import pandas as pd
@@ -17,7 +18,9 @@ import pandas as pd
 PROJECT_ROOT = os.path.dirname(
     os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 )
-DATA_DIR = os.path.join(PROJECT_ROOT, "data")
+sys.path.insert(0, os.path.join(PROJECT_ROOT, "src", "drone_emission"))
+
+from utils import load_config  # noqa: E402
 
 DRONE_TECH_GROUPS = {
     "operation": (
@@ -248,10 +251,19 @@ def compare_outputs(oat: pd.DataFrame, shap: pd.DataFrame, named: pd.DataFrame, 
 
 
 def main():
-    oat = pd.read_csv(os.path.join(DATA_DIR, "all_sensitivity_oat.csv"))
-    shap = pd.read_csv(os.path.join(DATA_DIR, "all_sensitivity_shapley.csv"))
-    named = pd.read_csv(os.path.join(DATA_DIR, "all_sensitivity_named.csv"))
-    sobol = pd.read_csv(os.path.join(DATA_DIR, "all_sensitivity_sobol.csv"))
+    import argparse
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--env", type=str, default=None)
+    args = parser.parse_args()
+
+    config = load_config(os.path.join(PROJECT_ROOT, "experiment.toml"), env=args.env)
+    data_dir = config["data_dir"]
+
+    oat = pd.read_csv(os.path.join(data_dir, "all_sensitivity_oat.csv"))
+    shap = pd.read_csv(os.path.join(data_dir, "all_sensitivity_shapley.csv"))
+    named = pd.read_csv(os.path.join(data_dir, "all_sensitivity_named.csv"))
+    sobol = pd.read_csv(os.path.join(data_dir, "all_sensitivity_sobol.csv"))
     summarize_oat(oat)
     summarize_shapley(shap)
     summarize_named(named)
