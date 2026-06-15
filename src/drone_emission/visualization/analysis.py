@@ -3897,6 +3897,7 @@ def _write_regions_map_city_rank_and_drone_share_report(
     map_df,
     drone_df,
     reduction_col,
+    reduction_pct_col,
     drone_share_col,
     axes,
     color_scales,
@@ -3917,8 +3918,12 @@ def _write_regions_map_city_rank_and_drone_share_report(
         cbar_a_ax,
         cbar_b_ax,
     ) = axes
-    reduction_cmap, reduction_norm, reduction_bins, reduction_edges = color_scales["reduction"]
-    drone_cmap, drone_norm, drone_bins, drone_edges = color_scales["drone_share"]
+    reduction_cmap, reduction_norm, reduction_bins, reduction_edges = (
+        color_scales["reduction"]
+    )
+    reduction_pct_cmap, reduction_pct_norm, reduction_pct_bins, reduction_pct_edges = (
+        color_scales["reduction_pct"]
+    )
     ax_c_secondary = _find_overlay_axis(ax_c.get_figure(), ax_c)
 
     payload = {
@@ -3945,10 +3950,10 @@ def _write_regions_map_city_rank_and_drone_share_report(
                     reduction_cmap,
                 ),
             },
-            "b_drone_share_map": {
+            "b_oracle_reduction_pct_map": {
                 **_map_panel_report(
-                    drone_df, drone_share_col, drone_cmap, drone_norm,
-                    drone_bins, ax_b, "b",
+                    drone_df, reduction_pct_col, reduction_pct_cmap, reduction_pct_norm,
+                    reduction_pct_bins, ax_b, "b",
                 ),
                 "inset_drone_share_distribution": _drone_share_distribution_report(
                     drone_df,
@@ -3957,10 +3962,10 @@ def _write_regions_map_city_rank_and_drone_share_report(
                 ),
                 "colorbar": _colorbar_report(
                     cbar_b_ax,
-                    drone_bins,
-                    drone_edges,
-                    "Drone share at minimum lifecycle emission (%)",
-                    drone_cmap,
+                    reduction_pct_bins,
+                    reduction_pct_edges,
+                    "Oracle reduction vs e-bike (%)",
+                    reduction_pct_cmap,
                 ),
             },
             "c_province_lifecycle_and_reduction": _province_lifecycle_panel_report(
@@ -4004,7 +4009,7 @@ def plot_regions_map_city_rank_and_drone_share(
     for_latex: bool = False,
     plot_title: bool = False,
 ):
-    """Maps for Oracle reduction and drone share, with province lifecycle and concept panels.
+    """Maps for absolute and percentage Oracle reduction, with drone-share inset.
 
     Args:
         df_stats: all_region_stats DataFrame.
@@ -4036,7 +4041,9 @@ def plot_regions_map_city_rank_and_drone_share(
             )
     try:
         reduction_col = _oracle_reduction_tonnes_column(map_df)
-        drone_share_col = _weighted_drone_share_column(df_stats)
+        drone_df = df_stats.copy()
+        reduction_pct_col = _weighted_reduction_column(drone_df)
+        drone_share_col = _weighted_drone_share_column(drone_df)
     except KeyError as exc:
         print(f"Regions map city rank and drone share skipped — {exc}")
         return
@@ -4046,7 +4053,16 @@ def plot_regions_map_city_rank_and_drone_share(
         print("Regions map city rank and drone share skipped — no valid reduction values")
         return
 
-    drone_df = df_stats.copy()
+    drone_df[reduction_pct_col] = pd.to_numeric(
+        drone_df[reduction_pct_col], errors="coerce"
+    )
+    if drone_df[reduction_pct_col].dropna().empty:
+        print(
+            "Regions map city rank and drone share skipped — "
+            "no valid reduction-percentage values"
+        )
+        return
+
     drone_df[drone_share_col] = pd.to_numeric(drone_df[drone_share_col], errors="coerce")
     if drone_df[drone_share_col].dropna().empty:
         print("Regions map city rank and drone share skipped — no valid drone-share values")
@@ -4055,7 +4071,10 @@ def plot_regions_map_city_rank_and_drone_share(
     reduction_cmap, reduction_norm, reduction_bins, reduction_edges = (
         _build_absolute_reduction_log_cmap(reduction_values)
     )
-    drone_cmap, drone_norm, drone_bins, drone_edges = _build_drone_share_cmap()
+    v_max = max(float(drone_df[reduction_pct_col].max(skipna=True)), 0.0)
+    reduction_pct_cmap, reduction_pct_norm, reduction_pct_bins, reduction_pct_edges = (
+        _build_reduction_cmap(v_max)
+    )
 
     fig = plt.figure(figsize=figsize)
     gs = fig.add_gridspec(
@@ -4113,11 +4132,11 @@ def plot_regions_map_city_rank_and_drone_share(
 
     plot_regions_on_china_map(
         df=drone_df,
-        color_by=drone_share_col,
+        color_by=reduction_pct_col,
         ax=ax_b,
         plot_title=False,
-        cmap=drone_cmap,
-        norm=drone_norm,
+        cmap=reduction_pct_cmap,
+        norm=reduction_pct_norm,
         draw_colorbar=False,
         draw_legend=False,
     )
@@ -4226,11 +4245,11 @@ def plot_regions_map_city_rank_and_drone_share(
     cbar_b, n_bands_b = _draw_discrete_reduction_colorbar(
         fig,
         cbar_b_ax,
-        drone_cmap,
-        drone_norm,
-        drone_bins,
-        drone_edges,
-        "Drone share at minimum lifecycle emission (%)",
+        reduction_pct_cmap,
+        reduction_pct_norm,
+        reduction_pct_bins,
+        reduction_pct_edges,
+        "Oracle reduction vs e-bike (%)",
     )
     _annotate_unstudied(fig, cbar_b, cbar_b_ax, n_bands_b)
 
@@ -4248,6 +4267,7 @@ def plot_regions_map_city_rank_and_drone_share(
             map_df=map_df,
             drone_df=drone_df,
             reduction_col=reduction_col,
+            reduction_pct_col=reduction_pct_col,
             drone_share_col=drone_share_col,
             axes=(
                 ax_a,
@@ -4268,11 +4288,11 @@ def plot_regions_map_city_rank_and_drone_share(
                     reduction_bins,
                     reduction_edges,
                 ),
-                "drone_share": (
-                    drone_cmap,
-                    drone_norm,
-                    drone_bins,
-                    drone_edges,
+                "reduction_pct": (
+                    reduction_pct_cmap,
+                    reduction_pct_norm,
+                    reduction_pct_bins,
+                    reduction_pct_edges,
                 ),
             },
             production_df=production_df,
