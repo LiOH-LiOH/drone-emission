@@ -4304,7 +4304,7 @@ def _write_regions_map_city_rank_and_drone_share_report(
             "e_production_phase_selected_trip": _phase_bar_panel_report(
                 production_df,
                 ax_e,
-                "Production emission\n(g CO2e / order)",
+                "Production\n(g CO2e/order)",
                 "Body",
                 "Battery",
                 "#7f8c8d",
@@ -4315,7 +4315,7 @@ def _write_regions_map_city_rank_and_drone_share_report(
             "g_end_of_life_phase_selected_trip": _phase_bar_panel_report(
                 eol_df,
                 ax_g,
-                "End-of-life emission\n(g CO2e / order)",
+                "EOL\n(g CO2e/order)",
                 "Body",
                 "Battery",
                 "#8b8f97",
@@ -4409,7 +4409,7 @@ def plot_regions_map_city_rank_and_drone_share(
     gs = fig.add_gridspec(
         5,
         2,
-        height_ratios=[1.0, 0.03, 0.40, 0.10, 0.50],
+        height_ratios=[1.0, 0.03, 0.55, 0.07, 0.44],
         hspace=0.0,
         wspace=0.25,
     )
@@ -4556,10 +4556,10 @@ def plot_regions_map_city_rank_and_drone_share(
             "road_distance_km_for_ebike": _json_safe_scalar(road_km),
             "ebike_emission_distance_km": _json_safe_scalar(ebike_km),
         }
-        distance_label = f"Beijing median trip: air {air_km:.2f} km; road {road_km:.2f} km"
+        distance_label = "Median trip"
     else:
         distance_context = {"city": "beijing", "status": "missing_selected_trip"}
-        distance_label = "Beijing median trip"
+        distance_label = "Median trip"
 
     production_distance_context = distance_context
     eol_distance_context = distance_context
@@ -4582,7 +4582,7 @@ def plot_regions_map_city_rank_and_drone_share(
         _draw_trip_phase_barplot(
             ax_e,
             production_df,
-            ylabel="Production emission\n(g CO$_2$e / order)",
+            ylabel="Production\n(g CO$_2$e/order)",
             body_label="Body",
             battery_label="Battery",
             body_color="#7f8c8d",
@@ -4608,6 +4608,8 @@ def plot_regions_map_city_rank_and_drone_share(
             beijing_od_df,
             plot_title=plot_title,
         )
+        ax_f.set_xlabel("Distance (km)", fontsize=12)
+        ax_f.set_ylabel("Use-phase emission\n(g CO$_2$e/leg)", fontsize=12)
         median_trip_report = {
             "axis": _axis_report(ax_f),
             "status": "ok" if median_trip_data is not None else "no_valid_rows",
@@ -4653,7 +4655,7 @@ def plot_regions_map_city_rank_and_drone_share(
         _draw_trip_phase_barplot(
             ax_g,
             eol_df,
-            ylabel="End-of-life emission\n(g CO$_2$e / order)",
+            ylabel="EOL\n(g CO$_2$e/order)",
             body_label="Body",
             battery_label="Battery",
             body_color="#8b8f97",
