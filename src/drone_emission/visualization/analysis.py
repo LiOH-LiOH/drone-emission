@@ -1954,7 +1954,7 @@ def plot_regions_map_pathway_scenarios(
             curve_data.get("kappa"),
             "e",
             r"E-bike bundling factor $\kappa$",
-            orientation="horizontal",
+            orientation="vertical",
             saved_limits=curve_saved_limits,
             share_limits=curve_share_limits,
         ),
