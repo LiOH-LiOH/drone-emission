@@ -3853,6 +3853,8 @@ def _phase_bar_panel_report(
     body_color,
     battery_color,
     distance_context,
+    body_colors_by_vehicle=None,
+    battery_colors_by_vehicle=None,
 ):
     """Return stacked body/battery bar data for a selected-trip phase panel."""
     x = np.arange(len(df))
@@ -3874,14 +3876,22 @@ def _phase_bar_panel_report(
                     "bottom": 0.0,
                     "height_g_per_order": _json_safe_scalar(body_value),
                     "top": _json_safe_scalar(body_value),
-                    "color": body_color,
+                    "color": (
+                        body_colors_by_vehicle.get(vehicle, body_color)
+                        if body_colors_by_vehicle
+                        else body_color
+                    ),
                 },
                 "battery_segment": {
                     "label": battery_label,
                     "bottom": _json_safe_scalar(body_value),
                     "height_g_per_order": _json_safe_scalar(battery_value),
                     "top": _json_safe_scalar(component_sum),
-                    "color": battery_color,
+                    "color": (
+                        battery_colors_by_vehicle.get(vehicle, battery_color)
+                        if battery_colors_by_vehicle
+                        else battery_color
+                    ),
                 },
                 "component_sum_check": {
                     "component_sum_g": _json_safe_scalar(component_sum),
@@ -4183,6 +4193,39 @@ def _selected_trip_distance_comparison_report(ax, sample):
         "city": "beijing",
         "panel_type": "distance_comparison",
         "target_display_aspect_width_over_height": 2.0,
+        "route_styles": {
+            "ebike_road_route": {
+                "color": "#d95f35",
+                "linewidth": 2.5,
+                "alpha": 0.9,
+                "label": "E-bike (road)",
+            },
+            "drone_straight_route": {
+                "color": "#1f77b4",
+                "linewidth": 2.0,
+                "linestyle": "--",
+                "alpha": 0.9,
+                "label": "Drone (straight)",
+            },
+        },
+        "endpoint_marker_styles": {
+            "merchant": {
+                "marker": "circle",
+                "matplotlib_marker": "o",
+                "color": "#2f6f4e",
+                "size": 90,
+                "edgecolor": "white",
+                "linewidth": 1.5,
+            },
+            "customer": {
+                "marker": "square",
+                "matplotlib_marker": "s",
+                "color": "#3f4b64",
+                "size": 90,
+                "edgecolor": "white",
+                "linewidth": 1.5,
+            },
+        },
     }
     if sample is None:
         report["selected_trip"] = {"status": "missing_or_unplottable_selected_trip"}
@@ -4235,6 +4278,8 @@ def _write_regions_map_city_rank_and_drone_share_report(
     eol_df,
     production_distance_context,
     eol_distance_context,
+    phase_body_colors,
+    phase_battery_colors,
     distance_comparison_sample,
     median_trip_report,
 ):
@@ -4325,6 +4370,8 @@ def _write_regions_map_city_rank_and_drone_share_report(
                 "#7f8c8d",
                 "#2ca25f",
                 production_distance_context,
+                body_colors_by_vehicle=phase_body_colors,
+                battery_colors_by_vehicle=phase_battery_colors,
             ),
             "f_beijing_median_trip_emission_process": median_trip_report,
             "g_end_of_life_phase_selected_trip": _phase_bar_panel_report(
@@ -4336,6 +4383,8 @@ def _write_regions_map_city_rank_and_drone_share_report(
                 "#8b8f97",
                 "#5b8db8",
                 eol_distance_context,
+                body_colors_by_vehicle=phase_body_colors,
+                battery_colors_by_vehicle=phase_battery_colors,
             ),
         },
     }
@@ -4780,6 +4829,8 @@ def plot_regions_map_city_rank_and_drone_share(
             eol_df=eol_df,
             production_distance_context=production_distance_context,
             eol_distance_context=eol_distance_context,
+            phase_body_colors=phase_body_colors,
+            phase_battery_colors=phase_battery_colors,
             distance_comparison_sample=distance_comparison_sample,
             median_trip_report=median_trip_report,
         )
