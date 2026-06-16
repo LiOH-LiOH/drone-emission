@@ -362,6 +362,8 @@ def _evaluate_pathway_optimal_curve_point(
     gef_mult: float,
     rider_weight: float,
     payload_kg: float,
+    anchor_kappa: float = None,
+    anchor_gef_mult: float = 1.0,
 ) -> dict:
     """Evaluate sampled annual CO2 savings and drone share for one pathway point."""
     from dataclasses import replace
@@ -395,6 +397,18 @@ def _evaluate_pathway_optimal_curve_point(
         drone_pp,
         DroneScenario(gef_mult=gef_mult, payload_kg=payload_kg),
     )
+    anchor_ebike_g = ebike_g
+    if anchor_kappa is not None or not np.isclose(anchor_gef_mult, gef_mult):
+        anchor_ebike_g = compute_ebike_per_order_g(
+            road_km,
+            ebike_pp,
+            EbikeScenario(
+                kappa=kappa if anchor_kappa is None else anchor_kappa,
+                gef_mult=anchor_gef_mult,
+                payload_kg=payload_kg,
+                rider_weight=rider_weight,
+            ),
+        )
 
     thresholds = _threshold_sweep(road_km)
     best_total_g = None
@@ -406,7 +420,7 @@ def _evaluate_pathway_optimal_curve_point(
             best_total_g = annual_total_g
             best_use_drone = use_drone
 
-    anchor_g = float((ebike_g * annual_sales).sum())
+    anchor_g = float((anchor_ebike_g * annual_sales).sum())
     drone_orders = float(annual_sales[best_use_drone].sum())
     total_orders = float(annual_sales.sum())
     return {
@@ -486,8 +500,7 @@ def _build_pathway_curve_data(
 
     def aggregate(kappa_value: float, gef_mult: float) -> dict:
         saved_kg = 0.0
-        weighted_share = 0.0
-        total_orders = 0.0
+        city_shares = []
         for od_sample, scale, province_gef in sampled:
             result = _evaluate_pathway_optimal_curve_point(
                 od_sample,
@@ -499,14 +512,14 @@ def _build_pathway_curve_data(
                 gef_mult=gef_mult,
                 rider_weight=rider_weight,
                 payload_kg=payload_kg,
+                anchor_kappa=baseline_kappa,
+                anchor_gef_mult=1.0,
             )
-            orders = float(od_sample["annual_sales"].sum()) * scale
             saved_kg += result["saved_kg"]
-            weighted_share += result["drone_share_pct"] * orders
-            total_orders += orders
+            city_shares.append(result["drone_share_pct"])
         return {
             "saved_kt": saved_kg / 1e6,
-            "drone_share_pct": weighted_share / total_orders if total_orders > 0 else np.nan,
+            "drone_share_pct": float(np.nanmedian(city_shares)) if city_shares else np.nan,
         }
 
     kappa_curve = []
@@ -561,6 +574,27 @@ def _plot_pathway_curve_panel(ax, curve_df: pd.DataFrame, panel_label: str, xlab
     ax.text(-0.08, 1.03, panel_label, transform=ax.transAxes,
             fontsize=14, fontweight="bold", va="bottom", ha="right")
     return ax_share
+
+
+def _override_pathway_curve_endpoint(
+    curve_df: pd.DataFrame,
+    x_value: float,
+    saved_kt: float,
+    drone_share_pct: float,
+) -> pd.DataFrame:
+    """Replace the curve point at x_value with exact panel summary values."""
+    if curve_df is None or curve_df.empty:
+        return curve_df
+    out = curve_df.copy()
+    idx = np.flatnonzero(np.isclose(out["x"].to_numpy(dtype=float), x_value))
+    if idx.size == 0:
+        return out
+    row_idx = out.index[idx[0]]
+    if np.isfinite(saved_kt):
+        out.loc[row_idx, "saved_kt"] = saved_kt
+    if np.isfinite(drone_share_pct):
+        out.loc[row_idx, "drone_share_pct"] = drone_share_pct
+    return out
 
 
 def plot_correlation_heatmap(
@@ -1540,12 +1574,6 @@ def plot_regions_map_pathway_scenarios(
         ("c", "Operator bundling",        0.65, 1.0, "optimal_mixed"),
         ("d", "Halved GEF + bundling",    0.65, 0.5, "optimal_mixed_2030"),
     ]
-    curve_data = _build_pathway_curve_data(
-        base,
-        data_dir=data_dir,
-        exp_config=exp_config,
-        baseline_kappa=baseline_kappa,
-    )
 
     reduction_col = "reduction_vs_anchor_ebike_pct"
     has_annual = "annual_lifecycle_kg" in named.columns
@@ -1596,6 +1624,39 @@ def plot_regions_map_pathway_scenarios(
         if has_annual and not anchor_rows.empty:
             joined = rows[["region_key", "annual_lifecycle_kg"]].merge(anchor_rows, on="region_key", how="inner")
             annual_saved_total_kg[label] = float((joined["anchor_annual_kg"] - joined["annual_lifecycle_kg"]).sum())
+
+    curve_data = _build_pathway_curve_data(
+        base,
+        data_dir=data_dir,
+        exp_config=exp_config,
+        baseline_kappa=baseline_kappa,
+    )
+    if "kappa" in curve_data:
+        curve_data["kappa"] = _override_pathway_curve_endpoint(
+            curve_data["kappa"],
+            baseline_kappa,
+            annual_saved_total_kg.get("a", np.nan) / 1e6,
+            drone_share_median.get("a", np.nan),
+        )
+        curve_data["kappa"] = _override_pathway_curve_endpoint(
+            curve_data["kappa"],
+            0.65,
+            annual_saved_total_kg.get("c", np.nan) / 1e6,
+            drone_share_median.get("c", np.nan),
+        )
+    if "gef" in curve_data:
+        curve_data["gef"] = _override_pathway_curve_endpoint(
+            curve_data["gef"],
+            1.0,
+            annual_saved_total_kg.get("a", np.nan) / 1e6,
+            drone_share_median.get("a", np.nan),
+        )
+        curve_data["gef"] = _override_pathway_curve_endpoint(
+            curve_data["gef"],
+            0.5,
+            annual_saved_total_kg.get("b", np.nan) / 1e6,
+            drone_share_median.get("b", np.nan),
+        )
 
     if not all_values:
         print("plot_regions_map_pathway_scenarios: no scenario rows matched any region in stats — "
