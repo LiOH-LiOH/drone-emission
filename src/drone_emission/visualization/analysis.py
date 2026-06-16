@@ -545,7 +545,15 @@ def _build_pathway_curve_data(
     }
 
 
-def _plot_pathway_curve_panel(ax, curve_df: pd.DataFrame, panel_label: str, xlabel: str):
+def _plot_pathway_curve_panel(
+    ax,
+    curve_df: pd.DataFrame,
+    panel_label: str,
+    axis_label: str,
+    orientation: str = "horizontal",
+    saved_limits: tuple[float, float] = None,
+    share_limits: tuple[float, float] = None,
+):
     """Draw total saved CO2 and drone share on dual axes."""
     if curve_df is None or curve_df.empty:
         ax.text(0.5, 0.5, "Pathway curve unavailable", transform=ax.transAxes,
@@ -556,21 +564,46 @@ def _plot_pathway_curve_panel(ax, curve_df: pd.DataFrame, panel_label: str, xlab
     x = curve_df["x"].to_numpy(dtype=float)
     saved = curve_df["saved_kt"].to_numpy(dtype=float)
     share = curve_df["drone_share_pct"].to_numpy(dtype=float)
+    if saved_limits is None:
+        saved_limits = _padded_visible_ylim(saved)
+    if share_limits is None:
+        share_limits = (0, min(105, max(100, np.nanmax(share) * 1.08)))
 
-    ax.plot(x, saved, color="#1b7837", marker="o", linewidth=1.8, markersize=4)
-    ax.set_xlabel(xlabel, fontsize=10)
-    ax.set_ylabel(r"CO$_2$ saved (kt/yr)", fontsize=10, color="#1b7837")
-    ax.tick_params(axis="y", labelcolor="#1b7837", labelsize=8)
-    ax.tick_params(axis="x", labelsize=8)
-    ax.grid(True, linestyle=":", alpha=0.35)
-    if x[0] > x[-1]:
-        ax.invert_xaxis()
+    if orientation == "vertical":
+        ax.plot(saved, x, color="#1b7837", marker="o", linewidth=1.8, markersize=4)
+        ax.set_xlabel(r"CO$_2$ saved (kt/yr)", fontsize=10, color="#1b7837")
+        ax.set_ylabel(axis_label, fontsize=10)
+        ax.tick_params(axis="x", labelcolor="#1b7837", labelsize=8)
+        ax.tick_params(axis="y", labelsize=8)
+        ax.grid(True, linestyle=":", alpha=0.35)
+        if saved_limits is not None:
+            ax.set_xlim(*saved_limits)
 
-    ax_share = ax.twinx()
-    ax_share.plot(x, share, color="#2166ac", marker="s", linewidth=1.6, markersize=3.5)
-    ax_share.set_ylabel("Drone share (%)", fontsize=10, color="#2166ac")
-    ax_share.tick_params(axis="y", labelcolor="#2166ac", labelsize=8)
-    ax_share.set_ylim(0, min(105, max(100, np.nanmax(share) * 1.08)))
+        ax_share = ax.twiny()
+        ax_share.plot(share, x, color="#2166ac", marker="s", linewidth=1.6, markersize=3.5)
+        ax_share.set_xlabel("Drone share (%)", fontsize=10, color="#2166ac")
+        ax_share.tick_params(axis="x", labelcolor="#2166ac", labelsize=8)
+        if share_limits is not None:
+            ax_share.set_xlim(*share_limits)
+    else:
+        ax.plot(x, saved, color="#1b7837", marker="o", linewidth=1.8, markersize=4)
+        ax.set_xlabel(axis_label, fontsize=10)
+        ax.set_ylabel(r"CO$_2$ saved (kt/yr)", fontsize=10, color="#1b7837")
+        ax.tick_params(axis="y", labelcolor="#1b7837", labelsize=8)
+        ax.tick_params(axis="x", labelsize=8)
+        ax.grid(True, linestyle=":", alpha=0.35)
+        if x[0] > x[-1]:
+            ax.invert_xaxis()
+        if saved_limits is not None:
+            ax.set_ylim(*saved_limits)
+
+        ax_share = ax.twinx()
+        ax_share.plot(x, share, color="#2166ac", marker="s", linewidth=1.6, markersize=3.5)
+        ax_share.set_ylabel("Drone share (%)", fontsize=10, color="#2166ac")
+        ax_share.tick_params(axis="y", labelcolor="#2166ac", labelsize=8)
+        if share_limits is not None:
+            ax_share.set_ylim(*share_limits)
+
     ax.text(-0.08, 1.03, panel_label, transform=ax.transAxes,
             fontsize=14, fontweight="bold", va="bottom", ha="right")
     return ax_share
@@ -595,6 +628,129 @@ def _override_pathway_curve_endpoint(
     if np.isfinite(drone_share_pct):
         out.loc[row_idx, "drone_share_pct"] = drone_share_pct
     return out
+
+
+def _pathway_curve_metric_limits(curve_data: dict) -> tuple[tuple[float, float], tuple[float, float]]:
+    """Return shared CO2-saved and drone-share limits for pathway curve panels."""
+    frames = [
+        frame
+        for frame in (curve_data or {}).values()
+        if frame is not None and not frame.empty
+    ]
+    if not frames:
+        return None, None
+
+    saved = np.concatenate([
+        frame["saved_kt"].to_numpy(dtype=float)
+        for frame in frames
+        if "saved_kt" in frame.columns
+    ])
+    share = np.concatenate([
+        frame["drone_share_pct"].to_numpy(dtype=float)
+        for frame in frames
+        if "drone_share_pct" in frame.columns
+    ])
+    saved_limits = _padded_visible_ylim(saved)
+    share_finite = share[np.isfinite(share)]
+    if share_finite.size == 0:
+        share_limits = None
+    else:
+        share_limits = (
+            max(0.0, float(share_finite.min()) - 5.0),
+            min(105.0, max(100.0, float(share_finite.max()) + 5.0)),
+        )
+    return saved_limits, share_limits
+
+
+def _summary_bar_limits(
+    drone_share_median: dict,
+    annual_saved_total_kg: dict,
+) -> tuple[tuple[float, float], tuple[float, float]]:
+    """Return shared limits for map inset summary bars."""
+    share_values = np.array(list(drone_share_median.values()), dtype=float)
+    share_values = share_values[np.isfinite(share_values)]
+    saved_values = np.array(
+        [value / 1e6 for value in annual_saved_total_kg.values()],
+        dtype=float,
+    )
+    saved_values = saved_values[np.isfinite(saved_values)]
+    share_limits = (
+        0.0,
+        min(105.0, max(100.0, float(share_values.max()) * 1.12))
+        if share_values.size
+        else 100.0,
+    )
+    saved_limits = _padded_visible_ylim(saved_values)
+    if saved_limits is None:
+        saved_limits = (0.0, 1.0)
+    return share_limits, saved_limits
+
+
+def _add_map_summary_bars(
+    ax_map,
+    drone_share_pct: float,
+    saved_kt: float,
+    share_limits: tuple[float, float],
+    saved_limits: tuple[float, float],
+):
+    """Add two-bar inset for drone share and CO2 saved inside a map panel."""
+    inset = ax_map.inset_axes([0.035, 0.08, 0.31, 0.26], zorder=10)
+    inset.set_facecolor((1, 1, 1, 0.90))
+    inset_saved = inset.twinx()
+
+    inset.bar(
+        [0],
+        [drone_share_pct],
+        width=0.55,
+        color="#2166ac",
+        alpha=0.85,
+        zorder=3,
+    )
+    inset_saved.bar(
+        [1],
+        [saved_kt],
+        width=0.55,
+        color="#1b7837",
+        alpha=0.85,
+        zorder=3,
+    )
+
+    inset.set_xlim(-0.6, 1.6)
+    inset.set_ylim(*share_limits)
+    inset_saved.set_ylim(*saved_limits)
+    inset.set_xticks([0, 1])
+    inset.set_xticklabels(["Share", "Saved"], fontsize=6.5)
+    inset.tick_params(axis="y", labelsize=6, colors="#2166ac", length=2)
+    inset_saved.tick_params(axis="y", labelsize=6, colors="#1b7837", length=2)
+    inset.grid(axis="y", linestyle=":", linewidth=0.4, alpha=0.35, zorder=0)
+    for spine in inset.spines.values():
+        spine.set_color("#888888")
+        spine.set_linewidth(0.4)
+    for spine in inset_saved.spines.values():
+        spine.set_visible(False)
+
+    inset.text(
+        0,
+        drone_share_pct,
+        f"{drone_share_pct:.0f}%",
+        ha="center",
+        va="bottom",
+        fontsize=6.5,
+        color="#2166ac",
+        zorder=5,
+    )
+    saved_label = f"{saved_kt:.0f}"
+    inset_saved.text(
+        1,
+        saved_kt,
+        saved_label,
+        ha="center",
+        va="bottom",
+        fontsize=6.5,
+        color="#1b7837",
+        zorder=5,
+    )
+    return inset, inset_saved
 
 
 def plot_correlation_heatmap(
@@ -1530,7 +1686,7 @@ def plot_regions_map_pathway_scenarios(
     data_dir: str = None,
     exp_config: dict = None,
     save_path: str = None,
-    figsize: tuple = (22, 18),
+    figsize: tuple = (20, 18),
     for_latex: bool = False,
     plot_title: bool = False,
 ):
@@ -1699,20 +1855,24 @@ def plot_regions_map_pathway_scenarios(
         float(s.max()) if len(s) else 0.0 for s in panel_province_emission_kt.values()
     ) if panel_province_emission_kt else 0.0
     line_y_max = max(line_y_max, 1.0) * 1.05
+    summary_share_limits, summary_saved_limits = _summary_bar_limits(
+        drone_share_median,
+        annual_saved_total_kg,
+    )
 
     fig = plt.figure(figsize=figsize)
     gs = fig.add_gridspec(
-        4, 3,
-        height_ratios=[5, 2.2, 5, 2.2],
-        width_ratios=[1, 1, 0.88],
-        hspace=0.25,
-        wspace=0.28,
+        5, 3,
+        height_ratios=[1.55, 5, 2.2, 5, 2.2],
+        width_ratios=[0.82, 1, 1],
+        hspace=0.30,
+        wspace=0.24,
     )
-    pos = {"a": (0, 0), "b": (0, 1), "c": (2, 0), "d": (2, 1)}
+    pos = {"a": (1, 1), "b": (1, 2), "c": (3, 1), "d": (3, 2)}
     ax_pairs = []
     curve_axes = [
-        fig.add_subplot(gs[0:2, 2]),
-        fig.add_subplot(gs[2:4, 2]),
+        fig.add_subplot(gs[1:5, 0]),
+        fig.add_subplot(gs[0, 1:3]),
     ]
 
     box_lines = []  # parallel list of twin axes for line overlay
@@ -1742,46 +1902,14 @@ def plot_regions_map_pathway_scenarios(
         ax_map.text(-0.02, 1.02, label, transform=ax_map.transAxes,
                     fontsize=14, fontweight="bold", va="bottom", ha="right")
 
-        from matplotlib.patches import Rectangle
-        table_rows = [
-            (r"$\kappa$", _format_kappa_value(k)),
-            ("gef", f"{g:.1f}"),
-            ("Drone share", f"{drone_share_median[label]:.0f}%"),
-        ]
-        if label in annual_saved_total_kg:
-            saved_kt = annual_saved_total_kg[label] / 1e6  # kg -> kt
-            table_rows.append((r"CO$_2$ saved", f"{saved_kt:.0f} kt/yr"))
-
-        n_rows = len(table_rows)
-        t_w, t_h = 0.34, 0.045 * n_rows
-        t_x = (1.0 - t_w) / 2  # centered, sits under the title
-        t_y = 0.98
-        col_split = 0.55  # fraction of table width for col 1
-        # Background + outer border
-        ax_map.add_patch(Rectangle(
-            (t_x, t_y - t_h), t_w, t_h,
-            transform=ax_map.transAxes, facecolor="white", edgecolor="gray",
-            linewidth=0.4, alpha=0.9, zorder=3,
-        ))
-        # Row separators + cell text
-        for i, (lbl, val) in enumerate(table_rows):
-            row_y_top = t_y - (i / n_rows) * t_h
-            row_y_mid = t_y - ((i + 0.5) / n_rows) * t_h
-            if i > 0:
-                ax_map.plot(
-                    [t_x, t_x + t_w], [row_y_top, row_y_top],
-                    transform=ax_map.transAxes, color="gray",
-                    linewidth=0.3, zorder=4,
-                )
-            ax_map.text(
-                t_x + 0.01, row_y_mid, lbl,
-                transform=ax_map.transAxes, fontsize=9,
-                ha="left", va="center", zorder=5,
-            )
-            ax_map.text(
-                t_x + col_split * t_w + 0.005, row_y_mid, val,
-                transform=ax_map.transAxes, fontsize=9,
-                ha="left", va="center", zorder=5,
+        saved_kt = annual_saved_total_kg.get(label, np.nan) / 1e6
+        if np.isfinite(drone_share_median[label]) and np.isfinite(saved_kt):
+            _add_map_summary_bars(
+                ax_map,
+                drone_share_median[label],
+                saved_kt,
+                summary_share_limits,
+                summary_saved_limits,
             )
 
         rows = panel_named[label]
@@ -1818,22 +1946,29 @@ def plot_regions_map_pathway_scenarios(
         ax_line.tick_params(axis="y", labelsize=8, colors="dimgray")
         box_lines.append(ax_line)
 
+    curve_saved_limits, curve_share_limits = _pathway_curve_metric_limits(curve_data)
     curve_twins = [
         _plot_pathway_curve_panel(
             curve_axes[0],
             curve_data.get("kappa"),
             "e",
             r"E-bike bundling factor $\kappa$",
+            orientation="vertical",
+            saved_limits=curve_saved_limits,
+            share_limits=curve_share_limits,
         ),
         _plot_pathway_curve_panel(
             curve_axes[1],
             curve_data.get("gef"),
             "f",
             "Grid emission factor multiplier",
+            orientation="horizontal",
+            saved_limits=curve_saved_limits,
+            share_limits=curve_share_limits,
         ),
     ]
 
-    cbar_ax = fig.add_axes((0.905, 0.28, 0.012, 0.44))
+    cbar_ax = fig.add_axes((0.925, 0.25, 0.012, 0.42))
     cbar, n_bands = _draw_discrete_reduction_colorbar(
         fig, cbar_ax, shared_cmap, shared_norm, bin_edges, reduction_edges,
         r"Reduction vs today's all-ebike anchor (%)",
@@ -1843,7 +1978,7 @@ def plot_regions_map_pathway_scenarios(
         fig.suptitle("Forward-pathway scenarios: per-delivery reduction across 314 cities",
                      fontsize=14, fontweight="bold")
 
-    fig.tight_layout(rect=(0, 0.03, 0.90, 0.98))
+    fig.tight_layout(rect=(0, 0.03, 0.92, 0.98))
 
     # Align each boxplot's width with its map (the map shrinks horizontally due to
     # its enforced geographic aspect ratio; gridspec leaves the boxplot wider).
