@@ -4186,7 +4186,7 @@ def _selected_trip_distance_sample(selected_trip, router):
     }
 
 
-def _selected_trip_distance_comparison_report(ax, sample, city="guangzhou"):
+def _selected_trip_distance_comparison_report(ax, sample, city="chengdu"):
     """Return plotted data for the selected-trip distance-comparison panel."""
     report = {
         "axis": _axis_report(ax),
@@ -4405,7 +4405,7 @@ def plot_regions_map_city_rank_and_drone_share(
     figsize: tuple = (18, 16),
     for_latex: bool = False,
     plot_title: bool = False,
-    median_trip_city: str = "guangzhou",
+    median_trip_city: str = "chengdu",
     beijing_od_df: "pd.DataFrame" = None,
     beijing_graph=None,
     beijing_router=None,

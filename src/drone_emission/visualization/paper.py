@@ -2907,47 +2907,47 @@ def render_all(data_dir: str, figures_dir: str, for_latex: bool = False, plot_ti
                 )
 
             if _want("regions_map_city_rank_and_drone_share"):
-                guangzhou_od_path = os.path.join(
+                chengdu_od_path = os.path.join(
                     data_dir,
                     "city",
-                    "guangzhou",
-                    "guangzhou_od_pairs.csv",
+                    "chengdu",
+                    "chengdu_od_pairs.csv",
                 )
-                guangzhou_graphml_path = os.path.join(
+                chengdu_graphml_path = os.path.join(
                     data_dir,
                     "city",
-                    "guangzhou",
-                    "guangzhou_roadnet.graphml",
+                    "chengdu",
+                    "chengdu_roadnet.graphml",
                 )
-                guangzhou_od_df = None
-                if os.path.exists(guangzhou_od_path):
-                    guangzhou_od_df = pd.read_csv(guangzhou_od_path)
+                chengdu_od_df = None
+                if os.path.exists(chengdu_od_path):
+                    chengdu_od_df = pd.read_csv(chengdu_od_path)
                 else:
                     print(
                         "regions_map_city_rank_and_drone_share: "
-                        "Guangzhou OD missing, Guangzhou median-trip panels will show "
-                        f"placeholders ({guangzhou_od_path})"
+                        "Chengdu OD missing, Chengdu median-trip panels will show "
+                        f"placeholders ({chengdu_od_path})"
                     )
-                guangzhou_graph, guangzhou_router = None, None
-                if os.path.exists(guangzhou_graphml_path):
+                chengdu_graph, chengdu_router = None, None
+                if os.path.exists(chengdu_graphml_path):
                     from roadnet.sparse_graph import SparseGraph
                     from roadnet.tile_router import TileRouter
 
-                    guangzhou_graph = SparseGraph.from_graphml(guangzhou_graphml_path)
-                    guangzhou_router = TileRouter(guangzhou_graph)
+                    chengdu_graph = SparseGraph.from_graphml(chengdu_graphml_path)
+                    chengdu_router = TileRouter(chengdu_graph)
                 else:
                     print(
                         "regions_map_city_rank_and_drone_share: "
-                        "Guangzhou roadnet missing, panel d will show placeholder "
-                        f"({guangzhou_graphml_path})"
+                        "Chengdu roadnet missing, panel d will show placeholder "
+                        f"({chengdu_graphml_path})"
                     )
                 plot_regions_map_city_rank_and_drone_share(
                     df_stats=df,
                     stats_csv_path=stats_path,
-                    median_trip_od_df=guangzhou_od_df,
-                    median_trip_graph=guangzhou_graph,
-                    median_trip_router=guangzhou_router,
-                    median_trip_city="guangzhou",
+                    median_trip_od_df=chengdu_od_df,
+                    median_trip_graph=chengdu_graph,
+                    median_trip_router=chengdu_router,
+                    median_trip_city="chengdu",
                     save_path=os.path.join(out, "regions_map_city_rank_and_drone_share.png"),
                     for_latex=for_latex,
                     plot_title=plot_title,
