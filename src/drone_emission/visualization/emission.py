@@ -1634,6 +1634,40 @@ def _build_break_even_surface_triangles(
     }
 
 
+def _build_break_even_surface_display_mesh(
+    air_distance_grid_km: np.ndarray,
+    detour_ratios: np.ndarray,
+    raw_surface: np.ndarray,
+    gef_limits: tuple[float, float],
+    distance_points: int = 520,
+    detour_points: int = 420,
+) -> dict | None:
+    """Build a smooth display mesh for the theoretical break-even surface."""
+    from scipy.interpolate import RectBivariateSpline
+
+    x_axis = np.asarray(air_distance_grid_km, dtype=float)
+    y_axis = np.asarray(detour_ratios, dtype=float)
+    z_grid = np.asarray(raw_surface, dtype=float)
+    if not np.isfinite(z_grid).all():
+        return _build_break_even_surface_triangles(
+            air_distance_grid_km=x_axis,
+            detour_ratios=y_axis,
+            raw_surface=z_grid,
+            gef_limits=gef_limits,
+        )
+
+    spline = RectBivariateSpline(y_axis, x_axis, z_grid, kx=3, ky=3, s=0.0)
+    display_x = np.linspace(float(x_axis.min()), float(x_axis.max()), distance_points)
+    display_y = np.linspace(float(y_axis.min()), float(y_axis.max()), detour_points)
+    display_z = spline(display_y, display_x)
+    return _build_break_even_surface_triangles(
+        air_distance_grid_km=display_x,
+        detour_ratios=display_y,
+        raw_surface=display_z,
+        gef_limits=gef_limits,
+    )
+
+
 def prepare_break_even_phase_diagram_data(
     data_dir: str = None,
     city_df: pd.DataFrame = None,
@@ -1717,7 +1751,7 @@ def prepare_break_even_phase_diagram_data(
         delta_slope=delta_slope_grid,
         gef_limits=BREAK_EVEN_GEF_LIMITS,
     )
-    surface_mesh = _build_break_even_surface_triangles(
+    surface_mesh = _build_break_even_surface_display_mesh(
         air_distance_grid_km=air_distance_grid_km,
         detour_ratios=detour_ratios,
         raw_surface=break_even_surface_raw,
@@ -1798,9 +1832,6 @@ def plot_break_even_phase_diagram(
     detour_ratios = prepared["detour_ratios"]
     panel_a = prepared["panel_a"]
     panel_b = prepared["panel_b"]
-    panel_c = prepared["panel_c"]
-    rep_air_distance_km = prepared["representative_air_distance_km"]
-    meta = prepared["meta"]
     distance_limits = prepared["axes"]["distance_limits"]
     detour_limits = prepared["axes"]["detour_limits"]
     gef_limits = prepared["axes"]["gef_limits"]
@@ -1906,23 +1937,8 @@ def plot_break_even_phase_diagram(
     ax_a.text2D(
         0.02,
         0.05,
-        panel_c["annotation"],
+        "Theoretical boundary from lifecycle model",
         transform=ax_a.transAxes,
-        fontsize=8.4,
-        color="#555555",
-        bbox={
-            "boxstyle": "round,pad=0.22",
-            "facecolor": "white",
-            "alpha": 0.84,
-            "edgecolor": "none",
-        },
-    )
-    ax_a.text2D(
-        0.98,
-        0.05,
-        f"sample cap: {meta['max_sample_rows_per_city']:,}/city; seed {meta['sample_seed']}",
-        transform=ax_a.transAxes,
-        ha="right",
         fontsize=8.4,
         color="#555555",
         bbox={
