@@ -4579,12 +4579,12 @@ def plot_regions_map_city_rank_and_drone_share(
     production_distance_context = distance_context
     eol_distance_context = distance_context
     phase_body_colors = {
-        "E-bike": "#2b78b8",
-        "Drone": "#d95f35",
+        "E-bike": "#d95f35",
+        "Drone": "#2b78b8",
     }
     phase_battery_colors = {
-        "E-bike": "#86b8dc",
-        "Drone": "#f2a37f",
+        "E-bike": "#f2a37f",
+        "Drone": "#86b8dc",
     }
     if production_df is None:
         ax_e.text(
