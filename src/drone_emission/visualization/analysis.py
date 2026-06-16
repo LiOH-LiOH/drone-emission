@@ -4646,13 +4646,15 @@ def plot_regions_map_city_rank_and_drone_share(
 
     production_distance_context = distance_context
     eol_distance_context = distance_context
+    phase_body_color = "#5f6368"
+    phase_battery_color = "#c7c9cc"
     phase_body_colors = {
-        "E-bike": "#d95f35",
-        "Drone": "#2b78b8",
+        "E-bike": phase_body_color,
+        "Drone": phase_body_color,
     }
     phase_battery_colors = {
-        "E-bike": "#f2a37f",
-        "Drone": "#86b8dc",
+        "E-bike": phase_battery_color,
+        "Drone": phase_battery_color,
     }
     if production_df is None:
         ax_e.text(
@@ -4676,8 +4678,8 @@ def plot_regions_map_city_rank_and_drone_share(
             ylabel="Production\n(g CO$_2$e/order)",
             body_label="Body",
             battery_label="Battery",
-            body_color="#7f8c8d",
-            battery_color="#2ca25f",
+            body_color=phase_body_color,
+            battery_color=phase_battery_color,
             distance_label=distance_label,
             body_colors_by_vehicle=phase_body_colors,
             battery_colors_by_vehicle=phase_battery_colors,
@@ -4756,8 +4758,8 @@ def plot_regions_map_city_rank_and_drone_share(
             ylabel="EOL\n(g CO$_2$e/order)",
             body_label="Body",
             battery_label="Battery",
-            body_color="#8b8f97",
-            battery_color="#5b8db8",
+            body_color=phase_body_color,
+            battery_color=phase_battery_color,
             distance_label=distance_label,
             body_colors_by_vehicle=phase_body_colors,
             battery_colors_by_vehicle=phase_battery_colors,
