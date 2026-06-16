@@ -3917,19 +3917,34 @@ def _draw_trip_phase_barplot(
     body_color,
     battery_color,
     distance_label,
+    body_colors_by_vehicle=None,
+    battery_colors_by_vehicle=None,
 ):
     """Draw stacked body/battery phase emissions for one selected OD trip."""
     x = np.arange(len(df))
     body = df["body_g"].to_numpy(dtype=float)
     battery = df["battery_g"].to_numpy(dtype=float)
     totals = body + battery
+    vehicles = df["vehicle"].tolist()
+    body_colors = [
+        body_colors_by_vehicle.get(vehicle, body_color)
+        if body_colors_by_vehicle
+        else body_color
+        for vehicle in vehicles
+    ]
+    battery_colors = [
+        battery_colors_by_vehicle.get(vehicle, battery_color)
+        if battery_colors_by_vehicle
+        else battery_color
+        for vehicle in vehicles
+    ]
     edge_color = "#2f3437"
 
     ax.bar(
         x,
         body,
         width=0.56,
-        color=body_color,
+        color=body_colors,
         edgecolor=edge_color,
         linewidth=0.8,
         label=body_label,
@@ -3939,7 +3954,7 @@ def _draw_trip_phase_barplot(
         battery,
         width=0.56,
         bottom=body,
-        color=battery_color,
+        color=battery_colors,
         edgecolor=edge_color,
         linewidth=0.8,
         label=battery_label,
@@ -3958,7 +3973,7 @@ def _draw_trip_phase_barplot(
         )
 
     ax.set_xticks(x)
-    ax.set_xticklabels(df["vehicle"])
+    ax.set_xticklabels(vehicles)
     ax.set_xlabel(distance_label)
     ax.set_ylabel(ylabel)
     ax.set_ylim(0, max_total * 1.25)
@@ -4124,8 +4139,8 @@ def _detour_concept_panel_report(ax):
             "detour_ratio": _json_safe_scalar(road_distance / straight_distance),
         },
         "labels": [
-            {"text": "Merchant", "anchor": "origin"},
-            {"text": "Customer", "anchor": "destination"},
+            {"text": "Merchant", "anchor": "origin", "marker": "circle"},
+            {"text": "Customer", "anchor": "destination", "marker": "square"},
             {"text": "E-bike route on roads", "color": "#d95f35"},
             {"text": "Drone route on air space", "color": "#1f77b4"},
             {"text": "takeoff", "color": "#1f77b4"},
@@ -4563,6 +4578,14 @@ def plot_regions_map_city_rank_and_drone_share(
 
     production_distance_context = distance_context
     eol_distance_context = distance_context
+    phase_body_colors = {
+        "E-bike": "#2b78b8",
+        "Drone": "#d95f35",
+    }
+    phase_battery_colors = {
+        "E-bike": "#86b8dc",
+        "Drone": "#f2a37f",
+    }
     if production_df is None:
         ax_e.text(
             0.5,
@@ -4588,6 +4611,8 @@ def plot_regions_map_city_rank_and_drone_share(
             body_color="#7f8c8d",
             battery_color="#2ca25f",
             distance_label=distance_label,
+            body_colors_by_vehicle=phase_body_colors,
+            battery_colors_by_vehicle=phase_battery_colors,
         )
     if beijing_od_df is None:
         ax_f.text(
@@ -4661,6 +4686,8 @@ def plot_regions_map_city_rank_and_drone_share(
             body_color="#8b8f97",
             battery_color="#5b8db8",
             distance_label=distance_label,
+            body_colors_by_vehicle=phase_body_colors,
+            battery_colors_by_vehicle=phase_battery_colors,
         )
     ax_d.text(-0.03, 1.02, "d", transform=ax_d.transAxes,
               fontsize=16, fontweight="bold", va="bottom", ha="right")
