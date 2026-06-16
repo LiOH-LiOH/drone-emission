@@ -726,7 +726,7 @@ def prepare_contribution_decomposition_data(
         "top_cities": _top_city_component_rows(
             city_reports=city_reports,
             national_baseline_kg=national_baseline_kg,
-            top_n=20,
+            top_n=15,
         ),
         "cities": city_reports,
         "skipped_cities": skipped_cities,
@@ -915,7 +915,7 @@ def _write_contribution_decomposition_report(prepared: Dict, save_path: str):
 def plot_contribution_decomposition(
     prepared: Dict,
     save_path: str = None,
-    figsize: tuple = (15, 10),
+    figsize: tuple = (18, 7),
     for_latex: bool = False,
     plot_title: bool = False,
 ):
@@ -934,23 +934,23 @@ def plot_contribution_decomposition(
 
     fig = plt.figure(figsize=figsize)
     gs = fig.add_gridspec(
-        2,
         1,
-        height_ratios=[1.0, 1.25],
-        hspace=0.32,
+        2,
+        width_ratios=[0.85, 1.35],
+        wspace=0.22,
     )
     ax_a = fig.add_subplot(gs[0, 0])
-    ax_b = fig.add_subplot(gs[1, 0])
+    ax_b = fig.add_subplot(gs[0, 1])
 
     _plot_contribution_waterfall(ax_a, prepared["national"])
-    _plot_top_city_contribution_bars(ax_b, prepared.get("top_cities", []))
+    _plot_top_city_contribution_bars(ax_b, prepared.get("top_cities", [])[:15])
 
     if plot_title:
         ax_a.set_title(
             "Sampled Current-Mechanism Contribution Decomposition",
             fontsize=14,
         )
-        ax_b.set_title("Top 20 cities by total emission reduction", fontsize=12)
+        ax_b.set_title("Top 15 cities by total emission reduction", fontsize=12)
     _add_panel_letter(ax_a, "a")
     _add_panel_letter(ax_b, "b")
 
