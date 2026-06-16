@@ -11,6 +11,7 @@ from typing import Dict
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from matplotlib.colors import TwoSlopeNorm
 
 from ._utils import _add_title_suffix
 
@@ -47,6 +48,10 @@ CONTRIBUTION_COMPONENT_SPECS = (
 CONTRIBUTION_COMPONENT_KEYS = tuple(
     spec["key"] for spec in CONTRIBUTION_COMPONENT_SPECS
 )
+BREAK_EVEN_REPRESENTATIVE_AIR_DISTANCE_KM = 2.0
+BREAK_EVEN_CURVE_AIR_DISTANCES_KM = (0.5, 1.0, 2.0, 3.0, 5.0)
+BREAK_EVEN_DETOUR_LIMITS = (1.0, 3.5)
+BREAK_EVEN_GEF_LIMITS = (0.0, 1.0)
 
 
 def _json_safe(value):
@@ -1071,6 +1076,667 @@ def plot_contribution_decomposition(
         _write_contribution_decomposition_report(prepared, save_path)
         plt.close(fig)
         print(f"Contribution decomposition saved to {save_path}")
+    else:
+        plt.show()
+        plt.close(fig)
+
+
+def _build_break_even_scenarios(exp_config: dict = None):
+    """Create shared LCA params and scenarios for break-even calculations."""
+    from emission.cal_single_delivery import (
+        create_drone_params,
+        create_ebike_params,
+        get_emission_params,
+    )
+    from sensitivity.vectorized_lca import DroneScenario, EbikeScenario
+
+    emission_cfg = get_emission_params(exp_config)
+    ebike_params = create_ebike_params(exp_config)
+    drone_params = create_drone_params(exp_config)
+    ebike_scenario = EbikeScenario(
+        kappa=float(getattr(ebike_params, "kappa", 1.0)),
+        rider_weight=emission_cfg["rider_weight"],
+        payload_kg=emission_cfg["payload_kg"],
+    )
+    drone_scenario = DroneScenario(
+        payload_kg=emission_cfg["payload_kg"],
+    )
+    return ebike_params, drone_params, ebike_scenario, drone_scenario
+
+
+def _break_even_linear_coefficients(
+    detour_ratios: np.ndarray,
+    air_distance_km: float,
+    ebike_params,
+    drone_params,
+    ebike_scenario,
+    drone_scenario,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Return delta_g intercept and GEF slope for one air distance."""
+    from dataclasses import replace
+
+    from sensitivity.vectorized_lca import (
+        compute_drone_per_order_g,
+        compute_ebike_per_order_g,
+    )
+
+    detour_ratios = np.asarray(detour_ratios, dtype=float)
+    air_distance_km = float(air_distance_km)
+    road_distances_km = detour_ratios * air_distance_km
+    air_distances_km = np.full_like(road_distances_km, air_distance_km, dtype=float)
+
+    ebike_zero = compute_ebike_per_order_g(
+        road_distances_km,
+        replace(ebike_params, e_use=0.0),
+        ebike_scenario,
+    )
+    drone_zero = compute_drone_per_order_g(
+        air_distances_km,
+        replace(drone_params, e_use=0.0),
+        drone_scenario,
+    )
+    ebike_one = compute_ebike_per_order_g(
+        road_distances_km,
+        replace(ebike_params, e_use=1.0),
+        ebike_scenario,
+    )
+    drone_one = compute_drone_per_order_g(
+        air_distances_km,
+        replace(drone_params, e_use=1.0),
+        drone_scenario,
+    )
+
+    delta_zero = drone_zero - ebike_zero
+    delta_slope = (drone_one - ebike_one) - delta_zero
+    return delta_zero, delta_slope
+
+
+def _break_even_grid_from_coefficients(
+    delta_zero: np.ndarray,
+    delta_slope: np.ndarray,
+    grid_factors: np.ndarray,
+) -> np.ndarray:
+    """Evaluate delta_g on a detour-ratio x GEF grid."""
+    return (
+        delta_zero[np.newaxis, :]
+        + np.asarray(grid_factors, dtype=float)[:, np.newaxis]
+        * delta_slope[np.newaxis, :]
+    )
+
+
+def _break_even_zero_curve(
+    delta_zero: np.ndarray,
+    delta_slope: np.ndarray,
+    gef_limits: tuple[float, float],
+) -> np.ndarray:
+    """Return the GEF at which delta_g equals zero for each detour ratio."""
+    gef_min, gef_max = map(float, gef_limits)
+    roots = np.full_like(delta_zero, np.nan, dtype=float)
+    valid = np.abs(delta_slope) > 1e-12
+    roots[valid] = -delta_zero[valid] / delta_slope[valid]
+    roots[(roots < gef_min) | (roots > gef_max)] = np.nan
+    return roots
+
+
+def _sample_break_even_observed_context(
+    city_df: pd.DataFrame,
+    data_dir: str,
+    ebike_params,
+    drone_params,
+    ebike_scenario,
+    drone_scenario,
+    max_sample_rows: int,
+    sample_seed: int,
+) -> dict:
+    """Sample observed OD/city contexts for the phase-diagram panel."""
+    from dataclasses import replace
+
+    from sensitivity.vectorized_lca import (
+        compute_drone_per_order_g,
+        compute_ebike_per_order_g,
+    )
+
+    empty_samples = pd.DataFrame(
+        columns=[
+            "region_key",
+            "gef",
+            "air_distance_km",
+            "road_distance_km",
+            "detour_ratio",
+            "delta_g",
+        ]
+    )
+    if city_df is None or city_df.empty:
+        return {
+            "samples": empty_samples,
+            "city_reports": [],
+            "skipped_cities": [],
+            "annotation": "No observed city sample available",
+        }
+
+    city_rows = city_df.copy()
+    if "region_level" in city_rows.columns:
+        city_rows = city_rows[city_rows["region_level"] == "city"].copy()
+
+    required_cols = {"region_key", "gef"}
+    missing = sorted(required_cols - set(city_rows.columns))
+    if missing:
+        return {
+            "samples": empty_samples,
+            "city_reports": [],
+            "skipped_cities": [
+                {
+                    "reason": "missing_city_columns",
+                    "columns": missing,
+                }
+            ],
+            "annotation": "No observed city sample available",
+        }
+
+    city_rows["gef"] = pd.to_numeric(city_rows["gef"], errors="coerce")
+    city_rows = city_rows[city_rows["region_key"].notna() & city_rows["gef"].notna()]
+    if city_rows.empty:
+        return {
+            "samples": empty_samples,
+            "city_reports": [],
+            "skipped_cities": [],
+            "annotation": "No observed city sample available",
+        }
+
+    sample_frames = []
+    city_reports = []
+    skipped_cities = []
+
+    for city_row in city_rows.sort_values("region_key").itertuples(index=False):
+        region_key = str(city_row.region_key)
+        od_path = _resolve_contribution_od_path(data_dir, region_key)
+        if od_path is None:
+            skipped_cities.append(
+                {"region_key": region_key, "reason": "missing_od_csv"}
+            )
+            continue
+
+        od_df = pd.read_csv(
+            od_path,
+            usecols=lambda col: col in {"distance_km", "road_distance_m"},
+        )
+        required_od_cols = {"distance_km", "road_distance_m"}
+        if not required_od_cols.issubset(od_df.columns):
+            skipped_cities.append(
+                {
+                    "region_key": region_key,
+                    "reason": "missing_required_od_columns",
+                    "columns_present": sorted(od_df.columns.tolist()),
+                }
+            )
+            continue
+
+        valid = od_df.copy()
+        valid["distance_km"] = pd.to_numeric(valid["distance_km"], errors="coerce")
+        valid["road_distance_m"] = pd.to_numeric(
+            valid["road_distance_m"], errors="coerce"
+        )
+        valid["_road_km"] = valid["road_distance_m"] / 1000.0
+        valid = valid[
+            valid["distance_km"].notna()
+            & (valid["distance_km"] > 0)
+            & valid["_road_km"].notna()
+            & (valid["_road_km"] > 0)
+        ].copy()
+        if valid.empty:
+            skipped_cities.append(
+                {"region_key": region_key, "reason": "no_valid_od_rows"}
+            )
+            continue
+
+        sampled, sample_meta = _sample_city_valid_rows(
+            valid_df=valid,
+            sample_distance_km=valid["_road_km"].to_numpy(dtype=float),
+            region_key=region_key,
+            max_sample_rows=max_sample_rows,
+            sample_seed=sample_seed,
+        )
+        if sampled.empty:
+            skipped_cities.append(
+                {"region_key": region_key, "reason": "sampling_returned_no_rows"}
+            )
+            continue
+
+        gef = float(city_row.gef)
+        air_distance_km = sampled["distance_km"].to_numpy(dtype=float)
+        road_distance_km = sampled["_road_km"].to_numpy(dtype=float)
+        delta_g = compute_drone_per_order_g(
+            air_distance_km,
+            replace(drone_params, e_use=gef),
+            drone_scenario,
+        ) - compute_ebike_per_order_g(
+            road_distance_km,
+            replace(ebike_params, e_use=gef),
+            ebike_scenario,
+        )
+        sample_frames.append(
+            pd.DataFrame(
+                {
+                    "region_key": region_key,
+                    "gef": gef,
+                    "air_distance_km": air_distance_km,
+                    "road_distance_km": road_distance_km,
+                    "detour_ratio": road_distance_km / air_distance_km,
+                    "delta_g": delta_g,
+                }
+            )
+        )
+        city_reports.append(
+            {
+                "region_key": region_key,
+                "gef": gef,
+                "sample": sample_meta,
+                "od_path": od_path,
+            }
+        )
+
+    samples = (
+        pd.concat(sample_frames, ignore_index=True)
+        if sample_frames
+        else empty_samples
+    )
+    if samples.empty:
+        annotation = "No observed OD/city sample available"
+    else:
+        annotation = (
+            f"Observed sample: {len(city_reports)} cities, "
+            f"{len(samples):,} sampled OD pairs"
+        )
+    return {
+        "samples": samples,
+        "city_reports": city_reports,
+        "skipped_cities": skipped_cities,
+        "annotation": annotation,
+    }
+
+
+def _phase_label_position(
+    delta_g_grid: np.ndarray,
+    detour_ratios: np.ndarray,
+    grid_factors: np.ndarray,
+    drone_wins: bool,
+) -> tuple[float, float] | None:
+    """Return a representative in-region label position."""
+    if drone_wins:
+        mask = delta_g_grid < 0
+    else:
+        mask = delta_g_grid > 0
+    if not np.any(mask):
+        return None
+    row_idx, col_idx = np.where(mask)
+    x = float(np.median(detour_ratios[col_idx]))
+    y = float(np.median(grid_factors[row_idx]))
+    return x, y
+
+
+def prepare_break_even_phase_diagram_data(
+    data_dir: str = None,
+    city_df: pd.DataFrame = None,
+    exp_config: dict = None,
+    representative_air_distance_km: float = BREAK_EVEN_REPRESENTATIVE_AIR_DISTANCE_KM,
+    curve_air_distances_km: tuple[float, ...] = BREAK_EVEN_CURVE_AIR_DISTANCES_KM,
+    max_sample_rows: int = CONTRIBUTION_SAMPLE_LIMIT,
+    sample_seed: int = CONTRIBUTION_SAMPLE_SEED,
+) -> Dict:
+    """Prepare break-even phase-diagram inputs for the paper figure.
+
+    Args:
+        data_dir: Root data directory for optional observed OD sampling.
+        city_df: Optional city-level stats with ``region_key`` and ``gef``.
+        exp_config: Experiment config dict for parameter overrides.
+        representative_air_distance_km: Air distance used for panel a.
+        curve_air_distances_km: Air distances used for panel b curves.
+        max_sample_rows: Per-city OD sampling cap.
+        sample_seed: Deterministic sampling seed.
+    """
+    ebike_params, drone_params, ebike_scenario, drone_scenario = (
+        _build_break_even_scenarios(exp_config)
+    )
+
+    observed = {
+        "samples": pd.DataFrame(
+            columns=[
+                "region_key",
+                "gef",
+                "air_distance_km",
+                "road_distance_km",
+                "detour_ratio",
+                "delta_g",
+            ]
+        ),
+        "city_reports": [],
+        "skipped_cities": [],
+        "annotation": "No observed city sample available",
+    }
+    if data_dir:
+        observed = _sample_break_even_observed_context(
+            city_df=city_df,
+            data_dir=data_dir,
+            ebike_params=ebike_params,
+            drone_params=drone_params,
+            ebike_scenario=ebike_scenario,
+            drone_scenario=drone_scenario,
+            max_sample_rows=max_sample_rows,
+            sample_seed=sample_seed,
+        )
+
+    detour_min, detour_max = BREAK_EVEN_DETOUR_LIMITS
+    sample_detours = pd.to_numeric(
+        observed["samples"].get("detour_ratio", pd.Series(dtype=float)),
+        errors="coerce",
+    ).to_numpy(dtype=float)
+    sample_detours = sample_detours[np.isfinite(sample_detours) & (sample_detours > 0)]
+    if len(sample_detours):
+        detour_max = min(
+            6.0,
+            max(detour_max, float(np.nanpercentile(sample_detours, 97.5)) * 1.05),
+        )
+    detour_ratios = np.linspace(detour_min, detour_max, 220)
+
+    gef_min, gef_max = BREAK_EVEN_GEF_LIMITS
+    grid_factors = np.linspace(gef_min, gef_max, 220)
+    rep_zero, rep_slope = _break_even_linear_coefficients(
+        detour_ratios=detour_ratios,
+        air_distance_km=representative_air_distance_km,
+        ebike_params=ebike_params,
+        drone_params=drone_params,
+        ebike_scenario=ebike_scenario,
+        drone_scenario=drone_scenario,
+    )
+    rep_delta_grid = _break_even_grid_from_coefficients(
+        delta_zero=rep_zero,
+        delta_slope=rep_slope,
+        grid_factors=grid_factors,
+    )
+
+    curves = []
+    for air_distance_km in curve_air_distances_km:
+        delta_zero, delta_slope = _break_even_linear_coefficients(
+            detour_ratios=detour_ratios,
+            air_distance_km=air_distance_km,
+            ebike_params=ebike_params,
+            drone_params=drone_params,
+            ebike_scenario=ebike_scenario,
+            drone_scenario=drone_scenario,
+        )
+        curves.append(
+            {
+                "air_distance_km": float(air_distance_km),
+                "break_even_gef": _break_even_zero_curve(
+                    delta_zero=delta_zero,
+                    delta_slope=delta_slope,
+                    gef_limits=BREAK_EVEN_GEF_LIMITS,
+                ),
+            }
+        )
+
+    return {
+        "axes": {
+            "detour_limits": (float(detour_min), float(detour_max)),
+            "gef_limits": (float(gef_min), float(gef_max)),
+        },
+        "representative_air_distance_km": float(representative_air_distance_km),
+        "detour_ratios": detour_ratios,
+        "grid_factors": grid_factors,
+        "panel_a": {
+            "delta_g": rep_delta_grid,
+            "break_even_gef": _break_even_zero_curve(
+                delta_zero=rep_zero,
+                delta_slope=rep_slope,
+                gef_limits=BREAK_EVEN_GEF_LIMITS,
+            ),
+        },
+        "panel_b": {
+            "curves": curves,
+        },
+        "panel_c": observed,
+        "meta": {
+            "sample_seed": int(sample_seed),
+            "max_sample_rows_per_city": int(max_sample_rows),
+            "ebike_kappa": float(ebike_scenario.kappa),
+        },
+    }
+
+
+def plot_break_even_phase_diagram(
+    prepared: Dict,
+    save_path: str = None,
+    figsize: tuple = (16, 5.6),
+    for_latex: bool = False,
+    plot_title: bool = False,
+):
+    """Lifecycle break-even phase diagram for drone vs e-bike delivery.
+
+    Args:
+        prepared: Output of ``prepare_break_even_phase_diagram_data``.
+        save_path: Path to save figure (with extension). Shows plot if None.
+        figsize: Figure size tuple.
+        for_latex: If True, save as PDF.
+        plot_title: If True, show title.
+    """
+    if not prepared:
+        print("Break-even phase diagram skipped — prepared data missing")
+        return
+
+    detour_ratios = prepared["detour_ratios"]
+    grid_factors = prepared["grid_factors"]
+    panel_a = prepared["panel_a"]
+    panel_b = prepared["panel_b"]
+    panel_c = prepared["panel_c"]
+    rep_air_distance_km = prepared["representative_air_distance_km"]
+    meta = prepared["meta"]
+
+    fig = plt.figure(figsize=figsize)
+    gs = fig.add_gridspec(1, 3, width_ratios=[1.15, 1.0, 1.0], wspace=0.28)
+    ax_a = fig.add_subplot(gs[0, 0])
+    ax_b = fig.add_subplot(gs[0, 1])
+    ax_c = fig.add_subplot(gs[0, 2])
+
+    delta_g_grid = np.asarray(panel_a["delta_g"], dtype=float)
+    panel_c_samples = panel_c["samples"]
+    panel_c_plot = panel_c_samples.copy()
+    if not panel_c_plot.empty:
+        for col in ("detour_ratio", "gef", "delta_g"):
+            panel_c_plot[col] = pd.to_numeric(panel_c_plot[col], errors="coerce")
+        panel_c_plot = panel_c_plot.dropna(subset=["detour_ratio", "gef", "delta_g"])
+    panel_c_delta = pd.to_numeric(
+        panel_c_plot.get("delta_g", pd.Series(dtype=float)),
+        errors="coerce",
+    ).to_numpy(dtype=float)
+    max_abs = float(np.nanmax(np.abs(delta_g_grid))) if delta_g_grid.size else 0.0
+    if len(panel_c_delta):
+        finite_panel_c = panel_c_delta[np.isfinite(panel_c_delta)]
+        if len(finite_panel_c):
+            max_abs = max(max_abs, float(np.nanpercentile(np.abs(finite_panel_c), 98)))
+    max_abs = max(max_abs, 1.0)
+
+    X, Y = np.meshgrid(detour_ratios, grid_factors)
+    cmap = plt.get_cmap("RdBu_r")
+    norm = TwoSlopeNorm(vmin=-max_abs, vcenter=0.0, vmax=max_abs)
+    surface = ax_a.contourf(
+        X,
+        Y,
+        delta_g_grid,
+        levels=np.linspace(-max_abs, max_abs, 15),
+        cmap=cmap,
+        norm=norm,
+        extend="both",
+    )
+    if np.nanmin(delta_g_grid) <= 0.0 <= np.nanmax(delta_g_grid):
+        zero_contour = ax_a.contour(
+            X,
+            Y,
+            delta_g_grid,
+            levels=[0.0],
+            colors="black",
+            linewidths=1.3,
+        )
+        ax_a.clabel(zero_contour, fmt={0.0: "Delta g = 0"}, fontsize=9, inline=True)
+
+    for label, drone_wins, color in (
+        ("Drone wins", True, "#1f5aa6"),
+        ("E-bike wins", False, "#9f2f2f"),
+    ):
+        pos = _phase_label_position(
+            delta_g_grid=delta_g_grid,
+            detour_ratios=detour_ratios,
+            grid_factors=grid_factors,
+            drone_wins=drone_wins,
+        )
+        if pos is None:
+            continue
+        ax_a.text(
+            pos[0],
+            pos[1],
+            label,
+            fontsize=10,
+            fontweight="bold",
+            ha="center",
+            va="center",
+            color=color,
+            bbox={
+                "boxstyle": "round,pad=0.25",
+                "facecolor": "white",
+                "alpha": 0.78,
+                "edgecolor": "none",
+            },
+        )
+
+    colorbar = fig.colorbar(surface, ax=ax_a, fraction=0.05, pad=0.03)
+    colorbar.set_label("Δg = E_drone - E_ebike (g CO2e/order)", fontsize=10)
+
+    curve_colors = plt.get_cmap("viridis")(
+        np.linspace(0.15, 0.85, len(panel_b["curves"]))
+    )
+    for color, curve in zip(curve_colors, panel_b["curves"]):
+        mask = np.isfinite(curve["break_even_gef"])
+        if not np.any(mask):
+            continue
+        ax_b.plot(
+            detour_ratios[mask],
+            curve["break_even_gef"][mask],
+            color=color,
+            linewidth=2.0,
+            label=f"{curve['air_distance_km']:g} km",
+        )
+
+    if not panel_c_plot.empty:
+        ax_c.scatter(
+            panel_c_plot["detour_ratio"],
+            panel_c_plot["gef"],
+            c=panel_c_plot["delta_g"],
+            cmap=cmap,
+            norm=norm,
+            s=10,
+            alpha=0.4,
+            linewidths=0.0,
+            rasterized=True,
+        )
+        ref_curve = panel_a["break_even_gef"]
+        ref_mask = np.isfinite(ref_curve)
+        if np.any(ref_mask):
+            ax_c.plot(
+                detour_ratios[ref_mask],
+                ref_curve[ref_mask],
+                color="black",
+                linewidth=1.1,
+                linestyle="--",
+                alpha=0.8,
+                label=f"{rep_air_distance_km:g} km reference",
+            )
+            ax_c.legend(loc="lower right", frameon=False, fontsize=9)
+        ax_c.text(
+            0.02,
+            0.02,
+            panel_c["annotation"],
+            transform=ax_c.transAxes,
+            ha="left",
+            va="bottom",
+            fontsize=8.8,
+            color="#555555",
+            bbox={
+                "boxstyle": "round,pad=0.25",
+                "facecolor": "white",
+                "alpha": 0.8,
+                "edgecolor": "none",
+            },
+        )
+    else:
+        ax_c.text(
+            0.5,
+            0.5,
+            panel_c["annotation"],
+            transform=ax_c.transAxes,
+            ha="center",
+            va="center",
+            fontsize=10,
+            color="#777777",
+        )
+
+    for ax in (ax_a, ax_b, ax_c):
+        ax.set_xlim(*prepared["axes"]["detour_limits"])
+        ax.set_ylim(*prepared["axes"]["gef_limits"])
+        ax.set_xlabel("Detour ratio (road / air)", fontsize=11)
+        ax.set_ylabel("Grid emission factor (kg CO2e/kWh)", fontsize=11)
+        ax.grid(alpha=0.18)
+
+    if plot_title:
+        ax_a.set_title(
+            f"Representative phase space ({rep_air_distance_km:g} km air distance)",
+            fontsize=12,
+        )
+        ax_b.set_title("Break-even contours by air distance", fontsize=12)
+        ax_c.set_title("Observed OD/city contexts", fontsize=12)
+
+    _add_panel_letter(ax_a, "a")
+    _add_panel_letter(ax_b, "b")
+    _add_panel_letter(ax_c, "c")
+
+    handles, _ = ax_b.get_legend_handles_labels()
+    if handles:
+        ax_b.legend(
+            title="Air distance",
+            loc="upper left",
+            frameon=False,
+            fontsize=9,
+            title_fontsize=9,
+        )
+    else:
+        ax_b.text(
+            0.5,
+            0.5,
+            "No break-even contour within plotted GEF range",
+            transform=ax_b.transAxes,
+            ha="center",
+            va="center",
+            fontsize=10,
+            color="#777777",
+        )
+    ax_c.text(
+        0.98,
+        0.02,
+        f"sample cap: {meta['max_sample_rows_per_city']:,}/city; seed {meta['sample_seed']}",
+        transform=ax_c.transAxes,
+        ha="right",
+        va="bottom",
+        fontsize=8.5,
+        color="#555555",
+    )
+
+    if save_path:
+        if for_latex and not save_path.endswith(".pdf"):
+            save_path = save_path.rsplit(".", 1)[0] + ".pdf"
+        if plot_title:
+            save_path = _add_title_suffix(save_path)
+        os.makedirs(os.path.dirname(save_path), exist_ok=True)
+        fig.savefig(save_path, dpi=300, bbox_inches="tight")
+        plt.close(fig)
+        print(f"Break-even phase diagram saved to {save_path}")
     else:
         plt.show()
         plt.close(fig)

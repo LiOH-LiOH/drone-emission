@@ -30,6 +30,7 @@ Available figures:
     city_gef_scatter_components,
     city_gef_context_detour_summary,
     contribution_decomposition,
+    break_even_phase_diagram,
     regions_map,
     regions_map_optimal_drone_share,
     regions_map_city_rank_and_drone_share,
@@ -2398,6 +2399,57 @@ def _render_contribution_decomposition(
     )
 
 
+def _render_break_even_phase_diagram(
+    data_dir,
+    out,
+    for_latex,
+    plot_title,
+    exp_config,
+):
+    """Render the lifecycle break-even / phase-diagram paper figure."""
+    from visualization.emission import (
+        plot_break_even_phase_diagram,
+        prepare_break_even_phase_diagram_data,
+    )
+
+    city_df = None
+    stats_path = os.path.join(data_dir, "all_region_stats.csv")
+    if os.path.exists(stats_path):
+        city_df = pd.read_csv(stats_path)
+        if "region_level" in city_df.columns:
+            city_df = city_df[city_df["region_level"] == "city"].copy()
+
+        has_gef = "gef" in city_df.columns and city_df["gef"].notna().any()
+        if not has_gef:
+            gef_path = os.path.join(data_dir, "gef_china.csv")
+            if "province" in city_df.columns and os.path.exists(gef_path):
+                gef_df = pd.read_csv(gef_path, encoding="gbk")
+                gef_df.columns = ["province", "gef"]
+                city_df = city_df.merge(gef_df, on="province", how="left")
+            else:
+                print(
+                    "break_even_phase_diagram: city GEF data unavailable; "
+                    "panel c will show a placeholder"
+                )
+    else:
+        print(
+            f"break_even_phase_diagram: missing {stats_path}; "
+            "panel c will show a placeholder"
+        )
+
+    prepared = prepare_break_even_phase_diagram_data(
+        data_dir=data_dir,
+        city_df=city_df,
+        exp_config=exp_config,
+    )
+    plot_break_even_phase_diagram(
+        prepared,
+        save_path=os.path.join(out, "break_even_phase_diagram.png"),
+        for_latex=for_latex,
+        plot_title=plot_title,
+    )
+
+
 def _render_distance_comparison_grid(data_dir, out, for_latex, plot_title, extreme):
     """Load Shanghai roadnet data and render a 3x3 distance-comparison grid for one tail."""
     region_key = "shanghai"
@@ -2603,6 +2655,15 @@ def render_all(data_dir: str, figures_dir: str, for_latex: bool = False, plot_ti
                     for_latex=for_latex,
                     plot_title=plot_title,
                 )
+
+    if _want("break_even_phase_diagram"):
+        _render_break_even_phase_diagram(
+            data_dir=data_dir,
+            out=out,
+            for_latex=for_latex,
+            plot_title=plot_title,
+            exp_config=exp_config,
+        )
 
     # --- Shanghai figures (independent of all_region_stats) ---
     if _want("shanghai_heatmap"):
