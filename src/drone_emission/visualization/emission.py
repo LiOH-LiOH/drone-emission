@@ -1535,80 +1535,41 @@ def _draw_observed_detour_mask_2d(ax, mask_data: dict, zorder: int = 5):
         )
 
 
-def _draw_observed_detour_mask_floor_3d(
-    ax,
-    mask_data: dict,
-    z_level: float,
-):
-    """Project observed detour quantile mask bands onto the floor plane."""
-    if not mask_data:
-        return
-
-    mask_x = mask_data["mask_x"]
-    smooth_curves = mask_data["smooth_curves"]
-    detour_min, detour_max = mask_data["detour_limits"]
-
-    for low_i, high_i, alpha in mask_data["quantile_bands"]:
-        if alpha <= 0:
-            continue
-        y_low = (
-            np.full_like(mask_x, detour_min)
-            if low_i is None
-            else smooth_curves[low_i]
-        )
-        y_high = (
-            np.full_like(mask_x, detour_max)
-            if high_i is None
-            else smooth_curves[high_i]
-        )
-        valid = (
-            np.isfinite(mask_x)
-            & np.isfinite(y_low)
-            & np.isfinite(y_high)
-            & (y_high >= y_low)
-        )
-        if not np.any(valid):
-            continue
-        starts = np.flatnonzero(valid & np.concatenate(([True], ~valid[:-1])))
-        ends = np.flatnonzero(valid & np.concatenate((~valid[1:], [True])))
-        for start, end in zip(starts, ends):
-            segment_x = mask_x[start : end + 1]
-            segment_low = y_low[start : end + 1]
-            segment_high = y_high[start : end + 1]
-            if len(segment_x) < 2:
-                continue
-            x_band = np.vstack([segment_x, segment_x])
-            y_band = np.vstack([segment_low, segment_high])
-            z_band = np.full_like(x_band, z_level)
-            ax.plot_surface(
-                x_band,
-                y_band,
-                z_band,
-                color="white",
-                alpha=alpha,
-                linewidth=0,
-                antialiased=False,
-                shade=False,
-            )
-
-
 def _select_break_even_gef_levels(
     city_gefs: np.ndarray,
     gef_limits: tuple[float, float],
 ) -> list[dict]:
-    """Choose low, median, and high GEF slices for the heatmap panels."""
+    """Choose low/high GEF slices from the two strongest city-distribution modes."""
     gef_min, gef_max = map(float, gef_limits)
     values = np.asarray(city_gefs, dtype=float)
     values = values[np.isfinite(values)]
-    if len(values):
-        selected = np.quantile(values, [0.10, 0.50, 0.90])
+
+    if len(values) >= 8:
+        hist_edges = np.linspace(gef_min, gef_max, 15)
+        hist_counts, _ = np.histogram(values, bins=hist_edges)
+        smooth_counts = np.convolve(hist_counts, [0.25, 0.5, 0.25], mode="same")
+        centers = (hist_edges[:-1] + hist_edges[1:]) / 2
+        peak_order = np.argsort(smooth_counts)[::-1]
+        chosen = []
+        min_sep = max((gef_max - gef_min) * 0.18, 0.08)
+        for idx in peak_order:
+            center = float(centers[idx])
+            if any(abs(center - prior) < min_sep for prior in chosen):
+                continue
+            chosen.append(center)
+            if len(chosen) == 2:
+                break
+        if len(chosen) == 2:
+            selected = np.array(sorted(chosen), dtype=float)
+        else:
+            selected = np.quantile(values, [0.20, 0.80])
     else:
-        selected = np.array([0.15, 0.40, 0.65], dtype=float)
+        selected = np.array([0.18, 0.62], dtype=float)
+
     selected = np.clip(selected, gef_min, gef_max)
     return [
         {"label": "Low GEF", "gef": float(selected[0])},
-        {"label": "Median GEF", "gef": float(selected[1])},
-        {"label": "High GEF", "gef": float(selected[2])},
+        {"label": "High GEF", "gef": float(selected[1])},
     ]
 
 
@@ -1673,11 +1634,11 @@ def prepare_break_even_phase_diagram_data(
     sample_detours = sample_detours[np.isfinite(sample_detours) & (sample_detours > 0)]
     if len(sample_detours):
         detour_max = max(detour_max, float(np.nanpercentile(sample_detours, 97.5)))
-    detour_ratios = np.linspace(detour_min, detour_max, 160)
+    detour_ratios = np.linspace(detour_min, detour_max, 260)
 
     gef_min, gef_max = BREAK_EVEN_GEF_LIMITS
-    grid_factors = np.linspace(gef_min, gef_max, 160)
-    air_distance_grid_km = np.linspace(distance_min, distance_max, 160)
+    grid_factors = np.linspace(gef_min, gef_max, 220)
+    air_distance_grid_km = np.linspace(distance_min, distance_max, 260)
     delta_zero_grid, delta_slope_grid = _break_even_mesh_coefficients(
         air_distance_grid_km=air_distance_grid_km,
         detour_ratios=detour_ratios,
@@ -1691,8 +1652,6 @@ def prepare_break_even_phase_diagram_data(
         delta_slope=delta_slope_grid,
         gef_limits=BREAK_EVEN_GEF_LIMITS,
     )
-    floor_projection_gef = float(np.median(grid_factors))
-    floor_delta_g = delta_zero_grid + floor_projection_gef * delta_slope_grid
     observed_mask = _break_even_observed_mask_data(
         observed_samples=observed["samples"],
         distance_limits=(distance_min, distance_max),
@@ -1727,8 +1686,6 @@ def prepare_break_even_phase_diagram_data(
             "break_even_gef": break_even_surface,
             "delta_zero": delta_zero_grid,
             "delta_slope": delta_slope_grid,
-            "floor_delta_g": floor_delta_g,
-            "floor_projection_gef": floor_projection_gef,
             "observed_mask": observed_mask,
         },
         "panel_b": {
@@ -1747,7 +1704,7 @@ def prepare_break_even_phase_diagram_data(
 def plot_break_even_phase_diagram(
     prepared: Dict,
     save_path: str = None,
-    figsize: tuple = (18, 5.2),
+    figsize: tuple = (14.5, 5.0),
     for_latex: bool = False,
     plot_title: bool = False,
 ):
@@ -1776,28 +1733,24 @@ def plot_break_even_phase_diagram(
     gef_limits = prepared["axes"]["gef_limits"]
 
     fig = plt.figure(figsize=figsize)
-    gs = fig.add_gridspec(1, 4, width_ratios=[1.2, 1.0, 1.0, 1.0], wspace=0.18)
+    gs = fig.add_gridspec(1, 3, width_ratios=[1.2, 1.0, 1.0], wspace=0.18)
     ax_a = fig.add_subplot(gs[0, 0], projection="3d")
     ax_b = fig.add_subplot(gs[0, 1])
     ax_c = fig.add_subplot(gs[0, 2])
-    ax_d = fig.add_subplot(gs[0, 3])
 
     break_even_surface = np.asarray(panel_a["break_even_gef"], dtype=float)
-    floor_delta_g = np.asarray(panel_a["floor_delta_g"], dtype=float)
     valid_surface = np.isfinite(break_even_surface)
-    panel_c_delta = pd.to_numeric(
-        panel_c["samples"].get("delta_g", pd.Series(dtype=float)),
-        errors="coerce",
-    ).to_numpy(dtype=float)
 
-    finite_blocks = [floor_delta_g[np.isfinite(floor_delta_g)]]
+    finite_blocks = []
     for gef_panel in panel_b["gef_panels"]:
         values = np.asarray(gef_panel["delta_g"], dtype=float)
         finite_blocks.append(values[np.isfinite(values)])
-    if len(panel_c_delta):
-        finite_blocks.append(panel_c_delta[np.isfinite(panel_c_delta)])
     finite_delta = np.concatenate([block for block in finite_blocks if len(block)])
-    max_abs = float(np.nanpercentile(np.abs(finite_delta), 98)) if len(finite_delta) else 1.0
+    max_abs = (
+        float(np.nanpercentile(np.abs(finite_delta), 98))
+        if len(finite_delta)
+        else 1.0
+    )
     max_abs = max(max_abs, 1.0)
 
     delta_cmap = plt.get_cmap("RdBu_r")
@@ -1806,50 +1759,20 @@ def plot_break_even_phase_diagram(
     surface_norm = plt.Normalize(vmin=gef_limits[0], vmax=gef_limits[1])
     X, Y = np.meshgrid(air_distance_grid_km, detour_ratios)
 
-    floor_z = gef_limits[0]
-    ax_a.contourf(
-        X,
-        Y,
-        floor_delta_g,
-        zdir="z",
-        offset=floor_z,
-        levels=np.linspace(-max_abs, max_abs, 17),
-        cmap=delta_cmap,
-        norm=delta_norm,
-        alpha=0.96,
-    )
-    _draw_observed_detour_mask_floor_3d(
-        ax=ax_a,
-        mask_data=panel_a["observed_mask"],
-        z_level=floor_z,
-    )
     if np.any(valid_surface):
+        z_surface = np.ma.masked_invalid(break_even_surface)
         ax_a.plot_surface(
             X,
             Y,
-            np.ma.masked_invalid(break_even_surface),
-            facecolors=surface_cmap(
-                surface_norm(np.nan_to_num(break_even_surface, nan=floor_z))
-            ),
-            rstride=3,
-            cstride=3,
+            z_surface,
+            cmap=surface_cmap,
+            norm=surface_norm,
+            rstride=1,
+            cstride=1,
             linewidth=0,
             antialiased=True,
             shade=False,
-            alpha=0.94,
-        )
-
-    rep_idx = int(np.argmin(np.abs(air_distance_grid_km - rep_air_distance_km)))
-    rep_curve = break_even_surface[:, rep_idx]
-    rep_mask = np.isfinite(rep_curve)
-    if np.any(rep_mask):
-        ax_a.plot(
-            np.full(np.count_nonzero(rep_mask), air_distance_grid_km[rep_idx]),
-            detour_ratios[rep_mask],
-            rep_curve[rep_mask],
-            color="black",
-            linewidth=1.4,
-            linestyle="--",
+            alpha=0.96,
         )
 
     ax_a.text2D(
@@ -1883,7 +1806,7 @@ def plot_break_even_phase_diagram(
     ax_a.text2D(
         0.02,
         0.74,
-        f"Dashed slice: {air_distance_grid_km[rep_idx]:.1f} km air distance",
+        "Surface shows GEF* where Delta g = 0",
         transform=ax_a.transAxes,
         fontsize=8.8,
         color="#444444",
@@ -1935,7 +1858,7 @@ def plot_break_even_phase_diagram(
     ax_a.yaxis.pane.set_alpha(0.0)
     ax_a.zaxis.pane.set_alpha(0.0)
 
-    heatmap_axes = [ax_b, ax_c, ax_d]
+    heatmap_axes = [ax_b, ax_c]
     heatmap_mappable = None
     for ax, gef_panel in zip(heatmap_axes, panel_b["gef_panels"]):
         delta_g = np.asarray(gef_panel["delta_g"], dtype=float)
@@ -2007,7 +1930,6 @@ def plot_break_even_phase_diagram(
     _add_panel_letter(ax_a, "a")
     _add_panel_letter(ax_b, "b")
     _add_panel_letter(ax_c, "c")
-    _add_panel_letter(ax_d, "d")
 
     plt.tight_layout()
 
