@@ -11,7 +11,7 @@ from typing import Dict
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from matplotlib.colors import TwoSlopeNorm
+from matplotlib.colors import BoundaryNorm, TwoSlopeNorm
 
 from ._utils import _add_title_suffix
 
@@ -1668,6 +1668,102 @@ def _build_break_even_surface_display_mesh(
     )
 
 
+def _break_even_detour_curve_at_gef(
+    detour_ratios: np.ndarray,
+    delta_g: np.ndarray,
+) -> np.ndarray:
+    """Return detour-ratio roots for Delta g = 0 at one fixed GEF."""
+    detour_axis = np.asarray(detour_ratios, dtype=float)
+    values = np.asarray(delta_g, dtype=float)
+    roots = np.full(values.shape[1], np.nan, dtype=float)
+
+    for col in range(values.shape[1]):
+        column = values[:, col]
+        finite = np.isfinite(column) & np.isfinite(detour_axis)
+        if finite.sum() < 2:
+            continue
+
+        y = detour_axis[finite]
+        v = column[finite]
+        zero_idx = np.flatnonzero(np.isclose(v, 0.0, atol=1e-10))
+        if zero_idx.size:
+            roots[col] = y[zero_idx[0]]
+            continue
+
+        signs_cross = (v[:-1] <= 0.0) & (v[1:] >= 0.0)
+        signs_cross |= (v[:-1] >= 0.0) & (v[1:] <= 0.0)
+        crossings = np.flatnonzero(signs_cross)
+        if not crossings.size:
+            continue
+
+        idx = crossings[0]
+        y0, y1 = y[idx], y[idx + 1]
+        v0, v1 = v[idx], v[idx + 1]
+        if abs(v1 - v0) <= 1e-12:
+            roots[col] = 0.5 * (y0 + y1)
+        else:
+            roots[col] = y0 - v0 * (y1 - y0) / (v1 - v0)
+
+    return roots
+
+
+def _keep_longest_finite_run(values: np.ndarray) -> np.ndarray:
+    """Mask all but the longest contiguous finite run in a 1D curve."""
+    values = np.asarray(values, dtype=float).copy()
+    finite = np.isfinite(values)
+    if not finite.any():
+        return values
+
+    padded = np.concatenate(([False], finite, [False]))
+    changes = np.diff(padded.astype(int))
+    starts = np.flatnonzero(changes == 1)
+    ends = np.flatnonzero(changes == -1)
+    longest = int(np.argmax(ends - starts))
+
+    keep = np.zeros_like(finite, dtype=bool)
+    keep[starts[longest] : ends[longest]] = True
+    values[~keep] = np.nan
+    return values
+
+
+def _build_break_even_contour_surface_mesh(
+    air_distance_grid_km: np.ndarray,
+    detour_ratios: np.ndarray,
+    delta_zero: np.ndarray,
+    delta_slope: np.ndarray,
+    gef_limits: tuple[float, float],
+    gef_points: int = 34,
+) -> dict | None:
+    """Build a lightweight 3D surface by stacking 2D break-even contours."""
+    gef_min, gef_max = map(float, gef_limits)
+    x_axis = np.asarray(air_distance_grid_km, dtype=float)
+    gef_axis = np.linspace(gef_min, gef_max, int(gef_points))
+    delta_zero = np.asarray(delta_zero, dtype=float)
+    delta_slope = np.asarray(delta_slope, dtype=float)
+
+    x_mesh = np.tile(x_axis, (len(gef_axis), 1))
+    z_mesh = np.tile(gef_axis[:, np.newaxis], (1, len(x_axis)))
+    y_mesh = np.full_like(x_mesh, np.nan, dtype=float)
+
+    for row, gef in enumerate(gef_axis):
+        delta_g = delta_zero + gef * delta_slope
+        y_mesh[row] = _break_even_detour_curve_at_gef(
+            detour_ratios=detour_ratios,
+            delta_g=delta_g,
+        )
+        y_mesh[row] = _keep_longest_finite_run(y_mesh[row])
+
+    if not np.isfinite(y_mesh).any():
+        return None
+
+    return {
+        "kind": "contour_surface",
+        "x": x_mesh,
+        "y": y_mesh,
+        "z": z_mesh,
+    }
+
+
 def prepare_break_even_phase_diagram_data(
     data_dir: str = None,
     city_df: pd.DataFrame = None,
@@ -1751,10 +1847,11 @@ def prepare_break_even_phase_diagram_data(
         delta_slope=delta_slope_grid,
         gef_limits=BREAK_EVEN_GEF_LIMITS,
     )
-    surface_mesh = _build_break_even_surface_display_mesh(
+    surface_mesh = _build_break_even_contour_surface_mesh(
         air_distance_grid_km=air_distance_grid_km,
         detour_ratios=detour_ratios,
-        break_even_surface=break_even_surface,
+        delta_zero=delta_zero_grid,
+        delta_slope=delta_slope_grid,
         gef_limits=BREAK_EVEN_GEF_LIMITS,
     )
     observed_mask = _break_even_observed_mask_data(
@@ -1851,31 +1948,47 @@ def plot_break_even_phase_diagram(
         finite_blocks.append(values[np.isfinite(values)])
     finite_delta = np.concatenate([block for block in finite_blocks if len(block)])
     max_abs = (
-        float(np.nanpercentile(np.abs(finite_delta), 98))
+        float(np.nanpercentile(np.abs(finite_delta), 90))
         if len(finite_delta)
         else 1.0
     )
-    max_abs = max(max_abs, 1.0)
+    max_abs = max(max_abs, 10.0)
 
-    delta_cmap = plt.get_cmap("RdBu_r")
-    delta_norm = TwoSlopeNorm(vmin=-max_abs, vcenter=0.0, vmax=max_abs)
+    delta_bounds = np.linspace(-max_abs, max_abs, 9)
+    delta_cmap = plt.get_cmap("RdBu_r", len(delta_bounds) - 1)
+    delta_norm = BoundaryNorm(delta_bounds, ncolors=delta_cmap.N, clip=False)
     surface_cmap = plt.get_cmap("viridis")
     surface_norm = plt.Normalize(vmin=gef_limits[0], vmax=gef_limits[1])
     X, Y = np.meshgrid(air_distance_grid_km, detour_ratios)
 
     if surface_mesh:
-        ax_a.plot_trisurf(
-            surface_mesh["x"],
-            surface_mesh["y"],
-            surface_mesh["z"],
-            triangles=surface_mesh["triangles"],
-            cmap=surface_cmap,
-            norm=surface_norm,
-            linewidth=0,
-            antialiased=True,
-            shade=False,
-            alpha=0.96,
-        )
+        if surface_mesh.get("kind") == "contour_surface":
+            ax_a.plot_surface(
+                surface_mesh["x"],
+                surface_mesh["y"],
+                surface_mesh["z"],
+                cmap=surface_cmap,
+                norm=surface_norm,
+                rstride=1,
+                cstride=1,
+                linewidth=0,
+                antialiased=True,
+                shade=False,
+                alpha=0.96,
+            )
+        else:
+            ax_a.plot_trisurf(
+                surface_mesh["x"],
+                surface_mesh["y"],
+                surface_mesh["z"],
+                triangles=surface_mesh["triangles"],
+                cmap=surface_cmap,
+                norm=surface_norm,
+                linewidth=0,
+                antialiased=True,
+                shade=False,
+                alpha=0.96,
+            )
     elif np.isfinite(break_even_surface).any():
         z_surface = np.ma.masked_invalid(break_even_surface)
         ax_a.plot_surface(
@@ -1977,7 +2090,7 @@ def plot_break_even_phase_diagram(
                 detour_limits[1],
             ],
             norm=delta_norm,
-            interpolation="bilinear",
+            interpolation="nearest",
         )
         heatmap_mappable = im
         _draw_observed_detour_mask_2d(ax, panel_a["observed_mask"], zorder=5)
@@ -2024,6 +2137,10 @@ def plot_break_even_phase_diagram(
         ax=heatmap_axes,
         fraction=0.022,
         pad=0.01,
+        boundaries=delta_bounds,
+        ticks=delta_bounds[::2],
+        extend="both",
+        spacing="proportional",
     )
     colorbar.set_label("Delta g = E_drone - E_ebike (g CO2e/order)", fontsize=10)
 
