@@ -1637,17 +1637,17 @@ def _build_break_even_surface_triangles(
 def _build_break_even_surface_display_mesh(
     air_distance_grid_km: np.ndarray,
     detour_ratios: np.ndarray,
-    raw_surface: np.ndarray,
+    break_even_surface: np.ndarray,
     gef_limits: tuple[float, float],
     distance_points: int = 520,
     detour_points: int = 420,
 ) -> dict | None:
-    """Build a smooth display mesh for the theoretical break-even surface."""
+    """Build a display mesh for the visible theoretical break-even surface."""
     from scipy.interpolate import RectBivariateSpline
 
     x_axis = np.asarray(air_distance_grid_km, dtype=float)
     y_axis = np.asarray(detour_ratios, dtype=float)
-    z_grid = np.asarray(raw_surface, dtype=float)
+    z_grid = np.asarray(break_even_surface, dtype=float)
     if not np.isfinite(z_grid).all():
         return _build_break_even_surface_triangles(
             air_distance_grid_km=x_axis,
@@ -1754,7 +1754,7 @@ def prepare_break_even_phase_diagram_data(
     surface_mesh = _build_break_even_surface_display_mesh(
         air_distance_grid_km=air_distance_grid_km,
         detour_ratios=detour_ratios,
-        raw_surface=break_even_surface_raw,
+        break_even_surface=break_even_surface,
         gef_limits=BREAK_EVEN_GEF_LIMITS,
     )
     observed_mask = _break_even_observed_mask_data(
