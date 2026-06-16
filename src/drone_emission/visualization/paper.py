@@ -3053,6 +3053,8 @@ def render_all(data_dir: str, figures_dir: str, for_latex: bool = False, plot_ti
                     plot_regions_map_pathway_scenarios(
                         named_csv_path=named_path,
                         stats_csv_path=stats_path,
+                        data_dir=data_dir,
+                        exp_config=exp_config,
                         save_path=os.path.join(out, "regions_map_pathway_scenarios.png"),
                         for_latex=for_latex,
                         plot_title=plot_title,

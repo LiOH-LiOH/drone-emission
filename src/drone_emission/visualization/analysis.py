@@ -322,6 +322,247 @@ def _pathway_anchor_annual_kg(
     )
 
 
+def _sample_od_for_pathway_curve(
+    od_df: pd.DataFrame,
+    max_rows: int,
+    random_state: int,
+) -> tuple[pd.DataFrame, float]:
+    """Return sampled OD rows and the annual-sales expansion factor."""
+    required = {"road_distance_m", "distance_km", "annual_sales"}
+    missing = required - set(od_df.columns)
+    if missing:
+        raise KeyError(f"missing OD columns {sorted(missing)}")
+
+    valid = od_df[list(required)].copy()
+    for col in required:
+        valid[col] = pd.to_numeric(valid[col], errors="coerce")
+    valid = valid[
+        (valid["road_distance_m"] >= 0)
+        & (valid["distance_km"] > 0)
+        & (valid["annual_sales"] > 0)
+    ].dropna()
+    if valid.empty:
+        return valid, 1.0
+
+    total_sales = float(valid["annual_sales"].sum())
+    if len(valid) > max_rows:
+        valid = valid.sample(n=max_rows, random_state=random_state)
+    sample_sales = float(valid["annual_sales"].sum())
+    scale = total_sales / sample_sales if sample_sales > 0 else 1.0
+    return valid, scale
+
+
+def _evaluate_pathway_optimal_curve_point(
+    od_df: pd.DataFrame,
+    scale: float,
+    ebike_params,
+    drone_params,
+    province_gef_kwh: float,
+    kappa: float,
+    gef_mult: float,
+    rider_weight: float,
+    payload_kg: float,
+) -> dict:
+    """Evaluate sampled annual CO2 savings and drone share for one pathway point."""
+    from dataclasses import replace
+
+    from sensitivity.named_scenarios import _threshold_sweep
+    from sensitivity.vectorized_lca import (
+        DroneScenario,
+        EbikeScenario,
+        compute_drone_per_order_g,
+        compute_ebike_per_order_g,
+    )
+
+    road_km = od_df["road_distance_m"].to_numpy(dtype=float) / 1000.0
+    air_km = od_df["distance_km"].to_numpy(dtype=float)
+    annual_sales = od_df["annual_sales"].to_numpy(dtype=float)
+
+    ebike_pp = replace(ebike_params, e_use=province_gef_kwh)
+    drone_pp = replace(drone_params, e_use=province_gef_kwh)
+    ebike_g = compute_ebike_per_order_g(
+        road_km,
+        ebike_pp,
+        EbikeScenario(
+            kappa=kappa,
+            gef_mult=gef_mult,
+            payload_kg=payload_kg,
+            rider_weight=rider_weight,
+        ),
+    )
+    drone_g = compute_drone_per_order_g(
+        air_km,
+        drone_pp,
+        DroneScenario(gef_mult=gef_mult, payload_kg=payload_kg),
+    )
+
+    thresholds = _threshold_sweep(road_km)
+    best_total_g = None
+    best_use_drone = None
+    for threshold in thresholds:
+        use_drone = road_km >= threshold
+        annual_total_g = float((np.where(use_drone, drone_g, ebike_g) * annual_sales).sum())
+        if best_total_g is None or annual_total_g < best_total_g:
+            best_total_g = annual_total_g
+            best_use_drone = use_drone
+
+    anchor_g = float((ebike_g * annual_sales).sum())
+    drone_orders = float(annual_sales[best_use_drone].sum())
+    total_orders = float(annual_sales.sum())
+    return {
+        "saved_kg": (anchor_g - best_total_g) * scale / 1000.0,
+        "drone_share_pct": drone_orders / total_orders * 100.0 if total_orders > 0 else np.nan,
+    }
+
+
+def _build_pathway_curve_data(
+    stats_df: pd.DataFrame,
+    data_dir: str,
+    exp_config: dict | None,
+    baseline_kappa: float,
+    kappa_end: float = 0.65,
+    n_points: int = 7,
+    max_rows_per_city: int = 1500,
+    random_state: int = 42,
+) -> dict:
+    """Build sampled nationwide kappa and GEF pathway curves."""
+    from emission.cal_single_delivery import create_drone_params, create_ebike_params
+    from utils.grid_emission_factor import fetch_factor
+
+    if not data_dir:
+        return {}
+
+    ebike_params = create_ebike_params(exp_config)
+    drone_params = create_drone_params(exp_config)
+    emission_cfg = (exp_config or {}).get("emission_params", {})
+    rider_weight = float(emission_cfg.get("rider_weight", 70.0))
+    payload_kg = float(emission_cfg.get("payload_kg", 1.0))
+    gef_path = (exp_config or {}).get("gef_path")
+    if "region_level" in stats_df.columns:
+        city_rows = stats_df[stats_df["region_level"] == "city"].copy()
+    else:
+        city_rows = stats_df.copy()
+    required_stats = {"region_key", "province"}
+    if city_rows.empty or not required_stats.issubset(city_rows.columns):
+        return {}
+
+    sampled = []
+    skipped = []
+    for idx, row in city_rows.iterrows():
+        region_key = row["region_key"]
+        province = row["province"]
+        od_path = os.path.join(data_dir, "city", region_key, f"{region_key}_od_pairs.csv")
+        if not os.path.exists(od_path):
+            skipped.append(region_key)
+            continue
+        try:
+            od_df = pd.read_csv(
+                od_path,
+                usecols=["road_distance_m", "distance_km", "annual_sales"],
+            )
+            od_sample, scale = _sample_od_for_pathway_curve(
+                od_df,
+                max_rows=max_rows_per_city,
+                random_state=random_state + int(idx),
+            )
+            if od_sample.empty:
+                skipped.append(region_key)
+                continue
+            province_gef = (
+                fetch_factor(province, gef_path)
+                if gef_path
+                else float(emission_cfg.get("e_use", 0.6))
+            )
+        except Exception:
+            skipped.append(region_key)
+            continue
+        sampled.append((od_sample, scale, float(province_gef)))
+
+    if not sampled:
+        return {}
+
+    kappa_values = np.linspace(baseline_kappa, kappa_end, n_points)
+    gef_values = np.linspace(1.0, 0.5, n_points)
+
+    def aggregate(kappa_value: float, gef_mult: float) -> dict:
+        saved_kg = 0.0
+        weighted_share = 0.0
+        total_orders = 0.0
+        for od_sample, scale, province_gef in sampled:
+            result = _evaluate_pathway_optimal_curve_point(
+                od_sample,
+                scale,
+                ebike_params,
+                drone_params,
+                province_gef,
+                kappa=kappa_value,
+                gef_mult=gef_mult,
+                rider_weight=rider_weight,
+                payload_kg=payload_kg,
+            )
+            orders = float(od_sample["annual_sales"].sum()) * scale
+            saved_kg += result["saved_kg"]
+            weighted_share += result["drone_share_pct"] * orders
+            total_orders += orders
+        return {
+            "saved_kt": saved_kg / 1e6,
+            "drone_share_pct": weighted_share / total_orders if total_orders > 0 else np.nan,
+        }
+
+    kappa_curve = []
+    for value in kappa_values:
+        point = aggregate(float(value), 1.0)
+        point["x"] = float(value)
+        kappa_curve.append(point)
+
+    gef_curve = []
+    for value in gef_values:
+        point = aggregate(baseline_kappa, float(value))
+        point["x"] = float(value)
+        gef_curve.append(point)
+
+    print(
+        "plot_regions_map_pathway_scenarios: sampled "
+        f"{len(sampled)} cities for pathway curves "
+        f"(max {max_rows_per_city} OD rows/city; skipped {len(skipped)})"
+    )
+    return {
+        "kappa": pd.DataFrame(kappa_curve),
+        "gef": pd.DataFrame(gef_curve),
+    }
+
+
+def _plot_pathway_curve_panel(ax, curve_df: pd.DataFrame, panel_label: str, xlabel: str):
+    """Draw total saved CO2 and drone share on dual axes."""
+    if curve_df is None or curve_df.empty:
+        ax.text(0.5, 0.5, "Pathway curve unavailable", transform=ax.transAxes,
+                ha="center", va="center", fontsize=10, color="dimgray")
+        ax.set_axis_off()
+        return None
+
+    x = curve_df["x"].to_numpy(dtype=float)
+    saved = curve_df["saved_kt"].to_numpy(dtype=float)
+    share = curve_df["drone_share_pct"].to_numpy(dtype=float)
+
+    ax.plot(x, saved, color="#1b7837", marker="o", linewidth=1.8, markersize=4)
+    ax.set_xlabel(xlabel, fontsize=10)
+    ax.set_ylabel(r"CO$_2$ saved (kt/yr)", fontsize=10, color="#1b7837")
+    ax.tick_params(axis="y", labelcolor="#1b7837", labelsize=8)
+    ax.tick_params(axis="x", labelsize=8)
+    ax.grid(True, linestyle=":", alpha=0.35)
+    if x[0] > x[-1]:
+        ax.invert_xaxis()
+
+    ax_share = ax.twinx()
+    ax_share.plot(x, share, color="#2166ac", marker="s", linewidth=1.6, markersize=3.5)
+    ax_share.set_ylabel("Drone share (%)", fontsize=10, color="#2166ac")
+    ax_share.tick_params(axis="y", labelcolor="#2166ac", labelsize=8)
+    ax_share.set_ylim(0, min(105, max(100, np.nanmax(share) * 1.08)))
+    ax.text(-0.08, 1.03, panel_label, transform=ax.transAxes,
+            fontsize=14, fontweight="bold", va="bottom", ha="right")
+    return ax_share
+
+
 def plot_correlation_heatmap(
     corr_df: pd.DataFrame,
     save_path: str = None,
@@ -1252,8 +1493,10 @@ def plot_regions_map_kappa_panels(
 def plot_regions_map_pathway_scenarios(
     named_csv_path: str,
     stats_csv_path: str,
+    data_dir: str = None,
+    exp_config: dict = None,
     save_path: str = None,
-    figsize: tuple = (16, 18),
+    figsize: tuple = (22, 18),
     for_latex: bool = False,
     plot_title: bool = False,
 ):
@@ -1278,6 +1521,8 @@ def plot_regions_map_pathway_scenarios(
     Args:
         named_csv_path: Path to all_sensitivity_named.csv.
         stats_csv_path: Path to all_region_stats.csv (provides region_name_cn lookup).
+        data_dir: Data root containing city OD-pair CSVs for sampled curve panels.
+        exp_config: Experiment config for vehicle parameters and GEF path.
         save_path: Path to save figure. Shows plot if None.
         figsize: Figure size tuple.
         for_latex: If True, save as PDF.
@@ -1295,6 +1540,12 @@ def plot_regions_map_pathway_scenarios(
         ("c", "Operator bundling",        0.65, 1.0, "optimal_mixed"),
         ("d", "Halved GEF + bundling",    0.65, 0.5, "optimal_mixed_2030"),
     ]
+    curve_data = _build_pathway_curve_data(
+        base,
+        data_dir=data_dir,
+        exp_config=exp_config,
+        baseline_kappa=baseline_kappa,
+    )
 
     reduction_col = "reduction_vs_anchor_ebike_pct"
     has_annual = "annual_lifecycle_kg" in named.columns
@@ -1389,9 +1640,19 @@ def plot_regions_map_pathway_scenarios(
     line_y_max = max(line_y_max, 1.0) * 1.05
 
     fig = plt.figure(figsize=figsize)
-    gs = fig.add_gridspec(4, 2, height_ratios=[5, 2.2, 5, 2.2], hspace=0.25, wspace=0.20)
+    gs = fig.add_gridspec(
+        4, 3,
+        height_ratios=[5, 2.2, 5, 2.2],
+        width_ratios=[1, 1, 0.88],
+        hspace=0.25,
+        wspace=0.28,
+    )
     pos = {"a": (0, 0), "b": (0, 1), "c": (2, 0), "d": (2, 1)}
     ax_pairs = []
+    curve_axes = [
+        fig.add_subplot(gs[0:2, 2]),
+        fig.add_subplot(gs[2:4, 2]),
+    ]
 
     box_lines = []  # parallel list of twin axes for line overlay
     for label, title, k, g, _s in panels:
@@ -1496,7 +1757,22 @@ def plot_regions_map_pathway_scenarios(
         ax_line.tick_params(axis="y", labelsize=8, colors="dimgray")
         box_lines.append(ax_line)
 
-    cbar_ax = fig.add_axes((0.93, 0.28, 0.015, 0.44))
+    curve_twins = [
+        _plot_pathway_curve_panel(
+            curve_axes[0],
+            curve_data.get("kappa"),
+            "e",
+            r"E-bike bundling factor $\kappa$",
+        ),
+        _plot_pathway_curve_panel(
+            curve_axes[1],
+            curve_data.get("gef"),
+            "f",
+            "Grid emission factor multiplier",
+        ),
+    ]
+
+    cbar_ax = fig.add_axes((0.905, 0.28, 0.012, 0.44))
     cbar, n_bands = _draw_discrete_reduction_colorbar(
         fig, cbar_ax, shared_cmap, shared_norm, bin_edges, reduction_edges,
         r"Reduction vs today's all-ebike anchor (%)",
@@ -1506,7 +1782,7 @@ def plot_regions_map_pathway_scenarios(
         fig.suptitle("Forward-pathway scenarios: per-delivery reduction across 314 cities",
                      fontsize=14, fontweight="bold")
 
-    fig.tight_layout(rect=(0, 0.03, 0.92, 0.98))
+    fig.tight_layout(rect=(0, 0.03, 0.90, 0.98))
 
     # Align each boxplot's width with its map (the map shrinks horizontally due to
     # its enforced geographic aspect ratio; gridspec leaves the boxplot wider).
@@ -1520,6 +1796,9 @@ def plot_regions_map_pathway_scenarios(
         new_pos = [map_box.x0, new_y0, map_box.width, box_box.height]
         ax_box.set_position(new_pos)
         ax_line.set_position(new_pos)
+    for ax, ax_twin in zip(curve_axes, curve_twins):
+        if ax_twin is not None:
+            ax_twin.set_position(ax.get_position())
 
     _annotate_unstudied(fig, cbar, cbar_ax, n_bands)
 
