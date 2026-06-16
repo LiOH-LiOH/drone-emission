@@ -3931,11 +3931,11 @@ def plot_regions_map_city_rank_inset(
     df_stats: "pd.DataFrame",
     stats_csv_path: str,
     save_path: str = None,
-    figsize: tuple = (10, 9),
+    figsize: tuple = (14, 7),
     for_latex: bool = False,
     plot_title: bool = False,
 ):
-    """China choropleth with compact top-city Oracle reduction inset.
+    """China choropleth with top-city Oracle reduction rank.
 
     Args:
         df_stats: all_region_stats DataFrame.
@@ -3970,7 +3970,10 @@ def plot_regions_map_city_rank_inset(
         valid_reductions
     )
 
-    fig, ax_a = plt.subplots(figsize=figsize)
+    fig = plt.figure(figsize=figsize)
+    gs = fig.add_gridspec(1, 2, width_ratios=[1.35, 1.0], wspace=0.18)
+    ax_a = fig.add_subplot(gs[0, 0])
+    ax_b = fig.add_subplot(gs[0, 1])
     plot_regions_on_china_map(
         df=map_df, color_by=reduction_col,
         ax=ax_a, plot_title=plot_title,
@@ -3984,22 +3987,17 @@ def plot_regions_map_city_rank_inset(
     for spine in ax_a.spines.values():
         spine.set_visible(False)
 
-    ax_b = ax_a.inset_axes([0.03, 0.04, 0.34, 0.38], zorder=10)
     _plot_city_oracle_reduction_rank(
-        map_df, 10,
+        map_df, 15,
         plot_title=plot_title,
         ax=ax_b,
         invert_vertical=True,
-        compact=True,
+        compact=False,
     )
-    ax_b.set_facecolor("none")
-    ax_b.patch.set_alpha(0.0)
-    for name, spine in ax_b.spines.items():
-        spine.set_visible(name in {"left", "bottom"})
-        spine.set_edgecolor("#666666")
-        spine.set_linewidth(0.6)
 
     ax_a.text(-0.03, 1.02, "a", transform=ax_a.transAxes,
+              fontsize=16, fontweight="bold", va="bottom", ha="right")
+    ax_b.text(-0.08, 1.02, "b", transform=ax_b.transAxes,
               fontsize=16, fontweight="bold", va="bottom", ha="right")
 
     fig.tight_layout()
