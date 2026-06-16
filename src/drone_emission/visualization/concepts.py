@@ -9,7 +9,7 @@ from typing import Iterable, Sequence
 import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib import patheffects as pe
-from matplotlib.patches import Circle, FancyArrowPatch, FancyBboxPatch, Polygon
+from matplotlib.patches import Circle, FancyArrowPatch, FancyBboxPatch, Polygon, Rectangle
 
 from visualization._utils import _add_title_suffix
 
@@ -154,11 +154,33 @@ def _add_buildings(ax: plt.Axes) -> None:
 
 
 def _add_marker(ax: plt.Axes, xy_world: Point, *, color: str, label: str,
-                label_offset: Point, zorder: int = 40) -> Point:
+                label_offset: Point, zorder: int = 40,
+                shape: str = "circle") -> Point:
     xy = _project(*xy_world)
-    ax.add_patch(Circle(xy, radius=0.15, facecolor=color, edgecolor=_COLORS["white"],
-                        linewidth=1.6, zorder=zorder,
-                        path_effects=[pe.SimplePatchShadow(offset=(1.0, -1.0), alpha=0.25), pe.Normal()]))
+    path_effects = [pe.SimplePatchShadow(offset=(1.0, -1.0), alpha=0.25), pe.Normal()]
+    if shape == "square":
+        side = 0.26
+        marker = Rectangle(
+            (xy[0] - side / 2, xy[1] - side / 2),
+            side,
+            side,
+            facecolor=color,
+            edgecolor=_COLORS["white"],
+            linewidth=1.4,
+            zorder=zorder,
+            path_effects=path_effects,
+        )
+    else:
+        marker = Circle(
+            xy,
+            radius=0.15,
+            facecolor=color,
+            edgecolor=_COLORS["white"],
+            linewidth=1.6,
+            zorder=zorder,
+            path_effects=path_effects,
+        )
+    ax.add_patch(marker)
     ax.text(xy[0] + label_offset[0], xy[1] + label_offset[1], label,
             color=_COLORS["text"], fontsize=10.5, fontweight="bold",
             ha="center", va="center", zorder=zorder + 2)
@@ -255,8 +277,23 @@ def _draw_detour_ratio_concept(ax: "plt.Axes", plot_title: bool = False) -> None
 
     _add_drone_path(ax, origin, destination)
 
-    origin_xy = _add_marker(ax, origin,      color=_COLORS["origin"],      label="Merchant", label_offset=(-0.25, -0.36), zorder=65)
-    dest_xy   = _add_marker(ax, destination, color=_COLORS["destination"], label="Customer",  label_offset=(0.90, 0.40),  zorder=65)
+    origin_xy = _add_marker(
+        ax,
+        origin,
+        color=_COLORS["origin"],
+        label="Merchant",
+        label_offset=(-0.25, -0.36),
+        zorder=65,
+    )
+    dest_xy = _add_marker(
+        ax,
+        destination,
+        color=_COLORS["destination"],
+        label="Customer",
+        label_offset=(0.90, 0.40),
+        zorder=65,
+        shape="square",
+    )
 
     mid_bike = _project(4.75, _GRID_Y[1])
     ax.text(mid_bike[0], mid_bike[1] - 0.72, "E-bike route\non roads",
