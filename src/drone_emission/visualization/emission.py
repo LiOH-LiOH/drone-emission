@@ -74,6 +74,63 @@ def _json_safe(value):
     return value
 
 
+def _report_number(value):
+    """Return a JSON-safe scalar with NaN/Inf represented as None."""
+    return _json_safe(value)
+
+
+def _report_array(values):
+    """Return a JSON-safe list from an array-like object."""
+    return [_report_number(value) for value in values]
+
+
+def _report_axis(ax):
+    """Return figure-fraction position and data scale for an axis."""
+    pos = ax.get_position()
+    return {
+        "bbox_figure_fraction": {
+            "x0": _report_number(pos.x0),
+            "y0": _report_number(pos.y0),
+            "x1": _report_number(pos.x1),
+            "y1": _report_number(pos.y1),
+            "width": _report_number(pos.width),
+            "height": _report_number(pos.height),
+        },
+        "xlim_data": _report_array(ax.get_xlim()),
+        "ylim_data": _report_array(ax.get_ylim()),
+        "xlabel": ax.get_xlabel(),
+        "ylabel": ax.get_ylabel(),
+        "xticks_data": _report_array(ax.get_xticks()),
+        "yticks_data": _report_array(ax.get_yticks()),
+    }
+
+
+def _array_summary(values):
+    """Return compact numeric summary stats for report payloads."""
+    arr = np.asarray(values, dtype=float)
+    arr = arr[np.isfinite(arr)]
+    if arr.size == 0:
+        return {
+            "count": 0,
+            "mean": None,
+            "median": None,
+            "min": None,
+            "max": None,
+            "q05": None,
+            "q95": None,
+        }
+    q05, median, q95 = np.percentile(arr, [5, 50, 95])
+    return {
+        "count": int(arr.size),
+        "mean": _report_number(arr.mean()),
+        "median": _report_number(median),
+        "min": _report_number(arr.min()),
+        "max": _report_number(arr.max()),
+        "q05": _report_number(q05),
+        "q95": _report_number(q95),
+    }
+
+
 def _stable_seed(region_key: str, base_seed: int) -> int:
     """Return a deterministic per-city seed from a shared base seed."""
     return int((base_seed + zlib.crc32(region_key.encode("utf-8"))) % (2 ** 32))
@@ -738,10 +795,10 @@ def _format_component_annotation(pp_value: float, kg_value: float) -> str:
     return f"{pp_value:+.2f} pp\n({kg_value / 1e6:+.2f} kt)"
 
 
-def _add_panel_letter(ax, letter: str):
+def _add_panel_letter(ax, letter: str, fontsize: int = 13):
     """Add a bold panel letter just above the top-left corner."""
     text_kwargs = {
-        "fontsize": 13,
+        "fontsize": fontsize,
         "fontweight": "bold",
         "ha": "right",
         "va": "bottom",
@@ -900,6 +957,49 @@ def _plot_top_city_contribution_bars(ax, rows: list[dict]):
     ax.set_ylim(ymin, ymax)
 
 
+def _plot_contribution_decomposition_panels(
+    fig,
+    ax_a,
+    ax_b,
+    prepared: Dict,
+    plot_title: bool = False,
+    panel_letters: tuple[str, str] = ("a", "b"),
+    legend_anchor: tuple[float, float] = (0.5, 0.98),
+    panel_letter_fontsize: int = 13,
+):
+    """Draw contribution-decomposition panels on caller-provided axes."""
+    _plot_contribution_waterfall(ax_a, prepared["national"])
+    _plot_top_city_contribution_bars(ax_b, prepared.get("top_cities", [])[:15])
+
+    if plot_title:
+        ax_a.set_title(
+            "Sampled Current-Mechanism Contribution Decomposition",
+            fontsize=14,
+        )
+        ax_b.set_title("Top 15 cities by total emission reduction", fontsize=12)
+    _add_panel_letter(ax_a, panel_letters[0], fontsize=panel_letter_fontsize)
+    _add_panel_letter(ax_b, panel_letters[1], fontsize=panel_letter_fontsize)
+
+    legend_handles = [
+        plt.Rectangle(
+            (0, 0),
+            1,
+            1,
+            facecolor=spec["color"],
+            edgecolor="white",
+            label=spec["label"],
+        )
+        for spec in CONTRIBUTION_COMPONENT_SPECS
+    ]
+    fig.legend(
+        handles=legend_handles,
+        loc="upper center",
+        ncol=4,
+        frameon=False,
+        bbox_to_anchor=legend_anchor,
+    )
+
+
 def _write_contribution_decomposition_report(prepared: Dict, save_path: str):
     """Write the sampled contribution decomposition audit JSON."""
     report_path = save_path.rsplit(".", 1)[0] + "_report.json"
@@ -910,6 +1010,223 @@ def _write_contribution_decomposition_report(prepared: Dict, save_path: str):
     with open(report_path, "w", encoding="utf-8") as f:
         json.dump(_json_safe(payload), f, indent=2, ensure_ascii=False, allow_nan=False)
     print(f"Contribution decomposition report saved to {report_path}")
+
+
+def _break_even_panel_report(prepared: Dict, axes: tuple):
+    """Return compact report data for break-even phase panels."""
+    ax_a, ax_b, ax_c = axes
+    panel_a = prepared["panel_a"]
+    panel_b = prepared["panel_b"]
+    observed = prepared.get("panel_c", {})
+    observed_samples = observed.get("samples", pd.DataFrame())
+    city_reports = observed.get("city_reports", [])
+
+    surface = np.asarray(panel_a.get("break_even_gef"), dtype=float)
+    observed_mask = panel_a.get("observed_mask") or {}
+    mask_values = np.asarray(observed_mask.get("mask"), dtype=float)
+    finite_mask = mask_values[np.isfinite(mask_values)] if mask_values.size else np.array([])
+
+    gef_panel_reports = []
+    for letter, ax, gef_panel in zip(("b", "c"), (ax_b, ax_c), panel_b["gef_panels"]):
+        delta_g = np.asarray(gef_panel["delta_g"], dtype=float)
+        zero_contour_present = bool(np.nanmin(delta_g) <= 0.0 <= np.nanmax(delta_g))
+        gef_panel_reports.append(
+            {
+                "panel_letter": letter,
+                "axis": _report_axis(ax),
+                "label": gef_panel["label"],
+                "grid_emission_factor_kg_co2e_per_kwh": _report_number(gef_panel["gef"]),
+                "delta_g_summary_g_co2e_per_order": _array_summary(delta_g),
+                "zero_contour_delta_g_equals_0_present": zero_contour_present,
+                "color_encoding": "Delta g = E_drone - E_ebike; negative means drone lower-emission.",
+            }
+        )
+
+    return {
+        "a_break_even_gef_surface": {
+            "axis": _report_axis(ax_a),
+            "zlim_data": _report_array(ax_a.get_zlim()),
+            "surface_gef_summary_kg_co2e_per_kwh": _array_summary(surface),
+            "distance_grid_km": {
+                "count": int(len(prepared["air_distance_grid_km"])),
+                "min": _report_number(np.min(prepared["air_distance_grid_km"])),
+                "max": _report_number(np.max(prepared["air_distance_grid_km"])),
+            },
+            "detour_ratio_grid": {
+                "count": int(len(prepared["detour_ratios"])),
+                "min": _report_number(np.min(prepared["detour_ratios"])),
+                "max": _report_number(np.max(prepared["detour_ratios"])),
+            },
+            "observed_context": {
+                "city_count": int(len(city_reports)),
+                "sample_count": int(len(observed_samples)) if hasattr(observed_samples, "__len__") else 0,
+                "mask_nonzero_cells": int(np.count_nonzero(finite_mask > 0)) if finite_mask.size else 0,
+                "annotation": observed.get("annotation"),
+            },
+            "interpretation": "Surface shows GEF* where Delta g = 0; below surface drone wins, above surface e-bike wins.",
+        },
+        "b_c_delta_g_heatmaps": gef_panel_reports,
+    }
+
+
+def _contribution_panel_report(prepared: Dict, axes: tuple):
+    """Return compact report data for contribution-decomposition panels."""
+    ax_d, ax_e = axes
+    national = prepared["national"]
+    national_components = []
+    for idx, spec in enumerate(CONTRIBUTION_COMPONENT_SPECS):
+        national_components.append(
+            {
+                "x_index": idx,
+                "key": spec["key"],
+                "label": spec["label"],
+                "short_label": spec["short_label"],
+                "color": spec["color"],
+                "kg_co2e_per_year": _report_number(national[f"{spec['key']}_kg"]),
+                "percentage_points_of_national_ebike_baseline": _report_number(
+                    national[f"{spec['key']}_pp"]
+                ),
+            }
+        )
+    national_components.append(
+        {
+            "x_index": len(CONTRIBUTION_COMPONENT_SPECS),
+            "key": "total_net",
+            "label": "Net reduction",
+            "color": "#2F4B7C",
+            "kg_co2e_per_year": _report_number(national["total_net_kg"]),
+            "percentage_points_of_national_ebike_baseline": _report_number(
+                national["total_net_pp"]
+            ),
+        }
+    )
+
+    top_city_rows = []
+    for idx, row in enumerate(prepared.get("top_cities", [])[:15]):
+        top_city_rows.append(
+            {
+                "x_index": idx,
+                "region_key": row.get("region_key"),
+                "label": row.get("label"),
+                "baseline_ebike_lifecycle_kg": _report_number(
+                    row.get("baseline_ebike_lifecycle_kg")
+                ),
+                "total_net_kg": _report_number(row.get("total_net_kg")),
+                "total_net_pp": _report_number(row.get("total_net_pp")),
+                "component_pct_points": {
+                    spec["key"]: _report_number(row.get(f"{spec['key']}_pp"))
+                    for spec in CONTRIBUTION_COMPONENT_SPECS
+                },
+                "component_kg": {
+                    spec["key"]: _report_number(row.get(f"{spec['key']}_kg"))
+                    for spec in CONTRIBUTION_COMPONENT_SPECS
+                },
+            }
+        )
+
+    return {
+        "d_national_contribution_waterfall": {
+            "axis": _report_axis(ax_d),
+            "baseline_ebike_lifecycle_kg": _report_number(
+                national["baseline_ebike_lifecycle_kg"]
+            ),
+            "drone_assigned_sampled_rows": _report_number(
+                national["drone_assigned_sampled_rows"]
+            ),
+            "sum_check": _json_safe(national.get("sum_check", {})),
+            "bars": national_components,
+        },
+        "e_top_city_contribution_bars": {
+            "axis": _report_axis(ax_e),
+            "city_count_plotted": len(top_city_rows),
+            "bars": top_city_rows,
+            "legend_components": _json_safe(list(CONTRIBUTION_COMPONENT_SPECS)),
+        },
+        "sampling": _json_safe(prepared.get("sampling", {})),
+        "runtime": _json_safe(prepared.get("runtime", {})),
+    }
+
+
+def _write_break_even_contribution_decomposition_report(
+    break_even_prepared: Dict,
+    contribution_prepared: Dict,
+    save_path: str,
+    figsize: tuple,
+    axes: tuple,
+):
+    """Write compact JSON and Markdown reports for the combined figure."""
+    report_base = save_path.rsplit(".", 1)[0] + "_report"
+    json_path = report_base + ".json"
+    md_path = report_base + ".md"
+    ax_a, ax_b, ax_c, ax_d, ax_e = axes
+    break_even_report = _break_even_panel_report(
+        break_even_prepared,
+        axes=(ax_a, ax_b, ax_c),
+    )
+    contribution_report = _contribution_panel_report(
+        contribution_prepared,
+        axes=(ax_d, ax_e),
+    )
+    payload = {
+        "figure_name": "break_even_contribution_decomposition",
+        "figure_path": save_path,
+        "figure_size_inches": {"width": figsize[0], "height": figsize[1]},
+        "coordinate_convention": (
+            "Plotted x/y/z values are Matplotlib data coordinates for the stated "
+            "axis. Axis bbox values are figure-fraction coordinates."
+        ),
+        "report_scope": (
+            "Compact LLM-readable report: full plotted grids are summarized, "
+            "while all waterfall bars and top-city stacked bars are listed."
+        ),
+        "panels": {
+            **break_even_report,
+            **contribution_report,
+        },
+    }
+    with open(json_path, "w", encoding="utf-8") as f:
+        json.dump(_json_safe(payload), f, indent=2, ensure_ascii=False, allow_nan=False)
+
+    national = contribution_prepared["national"]
+    lines = [
+        "# break_even_contribution_decomposition",
+        "",
+        f"- Figure path: `{save_path}`",
+        f"- Figure size: {figsize[0]} x {figsize[1]} inches",
+        "- Layout: panels a-c are the break-even phase diagram; panels d-e are the contribution decomposition.",
+        f"- National net reduction: {national['total_net_pp']:.3f} pp "
+        f"({national['total_net_kg'] / 1e6:.3f} kt CO2e/yr).",
+        f"- National all-e-bike baseline: {national['baseline_ebike_lifecycle_kg'] / 1e6:.3f} kt CO2e/yr.",
+        f"- Top-city bars plotted: {len(contribution_prepared.get('top_cities', [])[:15])}.",
+        "",
+        "## Panel Reading Guide",
+        "",
+        "- a: 3D surface of break-even grid emission factor, GEF*, where drone and e-bike emissions are equal.",
+        "- b-c: heatmaps at representative GEF levels; negative Delta g means drone has lower per-order emissions.",
+        "- d: national waterfall of mechanism contributions relative to the all-e-bike baseline.",
+        "- e: stacked contribution bars for the top 15 cities by net reduction.",
+        "",
+        "## National Components",
+    ]
+    for spec in CONTRIBUTION_COMPONENT_SPECS:
+        key = spec["key"]
+        pp_key = f"{key}_pp"
+        kg_key = f"{key}_kg"
+        lines.append(
+            f"- {spec['label']}: {national[pp_key]:.3f} pp, "
+            f"{national[kg_key] / 1e6:.3f} kt CO2e/yr"
+        )
+    lines.extend(["", "## Top Cities"])
+    for row in contribution_prepared.get("top_cities", [])[:15]:
+        lines.append(
+            f"- {row.get('label')}: {row.get('total_net_pp', 0.0):.3f} pp, "
+            f"{row.get('total_net_kg', 0.0) / 1e6:.3f} kt CO2e/yr"
+        )
+    with open(md_path, "w", encoding="utf-8") as f:
+        f.write("\n".join(lines) + "\n")
+
+    print(f"Break-even contribution decomposition report saved to {md_path}")
+    print(f"Break-even contribution decomposition report data saved to {json_path}")
 
 
 def plot_contribution_decomposition(
@@ -942,35 +1259,12 @@ def plot_contribution_decomposition(
     ax_a = fig.add_subplot(gs[0, 0])
     ax_b = fig.add_subplot(gs[0, 1])
 
-    _plot_contribution_waterfall(ax_a, prepared["national"])
-    _plot_top_city_contribution_bars(ax_b, prepared.get("top_cities", [])[:15])
-
-    if plot_title:
-        ax_a.set_title(
-            "Sampled Current-Mechanism Contribution Decomposition",
-            fontsize=14,
-        )
-        ax_b.set_title("Top 15 cities by total emission reduction", fontsize=12)
-    _add_panel_letter(ax_a, "a")
-    _add_panel_letter(ax_b, "b")
-
-    legend_handles = [
-        plt.Rectangle(
-            (0, 0),
-            1,
-            1,
-            facecolor=spec["color"],
-            edgecolor="white",
-            label=spec["label"],
-        )
-        for spec in CONTRIBUTION_COMPONENT_SPECS
-    ]
-    fig.legend(
-        handles=legend_handles,
-        loc="upper center",
-        ncol=4,
-        frameon=False,
-        bbox_to_anchor=(0.5, 0.98),
+    _plot_contribution_decomposition_panels(
+        fig,
+        ax_a,
+        ax_b,
+        prepared,
+        plot_title=plot_title,
     )
 
     if save_path:
@@ -2065,26 +2359,18 @@ def prepare_break_even_phase_diagram_data(
     }
 
 
-def plot_break_even_phase_diagram(
+def _plot_break_even_phase_diagram_panels(
+    fig,
+    ax_a,
+    ax_b,
+    ax_c,
     prepared: Dict,
-    save_path: str = None,
-    figsize: tuple = (14.5, 5.0),
-    for_latex: bool = False,
     plot_title: bool = False,
+    panel_letters: tuple[str, str, str] = ("a", "b", "c"),
+    font_scale: float = 1.0,
+    panel_letter_fontsize: int = 13,
 ):
-    """Lifecycle break-even phase diagram for drone vs e-bike delivery.
-
-    Args:
-        prepared: Output of ``prepare_break_even_phase_diagram_data``.
-        save_path: Path to save figure (with extension). Shows plot if None.
-        figsize: Figure size tuple.
-        for_latex: If True, save as PDF.
-        plot_title: If True, show title.
-    """
-    if not prepared:
-        print("Break-even phase diagram skipped — prepared data missing")
-        return
-
+    """Draw break-even phase-diagram panels on caller-provided axes."""
     air_distance_grid_km = prepared["air_distance_grid_km"]
     detour_ratios = prepared["detour_ratios"]
     panel_a = prepared["panel_a"]
@@ -2092,12 +2378,6 @@ def plot_break_even_phase_diagram(
     distance_limits = prepared["axes"]["distance_limits"]
     detour_limits = prepared["axes"]["detour_limits"]
     gef_limits = prepared["axes"]["gef_limits"]
-
-    fig = plt.figure(figsize=figsize)
-    gs = fig.add_gridspec(1, 3, width_ratios=[1.2, 1.0, 1.0], wspace=0.18)
-    ax_a = fig.add_subplot(gs[0, 0], projection="3d")
-    ax_b = fig.add_subplot(gs[0, 1])
-    ax_c = fig.add_subplot(gs[0, 2])
 
     break_even_surface = np.asarray(panel_a["break_even_gef"], dtype=float)
     surface_mesh = panel_a.get("surface_mesh")
@@ -2165,68 +2445,33 @@ def plot_break_even_phase_diagram(
             alpha=0.96,
         )
 
-    ax_a.text2D(
-        0.02,
-        0.90,
-        "Below surface: drone wins",
-        transform=ax_a.transAxes,
-        fontsize=9.5,
-        color="#1f5aa6",
-        bbox={
-            "boxstyle": "round,pad=0.22",
-            "facecolor": "white",
-            "alpha": 0.84,
-            "edgecolor": "none",
-        },
+    annotation_specs = (
+        (0.90, "Below surface: drone wins", 9.5, "#1f5aa6"),
+        (0.82, "Above surface: e-bike wins", 9.5, "#9f2f2f"),
+        (0.74, "Surface shows GEF* where Delta g = 0", 8.8, "#444444"),
+        (0.05, "Theoretical boundary from lifecycle model", 8.4, "#555555"),
     )
-    ax_a.text2D(
-        0.02,
-        0.82,
-        "Above surface: e-bike wins",
-        transform=ax_a.transAxes,
-        fontsize=9.5,
-        color="#9f2f2f",
-        bbox={
-            "boxstyle": "round,pad=0.22",
-            "facecolor": "white",
-            "alpha": 0.84,
-            "edgecolor": "none",
-        },
-    )
-    ax_a.text2D(
-        0.02,
-        0.74,
-        "Surface shows GEF* where Delta g = 0",
-        transform=ax_a.transAxes,
-        fontsize=8.8,
-        color="#444444",
-        bbox={
-            "boxstyle": "round,pad=0.22",
-            "facecolor": "white",
-            "alpha": 0.84,
-            "edgecolor": "none",
-        },
-    )
-    ax_a.text2D(
-        0.02,
-        0.05,
-        "Theoretical boundary from lifecycle model",
-        transform=ax_a.transAxes,
-        fontsize=8.4,
-        color="#555555",
-        bbox={
-            "boxstyle": "round,pad=0.22",
-            "facecolor": "white",
-            "alpha": 0.84,
-            "edgecolor": "none",
-        },
-    )
+    for y, text, fontsize, color in annotation_specs:
+        ax_a.text2D(
+            0.02,
+            y,
+            text,
+            transform=ax_a.transAxes,
+            fontsize=fontsize * font_scale,
+            color=color,
+            bbox={
+                "boxstyle": "round,pad=0.22",
+                "facecolor": "white",
+                "alpha": 0.84,
+                "edgecolor": "none",
+            },
+        )
     ax_a.set_xlim(*distance_limits)
     ax_a.set_ylim(*detour_limits)
     ax_a.set_zlim(*gef_limits)
-    ax_a.set_xlabel("Air distance (km)", fontsize=10.5, labelpad=8)
-    ax_a.set_ylabel("Detour ratio (road / air)", fontsize=10.5, labelpad=8)
-    ax_a.set_zlabel("Break-even GEF* (kg CO2e/kWh)", fontsize=10.5, labelpad=8)
+    ax_a.set_xlabel("Air distance (km)", fontsize=10.5 * font_scale, labelpad=8)
+    ax_a.set_ylabel("Detour ratio (road / air)", fontsize=10.5 * font_scale, labelpad=8)
+    ax_a.set_zlabel("Break-even GEF* (kg CO2e/kWh)", fontsize=10.5 * font_scale, labelpad=8)
     ax_a.set_proj_type("ortho")
     ax_a.view_init(elev=28, azim=-128)
     ax_a.grid(alpha=0.2)
@@ -2264,17 +2509,25 @@ def plot_break_even_phase_diagram(
                 linewidths=1.3,
                 zorder=6,
             )
-            ax.clabel(contour, fmt={0.0: "Delta g = 0"}, fontsize=8, inline=True)
+            ax.clabel(
+                contour,
+                fmt={0.0: "Delta g = 0"},
+                fontsize=8 * font_scale,
+                inline=True,
+            )
         ax.set_xlim(*distance_limits)
         ax.set_ylim(*heatmap_detour_limits)
-        ax.set_xlabel("Air distance (km)", fontsize=11)
+        ax.set_xlabel("Air distance (km)", fontsize=11 * font_scale)
         if ax is ax_b:
-            ax.set_ylabel("Detour ratio (road / air)", fontsize=11)
+            ax.set_ylabel("Detour ratio (road / air)", fontsize=11 * font_scale)
         else:
             ax.set_ylabel("")
         ax.grid(alpha=0.15)
         if plot_title:
-            ax.set_title(f"{gef_panel['label']} ({gef_panel['gef']:.2f})", fontsize=11.5)
+            ax.set_title(
+                f"{gef_panel['label']} ({gef_panel['gef']:.2f})",
+                fontsize=11.5 * font_scale,
+            )
         ax.text(
             0.03,
             0.97,
@@ -2282,7 +2535,7 @@ def plot_break_even_phase_diagram(
             transform=ax.transAxes,
             ha="left",
             va="top",
-            fontsize=9.2,
+            fontsize=9.2 * font_scale,
             bbox={
                 "boxstyle": "round,pad=0.22",
                 "facecolor": "white",
@@ -2302,14 +2555,53 @@ def plot_break_even_phase_diagram(
         extend="both",
         spacing="proportional",
     )
-    colorbar.set_label("Delta g = E_drone - E_ebike (g CO2e/order)", fontsize=10)
+    colorbar.set_label(
+        "Delta g = E_drone - E_ebike (g CO2e/order)",
+        fontsize=10 * font_scale,
+    )
 
     if plot_title:
-        ax_a.set_title("Break-even GEF surface", fontsize=12, pad=10)
+        ax_a.set_title("Break-even GEF surface", fontsize=12 * font_scale, pad=10)
 
-    _add_panel_letter(ax_a, "a")
-    _add_panel_letter(ax_b, "b")
-    _add_panel_letter(ax_c, "c")
+    _add_panel_letter(ax_a, panel_letters[0], fontsize=panel_letter_fontsize)
+    _add_panel_letter(ax_b, panel_letters[1], fontsize=panel_letter_fontsize)
+    _add_panel_letter(ax_c, panel_letters[2], fontsize=panel_letter_fontsize)
+
+
+def plot_break_even_phase_diagram(
+    prepared: Dict,
+    save_path: str = None,
+    figsize: tuple = (14.5, 5.0),
+    for_latex: bool = False,
+    plot_title: bool = False,
+):
+    """Lifecycle break-even phase diagram for drone vs e-bike delivery.
+
+    Args:
+        prepared: Output of ``prepare_break_even_phase_diagram_data``.
+        save_path: Path to save figure (with extension). Shows plot if None.
+        figsize: Figure size tuple.
+        for_latex: If True, save as PDF.
+        plot_title: If True, show title.
+    """
+    if not prepared:
+        print("Break-even phase diagram skipped — prepared data missing")
+        return
+
+    fig = plt.figure(figsize=figsize)
+    gs = fig.add_gridspec(1, 3, width_ratios=[1.2, 1.0, 1.0], wspace=0.18)
+    ax_a = fig.add_subplot(gs[0, 0], projection="3d")
+    ax_b = fig.add_subplot(gs[0, 1])
+    ax_c = fig.add_subplot(gs[0, 2])
+
+    _plot_break_even_phase_diagram_panels(
+        fig,
+        ax_a,
+        ax_b,
+        ax_c,
+        prepared,
+        plot_title=plot_title,
+    )
 
     plt.tight_layout()
 
@@ -2322,6 +2614,97 @@ def plot_break_even_phase_diagram(
         fig.savefig(save_path, dpi=300, bbox_inches="tight")
         plt.close(fig)
         print(f"Break-even phase diagram saved to {save_path}")
+    else:
+        plt.show()
+        plt.close(fig)
+
+
+def plot_break_even_contribution_decomposition(
+    break_even_prepared: Dict,
+    contribution_prepared: Dict,
+    save_path: str = None,
+    figsize: tuple = (15.0, 10.2),
+    for_latex: bool = False,
+    plot_title: bool = False,
+):
+    """Stack break-even phase diagram above contribution decomposition.
+
+    Args:
+        break_even_prepared: Output of ``prepare_break_even_phase_diagram_data``.
+        contribution_prepared: Output of ``prepare_contribution_decomposition_data``.
+        save_path: Path to save figure (with extension). Shows plot if None.
+        figsize: Figure size tuple.
+        for_latex: If True, save as PDF.
+        plot_title: If True, show title.
+    """
+    if not break_even_prepared or not contribution_prepared:
+        print("Break-even contribution decomposition skipped — prepared data missing")
+        return
+
+    fig = plt.figure(figsize=figsize)
+    outer = fig.add_gridspec(
+        2,
+        1,
+        height_ratios=[1.0, 0.92],
+        hspace=0.34,
+    )
+    top = outer[0].subgridspec(
+        1,
+        3,
+        width_ratios=[1.2, 1.0, 1.0],
+        wspace=0.18,
+    )
+    bottom = outer[1].subgridspec(
+        1,
+        2,
+        width_ratios=[0.85, 1.35],
+        wspace=0.22,
+    )
+
+    ax_a = fig.add_subplot(top[0, 0], projection="3d")
+    ax_b = fig.add_subplot(top[0, 1])
+    ax_c = fig.add_subplot(top[0, 2])
+    ax_d = fig.add_subplot(bottom[0, 0])
+    ax_e = fig.add_subplot(bottom[0, 1])
+
+    _plot_break_even_phase_diagram_panels(
+        fig,
+        ax_a,
+        ax_b,
+        ax_c,
+        break_even_prepared,
+        plot_title=plot_title,
+        panel_letters=("a", "b", "c"),
+        font_scale=0.92,
+        panel_letter_fontsize=12,
+    )
+    _plot_contribution_decomposition_panels(
+        fig,
+        ax_d,
+        ax_e,
+        contribution_prepared,
+        plot_title=plot_title,
+        panel_letters=("d", "e"),
+        legend_anchor=(0.5, 0.46),
+        panel_letter_fontsize=12,
+    )
+
+    if save_path:
+        if for_latex and not save_path.endswith(".pdf"):
+            save_path = save_path.rsplit(".", 1)[0] + ".pdf"
+        if plot_title:
+            save_path = _add_title_suffix(save_path)
+        os.makedirs(os.path.dirname(save_path), exist_ok=True)
+        fig.savefig(save_path, dpi=300, bbox_inches="tight")
+        _write_break_even_contribution_decomposition_report(
+            break_even_prepared,
+            contribution_prepared,
+            save_path,
+            figsize,
+            axes=(ax_a, ax_b, ax_c, ax_d, ax_e),
+        )
+        plt.close(fig)
+        print(f"Break-even contribution decomposition saved to {save_path}")
     else:
         plt.show()
         plt.close(fig)

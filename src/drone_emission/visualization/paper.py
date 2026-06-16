@@ -29,6 +29,7 @@ Available figures:
     city_gef_distribution,
     city_gef_scatter_components,
     city_gef_context_detour_summary,
+    break_even_contribution_decomposition,
     contribution_decomposition,
     break_even_phase_diagram,
     regions_map,
@@ -104,6 +105,7 @@ CITY_CONTEXT_GROUP_FIGURES = {
 }
 
 REDUCTION_DETOUR_CACHE_VERSION = 2
+BREAK_EVEN_PHASE_CACHE_VERSION = 1
 REDUCTION_DETOUR_SELECTION_METRIC = "total_ebike_lifecycle"
 RETIRED_THRESHOLD_METRIC_COLUMNS = {
     "max_lifecycle_reduction_pct",
@@ -178,6 +180,13 @@ def _file_cache_signature(path):
         "size": stat.st_size,
         "mtime_ns": stat.st_mtime_ns,
     }
+
+
+def _optional_file_cache_signature(path):
+    """Return cache signature for an optional file, or None when absent."""
+    if not path or not os.path.exists(path):
+        return None
+    return _file_cache_signature(path)
 
 
 def _attach_enrichment_columns(stats_df, enriched_df):
@@ -2399,16 +2408,14 @@ def _render_contribution_decomposition(
     )
 
 
-def _render_break_even_phase_diagram(
+def _prepare_break_even_phase_diagram(
     data_dir,
-    out,
-    for_latex,
-    plot_title,
     exp_config,
 ):
-    """Render the lifecycle break-even / phase-diagram paper figure."""
+    """Prepare lifecycle break-even / phase-diagram data with cache."""
     from visualization.emission import (
-        plot_break_even_phase_diagram,
+        CONTRIBUTION_SAMPLE_LIMIT,
+        CONTRIBUTION_SAMPLE_SEED,
         prepare_break_even_phase_diagram_data,
     )
 
@@ -2437,14 +2444,117 @@ def _render_break_even_phase_diagram(
             "panel c will show a placeholder"
         )
 
-    prepared = prepare_break_even_phase_diagram_data(
+    from utils.config import get_cache_dir
+
+    figure_name = "break_even_phase_diagram"
+    gef_path = os.path.join(data_dir, "gef_china.csv")
+    cache_path = os.path.join(
+        get_cache_dir("visualization", "paper"),
+        f"{figure_name}_prepared.pkl",
+    )
+    cache_meta = {
+        "version": BREAK_EVEN_PHASE_CACHE_VERSION,
+        "figure_name": figure_name,
+        "stats_file": _optional_file_cache_signature(stats_path),
+        "gef_file": _optional_file_cache_signature(gef_path),
+        "kappa": _get_ebike_kappa(exp_config),
+        "max_sample_rows": CONTRIBUTION_SAMPLE_LIMIT,
+        "sample_seed": CONTRIBUTION_SAMPLE_SEED,
+    }
+    prepared = None
+    if os.path.exists(cache_path):
+        try:
+            with open(cache_path, "rb") as f:
+                cache = pickle.load(f)
+            if cache.get("meta") == cache_meta:
+                print(f"{figure_name}: loading prepared data cache {cache_path}")
+                prepared = cache["prepared"]
+            else:
+                print(f"{figure_name}: prepared data cache is stale; rebuilding")
+        except Exception as exc:
+            print(f"{figure_name}: failed to load prepared cache ({exc}); rebuilding")
+
+    if prepared is None:
+        prepared = prepare_break_even_phase_diagram_data(
+            data_dir=data_dir,
+            city_df=city_df,
+            exp_config=exp_config,
+        )
+        with open(cache_path, "wb") as f:
+            pickle.dump(
+                {"meta": cache_meta, "prepared": prepared},
+                f,
+                protocol=pickle.HIGHEST_PROTOCOL,
+            )
+        print(f"{figure_name}: wrote prepared data cache {cache_path}")
+
+    return prepared
+
+
+def _render_break_even_phase_diagram(
+    data_dir,
+    out,
+    for_latex,
+    plot_title,
+    exp_config,
+):
+    """Render the lifecycle break-even / phase-diagram paper figure."""
+    from visualization.emission import plot_break_even_phase_diagram
+
+    prepared = _prepare_break_even_phase_diagram(
         data_dir=data_dir,
-        city_df=city_df,
         exp_config=exp_config,
     )
+
     plot_break_even_phase_diagram(
         prepared,
         save_path=os.path.join(out, "break_even_phase_diagram.png"),
+        for_latex=for_latex,
+        plot_title=plot_title,
+    )
+
+
+def _render_break_even_contribution_decomposition(
+    data_dir,
+    out,
+    for_latex,
+    plot_title,
+    city_df,
+    exp_config,
+):
+    """Render the stacked break-even and contribution-decomposition figure."""
+    from visualization.emission import (
+        plot_break_even_contribution_decomposition,
+        prepare_contribution_decomposition_data,
+    )
+
+    named_path = os.path.join(data_dir, "all_sensitivity_named.csv")
+    named_df = None
+    if os.path.exists(named_path):
+        named_df = pd.read_csv(named_path)
+    else:
+        print(
+            "break_even_contribution_decomposition: missing "
+            f"{named_path}; thresholds will fall back to sampled sweeps"
+        )
+
+    break_even_prepared = _prepare_break_even_phase_diagram(
+        data_dir=data_dir,
+        exp_config=exp_config,
+    )
+    contribution_prepared = prepare_contribution_decomposition_data(
+        city_df=city_df,
+        data_dir=data_dir,
+        named_df=named_df,
+        exp_config=exp_config,
+    )
+    if break_even_prepared is None or contribution_prepared is None:
+        return
+
+    plot_break_even_contribution_decomposition(
+        break_even_prepared,
+        contribution_prepared,
+        save_path=os.path.join(out, "break_even_contribution_decomposition.png"),
         for_latex=for_latex,
         plot_title=plot_title,
     )
@@ -2656,7 +2766,7 @@ def render_all(data_dir: str, figures_dir: str, for_latex: bool = False, plot_ti
                     plot_title=plot_title,
                 )
 
-    if _want("break_even_phase_diagram"):
+    if only is not None and _want("break_even_phase_diagram"):
         _render_break_even_phase_diagram(
             data_dir=data_dir,
             out=out,
@@ -2771,6 +2881,7 @@ def render_all(data_dir: str, figures_dir: str, for_latex: bool = False, plot_ti
         "city_gef_distribution",
         "city_gef_scatter_components",
         "city_gef_context_detour_summary",
+        "break_even_contribution_decomposition",
         "contribution_decomposition",
         "scatter_detour_ratio_vs_reduction_by_gef",
         "regions_map_and_gef_scatter",
@@ -2852,7 +2963,8 @@ def render_all(data_dir: str, figures_dir: str, for_latex: bool = False, plot_ti
                 any(_want(figure_name) for figure_name in CITY_CONTEXT_FIGURES)
                 or any(_want(figure_name) for figure_name in CITY_CONTEXT_GROUP_FIGURES)
                 or _want("city_gef_context_detour_summary")
-                or _want("contribution_decomposition")
+                or _want("break_even_contribution_decomposition")
+                or (only is not None and _want("contribution_decomposition"))
                 or _want("top6_reduction_detour_grid")
                 or _want("top6_reduction_detour_grid_low_gef")
                 or _want("top6_reduction_detour_grid_random")
@@ -2865,7 +2977,17 @@ def render_all(data_dir: str, figures_dir: str, for_latex: bool = False, plot_ti
                 city_df = city_df.merge(gef_df, on="province", how="left")
                 city_df = _prepare_reduction_detour_city_stats(city_df)
 
-                if _want("contribution_decomposition"):
+                if _want("break_even_contribution_decomposition"):
+                    _render_break_even_contribution_decomposition(
+                        data_dir=data_dir,
+                        out=out,
+                        for_latex=for_latex,
+                        plot_title=plot_title,
+                        city_df=city_df,
+                        exp_config=exp_config,
+                    )
+
+                if only is not None and _want("contribution_decomposition"):
                     _render_contribution_decomposition(
                         data_dir=data_dir,
                         out=out,
