@@ -1872,7 +1872,7 @@ def plot_regions_map_pathway_scenarios(
     pos = {"a": (1, 1), "b": (1, 2), "c": (3, 1), "d": (3, 2)}
     ax_pairs = []
     curve_axes = [
-        fig.add_subplot(gs[0, 0]),
+        fig.add_subplot(gs[1:5, 0]),
         fig.add_subplot(gs[0, 1:3]),
     ]
 
@@ -1993,6 +1993,10 @@ def plot_regions_map_pathway_scenarios(
         new_pos = [map_box.x0, new_y0, map_box.width, box_box.height]
         ax_box.set_position(new_pos)
         ax_line.set_position(new_pos)
+    e_pos = curve_axes[0].get_position()
+    f_pos = curve_axes[1].get_position()
+    e_width = f_pos.height
+    curve_axes[0].set_position([e_pos.x1 - e_width, e_pos.y0, e_width, e_pos.height])
     for ax, ax_twin in zip(curve_axes, curve_twins):
         if ax_twin is not None:
             ax_twin.set_position(ax.get_position())
