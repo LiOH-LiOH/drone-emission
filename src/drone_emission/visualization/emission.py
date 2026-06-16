@@ -972,18 +972,6 @@ def plot_contribution_decomposition(
         frameon=False,
         bbox_to_anchor=(0.5, 0.98),
     )
-    fig.text(
-        0.5,
-        0.02,
-        (
-            "Sample cap: 2,000 OD pairs per city, stratified by distance; "
-            "all panel values use the national all-e-bike lifecycle baseline."
-        ),
-        ha="center",
-        va="bottom",
-        fontsize=9,
-        color="#555555",
-    )
 
     if save_path:
         if for_latex and not save_path.endswith(".pdf"):
@@ -1726,6 +1714,170 @@ def _keep_longest_finite_run(values: np.ndarray) -> np.ndarray:
     return values
 
 
+def _subsample_axis_indices(length: int, max_points: int) -> np.ndarray:
+    """Return unique near-uniform indices capped at ``max_points``."""
+    if length <= max_points:
+        return np.arange(length, dtype=int)
+    return np.unique(np.linspace(0, length - 1, int(max_points), dtype=int))
+
+
+def _march_tetrahedron_zero_surface(
+    coords: np.ndarray,
+    values: np.ndarray,
+    atol: float = 1e-12,
+) -> list[tuple[np.ndarray, np.ndarray, np.ndarray]]:
+    """Return triangles from one tetrahedron intersected by the zero level."""
+    below = values < -atol
+    above = values > atol
+    if not below.any() or not above.any():
+        return []
+
+    points = []
+    for start, end in ((0, 1), (0, 2), (0, 3), (1, 2), (1, 3), (2, 3)):
+        v0, v1 = values[start], values[end]
+        if (v0 < -atol and v1 > atol) or (v0 > atol and v1 < -atol):
+            t = -v0 / (v1 - v0)
+            points.append(coords[start] + t * (coords[end] - coords[start]))
+        elif abs(v0) <= atol and (v1 < -atol or v1 > atol):
+            points.append(coords[start])
+        elif abs(v1) <= atol and (v0 < -atol or v0 > atol):
+            points.append(coords[end])
+
+    if len(points) < 3:
+        return []
+
+    unique_points = []
+    seen = set()
+    for point in points:
+        key = tuple(round(float(v), 12) for v in point)
+        if key in seen:
+            continue
+        seen.add(key)
+        unique_points.append(point)
+
+    if len(unique_points) == 3:
+        return [(unique_points[0], unique_points[1], unique_points[2])]
+    if len(unique_points) == 4:
+        return [
+            (unique_points[0], unique_points[1], unique_points[2]),
+            (unique_points[0], unique_points[2], unique_points[3]),
+        ]
+    return []
+
+
+def _build_break_even_implicit_surface_mesh(
+    air_distance_grid_km: np.ndarray,
+    detour_ratios: np.ndarray,
+    delta_zero: np.ndarray,
+    delta_slope: np.ndarray,
+    gef_limits: tuple[float, float],
+    distance_points: int = 62,
+    detour_points: int = 62,
+    gef_points: int = 24,
+    max_active_cubes: int = 9000,
+) -> dict | None:
+    """Extract the Delta g = 0 implicit surface with marching tetrahedra."""
+    x_axis_full = np.asarray(air_distance_grid_km, dtype=float)
+    y_axis_full = np.asarray(detour_ratios, dtype=float)
+    delta_zero_full = np.asarray(delta_zero, dtype=float)
+    delta_slope_full = np.asarray(delta_slope, dtype=float)
+
+    x_idx = _subsample_axis_indices(len(x_axis_full), distance_points)
+    y_idx = _subsample_axis_indices(len(y_axis_full), detour_points)
+    x_axis = x_axis_full[x_idx]
+    y_axis = y_axis_full[y_idx]
+    z_axis = np.linspace(float(gef_limits[0]), float(gef_limits[1]), int(gef_points))
+    delta_zero_grid = delta_zero_full[np.ix_(y_idx, x_idx)]
+    delta_slope_grid = delta_slope_full[np.ix_(y_idx, x_idx)]
+    value_grid = (
+        delta_zero_grid[np.newaxis, :, :]
+        + z_axis[:, np.newaxis, np.newaxis] * delta_slope_grid[np.newaxis, :, :]
+    )
+
+    cube_corners = np.array(
+        [
+            [0, 0, 0],
+            [1, 0, 0],
+            [1, 1, 0],
+            [0, 1, 0],
+            [0, 0, 1],
+            [1, 0, 1],
+            [1, 1, 1],
+            [0, 1, 1],
+        ],
+        dtype=int,
+    )
+    tetrahedra = (
+        (0, 5, 1, 6),
+        (0, 1, 2, 6),
+        (0, 2, 3, 6),
+        (0, 3, 7, 6),
+        (0, 7, 4, 6),
+        (0, 4, 5, 6),
+    )
+
+    cube_value_views = [
+        value_grid[
+            iz : iz + len(z_axis) - 1,
+            iy : iy + len(y_axis) - 1,
+            ix : ix + len(x_axis) - 1,
+        ]
+        for ix, iy, iz in cube_corners
+    ]
+    cube_min = np.minimum.reduce(cube_value_views)
+    cube_max = np.maximum.reduce(cube_value_views)
+    cube_finite = np.logical_and.reduce([np.isfinite(view) for view in cube_value_views])
+    active_z, active_y, active_x = np.nonzero(
+        cube_finite & (cube_min <= 0.0) & (cube_max >= 0.0)
+    )
+    if len(active_x) > max_active_cubes:
+        keep = np.linspace(0, len(active_x) - 1, int(max_active_cubes), dtype=int)
+        active_z = active_z[keep]
+        active_y = active_y[keep]
+        active_x = active_x[keep]
+
+    vertices = []
+    triangles = []
+    for z_i, y_i, x_i in zip(active_z, active_y, active_x):
+        xs = (x_axis[x_i], x_axis[x_i + 1])
+        ys = (y_axis[y_i], y_axis[y_i + 1])
+        zs = (z_axis[z_i], z_axis[z_i + 1])
+        corner_coords = np.array(
+            [[xs[ix], ys[iy], zs[iz]] for ix, iy, iz in cube_corners],
+            dtype=float,
+        )
+        corner_values = np.array(
+            [
+                value_grid[z_i + iz, y_i + iy, x_i + ix]
+                for ix, iy, iz in cube_corners
+            ],
+            dtype=float,
+        )
+
+        for tet in tetrahedra:
+            for triangle in _march_tetrahedron_zero_surface(
+                corner_coords[list(tet)],
+                corner_values[list(tet)],
+            ):
+                base = len(vertices)
+                vertices.extend(
+                    tuple(float(v) for v in point) for point in triangle
+                )
+                triangles.append((base, base + 1, base + 2))
+
+    if not triangles:
+        return None
+
+    xyz = np.asarray(vertices, dtype=float)
+    return {
+        "kind": "implicit_surface",
+        "x": xyz[:, 0],
+        "y": xyz[:, 1],
+        "z": xyz[:, 2],
+        "triangles": np.asarray(triangles, dtype=int),
+    }
+
+
 def _build_break_even_contour_surface_mesh(
     air_distance_grid_km: np.ndarray,
     detour_ratios: np.ndarray,
@@ -1847,13 +1999,21 @@ def prepare_break_even_phase_diagram_data(
         delta_slope=delta_slope_grid,
         gef_limits=BREAK_EVEN_GEF_LIMITS,
     )
-    surface_mesh = _build_break_even_contour_surface_mesh(
+    surface_mesh = _build_break_even_implicit_surface_mesh(
         air_distance_grid_km=air_distance_grid_km,
         detour_ratios=detour_ratios,
         delta_zero=delta_zero_grid,
         delta_slope=delta_slope_grid,
         gef_limits=BREAK_EVEN_GEF_LIMITS,
     )
+    if surface_mesh is None:
+        surface_mesh = _build_break_even_contour_surface_mesh(
+            air_distance_grid_km=air_distance_grid_km,
+            detour_ratios=detour_ratios,
+            delta_zero=delta_zero_grid,
+            delta_slope=delta_slope_grid,
+            gef_limits=BREAK_EVEN_GEF_LIMITS,
+        )
     observed_mask = _break_even_observed_mask_data(
         observed_samples=observed["samples"],
         distance_limits=(distance_min, distance_max),
@@ -2075,6 +2235,7 @@ def plot_break_even_phase_diagram(
     ax_a.zaxis.pane.set_alpha(0.0)
 
     heatmap_axes = [ax_b, ax_c]
+    heatmap_detour_limits = (detour_limits[0], min(detour_limits[1], 2.5))
     heatmap_mappable = None
     for ax, gef_panel in zip(heatmap_axes, panel_b["gef_panels"]):
         delta_g = np.asarray(gef_panel["delta_g"], dtype=float)
@@ -2093,7 +2254,6 @@ def plot_break_even_phase_diagram(
             interpolation="nearest",
         )
         heatmap_mappable = im
-        _draw_observed_detour_mask_2d(ax, panel_a["observed_mask"], zorder=5)
         if np.nanmin(delta_g) <= 0.0 <= np.nanmax(delta_g):
             contour = ax.contour(
                 X,
@@ -2106,7 +2266,7 @@ def plot_break_even_phase_diagram(
             )
             ax.clabel(contour, fmt={0.0: "Delta g = 0"}, fontsize=8, inline=True)
         ax.set_xlim(*distance_limits)
-        ax.set_ylim(*detour_limits)
+        ax.set_ylim(*heatmap_detour_limits)
         ax.set_xlabel("Air distance (km)", fontsize=11)
         if ax is ax_b:
             ax.set_ylabel("Detour ratio (road / air)", fontsize=11)
