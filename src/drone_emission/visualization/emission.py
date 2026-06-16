@@ -50,8 +50,8 @@ CONTRIBUTION_COMPONENT_KEYS = tuple(
 )
 BREAK_EVEN_REPRESENTATIVE_AIR_DISTANCE_KM = 2.0
 BREAK_EVEN_CURVE_AIR_DISTANCES_KM = (0.5, 1.0, 2.0, 3.0, 5.0)
-BREAK_EVEN_DETOUR_LIMITS = (1.0, 3.5)
-BREAK_EVEN_GEF_LIMITS = (0.0, 1.0)
+BREAK_EVEN_DETOUR_LIMITS = (1.0, 2.2)
+BREAK_EVEN_GEF_LIMITS = (0.05, 0.80)
 
 
 def _json_safe(value):
@@ -806,16 +806,16 @@ def _format_component_annotation(pp_value: float, kg_value: float) -> str:
 
 def _add_panel_letter(ax, letter: str):
     """Add a bold panel letter just above the top-left corner."""
-    ax.text(
-        -0.10,
-        1.03,
-        letter,
-        transform=ax.transAxes,
-        fontsize=13,
-        fontweight="bold",
-        ha="right",
-        va="bottom",
-    )
+    text_kwargs = {
+        "fontsize": 13,
+        "fontweight": "bold",
+        "ha": "right",
+        "va": "bottom",
+    }
+    if hasattr(ax, "text2D"):
+        ax.text2D(-0.10, 1.03, letter, transform=ax.transAxes, **text_kwargs)
+    else:
+        ax.text(-0.10, 1.03, letter, transform=ax.transAxes, **text_kwargs)
 
 
 def _plot_contribution_waterfall(ax, national: dict):
@@ -1374,6 +1374,244 @@ def _phase_label_position(
     return x, y
 
 
+def _break_even_mesh_coefficients(
+    air_distance_grid_km: np.ndarray,
+    detour_ratios: np.ndarray,
+    ebike_params,
+    drone_params,
+    ebike_scenario,
+    drone_scenario,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Return delta_g intercept and GEF slope over a distance-detour mesh."""
+    from dataclasses import replace
+
+    from sensitivity.vectorized_lca import (
+        compute_drone_per_order_g,
+        compute_ebike_per_order_g,
+    )
+
+    distance_axis = np.asarray(air_distance_grid_km, dtype=float)
+    detour_axis = np.asarray(detour_ratios, dtype=float)
+    distance_mesh, detour_mesh = np.meshgrid(distance_axis, detour_axis)
+    road_distance_mesh = distance_mesh * detour_mesh
+
+    air_distance_flat = distance_mesh.ravel()
+    road_distance_flat = road_distance_mesh.ravel()
+    drone_zero = compute_drone_per_order_g(
+        air_distance_flat,
+        replace(drone_params, e_use=0.0),
+        drone_scenario,
+    )
+    ebike_zero = compute_ebike_per_order_g(
+        road_distance_flat,
+        replace(ebike_params, e_use=0.0),
+        ebike_scenario,
+    )
+    drone_one = compute_drone_per_order_g(
+        air_distance_flat,
+        replace(drone_params, e_use=1.0),
+        drone_scenario,
+    )
+    ebike_one = compute_ebike_per_order_g(
+        road_distance_flat,
+        replace(ebike_params, e_use=1.0),
+        ebike_scenario,
+    )
+
+    delta_zero = (drone_zero - ebike_zero).reshape(distance_mesh.shape)
+    delta_slope = ((drone_one - ebike_one) - (drone_zero - ebike_zero)).reshape(
+        distance_mesh.shape
+    )
+    return delta_zero, delta_slope
+
+
+def _break_even_observed_mask_data(
+    observed_samples: pd.DataFrame,
+    distance_limits: tuple[float, float],
+    detour_limits: tuple[float, float],
+    bin_width_km: float = 0.25,
+) -> dict | None:
+    """Return smoothed observed detour quantile bands for masking."""
+    valid = observed_samples.copy()
+    air_col = "air_distance_km" if "air_distance_km" in valid.columns else "distance_km"
+    detour_col = "detour_ratio" if "detour_ratio" in valid.columns else "detour"
+    if air_col not in valid.columns or detour_col not in valid.columns:
+        return None
+
+    distance_min, distance_max = map(float, distance_limits)
+    detour_min, detour_max = map(float, detour_limits)
+    valid[air_col] = pd.to_numeric(valid[air_col], errors="coerce")
+    valid[detour_col] = pd.to_numeric(valid[detour_col], errors="coerce")
+    valid = valid.dropna(subset=[air_col, detour_col]).copy()
+    valid = valid[
+        (valid[air_col] >= distance_min)
+        & (valid[air_col] <= distance_max)
+        & (valid[detour_col] >= detour_min)
+        & (valid[detour_col] <= detour_max)
+    ]
+    if valid.empty:
+        return None
+
+    from scipy.ndimage import gaussian_filter1d
+
+    x_edges = np.arange(distance_min, distance_max + bin_width_km, bin_width_km)
+    if len(x_edges) < 2:
+        return None
+    x_centers = (x_edges[:-1] + x_edges[1:]) / 2
+    mask_x = np.linspace(distance_min, distance_max, 700)
+    quantile_levels = np.array([0.05, 0.10, 0.25, 0.40, 0.60, 0.75, 0.90, 0.95])
+    quantile_curves = np.full((len(quantile_levels), len(x_centers)), np.nan)
+    quantile_bands = [
+        (None, 0, 0.66),
+        (0, 1, 0.54),
+        (1, 2, 0.42),
+        (2, 3, 0.24),
+        (3, 4, 0.00),
+        (4, 5, 0.24),
+        (5, 6, 0.42),
+        (6, 7, 0.54),
+        (7, None, 0.66),
+    ]
+
+    for x_i, (left, right) in enumerate(zip(x_edges[:-1], x_edges[1:])):
+        if right >= distance_max:
+            mask = (valid[air_col] >= left) & (valid[air_col] <= right)
+        else:
+            mask = (valid[air_col] >= left) & (valid[air_col] < right)
+        values = valid.loc[mask, detour_col].to_numpy(dtype=float)
+        values = values[np.isfinite(values)]
+        if values.size == 0:
+            continue
+        quantile_curves[:, x_i] = np.quantile(values, quantile_levels)
+
+    observed = np.flatnonzero(np.isfinite(quantile_curves[0]))
+    if observed.size <= 1:
+        return None
+
+    smooth_curves = np.full((len(quantile_levels), len(mask_x)), np.nan)
+    for q_i in range(len(quantile_levels)):
+        curve = quantile_curves[q_i]
+        curve = np.interp(x_centers, x_centers[observed], curve[observed])
+        curve = gaussian_filter1d(curve, sigma=1.0, mode="nearest")
+        smooth_curves[q_i] = np.interp(mask_x, x_centers, curve)
+
+    return {
+        "mask_x": mask_x,
+        "smooth_curves": smooth_curves,
+        "quantile_bands": quantile_bands,
+        "detour_limits": (detour_min, detour_max),
+    }
+
+
+def _draw_observed_detour_mask_2d(ax, mask_data: dict, zorder: int = 5):
+    """Draw observed detour quantile mask bands on a 2D axis."""
+    if not mask_data:
+        return
+
+    mask_x = mask_data["mask_x"]
+    smooth_curves = mask_data["smooth_curves"]
+    detour_min, detour_max = mask_data["detour_limits"]
+    for low_i, high_i, alpha in mask_data["quantile_bands"]:
+        if alpha <= 0:
+            continue
+        y_low = (
+            np.full_like(mask_x, detour_min)
+            if low_i is None
+            else smooth_curves[low_i]
+        )
+        y_high = (
+            np.full_like(mask_x, detour_max)
+            if high_i is None
+            else smooth_curves[high_i]
+        )
+        ax.fill_between(
+            mask_x,
+            y_low,
+            y_high,
+            color="white",
+            alpha=alpha,
+            linewidth=0,
+            zorder=zorder,
+        )
+
+
+def _draw_observed_detour_mask_floor_3d(
+    ax,
+    mask_data: dict,
+    z_level: float,
+):
+    """Project observed detour quantile mask bands onto the floor plane."""
+    if not mask_data:
+        return
+
+    mask_x = mask_data["mask_x"]
+    smooth_curves = mask_data["smooth_curves"]
+    detour_min, detour_max = mask_data["detour_limits"]
+
+    for low_i, high_i, alpha in mask_data["quantile_bands"]:
+        if alpha <= 0:
+            continue
+        y_low = (
+            np.full_like(mask_x, detour_min)
+            if low_i is None
+            else smooth_curves[low_i]
+        )
+        y_high = (
+            np.full_like(mask_x, detour_max)
+            if high_i is None
+            else smooth_curves[high_i]
+        )
+        valid = (
+            np.isfinite(mask_x)
+            & np.isfinite(y_low)
+            & np.isfinite(y_high)
+            & (y_high >= y_low)
+        )
+        if not np.any(valid):
+            continue
+        starts = np.flatnonzero(valid & np.concatenate(([True], ~valid[:-1])))
+        ends = np.flatnonzero(valid & np.concatenate((~valid[1:], [True])))
+        for start, end in zip(starts, ends):
+            segment_x = mask_x[start : end + 1]
+            segment_low = y_low[start : end + 1]
+            segment_high = y_high[start : end + 1]
+            if len(segment_x) < 2:
+                continue
+            x_band = np.vstack([segment_x, segment_x])
+            y_band = np.vstack([segment_low, segment_high])
+            z_band = np.full_like(x_band, z_level)
+            ax.plot_surface(
+                x_band,
+                y_band,
+                z_band,
+                color="white",
+                alpha=alpha,
+                linewidth=0,
+                antialiased=False,
+                shade=False,
+            )
+
+
+def _select_break_even_gef_levels(
+    city_gefs: np.ndarray,
+    gef_limits: tuple[float, float],
+) -> list[dict]:
+    """Choose low, median, and high GEF slices for the heatmap panels."""
+    gef_min, gef_max = map(float, gef_limits)
+    values = np.asarray(city_gefs, dtype=float)
+    values = values[np.isfinite(values)]
+    if len(values):
+        selected = np.quantile(values, [0.10, 0.50, 0.90])
+    else:
+        selected = np.array([0.15, 0.40, 0.65], dtype=float)
+    selected = np.clip(selected, gef_min, gef_max)
+    return [
+        {"label": "Low GEF", "gef": float(selected[0])},
+        {"label": "Median GEF", "gef": float(selected[1])},
+        {"label": "High GEF", "gef": float(selected[2])},
+    ]
+
+
 def prepare_break_even_phase_diagram_data(
     data_dir: str = None,
     city_df: pd.DataFrame = None,
@@ -1389,8 +1627,9 @@ def prepare_break_even_phase_diagram_data(
         data_dir: Root data directory for optional observed OD sampling.
         city_df: Optional city-level stats with ``region_key`` and ``gef``.
         exp_config: Experiment config dict for parameter overrides.
-        representative_air_distance_km: Air distance used for panel a.
-        curve_air_distances_km: Air distances used for panel b curves.
+        representative_air_distance_km: Air distance retained for compatibility and
+            surface annotation.
+        curve_air_distances_km: Retained for API compatibility.
         max_sample_rows: Per-city OD sampling cap.
         sample_seed: Deterministic sampling seed.
     """
@@ -1425,6 +1664,7 @@ def prepare_break_even_phase_diagram_data(
             sample_seed=sample_seed,
         )
 
+    distance_min, distance_max = 0.2, 5.0
     detour_min, detour_max = BREAK_EVEN_DETOUR_LIMITS
     sample_detours = pd.to_numeric(
         observed["samples"].get("detour_ratio", pd.Series(dtype=float)),
@@ -1432,73 +1672,74 @@ def prepare_break_even_phase_diagram_data(
     ).to_numpy(dtype=float)
     sample_detours = sample_detours[np.isfinite(sample_detours) & (sample_detours > 0)]
     if len(sample_detours):
-        detour_max = min(
-            6.0,
-            max(detour_max, float(np.nanpercentile(sample_detours, 97.5)) * 1.05),
-        )
-    detour_ratios = np.linspace(detour_min, detour_max, 220)
+        detour_max = max(detour_max, float(np.nanpercentile(sample_detours, 97.5)))
+    detour_ratios = np.linspace(detour_min, detour_max, 160)
 
     gef_min, gef_max = BREAK_EVEN_GEF_LIMITS
-    grid_factors = np.linspace(gef_min, gef_max, 220)
-    rep_zero, rep_slope = _break_even_linear_coefficients(
+    grid_factors = np.linspace(gef_min, gef_max, 160)
+    air_distance_grid_km = np.linspace(distance_min, distance_max, 160)
+    delta_zero_grid, delta_slope_grid = _break_even_mesh_coefficients(
+        air_distance_grid_km=air_distance_grid_km,
         detour_ratios=detour_ratios,
-        air_distance_km=representative_air_distance_km,
         ebike_params=ebike_params,
         drone_params=drone_params,
         ebike_scenario=ebike_scenario,
         drone_scenario=drone_scenario,
     )
-    rep_delta_grid = _break_even_grid_from_coefficients(
-        delta_zero=rep_zero,
-        delta_slope=rep_slope,
-        grid_factors=grid_factors,
+    break_even_surface = _break_even_zero_curve(
+        delta_zero=delta_zero_grid,
+        delta_slope=delta_slope_grid,
+        gef_limits=BREAK_EVEN_GEF_LIMITS,
     )
-
-    curves = []
-    for air_distance_km in curve_air_distances_km:
-        delta_zero, delta_slope = _break_even_linear_coefficients(
-            detour_ratios=detour_ratios,
-            air_distance_km=air_distance_km,
-            ebike_params=ebike_params,
-            drone_params=drone_params,
-            ebike_scenario=ebike_scenario,
-            drone_scenario=drone_scenario,
-        )
-        curves.append(
+    floor_projection_gef = float(np.median(grid_factors))
+    floor_delta_g = delta_zero_grid + floor_projection_gef * delta_slope_grid
+    observed_mask = _break_even_observed_mask_data(
+        observed_samples=observed["samples"],
+        distance_limits=(distance_min, distance_max),
+        detour_limits=(detour_min, detour_max),
+    )
+    city_gefs = np.array(
+        [report["gef"] for report in observed.get("city_reports", [])],
+        dtype=float,
+    )
+    gef_panels = []
+    for level in _select_break_even_gef_levels(city_gefs, BREAK_EVEN_GEF_LIMITS):
+        gef_panels.append(
             {
-                "air_distance_km": float(air_distance_km),
-                "break_even_gef": _break_even_zero_curve(
-                    delta_zero=delta_zero,
-                    delta_slope=delta_slope,
-                    gef_limits=BREAK_EVEN_GEF_LIMITS,
-                ),
+                "label": level["label"],
+                "gef": level["gef"],
+                "delta_g": delta_zero_grid + float(level["gef"]) * delta_slope_grid,
             }
         )
 
     return {
         "axes": {
+            "distance_limits": (float(distance_min), float(distance_max)),
             "detour_limits": (float(detour_min), float(detour_max)),
             "gef_limits": (float(gef_min), float(gef_max)),
         },
         "representative_air_distance_km": float(representative_air_distance_km),
+        "curve_air_distances_km": tuple(float(v) for v in curve_air_distances_km),
+        "air_distance_grid_km": air_distance_grid_km,
         "detour_ratios": detour_ratios,
         "grid_factors": grid_factors,
         "panel_a": {
-            "delta_g": rep_delta_grid,
-            "break_even_gef": _break_even_zero_curve(
-                delta_zero=rep_zero,
-                delta_slope=rep_slope,
-                gef_limits=BREAK_EVEN_GEF_LIMITS,
-            ),
+            "break_even_gef": break_even_surface,
+            "delta_zero": delta_zero_grid,
+            "delta_slope": delta_slope_grid,
+            "floor_delta_g": floor_delta_g,
+            "floor_projection_gef": floor_projection_gef,
+            "observed_mask": observed_mask,
         },
         "panel_b": {
-            "curves": curves,
+            "gef_panels": gef_panels,
         },
         "panel_c": observed,
         "meta": {
             "sample_seed": int(sample_seed),
             "max_sample_rows_per_city": int(max_sample_rows),
             "ebike_kappa": float(ebike_scenario.kappa),
+            "city_gefs": city_gefs,
         },
     }
 
@@ -1506,7 +1747,7 @@ def prepare_break_even_phase_diagram_data(
 def plot_break_even_phase_diagram(
     prepared: Dict,
     save_path: str = None,
-    figsize: tuple = (16, 5.6),
+    figsize: tuple = (18, 5.2),
     for_latex: bool = False,
     plot_title: bool = False,
 ):
@@ -1523,210 +1764,252 @@ def plot_break_even_phase_diagram(
         print("Break-even phase diagram skipped — prepared data missing")
         return
 
+    air_distance_grid_km = prepared["air_distance_grid_km"]
     detour_ratios = prepared["detour_ratios"]
-    grid_factors = prepared["grid_factors"]
     panel_a = prepared["panel_a"]
     panel_b = prepared["panel_b"]
     panel_c = prepared["panel_c"]
     rep_air_distance_km = prepared["representative_air_distance_km"]
     meta = prepared["meta"]
+    distance_limits = prepared["axes"]["distance_limits"]
+    detour_limits = prepared["axes"]["detour_limits"]
+    gef_limits = prepared["axes"]["gef_limits"]
 
     fig = plt.figure(figsize=figsize)
-    gs = fig.add_gridspec(1, 3, width_ratios=[1.15, 1.0, 1.0], wspace=0.28)
-    ax_a = fig.add_subplot(gs[0, 0])
+    gs = fig.add_gridspec(1, 4, width_ratios=[1.2, 1.0, 1.0, 1.0], wspace=0.18)
+    ax_a = fig.add_subplot(gs[0, 0], projection="3d")
     ax_b = fig.add_subplot(gs[0, 1])
     ax_c = fig.add_subplot(gs[0, 2])
+    ax_d = fig.add_subplot(gs[0, 3])
 
-    delta_g_grid = np.asarray(panel_a["delta_g"], dtype=float)
-    panel_c_samples = panel_c["samples"]
-    panel_c_plot = panel_c_samples.copy()
-    if not panel_c_plot.empty:
-        for col in ("detour_ratio", "gef", "delta_g"):
-            panel_c_plot[col] = pd.to_numeric(panel_c_plot[col], errors="coerce")
-        panel_c_plot = panel_c_plot.dropna(subset=["detour_ratio", "gef", "delta_g"])
+    break_even_surface = np.asarray(panel_a["break_even_gef"], dtype=float)
+    floor_delta_g = np.asarray(panel_a["floor_delta_g"], dtype=float)
+    valid_surface = np.isfinite(break_even_surface)
     panel_c_delta = pd.to_numeric(
-        panel_c_plot.get("delta_g", pd.Series(dtype=float)),
+        panel_c["samples"].get("delta_g", pd.Series(dtype=float)),
         errors="coerce",
     ).to_numpy(dtype=float)
-    max_abs = float(np.nanmax(np.abs(delta_g_grid))) if delta_g_grid.size else 0.0
+
+    finite_blocks = [floor_delta_g[np.isfinite(floor_delta_g)]]
+    for gef_panel in panel_b["gef_panels"]:
+        values = np.asarray(gef_panel["delta_g"], dtype=float)
+        finite_blocks.append(values[np.isfinite(values)])
     if len(panel_c_delta):
-        finite_panel_c = panel_c_delta[np.isfinite(panel_c_delta)]
-        if len(finite_panel_c):
-            max_abs = max(max_abs, float(np.nanpercentile(np.abs(finite_panel_c), 98)))
+        finite_blocks.append(panel_c_delta[np.isfinite(panel_c_delta)])
+    finite_delta = np.concatenate([block for block in finite_blocks if len(block)])
+    max_abs = float(np.nanpercentile(np.abs(finite_delta), 98)) if len(finite_delta) else 1.0
     max_abs = max(max_abs, 1.0)
 
-    X, Y = np.meshgrid(detour_ratios, grid_factors)
-    cmap = plt.get_cmap("RdBu_r")
-    norm = TwoSlopeNorm(vmin=-max_abs, vcenter=0.0, vmax=max_abs)
-    surface = ax_a.contourf(
+    delta_cmap = plt.get_cmap("RdBu_r")
+    delta_norm = TwoSlopeNorm(vmin=-max_abs, vcenter=0.0, vmax=max_abs)
+    surface_cmap = plt.get_cmap("viridis")
+    surface_norm = plt.Normalize(vmin=gef_limits[0], vmax=gef_limits[1])
+    X, Y = np.meshgrid(air_distance_grid_km, detour_ratios)
+
+    floor_z = gef_limits[0]
+    ax_a.contourf(
         X,
         Y,
-        delta_g_grid,
-        levels=np.linspace(-max_abs, max_abs, 15),
-        cmap=cmap,
-        norm=norm,
-        extend="both",
+        floor_delta_g,
+        zdir="z",
+        offset=floor_z,
+        levels=np.linspace(-max_abs, max_abs, 17),
+        cmap=delta_cmap,
+        norm=delta_norm,
+        alpha=0.96,
     )
-    if np.nanmin(delta_g_grid) <= 0.0 <= np.nanmax(delta_g_grid):
-        zero_contour = ax_a.contour(
+    _draw_observed_detour_mask_floor_3d(
+        ax=ax_a,
+        mask_data=panel_a["observed_mask"],
+        z_level=floor_z,
+    )
+    if np.any(valid_surface):
+        ax_a.plot_surface(
             X,
             Y,
-            delta_g_grid,
-            levels=[0.0],
-            colors="black",
-            linewidths=1.3,
-        )
-        ax_a.clabel(zero_contour, fmt={0.0: "Delta g = 0"}, fontsize=9, inline=True)
-
-    for label, drone_wins, color in (
-        ("Drone wins", True, "#1f5aa6"),
-        ("E-bike wins", False, "#9f2f2f"),
-    ):
-        pos = _phase_label_position(
-            delta_g_grid=delta_g_grid,
-            detour_ratios=detour_ratios,
-            grid_factors=grid_factors,
-            drone_wins=drone_wins,
-        )
-        if pos is None:
-            continue
-        ax_a.text(
-            pos[0],
-            pos[1],
-            label,
-            fontsize=10,
-            fontweight="bold",
-            ha="center",
-            va="center",
-            color=color,
-            bbox={
-                "boxstyle": "round,pad=0.25",
-                "facecolor": "white",
-                "alpha": 0.78,
-                "edgecolor": "none",
-            },
+            np.ma.masked_invalid(break_even_surface),
+            facecolors=surface_cmap(
+                surface_norm(np.nan_to_num(break_even_surface, nan=floor_z))
+            ),
+            rstride=3,
+            cstride=3,
+            linewidth=0,
+            antialiased=True,
+            shade=False,
+            alpha=0.94,
         )
 
-    colorbar = fig.colorbar(surface, ax=ax_a, fraction=0.05, pad=0.03)
-    colorbar.set_label("Δg = E_drone - E_ebike (g CO2e/order)", fontsize=10)
+    rep_idx = int(np.argmin(np.abs(air_distance_grid_km - rep_air_distance_km)))
+    rep_curve = break_even_surface[:, rep_idx]
+    rep_mask = np.isfinite(rep_curve)
+    if np.any(rep_mask):
+        ax_a.plot(
+            np.full(np.count_nonzero(rep_mask), air_distance_grid_km[rep_idx]),
+            detour_ratios[rep_mask],
+            rep_curve[rep_mask],
+            color="black",
+            linewidth=1.4,
+            linestyle="--",
+        )
 
-    curve_colors = plt.get_cmap("viridis")(
-        np.linspace(0.15, 0.85, len(panel_b["curves"]))
+    ax_a.text2D(
+        0.02,
+        0.90,
+        "Below surface: drone wins",
+        transform=ax_a.transAxes,
+        fontsize=9.5,
+        color="#1f5aa6",
+        bbox={
+            "boxstyle": "round,pad=0.22",
+            "facecolor": "white",
+            "alpha": 0.84,
+            "edgecolor": "none",
+        },
     )
-    for color, curve in zip(curve_colors, panel_b["curves"]):
-        mask = np.isfinite(curve["break_even_gef"])
-        if not np.any(mask):
-            continue
-        ax_b.plot(
-            detour_ratios[mask],
-            curve["break_even_gef"][mask],
-            color=color,
-            linewidth=2.0,
-            label=f"{curve['air_distance_km']:g} km",
-        )
+    ax_a.text2D(
+        0.02,
+        0.82,
+        "Above surface: e-bike wins",
+        transform=ax_a.transAxes,
+        fontsize=9.5,
+        color="#9f2f2f",
+        bbox={
+            "boxstyle": "round,pad=0.22",
+            "facecolor": "white",
+            "alpha": 0.84,
+            "edgecolor": "none",
+        },
+    )
+    ax_a.text2D(
+        0.02,
+        0.74,
+        f"Dashed slice: {air_distance_grid_km[rep_idx]:.1f} km air distance",
+        transform=ax_a.transAxes,
+        fontsize=8.8,
+        color="#444444",
+        bbox={
+            "boxstyle": "round,pad=0.22",
+            "facecolor": "white",
+            "alpha": 0.84,
+            "edgecolor": "none",
+        },
+    )
+    ax_a.text2D(
+        0.02,
+        0.05,
+        panel_c["annotation"],
+        transform=ax_a.transAxes,
+        fontsize=8.4,
+        color="#555555",
+        bbox={
+            "boxstyle": "round,pad=0.22",
+            "facecolor": "white",
+            "alpha": 0.84,
+            "edgecolor": "none",
+        },
+    )
+    ax_a.text2D(
+        0.98,
+        0.05,
+        f"sample cap: {meta['max_sample_rows_per_city']:,}/city; seed {meta['sample_seed']}",
+        transform=ax_a.transAxes,
+        ha="right",
+        fontsize=8.4,
+        color="#555555",
+        bbox={
+            "boxstyle": "round,pad=0.22",
+            "facecolor": "white",
+            "alpha": 0.84,
+            "edgecolor": "none",
+        },
+    )
+    ax_a.set_xlim(*distance_limits)
+    ax_a.set_ylim(*detour_limits)
+    ax_a.set_zlim(*gef_limits)
+    ax_a.set_xlabel("Air distance (km)", fontsize=10.5, labelpad=8)
+    ax_a.set_ylabel("Detour ratio (road / air)", fontsize=10.5, labelpad=8)
+    ax_a.set_zlabel("Break-even GEF* (kg CO2e/kWh)", fontsize=10.5, labelpad=8)
+    ax_a.view_init(elev=28, azim=-128)
+    ax_a.grid(alpha=0.2)
+    ax_a.xaxis.pane.set_alpha(0.0)
+    ax_a.yaxis.pane.set_alpha(0.0)
+    ax_a.zaxis.pane.set_alpha(0.0)
 
-    if not panel_c_plot.empty:
-        ax_c.scatter(
-            panel_c_plot["detour_ratio"],
-            panel_c_plot["gef"],
-            c=panel_c_plot["delta_g"],
-            cmap=cmap,
-            norm=norm,
-            s=10,
-            alpha=0.4,
-            linewidths=0.0,
-            rasterized=True,
+    heatmap_axes = [ax_b, ax_c, ax_d]
+    heatmap_mappable = None
+    for ax, gef_panel in zip(heatmap_axes, panel_b["gef_panels"]):
+        delta_g = np.asarray(gef_panel["delta_g"], dtype=float)
+        im = ax.imshow(
+            delta_g,
+            cmap=delta_cmap,
+            aspect="auto",
+            origin="lower",
+            extent=[
+                distance_limits[0],
+                distance_limits[1],
+                detour_limits[0],
+                detour_limits[1],
+            ],
+            norm=delta_norm,
+            interpolation="bilinear",
         )
-        ref_curve = panel_a["break_even_gef"]
-        ref_mask = np.isfinite(ref_curve)
-        if np.any(ref_mask):
-            ax_c.plot(
-                detour_ratios[ref_mask],
-                ref_curve[ref_mask],
-                color="black",
-                linewidth=1.1,
-                linestyle="--",
-                alpha=0.8,
-                label=f"{rep_air_distance_km:g} km reference",
+        heatmap_mappable = im
+        _draw_observed_detour_mask_2d(ax, panel_a["observed_mask"], zorder=5)
+        if np.nanmin(delta_g) <= 0.0 <= np.nanmax(delta_g):
+            contour = ax.contour(
+                X,
+                Y,
+                delta_g,
+                levels=[0.0],
+                colors="black",
+                linewidths=1.3,
+                zorder=6,
             )
-            ax_c.legend(loc="lower right", frameon=False, fontsize=9)
-        ax_c.text(
-            0.02,
-            0.02,
-            panel_c["annotation"],
-            transform=ax_c.transAxes,
+            ax.clabel(contour, fmt={0.0: "Delta g = 0"}, fontsize=8, inline=True)
+        ax.set_xlim(*distance_limits)
+        ax.set_ylim(*detour_limits)
+        ax.set_xlabel("Air distance (km)", fontsize=11)
+        if ax is ax_b:
+            ax.set_ylabel("Detour ratio (road / air)", fontsize=11)
+        else:
+            ax.set_ylabel("")
+        ax.grid(alpha=0.15)
+        if plot_title:
+            ax.set_title(f"{gef_panel['label']} ({gef_panel['gef']:.2f})", fontsize=11.5)
+        ax.text(
+            0.03,
+            0.97,
+            f"{gef_panel['label']}\nGEF = {gef_panel['gef']:.2f}",
+            transform=ax.transAxes,
             ha="left",
-            va="bottom",
-            fontsize=8.8,
-            color="#555555",
+            va="top",
+            fontsize=9.2,
             bbox={
-                "boxstyle": "round,pad=0.25",
+                "boxstyle": "round,pad=0.22",
                 "facecolor": "white",
-                "alpha": 0.8,
+                "alpha": 0.82,
                 "edgecolor": "none",
             },
-        )
-    else:
-        ax_c.text(
-            0.5,
-            0.5,
-            panel_c["annotation"],
-            transform=ax_c.transAxes,
-            ha="center",
-            va="center",
-            fontsize=10,
-            color="#777777",
+            zorder=7,
         )
 
-    for ax in (ax_a, ax_b, ax_c):
-        ax.set_xlim(*prepared["axes"]["detour_limits"])
-        ax.set_ylim(*prepared["axes"]["gef_limits"])
-        ax.set_xlabel("Detour ratio (road / air)", fontsize=11)
-        ax.set_ylabel("Grid emission factor (kg CO2e/kWh)", fontsize=11)
-        ax.grid(alpha=0.18)
+    colorbar = fig.colorbar(
+        heatmap_mappable,
+        ax=heatmap_axes,
+        fraction=0.022,
+        pad=0.01,
+    )
+    colorbar.set_label("Delta g = E_drone - E_ebike (g CO2e/order)", fontsize=10)
 
     if plot_title:
-        ax_a.set_title(
-            f"Representative phase space ({rep_air_distance_km:g} km air distance)",
-            fontsize=12,
-        )
-        ax_b.set_title("Break-even contours by air distance", fontsize=12)
-        ax_c.set_title("Observed OD/city contexts", fontsize=12)
+        ax_a.set_title("Break-even GEF surface", fontsize=12, pad=10)
 
     _add_panel_letter(ax_a, "a")
     _add_panel_letter(ax_b, "b")
     _add_panel_letter(ax_c, "c")
+    _add_panel_letter(ax_d, "d")
 
-    handles, _ = ax_b.get_legend_handles_labels()
-    if handles:
-        ax_b.legend(
-            title="Air distance",
-            loc="upper left",
-            frameon=False,
-            fontsize=9,
-            title_fontsize=9,
-        )
-    else:
-        ax_b.text(
-            0.5,
-            0.5,
-            "No break-even contour within plotted GEF range",
-            transform=ax_b.transAxes,
-            ha="center",
-            va="center",
-            fontsize=10,
-            color="#777777",
-        )
-    ax_c.text(
-        0.98,
-        0.02,
-        f"sample cap: {meta['max_sample_rows_per_city']:,}/city; seed {meta['sample_seed']}",
-        transform=ax_c.transAxes,
-        ha="right",
-        va="bottom",
-        fontsize=8.5,
-        color="#555555",
-    )
+    plt.tight_layout()
 
     if save_path:
         if for_latex and not save_path.endswith(".pdf"):
