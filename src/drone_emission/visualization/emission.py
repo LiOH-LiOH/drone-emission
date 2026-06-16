@@ -2082,7 +2082,7 @@ def plot_reduction_pct_and_detour_by_distance(
 
 
 def _select_median_trip_emission_sample(od_df: pd.DataFrame):
-    """Return the OD row closest to the median air distance for valid emission rows."""
+    """Return an OD row close to both median air and road distances."""
     required = [
         "distance_km",
         "road_distance_m",
@@ -2112,17 +2112,40 @@ def _select_median_trip_emission_sample(od_df: pd.DataFrame):
     else:
         weighted = pd.DataFrame()
 
-    if weighted.empty:
-        median_air = valid["distance_km"].median()
-    else:
-        cumulative_sales = weighted["annual_sales"].cumsum()
+    def _weighted_or_plain_median(value_col):
+        if weighted.empty:
+            return valid[value_col].median()
+        sorted_weighted = weighted.sort_values(value_col)
+        cumulative_sales = sorted_weighted["annual_sales"].cumsum()
         median_idx = cumulative_sales.searchsorted(cumulative_sales.iloc[-1] / 2.0)
-        median_air = weighted.iloc[min(median_idx, len(weighted) - 1)]["distance_km"]
-    return valid.loc[(valid["distance_km"] - median_air).abs().idxmin()]
+        return sorted_weighted.iloc[min(median_idx, len(sorted_weighted) - 1)][value_col]
+
+    target_air = _weighted_or_plain_median("distance_km")
+    target_road = _weighted_or_plain_median("road_distance_m")
+
+    air_scale = valid["distance_km"].quantile(0.75) - valid["distance_km"].quantile(0.25)
+    road_scale = (
+        valid["road_distance_m"].quantile(0.75)
+        - valid["road_distance_m"].quantile(0.25)
+    )
+    if pd.isna(air_scale) or air_scale <= 0:
+        air_scale = max(float(valid["distance_km"].median()), 1.0)
+    if pd.isna(road_scale) or road_scale <= 0:
+        road_scale = max(float(valid["road_distance_m"].median()), 1.0)
+
+    valid["_median_trip_score"] = (
+        (valid["distance_km"] - target_air).abs() / air_scale
+        + (valid["road_distance_m"] - target_road).abs() / road_scale
+    )
+    valid["_air_tiebreak"] = (valid["distance_km"] - target_air).abs()
+    valid["_road_tiebreak"] = (valid["road_distance_m"] - target_road).abs()
+    return valid.sort_values(
+        ["_median_trip_score", "_air_tiebreak", "_road_tiebreak"]
+    ).iloc[0]
 
 
 def _draw_median_trip_emission_process(ax, od_df: pd.DataFrame, plot_title: bool = False):
-    """Draw cumulative use-phase emission for the median-air-distance delivery leg."""
+    """Draw cumulative use-phase emission for a median-distance delivery leg."""
     sample = _select_median_trip_emission_sample(od_df)
     if sample is None:
         ax.text(
@@ -2359,7 +2382,7 @@ def plot_median_trip_emission_process(
     for_latex: bool = False,
     plot_title: bool = False,
 ):
-    """Cumulative use-phase emission along the median-air-distance delivery leg.
+    """Cumulative use-phase emission along a median-distance delivery leg.
 
     Args:
         od_df: OD pairs DataFrame with distance_km, road_distance_m,
