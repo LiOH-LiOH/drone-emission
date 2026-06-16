@@ -680,8 +680,9 @@ def _summary_bar_limits(
         if share_values.size
         else 100.0,
     )
-    saved_limits = _padded_visible_ylim(saved_values)
-    if saved_limits is None:
+    if saved_values.size:
+        saved_limits = (0.0, max(float(saved_values.max()) * 1.12, 1.0))
+    else:
         saved_limits = (0.0, 1.0)
     return share_limits, saved_limits
 
@@ -1871,7 +1872,7 @@ def plot_regions_map_pathway_scenarios(
     pos = {"a": (1, 1), "b": (1, 2), "c": (3, 1), "d": (3, 2)}
     ax_pairs = []
     curve_axes = [
-        fig.add_subplot(gs[1:5, 0]),
+        fig.add_subplot(gs[0, 0]),
         fig.add_subplot(gs[0, 1:3]),
     ]
 
@@ -1953,7 +1954,7 @@ def plot_regions_map_pathway_scenarios(
             curve_data.get("kappa"),
             "e",
             r"E-bike bundling factor $\kappa$",
-            orientation="vertical",
+            orientation="horizontal",
             saved_limits=curve_saved_limits,
             share_limits=curve_share_limits,
         ),
