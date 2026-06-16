@@ -873,7 +873,7 @@ def _plot_city_context_group_panels(
     """Draw the grouped city context panels into a parent subplot spec."""
     from matplotlib.lines import Line2D
 
-    outer = subplot_spec.subgridspec(1, len(contexts), wspace=0.32)
+    outer = subplot_spec.subgridspec(1, len(contexts), wspace=0.22)
     reduction_axes = []
     absolute_axes = []
     panel_records = []
@@ -890,7 +890,7 @@ def _plot_city_context_group_panels(
         block = outer[0, i].subgridspec(
             2,
             1,
-            height_ratios=[0.72, 1.55],
+            height_ratios=[0.78, 1.20],
             hspace=0.20,
         )
 
@@ -2031,12 +2031,12 @@ def _render_city_gef_context_detour_summary(
 
     reduction_col = _weighted_reduction_column(df_enriched)
 
-    figure_size = (18.0, 18.5)
+    figure_size = (20.0, 17.0)
     fig = plt.figure(figsize=figure_size)
     outer = fig.add_gridspec(
         3,
         1,
-        height_ratios=[1.05, 2.00, 1.05],
+        height_ratios=[1.05, 1.70, 1.05],
         hspace=0.34,
         left=0.06,
         right=0.97,
