@@ -29,6 +29,7 @@ Available figures:
     city_gef_distribution,
     city_gef_scatter_components,
     city_gef_context_detour_summary,
+    contribution_decomposition,
     regions_map,
     regions_map_optimal_drone_share,
     regions_map_city_rank_and_drone_share,
@@ -2356,6 +2357,47 @@ def _render_shanghai_air_road_joint(data_dir, out, for_latex, plot_title):
     )
 
 
+def _render_contribution_decomposition(
+    data_dir,
+    out,
+    for_latex,
+    plot_title,
+    city_df,
+    exp_config,
+):
+    """Render the sampled contribution-decomposition paper figure."""
+    from visualization.emission import (
+        plot_contribution_decomposition,
+        prepare_contribution_decomposition_data,
+    )
+
+    named_path = os.path.join(data_dir, "all_sensitivity_named.csv")
+    named_df = None
+    if os.path.exists(named_path):
+        named_df = pd.read_csv(named_path)
+    else:
+        print(
+            "contribution_decomposition: missing "
+            f"{named_path}; thresholds will fall back to sampled sweeps"
+        )
+
+    prepared = prepare_contribution_decomposition_data(
+        city_df=city_df,
+        data_dir=data_dir,
+        named_df=named_df,
+        exp_config=exp_config,
+    )
+    if prepared is None:
+        return
+
+    plot_contribution_decomposition(
+        prepared,
+        save_path=os.path.join(out, "contribution_decomposition.png"),
+        for_latex=for_latex,
+        plot_title=plot_title,
+    )
+
+
 def _render_distance_comparison_grid(data_dir, out, for_latex, plot_title, extreme):
     """Load Shanghai roadnet data and render a 3x3 distance-comparison grid for one tail."""
     region_key = "shanghai"
@@ -2668,6 +2710,7 @@ def render_all(data_dir: str, figures_dir: str, for_latex: bool = False, plot_ti
         "city_gef_distribution",
         "city_gef_scatter_components",
         "city_gef_context_detour_summary",
+        "contribution_decomposition",
         "scatter_detour_ratio_vs_reduction_by_gef",
         "regions_map_and_gef_scatter",
         *future_gef_figures,
@@ -2748,6 +2791,7 @@ def render_all(data_dir: str, figures_dir: str, for_latex: bool = False, plot_ti
                 any(_want(figure_name) for figure_name in CITY_CONTEXT_FIGURES)
                 or any(_want(figure_name) for figure_name in CITY_CONTEXT_GROUP_FIGURES)
                 or _want("city_gef_context_detour_summary")
+                or _want("contribution_decomposition")
                 or _want("top6_reduction_detour_grid")
                 or _want("top6_reduction_detour_grid_low_gef")
                 or _want("top6_reduction_detour_grid_random")
@@ -2759,6 +2803,16 @@ def render_all(data_dir: str, figures_dir: str, for_latex: bool = False, plot_ti
                 gef_df.columns = ["province", "gef"]
                 city_df = city_df.merge(gef_df, on="province", how="left")
                 city_df = _prepare_reduction_detour_city_stats(city_df)
+
+                if _want("contribution_decomposition"):
+                    _render_contribution_decomposition(
+                        data_dir=data_dir,
+                        out=out,
+                        for_latex=for_latex,
+                        plot_title=plot_title,
+                        city_df=city_df,
+                        exp_config=exp_config,
+                    )
 
                 for figure_name, context in CITY_CONTEXT_FIGURES.items():
                     if not _want(figure_name):

@@ -2,7 +2,10 @@
 排放分析可视化模块
 """
 
+import json
 import os
+import time
+import zlib
 from typing import Dict
 
 import matplotlib.pyplot as plt
@@ -10,6 +13,1067 @@ import numpy as np
 import pandas as pd
 
 from ._utils import _add_title_suffix
+
+
+CONTRIBUTION_SAMPLE_LIMIT = 2000
+CONTRIBUTION_SAMPLE_SEED = 42
+CONTRIBUTION_GEF_BIN_EDGES = np.linspace(0.0, 0.9, 10)
+CONTRIBUTION_COMPONENT_SPECS = (
+    {
+        "key": "production_eol_advantage",
+        "label": "Production / EOL advantage",
+        "short_label": "Production / EOL",
+        "color": "#4C78A8",
+    },
+    {
+        "key": "road_detour_benefit",
+        "label": "Road-detour benefit",
+        "short_label": "Road detour",
+        "color": "#72B7B2",
+    },
+    {
+        "key": "drone_energy_penalty",
+        "label": "Drone energy penalty",
+        "short_label": "Drone energy",
+        "color": "#E45756",
+    },
+    {
+        "key": "bundling_penalty",
+        "label": "Bundling penalty",
+        "short_label": "Bundling",
+        "color": "#B279A2",
+    },
+)
+CONTRIBUTION_COMPONENT_KEYS = tuple(
+    spec["key"] for spec in CONTRIBUTION_COMPONENT_SPECS
+)
+
+
+def _json_safe(value):
+    """Convert numpy/pandas values into JSON-safe Python scalars."""
+    if isinstance(value, dict):
+        return {str(k): _json_safe(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_json_safe(v) for v in value]
+    if isinstance(value, np.ndarray):
+        return [_json_safe(v) for v in value.tolist()]
+    if isinstance(value, (np.floating, float)):
+        if not np.isfinite(value):
+            return None
+        return float(value)
+    if isinstance(value, (np.integer, int)):
+        return int(value)
+    if isinstance(value, (np.bool_, bool)):
+        return bool(value)
+    if pd.isna(value):
+        return None
+    return value
+
+
+def _stable_seed(region_key: str, base_seed: int) -> int:
+    """Return a deterministic per-city seed from a shared base seed."""
+    return int((base_seed + zlib.crc32(region_key.encode("utf-8"))) % (2 ** 32))
+
+
+def _resolve_contribution_od_path(data_dir: str, region_key: str) -> str | None:
+    """Return the first available OD CSV path for a region key."""
+    candidates = []
+    for level in ("city", "district"):
+        for key in (region_key, region_key.lower()):
+            candidates.append(
+                os.path.join(data_dir, level, key, f"{key}_od_pairs.csv")
+            )
+    seen = set()
+    for path in candidates:
+        if path in seen:
+            continue
+        seen.add(path)
+        if os.path.exists(path):
+            return path
+    return None
+
+
+def _distance_strata_codes(distance_values: np.ndarray, n_strata: int = 5) -> np.ndarray:
+    """Return quantile-based distance strata codes for proportional sampling."""
+    if len(distance_values) == 0:
+        return np.zeros(0, dtype=int)
+    series = pd.Series(distance_values, copy=False)
+    finite = series[np.isfinite(series)]
+    if finite.empty or finite.nunique() <= 1:
+        return np.zeros(len(series), dtype=int)
+    q = int(min(n_strata, len(finite), finite.nunique()))
+    if q <= 1:
+        return np.zeros(len(series), dtype=int)
+    try:
+        strata = pd.qcut(finite, q=q, labels=False, duplicates="drop")
+    except ValueError:
+        return np.zeros(len(series), dtype=int)
+    codes = np.zeros(len(series), dtype=int)
+    codes[finite.index.to_numpy(dtype=int)] = strata.to_numpy(dtype=int)
+    return codes
+
+
+def _allocate_stratified_sample_sizes(
+    stratum_sizes: np.ndarray,
+    sample_size: int,
+) -> np.ndarray:
+    """Allocate a proportional sample size across non-empty strata."""
+    sizes = np.asarray(stratum_sizes, dtype=int)
+    total = int(sizes.sum())
+    if total <= 0 or sample_size >= total:
+        return sizes.copy()
+
+    raw = sample_size * sizes / total
+    alloc = np.floor(raw).astype(int)
+    nonempty = np.flatnonzero(sizes > 0)
+    if sample_size >= len(nonempty):
+        zero_alloc = nonempty[alloc[nonempty] == 0]
+        alloc[zero_alloc] = 1
+
+    max_keep = np.where(sizes > 0, sizes, 0)
+    alloc = np.minimum(alloc, max_keep)
+
+    remainder = int(sample_size - alloc.sum())
+    fractions = raw - np.floor(raw)
+
+    while remainder < 0:
+        removable = np.flatnonzero(alloc > 1)
+        if len(removable) == 0:
+            removable = np.flatnonzero(alloc > 0)
+        if len(removable) == 0:
+            break
+        order = removable[np.argsort(fractions[removable])]
+        idx = int(order[0])
+        alloc[idx] -= 1
+        remainder += 1
+
+    while remainder > 0:
+        capacity = sizes - alloc
+        candidates = np.flatnonzero(capacity > 0)
+        if len(candidates) == 0:
+            break
+        order = candidates[np.argsort(-fractions[candidates])]
+        idx = int(order[0])
+        alloc[idx] += 1
+        remainder -= 1
+
+    return alloc
+
+
+def _sample_city_valid_rows(
+    valid_df: pd.DataFrame,
+    sample_distance_km: np.ndarray,
+    region_key: str,
+    max_sample_rows: int,
+    sample_seed: int,
+) -> tuple[pd.DataFrame, dict]:
+    """Sample valid OD rows with proportional distance stratification."""
+    total_rows = len(valid_df)
+    if total_rows == 0:
+        return valid_df.copy(), {
+            "valid_rows": 0,
+            "sampled_rows": 0,
+            "distance_strata": [],
+            "sample_seed": int(sample_seed),
+        }
+
+    if total_rows <= max_sample_rows:
+        sampled = valid_df.copy()
+        sampled["_sample_expansion_weight"] = 1.0
+        sampled["_sample_stratum"] = _distance_strata_codes(sample_distance_km)
+        stratum_counts = (
+            sampled["_sample_stratum"].value_counts().sort_index().to_dict()
+        )
+        return sampled, {
+            "valid_rows": int(total_rows),
+            "sampled_rows": int(total_rows),
+            "distance_strata": [
+                {
+                    "stratum": int(code),
+                    "valid_rows": int(count),
+                    "sampled_rows": int(count),
+                    "expansion_weight": 1.0,
+                }
+                for code, count in stratum_counts.items()
+            ],
+            "sample_seed": int(sample_seed),
+        }
+
+    strata = _distance_strata_codes(sample_distance_km)
+    sampled_parts = []
+    stratum_report = []
+    rng = np.random.default_rng(_stable_seed(region_key, sample_seed))
+    unique_codes = np.array(sorted(pd.unique(strata)), dtype=int)
+    stratum_sizes = np.array([(strata == code).sum() for code in unique_codes], dtype=int)
+    allocations = _allocate_stratified_sample_sizes(stratum_sizes, max_sample_rows)
+
+    for code, stratum_size, draw_size in zip(unique_codes, stratum_sizes, allocations):
+        indices = np.flatnonzero(strata == code)
+        if draw_size <= 0 or len(indices) == 0:
+            stratum_report.append(
+                {
+                    "stratum": int(code),
+                    "valid_rows": int(stratum_size),
+                    "sampled_rows": 0,
+                    "expansion_weight": None,
+                }
+            )
+            continue
+        if draw_size >= len(indices):
+            chosen = indices
+        else:
+            chosen = np.sort(rng.choice(indices, size=int(draw_size), replace=False))
+        part = valid_df.iloc[chosen].copy()
+        expansion_weight = float(stratum_size / len(chosen))
+        part["_sample_expansion_weight"] = expansion_weight
+        part["_sample_stratum"] = int(code)
+        sampled_parts.append(part)
+        stratum_report.append(
+            {
+                "stratum": int(code),
+                "valid_rows": int(stratum_size),
+                "sampled_rows": int(len(chosen)),
+                "expansion_weight": expansion_weight,
+            }
+        )
+
+    sampled = pd.concat(sampled_parts, ignore_index=True) if sampled_parts else valid_df.iloc[0:0].copy()
+    return sampled, {
+        "valid_rows": int(total_rows),
+        "sampled_rows": int(len(sampled)),
+        "distance_strata": stratum_report,
+        "sample_seed": int(sample_seed),
+    }
+
+
+def _resolve_threshold_from_named(
+    named_df: pd.DataFrame,
+    region_key: str,
+    baseline_kappa: float,
+    stats_kappa: float | None = None,
+) -> tuple[float | None, dict]:
+    """Return the preferred precomputed optimal-mixed threshold for a city."""
+    if named_df is None or named_df.empty:
+        return None, {"source": "missing_named_csv"}
+
+    subset = named_df.copy()
+    for col in ("kappa", "gef_mult", "threshold_km"):
+        subset[col] = pd.to_numeric(subset[col], errors="coerce")
+    subset = subset[
+        (subset["region_key"] == region_key)
+        & (subset["strategy"] == "optimal_mixed")
+        & np.isclose(subset["gef_mult"], 1.0)
+        & subset["threshold_km"].notna()
+    ]
+    if subset.empty:
+        return None, {"source": "missing_city_threshold"}
+
+    candidate_specs = [("configured_kappa", baseline_kappa)]
+    if stats_kappa is not None and np.isfinite(stats_kappa):
+        if not np.isclose(stats_kappa, baseline_kappa):
+            candidate_specs.append(("stats_kappa", float(stats_kappa)))
+
+    unique_kappas = np.array(sorted(subset["kappa"].dropna().unique()), dtype=float)
+    if len(unique_kappas) == 1:
+        only_kappa = float(unique_kappas[0])
+        if not any(np.isclose(only_kappa, value) for _, value in candidate_specs):
+            candidate_specs.append(("only_available_kappa", only_kappa))
+
+    for source, kappa_value in candidate_specs:
+        matched = subset[np.isclose(subset["kappa"], kappa_value)]
+        if matched.empty:
+            continue
+        threshold = float(matched.iloc[0]["threshold_km"])
+        return threshold, {
+            "source": source,
+            "matched_kappa": float(kappa_value),
+            "available_kappas": unique_kappas.tolist(),
+        }
+
+    return None, {
+        "source": "no_matching_kappa",
+        "available_kappas": unique_kappas.tolist(),
+    }
+
+
+def _sample_threshold_sweep(
+    road_km: np.ndarray,
+    ebike_total_g: np.ndarray,
+    drone_total_g: np.ndarray,
+) -> tuple[float, dict]:
+    """Select the sampled optimal threshold using the standard vectorized sweep."""
+    from sensitivity.vectorized_lca import threshold_sweep_km
+
+    thresholds = threshold_sweep_km(road_km)
+    best_total = None
+    best_threshold = float("inf")
+    for threshold in thresholds:
+        use_drone = road_km >= threshold
+        mixed_total = float(np.where(use_drone, drone_total_g, ebike_total_g).sum())
+        if best_total is None or mixed_total < best_total:
+            best_total = mixed_total
+            best_threshold = float(threshold)
+    return best_threshold, {
+        "source": "sampled_threshold_sweep",
+        "tested_thresholds_km": thresholds.tolist(),
+    }
+
+
+def _contribution_row_template(label: str) -> dict:
+    """Create a zero-filled aggregate row for a plotted contribution group."""
+    row = {"label": label, "sampled_drone_rows": 0}
+    for key in CONTRIBUTION_COMPONENT_KEYS:
+        row[f"{key}_kg"] = 0.0
+        row[f"{key}_pp"] = 0.0
+    row["total_net_kg"] = 0.0
+    row["total_net_pp"] = 0.0
+    return row
+
+
+def _aggregate_component_rows(
+    assigned_df: pd.DataFrame,
+    group_col: str,
+    labels: list[str],
+    national_baseline_kg: float,
+) -> list[dict]:
+    """Aggregate per-row sampled contributions into labeled component rows."""
+    rows = []
+    for label in labels:
+        row = _contribution_row_template(label)
+        group = assigned_df[assigned_df[group_col] == label]
+        row["sampled_drone_rows"] = int(len(group))
+        for key in CONTRIBUTION_COMPONENT_KEYS:
+            kg_value = float(group[f"{key}_kg"].sum()) if not group.empty else 0.0
+            row[f"{key}_kg"] = kg_value
+            row[f"{key}_pp"] = (
+                kg_value / national_baseline_kg * 100.0
+                if national_baseline_kg > 0
+                else 0.0
+            )
+        row["total_net_kg"] = float(sum(row[f"{key}_kg"] for key in CONTRIBUTION_COMPONENT_KEYS))
+        row["total_net_pp"] = float(sum(row[f"{key}_pp"] for key in CONTRIBUTION_COMPONENT_KEYS))
+        rows.append(row)
+    return rows
+
+
+def prepare_contribution_decomposition_data(
+    city_df: pd.DataFrame,
+    data_dir: str,
+    named_df: pd.DataFrame = None,
+    exp_config: dict = None,
+    max_sample_rows: int = CONTRIBUTION_SAMPLE_LIMIT,
+    sample_seed: int = CONTRIBUTION_SAMPLE_SEED,
+) -> Dict:
+    """Prepare sampled current-mechanism contribution data for the paper figure."""
+    from dataclasses import replace
+
+    from emission.cal_single_delivery import (
+        create_drone_params,
+        create_ebike_params,
+        get_emission_params,
+    )
+    from sensitivity.vectorized_lca import (
+        DroneScenario,
+        EbikeScenario,
+        compute_drone_per_order_parts_g,
+        compute_ebike_per_order_parts_g,
+    )
+
+    if exp_config is None:
+        print("Contribution decomposition skipped — exp_config missing")
+        return None
+
+    start_time = time.perf_counter()
+    city_rows = city_df.copy()
+    if "region_level" in city_rows.columns:
+        city_rows = city_rows[city_rows["region_level"] == "city"].copy()
+
+    required_city_cols = {
+        "region_key",
+        "region_name_en",
+        "province",
+        "total_ebike_lifecycle",
+        "gef",
+    }
+    missing_city_cols = sorted(required_city_cols - set(city_rows.columns))
+    if missing_city_cols:
+        print(
+            "Contribution decomposition skipped — city stats missing columns "
+            f"{missing_city_cols}"
+        )
+        return None
+
+    for col in ("total_ebike_lifecycle", "gef", "ebike_kappa"):
+        if col in city_rows.columns:
+            city_rows[col] = pd.to_numeric(city_rows[col], errors="coerce")
+    city_rows = city_rows[
+        city_rows["total_ebike_lifecycle"].notna()
+        & (city_rows["total_ebike_lifecycle"] > 0)
+        & city_rows["gef"].notna()
+    ].copy()
+    if city_rows.empty:
+        print("Contribution decomposition skipped — no eligible city rows")
+        return None
+
+    baseline_kappa = float(getattr(create_ebike_params(exp_config), "kappa", 1.0))
+    emission_cfg = get_emission_params(exp_config)
+    ebike_params = create_ebike_params(exp_config)
+    drone_params = create_drone_params(exp_config)
+    ebike_actual_scenario = EbikeScenario(
+        kappa=baseline_kappa,
+        rider_weight=emission_cfg["rider_weight"],
+        payload_kg=emission_cfg["payload_kg"],
+    )
+    ebike_no_bundle_scenario = EbikeScenario(
+        kappa=1.0,
+        rider_weight=emission_cfg["rider_weight"],
+        payload_kg=emission_cfg["payload_kg"],
+    )
+    drone_actual_scenario = DroneScenario(
+        payload_kg=emission_cfg["payload_kg"],
+    )
+
+    assigned_frames = []
+    city_reports = []
+    skipped_cities = []
+    national_components_kg = {key: 0.0 for key in CONTRIBUTION_COMPONENT_KEYS}
+    national_baseline_kg = 0.0
+
+    for city_row in city_rows.sort_values("region_key").itertuples(index=False):
+        region_key = str(city_row.region_key)
+        od_path = _resolve_contribution_od_path(data_dir, region_key)
+        if od_path is None:
+            skipped_cities.append(
+                {"region_key": region_key, "reason": "missing_od_csv"}
+            )
+            continue
+
+        od_df = pd.read_csv(
+            od_path,
+            usecols=lambda col: col in {"distance_km", "annual_sales", "road_distance_m"},
+        )
+        if "distance_km" not in od_df.columns or "annual_sales" not in od_df.columns:
+            skipped_cities.append(
+                {
+                    "region_key": region_key,
+                    "reason": "missing_required_od_columns",
+                    "columns_present": sorted(od_df.columns.tolist()),
+                }
+            )
+            continue
+
+        valid = od_df.copy()
+        valid["distance_km"] = pd.to_numeric(valid["distance_km"], errors="coerce")
+        valid["annual_sales"] = pd.to_numeric(valid["annual_sales"], errors="coerce")
+        has_road_distance = "road_distance_m" in valid.columns
+        if has_road_distance:
+            valid["road_distance_m"] = pd.to_numeric(
+                valid["road_distance_m"], errors="coerce"
+            )
+            valid["_road_km"] = valid["road_distance_m"] / 1000.0
+        else:
+            valid["_road_km"] = valid["distance_km"]
+
+        valid = valid[
+            valid["distance_km"].notna()
+            & (valid["distance_km"] > 0)
+            & valid["_road_km"].notna()
+            & (valid["_road_km"] > 0)
+            & valid["annual_sales"].notna()
+            & (valid["annual_sales"] > 0)
+        ].copy()
+        if valid.empty:
+            skipped_cities.append(
+                {"region_key": region_key, "reason": "no_valid_od_rows"}
+            )
+            continue
+
+        sample_distance_km = (
+            valid["_road_km"].to_numpy(dtype=float)
+            if has_road_distance
+            else valid["distance_km"].to_numpy(dtype=float)
+        )
+        sampled, sample_meta = _sample_city_valid_rows(
+            valid_df=valid,
+            sample_distance_km=sample_distance_km,
+            region_key=region_key,
+            max_sample_rows=max_sample_rows,
+            sample_seed=sample_seed,
+        )
+        if sampled.empty:
+            skipped_cities.append(
+                {"region_key": region_key, "reason": "sampling_returned_no_rows"}
+            )
+            continue
+
+        gef = float(city_row.gef)
+        ebike_pp = replace(ebike_params, e_use=gef)
+        drone_pp = replace(drone_params, e_use=gef)
+        road_km = sampled["_road_km"].to_numpy(dtype=float)
+        air_km = sampled["distance_km"].to_numpy(dtype=float)
+        annual_sales = sampled["annual_sales"].to_numpy(dtype=float)
+        expansion_weight = sampled["_sample_expansion_weight"].to_numpy(dtype=float)
+        annual_weight = annual_sales * expansion_weight
+
+        ebike_actual_parts = compute_ebike_per_order_parts_g(
+            road_km,
+            ebike_pp,
+            ebike_actual_scenario,
+        )
+        ebike_no_bundle_road_parts = compute_ebike_per_order_parts_g(
+            road_km,
+            ebike_pp,
+            ebike_no_bundle_scenario,
+        )
+        ebike_no_bundle_air_parts = compute_ebike_per_order_parts_g(
+            air_km,
+            ebike_pp,
+            ebike_no_bundle_scenario,
+        )
+        drone_actual_parts = compute_drone_per_order_parts_g(
+            air_km,
+            drone_pp,
+            drone_actual_scenario,
+        )
+
+        stats_kappa = getattr(city_row, "ebike_kappa", np.nan)
+        threshold_km, threshold_meta = _resolve_threshold_from_named(
+            named_df=named_df,
+            region_key=region_key,
+            baseline_kappa=baseline_kappa,
+            stats_kappa=stats_kappa,
+        )
+        if threshold_km is None:
+            threshold_km, threshold_meta = _sample_threshold_sweep(
+                road_km=road_km,
+                ebike_total_g=ebike_actual_parts["total_g"],
+                drone_total_g=drone_actual_parts["total_g"],
+            )
+
+        use_drone = road_km >= threshold_km
+        detour_ratio = road_km / air_km
+
+        production_eol_advantage_g = (
+            ebike_no_bundle_air_parts["production_g"]
+            + ebike_no_bundle_air_parts["end_of_life_g"]
+            - drone_actual_parts["production_g"]
+            - drone_actual_parts["end_of_life_g"]
+        )
+        road_detour_benefit_g = (
+            ebike_no_bundle_road_parts["total_g"]
+            - ebike_no_bundle_air_parts["total_g"]
+        )
+        drone_energy_penalty_g = (
+            ebike_no_bundle_air_parts["use_g"] - drone_actual_parts["use_g"]
+        )
+        bundling_penalty_g = (
+            ebike_actual_parts["total_g"] - ebike_no_bundle_road_parts["total_g"]
+        )
+        net_saving_g = ebike_actual_parts["total_g"] - drone_actual_parts["total_g"]
+        sum_check_g = (
+            production_eol_advantage_g
+            + road_detour_benefit_g
+            + drone_energy_penalty_g
+            + bundling_penalty_g
+            - net_saving_g
+        )
+
+        assigned = sampled.loc[use_drone].copy()
+        assigned["_road_km"] = road_km[use_drone]
+        assigned["_air_km"] = air_km[use_drone]
+        assigned["_detour_ratio"] = detour_ratio[use_drone]
+        assigned["_annual_weight"] = annual_weight[use_drone]
+        for key, values in (
+            ("production_eol_advantage", production_eol_advantage_g),
+            ("road_detour_benefit", road_detour_benefit_g),
+            ("drone_energy_penalty", drone_energy_penalty_g),
+            ("bundling_penalty", bundling_penalty_g),
+        ):
+            assigned[f"{key}_kg"] = values[use_drone] * annual_weight[use_drone] / 1000.0
+        assigned["net_saving_kg"] = net_saving_g[use_drone] * annual_weight[use_drone] / 1000.0
+        assigned["sum_check_error_g"] = sum_check_g[use_drone]
+        assigned["gef"] = gef
+        assigned["region_key"] = region_key
+        assigned["region_name_en"] = str(city_row.region_name_en)
+        assigned["city_baseline_kg"] = float(city_row.total_ebike_lifecycle)
+
+        city_components_kg = {
+            key: float(assigned[f"{key}_kg"].sum())
+            for key in CONTRIBUTION_COMPONENT_KEYS
+        }
+        city_net_kg = float(sum(city_components_kg.values()))
+        city_baseline_kg = float(city_row.total_ebike_lifecycle)
+        city_reports.append(
+            {
+                "region_key": region_key,
+                "region_name_en": str(city_row.region_name_en),
+                "province": str(city_row.province),
+                "gef": gef,
+                "baseline_ebike_lifecycle_kg": city_baseline_kg,
+                "threshold_km": float(threshold_km),
+                "threshold_meta": threshold_meta,
+                "od_path": od_path,
+                "has_road_distance_m": bool(has_road_distance),
+                "sample": sample_meta,
+                "drone_assigned_sampled_rows": int(use_drone.sum()),
+                "sampled_drone_ratio_pct": float(use_drone.mean() * 100.0),
+                "component_kg": city_components_kg,
+                "component_pct_points": {
+                    key: (
+                        city_components_kg[key] / city_baseline_kg * 100.0
+                        if city_baseline_kg > 0
+                        else 0.0
+                    )
+                    for key in CONTRIBUTION_COMPONENT_KEYS
+                },
+                "net_saving_kg": city_net_kg,
+                "net_saving_pct_points": (
+                    city_net_kg / city_baseline_kg * 100.0
+                    if city_baseline_kg > 0
+                    else 0.0
+                ),
+                "sum_check": {
+                    "max_abs_error_g_per_order": float(
+                        np.abs(sum_check_g[use_drone]).max()
+                    )
+                    if use_drone.any()
+                    else 0.0,
+                    "aggregate_error_kg": float(
+                        assigned["sum_check_error_g"].mul(assigned["_annual_weight"]).sum()
+                        / 1000.0
+                    )
+                    if not assigned.empty
+                    else 0.0,
+                },
+            }
+        )
+
+        national_baseline_kg += city_baseline_kg
+        for key, value in city_components_kg.items():
+            national_components_kg[key] += value
+        if not assigned.empty:
+            assigned_frames.append(
+                assigned[
+                    [
+                        "region_key",
+                        "region_name_en",
+                        "gef",
+                        "_detour_ratio",
+                        "_annual_weight",
+                        "city_baseline_kg",
+                        "net_saving_kg",
+                        "sum_check_error_g",
+                        *[f"{key}_kg" for key in CONTRIBUTION_COMPONENT_KEYS],
+                    ]
+                ].copy()
+            )
+
+    if national_baseline_kg <= 0 or not city_reports:
+        print("Contribution decomposition skipped — no sampled city contributions available")
+        return None
+
+    assigned_df = (
+        pd.concat(assigned_frames, ignore_index=True)
+        if assigned_frames
+        else pd.DataFrame(
+            columns=[
+                "region_key",
+                "region_name_en",
+                "gef",
+                "_detour_ratio",
+                "_annual_weight",
+                "city_baseline_kg",
+                "net_saving_kg",
+                "sum_check_error_g",
+                *[f"{key}_kg" for key in CONTRIBUTION_COMPONENT_KEYS],
+            ]
+        )
+    )
+
+    national = {
+        f"{key}_kg": float(national_components_kg[key])
+        for key in CONTRIBUTION_COMPONENT_KEYS
+    }
+    for key in CONTRIBUTION_COMPONENT_KEYS:
+        national[f"{key}_pp"] = (
+            national[f"{key}_kg"] / national_baseline_kg * 100.0
+            if national_baseline_kg > 0
+            else 0.0
+        )
+    national["baseline_ebike_lifecycle_kg"] = float(national_baseline_kg)
+    national["total_net_kg"] = float(
+        sum(national[f"{key}_kg"] for key in CONTRIBUTION_COMPONENT_KEYS)
+    )
+    national["total_net_pp"] = float(
+        sum(national[f"{key}_pp"] for key in CONTRIBUTION_COMPONENT_KEYS)
+    )
+    national["drone_assigned_sampled_rows"] = int(len(assigned_df))
+    national["sum_check"] = {
+        "max_abs_error_g_per_order": float(np.abs(assigned_df["sum_check_error_g"]).max())
+        if not assigned_df.empty
+        else 0.0,
+        "aggregate_error_kg": float(
+            assigned_df["sum_check_error_g"].mul(assigned_df["_annual_weight"]).sum()
+            / 1000.0
+        )
+        if not assigned_df.empty
+        else 0.0,
+    }
+
+    if assigned_df.empty:
+        gef_rows = []
+        detour_rows = []
+    else:
+        gef_labels = [f"{edge:.1f}" for edge in CONTRIBUTION_GEF_BIN_EDGES[1:]]
+        processed_city_df = pd.DataFrame(city_reports)
+        processed_city_df["gef_bin"] = pd.cut(
+            pd.to_numeric(processed_city_df["gef"], errors="coerce"),
+            bins=CONTRIBUTION_GEF_BIN_EDGES,
+            labels=gef_labels,
+            include_lowest=True,
+            right=True,
+        )
+        assigned_df["gef_bin"] = pd.cut(
+            pd.to_numeric(assigned_df["gef"], errors="coerce"),
+            bins=CONTRIBUTION_GEF_BIN_EDGES,
+            labels=gef_labels,
+            include_lowest=True,
+            right=True,
+        )
+        present_gef_labels = [
+            label
+            for label in gef_labels
+            if (processed_city_df["gef_bin"] == label).any()
+        ]
+        gef_rows = _aggregate_component_rows(
+            assigned_df=assigned_df,
+            group_col="gef_bin",
+            labels=present_gef_labels,
+            national_baseline_kg=national_baseline_kg,
+        )
+
+        detour_codes = pd.qcut(
+            assigned_df["_detour_ratio"],
+            q=min(4, assigned_df["_detour_ratio"].nunique()),
+            labels=False,
+            duplicates="drop",
+        )
+        assigned_df["detour_quartile"] = detour_codes.map(
+            lambda code: f"Q{int(code) + 1}" if pd.notna(code) else None
+        )
+        detour_labels = [
+            f"Q{i + 1}"
+            for i in range(int(detour_codes.max()) + 1 if len(detour_codes) else 0)
+        ]
+        detour_rows = _aggregate_component_rows(
+            assigned_df=assigned_df,
+            group_col="detour_quartile",
+            labels=detour_labels,
+            national_baseline_kg=national_baseline_kg,
+        )
+
+    runtime_seconds = time.perf_counter() - start_time
+    return {
+        "component_specs": list(CONTRIBUTION_COMPONENT_SPECS),
+        "sampling": {
+            "max_sample_rows_per_city": int(max_sample_rows),
+            "sample_seed": int(sample_seed),
+            "distance_stratification": "road_distance_m if available else distance_km",
+        },
+        "runtime": {
+            "prep_runtime_seconds": float(runtime_seconds),
+            "city_count_input": int(len(city_rows)),
+            "city_count_processed": int(len(city_reports)),
+            "city_count_skipped": int(len(skipped_cities)),
+        },
+        "national": national,
+        "by_gef_bin": gef_rows,
+        "by_detour_quartile": detour_rows,
+        "cities": city_reports,
+        "skipped_cities": skipped_cities,
+    }
+
+
+def _format_component_annotation(pp_value: float, kg_value: float) -> str:
+    """Format a pp / kt annotation for on-figure labels."""
+    return f"{pp_value:+.2f} pp\n({kg_value / 1e6:+.2f} kt)"
+
+
+def _add_panel_letter(ax, letter: str):
+    """Add a bold panel letter just above the top-left corner."""
+    ax.text(
+        -0.10,
+        1.03,
+        letter,
+        transform=ax.transAxes,
+        fontsize=13,
+        fontweight="bold",
+        ha="right",
+        va="bottom",
+    )
+
+
+def _plot_contribution_waterfall(ax, national: dict):
+    """Draw the national contribution waterfall."""
+    x = np.arange(len(CONTRIBUTION_COMPONENT_SPECS) + 1, dtype=float)
+    cumulative = 0.0
+    xticklabels = []
+    for idx, spec in enumerate(CONTRIBUTION_COMPONENT_SPECS):
+        value = float(national[f"{spec['key']}_pp"])
+        start = cumulative
+        end = cumulative + value
+        bottom = min(start, end)
+        height = abs(value)
+        ax.bar(
+            x[idx],
+            height,
+            bottom=bottom,
+            width=0.72,
+            color=spec["color"],
+            edgecolor="white",
+            linewidth=0.8,
+        )
+        ax.text(
+            x[idx],
+            end + (0.12 if value >= 0 else -0.12),
+            _format_component_annotation(
+                pp_value=value,
+                kg_value=float(national[f"{spec['key']}_kg"]),
+            ),
+            ha="center",
+            va="bottom" if value >= 0 else "top",
+            fontsize=9,
+        )
+        if idx < len(CONTRIBUTION_COMPONENT_SPECS) - 1:
+            ax.plot(
+                [x[idx] + 0.36, x[idx] + 0.64],
+                [end, end],
+                color="#666666",
+                linewidth=0.9,
+            )
+        cumulative = end
+        xticklabels.append(spec["short_label"])
+
+    total_pp = float(national["total_net_pp"])
+    total_bottom = min(0.0, total_pp)
+    ax.bar(
+        x[-1],
+        abs(total_pp),
+        bottom=total_bottom,
+        width=0.72,
+        color="#2F4B7C",
+        edgecolor="white",
+        linewidth=0.8,
+    )
+    ax.text(
+        x[-1],
+        total_pp + (0.12 if total_pp >= 0 else -0.12),
+        _format_component_annotation(
+            pp_value=total_pp,
+            kg_value=float(national["total_net_kg"]),
+        ),
+        ha="center",
+        va="bottom" if total_pp >= 0 else "top",
+        fontsize=9,
+        fontweight="bold",
+    )
+    xticklabels.append("Net reduction")
+
+    ax.axhline(0, color="#555555", linewidth=0.8)
+    ax.set_xticks(x, xticklabels, rotation=0)
+    ax.set_ylabel("Contribution to national all-e-bike baseline (pp)", fontsize=12)
+    ax.grid(axis="y", alpha=0.25)
+    ax.set_xlim(-0.6, len(x) - 0.4)
+
+
+def _plot_diverging_component_bars(ax, rows: list[dict], panel_xlabel: str):
+    """Draw diverging stacked horizontal component bars for grouped rows."""
+    if not rows:
+        ax.text(
+            0.5,
+            0.5,
+            "no sampled drone-assigned rows",
+            transform=ax.transAxes,
+            ha="center",
+            va="center",
+            fontsize=10,
+            color="#777777",
+        )
+        ax.tick_params(left=False, bottom=False, labelleft=False, labelbottom=False)
+        return
+
+    y = np.arange(len(rows), dtype=float)
+    for idx, row in enumerate(rows):
+        pos_acc = 0.0
+        neg_acc = 0.0
+        for spec in CONTRIBUTION_COMPONENT_SPECS:
+            value = float(row[f"{spec['key']}_pp"])
+            if value >= 0:
+                left = pos_acc
+                width = value
+                pos_acc += value
+            else:
+                left = neg_acc + value
+                width = -value
+                neg_acc += value
+            ax.barh(
+                y[idx],
+                width,
+                left=left,
+                height=0.72,
+                color=spec["color"],
+                edgecolor="white",
+                linewidth=0.8,
+            )
+        total_pp = float(row["total_net_pp"])
+        total_kg = float(row["total_net_kg"])
+        x_text = total_pp + (0.10 if total_pp >= 0 else -0.10)
+        ax.text(
+            x_text,
+            y[idx],
+            f"{total_pp:+.2f} pp ({total_kg / 1e6:+.2f} kt)",
+            ha="left" if total_pp >= 0 else "right",
+            va="center",
+            fontsize=8.5,
+        )
+
+    stack_extent = 0.0
+    for row in rows:
+        positive = sum(
+            max(0.0, float(row[f"{spec['key']}_pp"]))
+            for spec in CONTRIBUTION_COMPONENT_SPECS
+        )
+        negative = abs(
+            sum(
+                min(0.0, float(row[f"{spec['key']}_pp"]))
+                for spec in CONTRIBUTION_COMPONENT_SPECS
+            )
+        )
+        stack_extent = max(stack_extent, positive, negative)
+    max_abs = max(
+        0.5,
+        stack_extent,
+        max(abs(float(row["total_net_pp"])) for row in rows),
+    )
+    ax.axvline(0, color="#555555", linewidth=0.8)
+    ax.set_yticks(y, [row["label"] for row in rows])
+    ax.set_xlabel(panel_xlabel, fontsize=11)
+    ax.grid(axis="x", alpha=0.25)
+    ax.set_xlim(-max_abs * 1.35, max_abs * 1.35)
+    ax.invert_yaxis()
+
+
+def _write_contribution_decomposition_report(prepared: Dict, save_path: str):
+    """Write the sampled contribution decomposition audit JSON."""
+    report_path = save_path.rsplit(".", 1)[0] + "_report.json"
+    payload = {
+        "figure": "contribution_decomposition",
+        **prepared,
+    }
+    with open(report_path, "w", encoding="utf-8") as f:
+        json.dump(_json_safe(payload), f, indent=2, ensure_ascii=False, allow_nan=False)
+    print(f"Contribution decomposition report saved to {report_path}")
+
+
+def plot_contribution_decomposition(
+    prepared: Dict,
+    save_path: str = None,
+    figsize: tuple = (15, 10),
+    for_latex: bool = False,
+    plot_title: bool = False,
+):
+    """Three-panel sampled contribution decomposition for the paper figure.
+
+    Args:
+        prepared: Output of ``prepare_contribution_decomposition_data``.
+        save_path: Path to save figure (with extension). Shows plot if None.
+        figsize: Figure size tuple.
+        for_latex: If True, save as PDF.
+        plot_title: If True, show title.
+    """
+    if not prepared:
+        print("Contribution decomposition skipped — prepared data missing")
+        return
+
+    fig = plt.figure(figsize=figsize)
+    gs = fig.add_gridspec(
+        2,
+        2,
+        height_ratios=[1.05, 1.0],
+        hspace=0.28,
+        wspace=0.25,
+    )
+    ax_a = fig.add_subplot(gs[0, :])
+    ax_b = fig.add_subplot(gs[1, 0])
+    ax_c = fig.add_subplot(gs[1, 1])
+
+    _plot_contribution_waterfall(ax_a, prepared["national"])
+    _plot_diverging_component_bars(
+        ax_b,
+        prepared["by_gef_bin"],
+        panel_xlabel="Contribution to national all-e-bike baseline (pp)",
+    )
+    _plot_diverging_component_bars(
+        ax_c,
+        prepared["by_detour_quartile"],
+        panel_xlabel="Contribution to national all-e-bike baseline (pp)",
+    )
+
+    if plot_title:
+        ax_a.set_title(
+            "Sampled Current-Mechanism Contribution Decomposition",
+            fontsize=14,
+        )
+        ax_b.set_title("By GEF bin", fontsize=12)
+        ax_c.set_title("By detour-ratio quartile", fontsize=12)
+    _add_panel_letter(ax_a, "a")
+    _add_panel_letter(ax_b, "b")
+    _add_panel_letter(ax_c, "c")
+
+    legend_handles = [
+        plt.Rectangle(
+            (0, 0),
+            1,
+            1,
+            facecolor=spec["color"],
+            edgecolor="white",
+            label=spec["label"],
+        )
+        for spec in CONTRIBUTION_COMPONENT_SPECS
+    ]
+    fig.legend(
+        handles=legend_handles,
+        loc="upper center",
+        ncol=4,
+        frameon=False,
+        bbox_to_anchor=(0.5, 0.98),
+    )
+    fig.text(
+        0.5,
+        0.02,
+        (
+            "Sample cap: 2,000 OD pairs per city, stratified by distance; "
+            "all panel values use the national all-e-bike lifecycle baseline."
+        ),
+        ha="center",
+        va="bottom",
+        fontsize=9,
+        color="#555555",
+    )
+
+    if save_path:
+        if for_latex and not save_path.endswith(".pdf"):
+            save_path = save_path.rsplit(".", 1)[0] + ".pdf"
+        if plot_title:
+            save_path = _add_title_suffix(save_path)
+        os.makedirs(os.path.dirname(save_path), exist_ok=True)
+        fig.savefig(save_path, dpi=300, bbox_inches="tight")
+        _write_contribution_decomposition_report(prepared, save_path)
+        plt.close(fig)
+        print(f"Contribution decomposition saved to {save_path}")
+    else:
+        plt.show()
+        plt.close(fig)
 
 
 def add_experiment_info_box(
