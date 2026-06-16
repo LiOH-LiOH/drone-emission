@@ -18,7 +18,6 @@ from ._utils import _add_title_suffix
 
 CONTRIBUTION_SAMPLE_LIMIT = 2000
 CONTRIBUTION_SAMPLE_SEED = 42
-CONTRIBUTION_GEF_BIN_EDGES = np.linspace(0.0, 0.9, 10)
 CONTRIBUTION_COMPONENT_SPECS = (
     {
         "key": "production_eol_advantage",
@@ -335,30 +334,32 @@ def _contribution_row_template(label: str) -> dict:
     return row
 
 
-def _aggregate_component_rows(
-    assigned_df: pd.DataFrame,
-    group_col: str,
-    labels: list[str],
+def _top_city_component_rows(
+    city_reports: list[dict],
     national_baseline_kg: float,
+    top_n: int = 20,
 ) -> list[dict]:
-    """Aggregate per-row sampled contributions into labeled component rows."""
+    """Return top-city contribution rows ranked by total sampled net reduction."""
+    if national_baseline_kg <= 0:
+        return []
+
     rows = []
-    for label in labels:
+    for city in city_reports:
+        label = str(city.get("region_name_en", city.get("region_key", "")))
         row = _contribution_row_template(label)
-        group = assigned_df[assigned_df[group_col] == label]
-        row["sampled_drone_rows"] = int(len(group))
+        row["region_key"] = str(city.get("region_key", ""))
+        row["sampled_drone_rows"] = int(city.get("drone_assigned_sampled_rows", 0))
+        component_kg = city.get("component_kg", {}) or {}
         for key in CONTRIBUTION_COMPONENT_KEYS:
-            kg_value = float(group[f"{key}_kg"].sum()) if not group.empty else 0.0
+            kg_value = float(component_kg.get(key, 0.0))
             row[f"{key}_kg"] = kg_value
-            row[f"{key}_pp"] = (
-                kg_value / national_baseline_kg * 100.0
-                if national_baseline_kg > 0
-                else 0.0
-            )
-        row["total_net_kg"] = float(sum(row[f"{key}_kg"] for key in CONTRIBUTION_COMPONENT_KEYS))
-        row["total_net_pp"] = float(sum(row[f"{key}_pp"] for key in CONTRIBUTION_COMPONENT_KEYS))
+            row[f"{key}_pp"] = kg_value / national_baseline_kg * 100.0
+        row["total_net_kg"] = float(city.get("net_saving_kg", 0.0))
+        row["total_net_pp"] = row["total_net_kg"] / national_baseline_kg * 100.0
         rows.append(row)
-    return rows
+
+    rows.sort(key=lambda row: (row["total_net_kg"], row["label"]), reverse=True)
+    return rows[:top_n]
 
 
 def prepare_contribution_decomposition_data(
@@ -556,7 +557,6 @@ def prepare_contribution_decomposition_data(
             )
 
         use_drone = road_km >= threshold_km
-        detour_ratio = road_km / air_km
 
         production_eol_advantage_g = (
             ebike_no_bundle_air_parts["production_g"]
@@ -584,9 +584,6 @@ def prepare_contribution_decomposition_data(
         )
 
         assigned = sampled.loc[use_drone].copy()
-        assigned["_road_km"] = road_km[use_drone]
-        assigned["_air_km"] = air_km[use_drone]
-        assigned["_detour_ratio"] = detour_ratio[use_drone]
         assigned["_annual_weight"] = annual_weight[use_drone]
         for key, values in (
             ("production_eol_advantage", production_eol_advantage_g),
@@ -660,15 +657,8 @@ def prepare_contribution_decomposition_data(
             assigned_frames.append(
                 assigned[
                     [
-                        "region_key",
-                        "region_name_en",
-                        "gef",
-                        "_detour_ratio",
                         "_annual_weight",
-                        "city_baseline_kg",
-                        "net_saving_kg",
                         "sum_check_error_g",
-                        *[f"{key}_kg" for key in CONTRIBUTION_COMPONENT_KEYS],
                     ]
                 ].copy()
             )
@@ -682,15 +672,8 @@ def prepare_contribution_decomposition_data(
         if assigned_frames
         else pd.DataFrame(
             columns=[
-                "region_key",
-                "region_name_en",
-                "gef",
-                "_detour_ratio",
                 "_annual_weight",
-                "city_baseline_kg",
-                "net_saving_kg",
                 "sum_check_error_g",
-                *[f"{key}_kg" for key in CONTRIBUTION_COMPONENT_KEYS],
             ]
         )
     )
@@ -725,58 +708,6 @@ def prepare_contribution_decomposition_data(
         else 0.0,
     }
 
-    if assigned_df.empty:
-        gef_rows = []
-        detour_rows = []
-    else:
-        gef_labels = [f"{edge:.1f}" for edge in CONTRIBUTION_GEF_BIN_EDGES[1:]]
-        processed_city_df = pd.DataFrame(city_reports)
-        processed_city_df["gef_bin"] = pd.cut(
-            pd.to_numeric(processed_city_df["gef"], errors="coerce"),
-            bins=CONTRIBUTION_GEF_BIN_EDGES,
-            labels=gef_labels,
-            include_lowest=True,
-            right=True,
-        )
-        assigned_df["gef_bin"] = pd.cut(
-            pd.to_numeric(assigned_df["gef"], errors="coerce"),
-            bins=CONTRIBUTION_GEF_BIN_EDGES,
-            labels=gef_labels,
-            include_lowest=True,
-            right=True,
-        )
-        present_gef_labels = [
-            label
-            for label in gef_labels
-            if (processed_city_df["gef_bin"] == label).any()
-        ]
-        gef_rows = _aggregate_component_rows(
-            assigned_df=assigned_df,
-            group_col="gef_bin",
-            labels=present_gef_labels,
-            national_baseline_kg=national_baseline_kg,
-        )
-
-        detour_codes = pd.qcut(
-            assigned_df["_detour_ratio"],
-            q=min(4, assigned_df["_detour_ratio"].nunique()),
-            labels=False,
-            duplicates="drop",
-        )
-        assigned_df["detour_quartile"] = detour_codes.map(
-            lambda code: f"Q{int(code) + 1}" if pd.notna(code) else None
-        )
-        detour_labels = [
-            f"Q{i + 1}"
-            for i in range(int(detour_codes.max()) + 1 if len(detour_codes) else 0)
-        ]
-        detour_rows = _aggregate_component_rows(
-            assigned_df=assigned_df,
-            group_col="detour_quartile",
-            labels=detour_labels,
-            national_baseline_kg=national_baseline_kg,
-        )
-
     runtime_seconds = time.perf_counter() - start_time
     return {
         "component_specs": list(CONTRIBUTION_COMPONENT_SPECS),
@@ -792,8 +723,11 @@ def prepare_contribution_decomposition_data(
             "city_count_skipped": int(len(skipped_cities)),
         },
         "national": national,
-        "by_gef_bin": gef_rows,
-        "by_detour_quartile": detour_rows,
+        "top_cities": _top_city_component_rows(
+            city_reports=city_reports,
+            national_baseline_kg=national_baseline_kg,
+            top_n=20,
+        ),
         "cities": city_reports,
         "skipped_cities": skipped_cities,
     }
@@ -891,13 +825,13 @@ def _plot_contribution_waterfall(ax, national: dict):
     ax.set_xlim(-0.6, len(x) - 0.4)
 
 
-def _plot_diverging_component_bars(ax, rows: list[dict], panel_xlabel: str):
-    """Draw diverging stacked horizontal component bars for grouped rows."""
+def _plot_top_city_contribution_bars(ax, rows: list[dict]):
+    """Draw top-city stacked contribution bars ranked by total net reduction."""
     if not rows:
         ax.text(
             0.5,
             0.5,
-            "no sampled drone-assigned rows",
+            "no sampled city contributions",
             transform=ax.transAxes,
             ha="center",
             va="center",
@@ -907,65 +841,63 @@ def _plot_diverging_component_bars(ax, rows: list[dict], panel_xlabel: str):
         ax.tick_params(left=False, bottom=False, labelleft=False, labelbottom=False)
         return
 
-    y = np.arange(len(rows), dtype=float)
-    for idx, row in enumerate(rows):
-        pos_acc = 0.0
-        neg_acc = 0.0
-        for spec in CONTRIBUTION_COMPONENT_SPECS:
-            value = float(row[f"{spec['key']}_pp"])
-            if value >= 0:
-                left = pos_acc
-                width = value
-                pos_acc += value
-            else:
-                left = neg_acc + value
-                width = -value
-                neg_acc += value
-            ax.barh(
-                y[idx],
-                width,
-                left=left,
-                height=0.72,
-                color=spec["color"],
-                edgecolor="white",
-                linewidth=0.8,
-            )
-        total_pp = float(row["total_net_pp"])
-        total_kg = float(row["total_net_kg"])
-        x_text = total_pp + (0.10 if total_pp >= 0 else -0.10)
+    x = np.arange(len(rows), dtype=float)
+    pos_acc = np.zeros(len(rows), dtype=float)
+    neg_acc = np.zeros(len(rows), dtype=float)
+
+    for spec in CONTRIBUTION_COMPONENT_SPECS:
+        values = np.array([float(row[f"{spec['key']}_pp"]) for row in rows], dtype=float)
+        positive = np.clip(values, 0.0, None)
+        negative = np.clip(values, None, 0.0)
+        ax.bar(
+            x,
+            positive,
+            bottom=pos_acc,
+            width=0.72,
+            color=spec["color"],
+            edgecolor="white",
+            linewidth=0.8,
+        )
+        ax.bar(
+            x,
+            -negative,
+            bottom=neg_acc + negative,
+            width=0.72,
+            color=spec["color"],
+            edgecolor="white",
+            linewidth=0.8,
+        )
+        pos_acc += positive
+        neg_acc += negative
+
+    total_pp = np.array([float(row["total_net_pp"]) for row in rows], dtype=float)
+    total_kg = np.array([float(row["total_net_kg"]) for row in rows], dtype=float)
+    max_abs = max(
+        0.2,
+        float(np.max(np.abs(total_pp))) if len(total_pp) else 0.0,
+        float(np.max(pos_acc)) if len(pos_acc) else 0.0,
+        float(np.max(np.abs(neg_acc))) if len(neg_acc) else 0.0,
+    )
+    label_offset = max_abs * 0.025
+    for idx, (pp_value, kg_value) in enumerate(zip(total_pp, total_kg)):
         ax.text(
-            x_text,
-            y[idx],
-            f"{total_pp:+.2f} pp ({total_kg / 1e6:+.2f} kt)",
-            ha="left" if total_pp >= 0 else "right",
-            va="center",
-            fontsize=8.5,
+            x[idx],
+            pp_value + (label_offset if pp_value >= 0 else -label_offset),
+            f"{kg_value / 1e6:.2f} kt",
+            ha="center",
+            va="bottom" if pp_value >= 0 else "top",
+            fontsize=8,
         )
 
-    stack_extent = 0.0
-    for row in rows:
-        positive = sum(
-            max(0.0, float(row[f"{spec['key']}_pp"]))
-            for spec in CONTRIBUTION_COMPONENT_SPECS
-        )
-        negative = abs(
-            sum(
-                min(0.0, float(row[f"{spec['key']}_pp"]))
-                for spec in CONTRIBUTION_COMPONENT_SPECS
-            )
-        )
-        stack_extent = max(stack_extent, positive, negative)
-    max_abs = max(
-        0.5,
-        stack_extent,
-        max(abs(float(row["total_net_pp"])) for row in rows),
-    )
-    ax.axvline(0, color="#555555", linewidth=0.8)
-    ax.set_yticks(y, [row["label"] for row in rows])
-    ax.set_xlabel(panel_xlabel, fontsize=11)
-    ax.grid(axis="x", alpha=0.25)
-    ax.set_xlim(-max_abs * 1.35, max_abs * 1.35)
-    ax.invert_yaxis()
+    ax.axhline(0, color="#555555", linewidth=0.8)
+    ax.set_xticks(x, [row["label"] for row in rows], rotation=45, ha="right")
+    ax.set_ylabel("Contribution to national all-e-bike baseline (pp)", fontsize=12)
+    ax.set_xlabel("City", fontsize=11)
+    ax.grid(axis="y", alpha=0.25)
+    ax.set_xlim(-0.6, len(rows) - 0.4)
+    ymin = min(neg_acc.min(), total_pp.min(), 0.0) * 1.15
+    ymax = max(pos_acc.max(), total_pp.max(), 0.0) * 1.15
+    ax.set_ylim(ymin, ymax)
 
 
 def _write_contribution_decomposition_report(prepared: Dict, save_path: str):
@@ -987,7 +919,7 @@ def plot_contribution_decomposition(
     for_latex: bool = False,
     plot_title: bool = False,
 ):
-    """Three-panel sampled contribution decomposition for the paper figure.
+    """Two-panel sampled contribution decomposition for the paper figure.
 
     Args:
         prepared: Output of ``prepare_contribution_decomposition_data``.
@@ -1003,37 +935,24 @@ def plot_contribution_decomposition(
     fig = plt.figure(figsize=figsize)
     gs = fig.add_gridspec(
         2,
-        2,
-        height_ratios=[1.05, 1.0],
-        hspace=0.28,
-        wspace=0.25,
+        1,
+        height_ratios=[1.0, 1.25],
+        hspace=0.32,
     )
-    ax_a = fig.add_subplot(gs[0, :])
+    ax_a = fig.add_subplot(gs[0, 0])
     ax_b = fig.add_subplot(gs[1, 0])
-    ax_c = fig.add_subplot(gs[1, 1])
 
     _plot_contribution_waterfall(ax_a, prepared["national"])
-    _plot_diverging_component_bars(
-        ax_b,
-        prepared["by_gef_bin"],
-        panel_xlabel="Contribution to national all-e-bike baseline (pp)",
-    )
-    _plot_diverging_component_bars(
-        ax_c,
-        prepared["by_detour_quartile"],
-        panel_xlabel="Contribution to national all-e-bike baseline (pp)",
-    )
+    _plot_top_city_contribution_bars(ax_b, prepared.get("top_cities", []))
 
     if plot_title:
         ax_a.set_title(
             "Sampled Current-Mechanism Contribution Decomposition",
             fontsize=14,
         )
-        ax_b.set_title("By GEF bin", fontsize=12)
-        ax_c.set_title("By detour-ratio quartile", fontsize=12)
+        ax_b.set_title("Top 20 cities by total emission reduction", fontsize=12)
     _add_panel_letter(ax_a, "a")
     _add_panel_letter(ax_b, "b")
-    _add_panel_letter(ax_c, "c")
 
     legend_handles = [
         plt.Rectangle(
@@ -1175,6 +1094,17 @@ def _break_even_zero_curve(
     valid = np.abs(delta_slope) > 1e-12
     roots[valid] = -delta_zero[valid] / delta_slope[valid]
     roots[(roots < gef_min) | (roots > gef_max)] = np.nan
+    return roots
+
+
+def _break_even_zero_surface_raw(
+    delta_zero: np.ndarray,
+    delta_slope: np.ndarray,
+) -> np.ndarray:
+    """Return the unconstrained GEF at which delta_g equals zero."""
+    roots = np.full_like(delta_zero, np.nan, dtype=float)
+    valid = np.abs(delta_slope) > 1e-12
+    roots[valid] = -delta_zero[valid] / delta_slope[valid]
     return roots
 
 
@@ -1539,38 +1469,169 @@ def _select_break_even_gef_levels(
     city_gefs: np.ndarray,
     gef_limits: tuple[float, float],
 ) -> list[dict]:
-    """Choose low/high GEF slices from the two strongest city-distribution modes."""
+    """Choose low/high GEF slices from the strongest low/high city-distribution peaks."""
     gef_min, gef_max = map(float, gef_limits)
     values = np.asarray(city_gefs, dtype=float)
     values = values[np.isfinite(values)]
 
-    if len(values) >= 8:
-        hist_edges = np.linspace(gef_min, gef_max, 15)
-        hist_counts, _ = np.histogram(values, bins=hist_edges)
-        smooth_counts = np.convolve(hist_counts, [0.25, 0.5, 0.25], mode="same")
-        centers = (hist_edges[:-1] + hist_edges[1:]) / 2
-        peak_order = np.argsort(smooth_counts)[::-1]
-        chosen = []
-        min_sep = max((gef_max - gef_min) * 0.18, 0.08)
-        for idx in peak_order:
-            center = float(centers[idx])
-            if any(abs(center - prior) < min_sep for prior in chosen):
-                continue
-            chosen.append(center)
-            if len(chosen) == 2:
-                break
-        if len(chosen) == 2:
-            selected = np.array(sorted(chosen), dtype=float)
+    def _pick_peak_value(
+        subset: np.ndarray,
+        lower: float,
+        upper: float,
+        fallback: float,
+    ) -> float:
+        subset = np.asarray(subset, dtype=float)
+        subset = subset[np.isfinite(subset)]
+        subset = subset[(subset >= lower) & (subset < upper)]
+        if subset.size == 0:
+            return float(fallback)
+        if subset.size == 1:
+            return float(subset[0])
+
+        bin_width = 0.025
+        edges = np.arange(lower, upper + bin_width, bin_width)
+        if len(edges) < 2:
+            return float(np.median(subset))
+        counts, _ = np.histogram(subset, bins=edges)
+        peak_idx = int(np.argmax(counts))
+        peak_low = edges[peak_idx]
+        peak_high = edges[peak_idx + 1]
+        if peak_idx == len(counts) - 1:
+            mask = (subset >= peak_low) & (subset <= peak_high)
         else:
-            selected = np.quantile(values, [0.20, 0.80])
+            mask = (subset >= peak_low) & (subset < peak_high)
+        peak_values = np.sort(subset[mask])
+        if peak_values.size == 0:
+            return float(np.median(subset))
+        return float(np.median(peak_values))
+
+    if len(values) >= 8:
+        low_peak = _pick_peak_value(
+            values,
+            lower=gef_min,
+            upper=min(0.30, gef_max),
+            fallback=0.14,
+        )
+        high_peak = _pick_peak_value(
+            values,
+            lower=max(0.30, gef_min),
+            upper=gef_max + 1e-9,
+            fallback=0.49,
+        )
+        selected = np.array([low_peak, high_peak], dtype=float)
     else:
-        selected = np.array([0.18, 0.62], dtype=float)
+        selected = np.array([0.14, 0.49], dtype=float)
 
     selected = np.clip(selected, gef_min, gef_max)
     return [
         {"label": "Low GEF", "gef": float(selected[0])},
         {"label": "High GEF", "gef": float(selected[1])},
     ]
+
+
+def _clip_polygon_against_z_bound(
+    polygon: list[tuple[float, float, float]],
+    bound: float,
+    keep_below: bool,
+) -> list[tuple[float, float, float]]:
+    """Clip a 3D polygon against a horizontal z-plane."""
+    if not polygon:
+        return []
+
+    def _inside(vertex):
+        if keep_below:
+            return vertex[2] <= bound + 1e-12
+        return vertex[2] >= bound - 1e-12
+
+    clipped = []
+    for start, end in zip(polygon, polygon[1:] + polygon[:1]):
+        start_inside = _inside(start)
+        end_inside = _inside(end)
+        if start_inside and end_inside:
+            clipped.append(end)
+            continue
+        if start_inside != end_inside:
+            z0, z1 = start[2], end[2]
+            if abs(z1 - z0) <= 1e-12:
+                point = (end[0], end[1], bound)
+            else:
+                t = (bound - z0) / (z1 - z0)
+                point = (
+                    start[0] + t * (end[0] - start[0]),
+                    start[1] + t * (end[1] - start[1]),
+                    bound,
+                )
+            clipped.append(point)
+            if end_inside:
+                clipped.append(end)
+    return clipped
+
+
+def _build_break_even_surface_triangles(
+    air_distance_grid_km: np.ndarray,
+    detour_ratios: np.ndarray,
+    raw_surface: np.ndarray,
+    gef_limits: tuple[float, float],
+) -> dict | None:
+    """Clip the raw root surface to the visible GEF range and triangulate it."""
+    gef_min, gef_max = map(float, gef_limits)
+    x_grid, y_grid = np.meshgrid(
+        np.asarray(air_distance_grid_km, dtype=float),
+        np.asarray(detour_ratios, dtype=float),
+    )
+    z_grid = np.asarray(raw_surface, dtype=float)
+
+    vertices: list[tuple[float, float, float]] = []
+    triangles: list[tuple[int, int, int]] = []
+    vertex_index: dict[tuple[float, float, float], int] = {}
+
+    def _vertex_id(vertex: tuple[float, float, float]) -> int:
+        key = tuple(round(float(v), 10) for v in vertex)
+        existing = vertex_index.get(key)
+        if existing is not None:
+            return existing
+        idx = len(vertices)
+        vertex_index[key] = idx
+        vertices.append((float(vertex[0]), float(vertex[1]), float(vertex[2])))
+        return idx
+
+    n_rows, n_cols = z_grid.shape
+    for row in range(n_rows - 1):
+        for col in range(n_cols - 1):
+            cell = [
+                (x_grid[row, col], y_grid[row, col], z_grid[row, col]),
+                (x_grid[row, col + 1], y_grid[row, col + 1], z_grid[row, col + 1]),
+                (
+                    x_grid[row + 1, col + 1],
+                    y_grid[row + 1, col + 1],
+                    z_grid[row + 1, col + 1],
+                ),
+                (x_grid[row + 1, col], y_grid[row + 1, col], z_grid[row + 1, col]),
+            ]
+            if not all(np.isfinite(vertex[2]) for vertex in cell):
+                continue
+            polygon = _clip_polygon_against_z_bound(cell, gef_min, keep_below=False)
+            polygon = _clip_polygon_against_z_bound(polygon, gef_max, keep_below=True)
+            if len(polygon) < 3:
+                continue
+            poly_ids = [_vertex_id(vertex) for vertex in polygon]
+            for idx in range(1, len(poly_ids) - 1):
+                a, b, c = poly_ids[0], poly_ids[idx], poly_ids[idx + 1]
+                if a == b or b == c or a == c:
+                    continue
+                triangles.append((a, b, c))
+
+    if not triangles:
+        return None
+
+    xyz = np.asarray(vertices, dtype=float)
+    tri = np.asarray(triangles, dtype=int)
+    return {
+        "x": xyz[:, 0],
+        "y": xyz[:, 1],
+        "z": xyz[:, 2],
+        "triangles": tri,
+    }
 
 
 def prepare_break_even_phase_diagram_data(
@@ -1647,9 +1708,19 @@ def prepare_break_even_phase_diagram_data(
         ebike_scenario=ebike_scenario,
         drone_scenario=drone_scenario,
     )
+    break_even_surface_raw = _break_even_zero_surface_raw(
+        delta_zero=delta_zero_grid,
+        delta_slope=delta_slope_grid,
+    )
     break_even_surface = _break_even_zero_curve(
         delta_zero=delta_zero_grid,
         delta_slope=delta_slope_grid,
+        gef_limits=BREAK_EVEN_GEF_LIMITS,
+    )
+    surface_mesh = _build_break_even_surface_triangles(
+        air_distance_grid_km=air_distance_grid_km,
+        detour_ratios=detour_ratios,
+        raw_surface=break_even_surface_raw,
         gef_limits=BREAK_EVEN_GEF_LIMITS,
     )
     observed_mask = _break_even_observed_mask_data(
@@ -1684,8 +1755,10 @@ def prepare_break_even_phase_diagram_data(
         "grid_factors": grid_factors,
         "panel_a": {
             "break_even_gef": break_even_surface,
+            "break_even_gef_raw": break_even_surface_raw,
             "delta_zero": delta_zero_grid,
             "delta_slope": delta_slope_grid,
+            "surface_mesh": surface_mesh,
             "observed_mask": observed_mask,
         },
         "panel_b": {
@@ -1739,7 +1812,7 @@ def plot_break_even_phase_diagram(
     ax_c = fig.add_subplot(gs[0, 2])
 
     break_even_surface = np.asarray(panel_a["break_even_gef"], dtype=float)
-    valid_surface = np.isfinite(break_even_surface)
+    surface_mesh = panel_a.get("surface_mesh")
 
     finite_blocks = []
     for gef_panel in panel_b["gef_panels"]:
@@ -1759,7 +1832,20 @@ def plot_break_even_phase_diagram(
     surface_norm = plt.Normalize(vmin=gef_limits[0], vmax=gef_limits[1])
     X, Y = np.meshgrid(air_distance_grid_km, detour_ratios)
 
-    if np.any(valid_surface):
+    if surface_mesh:
+        ax_a.plot_trisurf(
+            surface_mesh["x"],
+            surface_mesh["y"],
+            surface_mesh["z"],
+            triangles=surface_mesh["triangles"],
+            cmap=surface_cmap,
+            norm=surface_norm,
+            linewidth=0,
+            antialiased=True,
+            shade=False,
+            alpha=0.96,
+        )
+    elif np.isfinite(break_even_surface).any():
         z_surface = np.ma.masked_invalid(break_even_surface)
         ax_a.plot_surface(
             X,
@@ -1852,6 +1938,7 @@ def plot_break_even_phase_diagram(
     ax_a.set_xlabel("Air distance (km)", fontsize=10.5, labelpad=8)
     ax_a.set_ylabel("Detour ratio (road / air)", fontsize=10.5, labelpad=8)
     ax_a.set_zlabel("Break-even GEF* (kg CO2e/kWh)", fontsize=10.5, labelpad=8)
+    ax_a.set_proj_type("ortho")
     ax_a.view_init(elev=28, azim=-128)
     ax_a.grid(alpha=0.2)
     ax_a.xaxis.pane.set_alpha(0.0)
