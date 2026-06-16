@@ -4186,11 +4186,11 @@ def _selected_trip_distance_sample(selected_trip, router):
     }
 
 
-def _selected_trip_distance_comparison_report(ax, sample):
+def _selected_trip_distance_comparison_report(ax, sample, city="shanghai"):
     """Return plotted data for the selected-trip distance-comparison panel."""
     report = {
         "axis": _axis_report(ax),
-        "city": "beijing",
+        "city": city,
         "panel_type": "distance_comparison",
         "target_display_aspect_width_over_height": 2.0,
         "route_styles": {
@@ -4280,6 +4280,7 @@ def _write_regions_map_city_rank_and_drone_share_report(
     eol_distance_context,
     phase_body_colors,
     phase_battery_colors,
+    median_trip_city,
     distance_comparison_sample,
     median_trip_report,
 ):
@@ -4355,10 +4356,11 @@ def _write_regions_map_city_rank_and_drone_share_report(
                 ),
             },
             "c_detour_ratio_concept": _detour_concept_panel_report(ax_c),
-            "d_beijing_median_trip_distance_comparison": (
+            f"d_{median_trip_city}_median_trip_distance_comparison": (
                 _selected_trip_distance_comparison_report(
                     ax_d,
                     distance_comparison_sample,
+                    city=median_trip_city,
                 )
             ),
             "e_production_phase_selected_trip": _phase_bar_panel_report(
@@ -4373,7 +4375,7 @@ def _write_regions_map_city_rank_and_drone_share_report(
                 body_colors_by_vehicle=phase_body_colors,
                 battery_colors_by_vehicle=phase_battery_colors,
             ),
-            "f_beijing_median_trip_emission_process": median_trip_report,
+            f"f_{median_trip_city}_median_trip_emission_process": median_trip_report,
             "g_end_of_life_phase_selected_trip": _phase_bar_panel_report(
                 eol_df,
                 ax_g,
@@ -4396,26 +4398,34 @@ def _write_regions_map_city_rank_and_drone_share_report(
 def plot_regions_map_city_rank_and_drone_share(
     df_stats: "pd.DataFrame",
     stats_csv_path: str,
-    beijing_od_df: "pd.DataFrame" = None,
-    beijing_graph=None,
-    beijing_router=None,
+    median_trip_od_df: "pd.DataFrame" = None,
+    median_trip_graph=None,
+    median_trip_router=None,
     save_path: str = None,
     figsize: tuple = (18, 16),
     for_latex: bool = False,
     plot_title: bool = False,
+    median_trip_city: str = "shanghai",
+    beijing_od_df: "pd.DataFrame" = None,
+    beijing_graph=None,
+    beijing_router=None,
 ):
     """Maps for absolute and percentage Oracle reduction, with drone-share inset.
 
     Args:
         df_stats: all_region_stats DataFrame.
         stats_csv_path: Path to all_region_stats.csv (for map function).
-        beijing_od_df: Beijing OD pairs DataFrame for the median-trip use-phase panel.
-        beijing_graph: Beijing road network graph for the median-trip distance panel.
-        beijing_router: Router for drawing the Beijing median-trip road path.
+        median_trip_od_df: OD pairs DataFrame for the median-trip panels.
+        median_trip_graph: Road network graph for the median-trip distance panel.
+        median_trip_router: Router for drawing the median-trip road path.
         save_path: Path to save figure. Shows plot if None.
         figsize: Figure size tuple.
         for_latex: If True, save as PDF.
         plot_title: If True, show title.
+        median_trip_city: City key used in labels and report metadata.
+        beijing_od_df: Deprecated alias for median_trip_od_df.
+        beijing_graph: Deprecated alias for median_trip_graph.
+        beijing_router: Deprecated alias for median_trip_router.
     """
     from visualization.concepts import _draw_detour_ratio_concept
     from visualization.emission import (
@@ -4423,6 +4433,15 @@ def plot_regions_map_city_rank_and_drone_share(
         _select_median_trip_emission_sample,
     )
     from visualization.regions import plot_regions_on_china_map
+
+    if median_trip_od_df is None and beijing_od_df is not None:
+        median_trip_od_df = beijing_od_df
+        median_trip_city = "beijing"
+    if median_trip_graph is None and beijing_graph is not None:
+        median_trip_graph = beijing_graph
+    if median_trip_router is None and beijing_router is not None:
+        median_trip_router = beijing_router
+    median_trip_city_label = median_trip_city.replace("_", " ").title()
 
     map_df = pd.read_csv(stats_csv_path)
     for col in ("oracle_min_lifecycle_kg",):
@@ -4564,8 +4583,8 @@ def plot_regions_map_city_rank_and_drone_share(
               fontsize=16, fontweight="bold", va="bottom", ha="right")
 
     selected_trip = (
-        _select_median_trip_emission_sample(beijing_od_df)
-        if beijing_od_df is not None
+        _select_median_trip_emission_sample(median_trip_od_df)
+        if median_trip_od_df is not None
         else None
     )
 
@@ -4575,16 +4594,16 @@ def plot_regions_map_city_rank_and_drone_share(
 
     distance_comparison_sample = _selected_trip_distance_sample(
         selected_trip,
-        beijing_router,
+        median_trip_router,
     )
     d_target_aspect = 2.0
-    if distance_comparison_sample is not None and beijing_graph is not None:
+    if distance_comparison_sample is not None and median_trip_graph is not None:
         from visualization.roadnet import _draw_distance_panel
 
         _draw_distance_panel(
             ax_d,
             distance_comparison_sample,
-            beijing_graph,
+            median_trip_graph,
             show_legend=True,
             show_stats_box=False,
             target_aspect=d_target_aspect,
@@ -4594,7 +4613,7 @@ def plot_regions_map_city_rank_and_drone_share(
         ax_d.text(
             0.5,
             0.5,
-            "Beijing median trip distance comparison\nnot available",
+            f"{median_trip_city_label} median trip distance comparison\nnot available",
             transform=ax_d.transAxes,
             ha="center",
             va="center",
@@ -4615,14 +4634,14 @@ def plot_regions_map_city_rank_and_drone_share(
         if "ebike_kappa" in selected_trip.index and pd.notna(selected_trip["ebike_kappa"]):
             ebike_km *= float(selected_trip["ebike_kappa"])
         distance_context = {
-            "city": "beijing",
+            "city": median_trip_city,
             "air_distance_km_for_drone": _json_safe_scalar(air_km),
             "road_distance_km_for_ebike": _json_safe_scalar(road_km),
             "ebike_emission_distance_km": _json_safe_scalar(ebike_km),
         }
         distance_label = "Median trip"
     else:
-        distance_context = {"city": "beijing", "status": "missing_selected_trip"}
+        distance_context = {"city": median_trip_city, "status": "missing_selected_trip"}
         distance_label = "Median trip"
 
     production_distance_context = distance_context
@@ -4639,7 +4658,7 @@ def plot_regions_map_city_rank_and_drone_share(
         ax_e.text(
             0.5,
             0.5,
-            "Beijing median trip production data\nnot available",
+            f"{median_trip_city_label} median trip production data\nnot available",
             transform=ax_e.transAxes,
             ha="center",
             va="center",
@@ -4663,11 +4682,11 @@ def plot_regions_map_city_rank_and_drone_share(
             body_colors_by_vehicle=phase_body_colors,
             battery_colors_by_vehicle=phase_battery_colors,
         )
-    if beijing_od_df is None:
+    if median_trip_od_df is None:
         ax_f.text(
             0.5,
             0.5,
-            "Beijing median trip emission data\nnot available",
+            f"{median_trip_city_label} median trip emission data\nnot available",
             transform=ax_f.transAxes,
             ha="center",
             va="center",
@@ -4675,23 +4694,28 @@ def plot_regions_map_city_rank_and_drone_share(
             color="#777777",
         )
         ax_f.tick_params(left=False, bottom=False, labelleft=False, labelbottom=False)
-        median_trip_report = {"axis": _axis_report(ax_f), "status": "missing_beijing_od"}
+        median_trip_report = {
+            "axis": _axis_report(ax_f),
+            "city": median_trip_city,
+            "status": f"missing_{median_trip_city}_od",
+        }
     else:
         median_trip_data = _draw_median_trip_emission_process(
             ax_f,
-            beijing_od_df,
+            median_trip_od_df,
             plot_title=plot_title,
         )
         ax_f.set_xlabel("Distance (km)", fontsize=12)
         ax_f.set_ylabel("Use-phase emission\n(g CO$_2$e/leg)", fontsize=12)
         median_trip_report = {
             "axis": _axis_report(ax_f),
+            "city": median_trip_city,
             "status": "ok" if median_trip_data is not None else "no_valid_rows",
         }
         if median_trip_data is not None:
             median_trip_report.update(
                 {
-                    "city": "beijing",
+                    "city": median_trip_city,
                     "air_km": _json_safe_scalar(median_trip_data["air_km"]),
                     "road_km": _json_safe_scalar(median_trip_data["road_km"]),
                     "drone_curve": [
@@ -4714,7 +4738,7 @@ def plot_regions_map_city_rank_and_drone_share(
         ax_g.text(
             0.5,
             0.5,
-            "Beijing median trip EOL data\nnot available",
+            f"{median_trip_city_label} median trip EOL data\nnot available",
             transform=ax_g.transAxes,
             ha="center",
             va="center",
@@ -4831,6 +4855,7 @@ def plot_regions_map_city_rank_and_drone_share(
             eol_distance_context=eol_distance_context,
             phase_body_colors=phase_body_colors,
             phase_battery_colors=phase_battery_colors,
+            median_trip_city=median_trip_city,
             distance_comparison_sample=distance_comparison_sample,
             median_trip_report=median_trip_report,
         )
