@@ -607,22 +607,14 @@ def prepare_contribution_decomposition_data(
             drone_actual_scenario,
         )
 
-        stats_kappa = getattr(city_row, "ebike_kappa", np.nan)
-        threshold_km, threshold_meta = _resolve_threshold_from_named(
-            named_df=named_df,
-            region_key=region_key,
-            baseline_kappa=baseline_kappa,
-            stats_kappa=stats_kappa,
-        )
-        if threshold_km is None:
-            threshold_km, threshold_meta = _sample_threshold_sweep(
-                road_km=road_km,
-                ebike_total_g=ebike_actual_parts["total_g"],
-                drone_total_g=drone_actual_parts["total_g"],
-                order_weight=annual_weight,
-            )
-
-        use_drone = road_km >= threshold_km
+        use_drone = drone_actual_parts["total_g"] < ebike_actual_parts["total_g"]
+        assignment_meta = {
+            "rule": "oracle_per_od_lifecycle_minimum",
+            "description": (
+                "Assign each OD to drone only when drone lifecycle emissions "
+                "are lower than the e-bike alternative."
+            ),
+        }
 
         production_eol_advantage_g = (
             ebike_no_bundle_air_parts["production_g"]
@@ -678,8 +670,8 @@ def prepare_contribution_decomposition_data(
                 "province": str(city_row.province),
                 "gef": gef,
                 "baseline_ebike_lifecycle_kg": city_baseline_kg,
-                "threshold_km": float(threshold_km),
-                "threshold_meta": threshold_meta,
+                "assignment_rule": assignment_meta["rule"],
+                "assignment_meta": assignment_meta,
                 "od_path": od_path,
                 "has_road_distance_m": bool(has_road_distance),
                 "sample": sample_meta,
@@ -2726,10 +2718,10 @@ def plot_break_even_contribution_decomposition(
         contribution_prepared,
         plot_title=plot_title,
         panel_letters=("d", "e"),
-        legend_anchor=(0.5, 0.485),
+        legend_anchor=(0.5, 0.455),
         panel_letter_fontsize=12,
         rotate_waterfall_xticks=True,
-        panel_letter_position=(-0.10, 1.13),
+        panel_letter_position=(-0.10, 1.22),
     )
 
     if save_path:
