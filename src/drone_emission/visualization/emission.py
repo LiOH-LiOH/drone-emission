@@ -809,7 +809,7 @@ def _add_panel_letter(ax, letter: str, fontsize: int = 13):
         ax.text(-0.10, 1.03, letter, transform=ax.transAxes, **text_kwargs)
 
 
-def _plot_contribution_waterfall(ax, national: dict):
+def _plot_contribution_waterfall(ax, national: dict, rotate_xticks: bool = False):
     """Draw the national contribution waterfall."""
     x = np.arange(len(CONTRIBUTION_COMPONENT_SPECS) + 1, dtype=float)
     cumulative = 0.0
@@ -876,7 +876,12 @@ def _plot_contribution_waterfall(ax, national: dict):
     xticklabels.append("Net reduction")
 
     ax.axhline(0, color="#555555", linewidth=0.8)
-    ax.set_xticks(x, xticklabels, rotation=0)
+    ax.set_xticks(
+        x,
+        xticklabels,
+        rotation=45 if rotate_xticks else 0,
+        ha="right" if rotate_xticks else "center",
+    )
     ax.set_ylabel("Contribution to national all-e-bike baseline (pp)", fontsize=12)
     ax.grid(axis="y", alpha=0.25)
     ax.set_xlim(-0.6, len(x) - 0.4)
@@ -966,9 +971,14 @@ def _plot_contribution_decomposition_panels(
     panel_letters: tuple[str, str] = ("a", "b"),
     legend_anchor: tuple[float, float] = (0.5, 0.98),
     panel_letter_fontsize: int = 13,
+    rotate_waterfall_xticks: bool = False,
 ):
     """Draw contribution-decomposition panels on caller-provided axes."""
-    _plot_contribution_waterfall(ax_a, prepared["national"])
+    _plot_contribution_waterfall(
+        ax_a,
+        prepared["national"],
+        rotate_xticks=rotate_waterfall_xticks,
+    )
     _plot_top_city_contribution_bars(ax_b, prepared.get("top_cities", [])[:15])
 
     if plot_title:
@@ -2369,6 +2379,7 @@ def _plot_break_even_phase_diagram_panels(
     panel_letters: tuple[str, str, str] = ("a", "b", "c"),
     font_scale: float = 1.0,
     panel_letter_fontsize: int = 13,
+    show_surface_annotations: bool = True,
 ):
     """Draw break-even phase-diagram panels on caller-provided axes."""
     air_distance_grid_km = prepared["air_distance_grid_km"]
@@ -2445,27 +2456,28 @@ def _plot_break_even_phase_diagram_panels(
             alpha=0.96,
         )
 
-    annotation_specs = (
-        (0.90, "Below surface: drone wins", 9.5, "#1f5aa6"),
-        (0.82, "Above surface: e-bike wins", 9.5, "#9f2f2f"),
-        (0.74, "Surface shows GEF* where Delta g = 0", 8.8, "#444444"),
-        (0.05, "Theoretical boundary from lifecycle model", 8.4, "#555555"),
-    )
-    for y, text, fontsize, color in annotation_specs:
-        ax_a.text2D(
-            0.02,
-            y,
-            text,
-            transform=ax_a.transAxes,
-            fontsize=fontsize * font_scale,
-            color=color,
-            bbox={
-                "boxstyle": "round,pad=0.22",
-                "facecolor": "white",
-                "alpha": 0.84,
-                "edgecolor": "none",
-            },
+    if show_surface_annotations:
+        annotation_specs = (
+            (0.90, "Below surface: drone wins", 9.5, "#1f5aa6"),
+            (0.82, "Above surface: e-bike wins", 9.5, "#9f2f2f"),
+            (0.74, "Surface shows GEF* where Delta g = 0", 8.8, "#444444"),
+            (0.05, "Theoretical boundary from lifecycle model", 8.4, "#555555"),
         )
+        for y, text, fontsize, color in annotation_specs:
+            ax_a.text2D(
+                0.02,
+                y,
+                text,
+                transform=ax_a.transAxes,
+                fontsize=fontsize * font_scale,
+                color=color,
+                bbox={
+                    "boxstyle": "round,pad=0.22",
+                    "facecolor": "white",
+                    "alpha": 0.84,
+                    "edgecolor": "none",
+                },
+            )
     ax_a.set_xlim(*distance_limits)
     ax_a.set_ylim(*detour_limits)
     ax_a.set_zlim(*gef_limits)
@@ -2677,6 +2689,7 @@ def plot_break_even_contribution_decomposition(
         panel_letters=("a", "b", "c"),
         font_scale=0.92,
         panel_letter_fontsize=12,
+        show_surface_annotations=False,
     )
     _plot_contribution_decomposition_panels(
         fig,
@@ -2685,8 +2698,9 @@ def plot_break_even_contribution_decomposition(
         contribution_prepared,
         plot_title=plot_title,
         panel_letters=("d", "e"),
-        legend_anchor=(0.5, 0.46),
+        legend_anchor=(0.5, 0.515),
         panel_letter_fontsize=12,
+        rotate_waterfall_xticks=True,
     )
 
     if save_path:
