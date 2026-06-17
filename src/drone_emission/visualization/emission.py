@@ -225,7 +225,7 @@ def _sample_city_valid_rows(
     valid_df: pd.DataFrame,
     sample_distance_km: np.ndarray,
     region_key: str,
-    max_sample_rows: int,
+    max_sample_rows: int | None,
     sample_seed: int,
 ) -> tuple[pd.DataFrame, dict]:
     """Sample valid OD rows with proportional distance stratification."""
@@ -238,7 +238,7 @@ def _sample_city_valid_rows(
             "sample_seed": int(sample_seed),
         }
 
-    if total_rows <= max_sample_rows:
+    if max_sample_rows is None or total_rows <= max_sample_rows:
         sampled = valid_df.copy()
         sampled["_sample_expansion_weight"] = 1.0
         sampled["_sample_stratum"] = _distance_strata_codes(sample_distance_km)
@@ -258,6 +258,7 @@ def _sample_city_valid_rows(
                 for code, count in stratum_counts.items()
             ],
             "sample_seed": int(sample_seed),
+            "sampling_mode": "full" if max_sample_rows is None else "sample_or_full",
         }
 
     strata = _distance_strata_codes(sample_distance_km)
@@ -361,16 +362,23 @@ def _sample_threshold_sweep(
     road_km: np.ndarray,
     ebike_total_g: np.ndarray,
     drone_total_g: np.ndarray,
+    order_weight: np.ndarray = None,
 ) -> tuple[float, dict]:
     """Select the sampled optimal threshold using the standard vectorized sweep."""
     from sensitivity.vectorized_lca import threshold_sweep_km
 
+    if order_weight is None:
+        order_weight = np.ones_like(road_km, dtype=float)
+    else:
+        order_weight = np.asarray(order_weight, dtype=float)
     thresholds = threshold_sweep_km(road_km)
     best_total = None
     best_threshold = float("inf")
     for threshold in thresholds:
         use_drone = road_km >= threshold
-        mixed_total = float(np.where(use_drone, drone_total_g, ebike_total_g).sum())
+        mixed_total = float(
+            (np.where(use_drone, drone_total_g, ebike_total_g) * order_weight).sum()
+        )
         if best_total is None or mixed_total < best_total:
             best_total = mixed_total
             best_threshold = float(threshold)
@@ -424,10 +432,10 @@ def prepare_contribution_decomposition_data(
     data_dir: str,
     named_df: pd.DataFrame = None,
     exp_config: dict = None,
-    max_sample_rows: int = CONTRIBUTION_SAMPLE_LIMIT,
+    max_sample_rows: int | None = CONTRIBUTION_SAMPLE_LIMIT,
     sample_seed: int = CONTRIBUTION_SAMPLE_SEED,
 ) -> Dict:
-    """Prepare sampled current-mechanism contribution data for the paper figure."""
+    """Prepare current-mechanism contribution data for the paper figure."""
     from dataclasses import replace
 
     from emission.cal_single_delivery import (
@@ -611,6 +619,7 @@ def prepare_contribution_decomposition_data(
                 road_km=road_km,
                 ebike_total_g=ebike_actual_parts["total_g"],
                 drone_total_g=drone_actual_parts["total_g"],
+                order_weight=annual_weight,
             )
 
         use_drone = road_km >= threshold_km
@@ -721,7 +730,7 @@ def prepare_contribution_decomposition_data(
             )
 
     if national_baseline_kg <= 0 or not city_reports:
-        print("Contribution decomposition skipped — no sampled city contributions available")
+        print("Contribution decomposition skipped — no city contributions available")
         return None
 
     assigned_df = (
@@ -769,8 +778,11 @@ def prepare_contribution_decomposition_data(
     return {
         "component_specs": list(CONTRIBUTION_COMPONENT_SPECS),
         "sampling": {
-            "max_sample_rows_per_city": int(max_sample_rows),
+            "max_sample_rows_per_city": (
+                None if max_sample_rows is None else int(max_sample_rows)
+            ),
             "sample_seed": int(sample_seed),
+            "mode": "full_real_data" if max_sample_rows is None else "stratified_sample",
             "distance_stratification": "road_distance_m if available else distance_km",
         },
         "runtime": {

@@ -103,9 +103,30 @@ CITY_CONTEXT_GROUP_FIGURES = {
         CITY_CONTEXT_FIGURES["guangzhou_city_context"],
     ),
 }
+CITY_GEF_CONTEXT_BOTTOM_MAJOR_CITIES = (
+    "Beijing",
+    "Shanghai",
+    "Chongqing",
+    "Shenzhen",
+    "Chengdu",
+    "Guangzhou",
+    "Tianjin",
+    "Kunming",
+)
+CITY_GEF_CONTEXT_BOTTOM_LABEL_OFFSETS = {
+    "Beijing": (8, 8),
+    "Shanghai": (8, -12),
+    "Chongqing": (-14, -14),
+    "Shenzhen": (8, 8),
+    "Chengdu": (-12, -14),
+    "Guangzhou": (8, -12),
+    "Tianjin": (8, 8),
+    "Kunming": (-12, 10),
+}
 
 REDUCTION_DETOUR_CACHE_VERSION = 2
 BREAK_EVEN_PHASE_CACHE_VERSION = 1
+CONTRIBUTION_DECOMPOSITION_FULL_CACHE_VERSION = 1
 REDUCTION_DETOUR_SELECTION_METRIC = "total_ebike_lifecycle"
 RETIRED_THRESHOLD_METRIC_COLUMNS = {
     "max_lifecycle_reduction_pct",
@@ -1601,6 +1622,103 @@ def _add_city_detour_reduction_markers(
     return marker_records
 
 
+def _add_major_city_detour_reduction_labels(
+    fig,
+    axes,
+    df,
+    reduction_col,
+    panel_letters=("j", "k"),
+):
+    """Label major cities in the bottom detour-reduction scatter panels."""
+    ax_low, _, ax_high = axes
+    feature_var = "detour_ratio"
+    group_var = "grid_emission_factor"
+    threshold = 0.3
+    needed = ["region_name_en", feature_var, reduction_col, group_var]
+    if any(col not in df.columns for col in needed):
+        return []
+
+    columns = needed + (["region_key"] if "region_key" in df.columns else [])
+    plot_df = df[columns].copy()
+    for col in (feature_var, reduction_col, group_var):
+        plot_df[col] = pd.to_numeric(plot_df[col], errors="coerce")
+    plot_df = plot_df.dropna(subset=[feature_var, reduction_col, group_var])
+    if plot_df.empty:
+        return []
+
+    axis_by_group = {
+        "low_gef": ax_low,
+        "high_gef": ax_high,
+    }
+    panel_letter_by_group = {
+        "low_gef": panel_letters[0],
+        "high_gef": panel_letters[1],
+    }
+    label_records = []
+
+    for city in CITY_GEF_CONTEXT_BOTTOM_MAJOR_CITIES:
+        rows = plot_df[plot_df["region_name_en"] == city]
+        if rows.empty:
+            continue
+
+        row = rows.iloc[0]
+        x = float(row[feature_var])
+        y = float(row[reduction_col])
+        gef = float(row[group_var])
+        axis_name = "low_gef" if gef <= threshold else "high_gef"
+        ax = axis_by_group[axis_name]
+        offset = CITY_GEF_CONTEXT_BOTTOM_LABEL_OFFSETS.get(city, (8, 8))
+        ax.scatter(
+            [x],
+            [y],
+            s=48,
+            marker="o",
+            facecolors="white",
+            edgecolors="#111111",
+            linewidths=1.0,
+            zorder=36,
+            clip_on=False,
+        )
+        ax.annotate(
+            city,
+            (x, y),
+            xytext=offset,
+            textcoords="offset points",
+            fontsize=8,
+            fontweight="bold",
+            color="#111111",
+            arrowprops=dict(arrowstyle="-", color="0.35", lw=0.75),
+            bbox=dict(
+                boxstyle="round,pad=0.18",
+                facecolor="white",
+                edgecolor="0.65",
+                alpha=0.88,
+            ),
+            zorder=37,
+        )
+        display_point = ax.transData.transform((x, y))
+        fig_point = fig.transFigure.inverted().transform(display_point)
+        label_records.append(
+            {
+                "region_key": row.get("region_key"),
+                "display_name": city,
+                "axis_name": axis_name,
+                "panel_letter": panel_letter_by_group[axis_name],
+                "x_detour_ratio": _report_number(x),
+                "y_reduction_pct": _report_number(y),
+                "grid_emission_factor": _report_number(gef),
+                "label_offset_points": {
+                    "x": offset[0],
+                    "y": offset[1],
+                },
+                "x_figure_fraction": _report_number(fig_point[0]),
+                "y_figure_fraction": _report_number(fig_point[1]),
+            }
+        )
+
+    return label_records
+
+
 def _add_city_panel_connector_lines(
     fig,
     top_marker_records,
@@ -1872,6 +1990,7 @@ def _write_city_gef_context_detour_report(
             f"- Group variable: `{bottom_report['group_var']}`",
             f"- Threshold: {bottom_report['threshold']}",
             f"- Selected city scatter markers: {len(bottom_report.get('selected_city_scatter_markers', []))}",
+            f"- Major city labels: {len(bottom_report.get('major_city_labels', []))}",
         ]
     )
     for panel in bottom_report["panels"]:
@@ -2120,6 +2239,13 @@ def _render_city_gef_context_detour_summary(
         reduction_col,
         panel_letters=bottom_panel_letters,
     )
+    bottom_major_city_labels = _add_major_city_detour_reduction_labels(
+        fig,
+        bottom_axes,
+        df_enriched,
+        reduction_col,
+        panel_letters=bottom_panel_letters,
+    )
     connector_lines = _add_city_panel_connector_lines(
         fig,
         top_city_gef_markers,
@@ -2155,6 +2281,7 @@ def _render_city_gef_context_detour_summary(
         panel_letters=bottom_panel_letters,
     )
     bottom_report["selected_city_scatter_markers"] = bottom_city_markers
+    bottom_report["major_city_labels"] = bottom_major_city_labels
     _write_city_gef_context_detour_report(
         save_path=save_path,
         figure_name=figure_name,
@@ -2514,6 +2641,92 @@ def _render_break_even_phase_diagram(
     )
 
 
+def _prepare_contribution_decomposition_full(
+    data_dir,
+    city_df,
+    named_df,
+    exp_config,
+):
+    """Prepare full-data contribution decomposition with cache."""
+    from visualization.emission import (
+        CONTRIBUTION_SAMPLE_SEED,
+        _resolve_contribution_od_path,
+        prepare_contribution_decomposition_data,
+    )
+    from utils.config import get_cache_dir
+
+    stats_path = os.path.join(data_dir, "all_region_stats.csv")
+    gef_path = os.path.join(data_dir, "gef_china.csv")
+    named_path = os.path.join(data_dir, "all_sensitivity_named.csv")
+    city_rows = city_df.copy()
+    required_cols = {"region_key", "total_ebike_lifecycle", "gef"}
+    od_files = {}
+    if required_cols.issubset(city_rows.columns):
+        for col in ("total_ebike_lifecycle", "gef"):
+            city_rows[col] = pd.to_numeric(city_rows[col], errors="coerce")
+        city_rows = city_rows[
+            city_rows["total_ebike_lifecycle"].notna()
+            & (city_rows["total_ebike_lifecycle"] > 0)
+            & city_rows["gef"].notna()
+        ].copy()
+        for region_key in sorted(city_rows["region_key"].dropna().astype(str).unique()):
+            od_path = _resolve_contribution_od_path(data_dir, region_key)
+            if od_path:
+                od_files[region_key] = _file_cache_signature(od_path)
+
+    figure_name = "break_even_contribution_decomposition"
+    cache_path = os.path.join(
+        get_cache_dir("visualization", "paper"),
+        f"{figure_name}_contribution_full_prepared.pkl",
+    )
+    cache_meta = {
+        "version": CONTRIBUTION_DECOMPOSITION_FULL_CACHE_VERSION,
+        "figure_name": figure_name,
+        "stats_file": _optional_file_cache_signature(stats_path),
+        "gef_file": _optional_file_cache_signature(gef_path),
+        "named_file": _optional_file_cache_signature(named_path),
+        "od_files": od_files,
+        "kappa": _get_ebike_kappa(exp_config),
+        "max_sample_rows": None,
+        "sample_seed": CONTRIBUTION_SAMPLE_SEED,
+    }
+    prepared = None
+    if os.path.exists(cache_path):
+        try:
+            with open(cache_path, "rb") as f:
+                cache = pickle.load(f)
+            if cache.get("meta") == cache_meta:
+                print(f"{figure_name}: loading full contribution cache {cache_path}")
+                prepared = cache["prepared"]
+            else:
+                print(f"{figure_name}: full contribution cache is stale; rebuilding")
+        except Exception as exc:
+            print(
+                f"{figure_name}: failed to load full contribution cache "
+                f"({exc}); rebuilding"
+            )
+
+    if prepared is None:
+        prepared = prepare_contribution_decomposition_data(
+            city_df=city_df,
+            data_dir=data_dir,
+            named_df=named_df,
+            exp_config=exp_config,
+            max_sample_rows=None,
+        )
+        if prepared is None:
+            return None
+        with open(cache_path, "wb") as f:
+            pickle.dump(
+                {"meta": cache_meta, "prepared": prepared},
+                f,
+                protocol=pickle.HIGHEST_PROTOCOL,
+            )
+        print(f"{figure_name}: wrote full contribution cache {cache_path}")
+
+    return prepared
+
+
 def _render_break_even_contribution_decomposition(
     data_dir,
     out,
@@ -2525,7 +2738,6 @@ def _render_break_even_contribution_decomposition(
     """Render the stacked break-even and contribution-decomposition figure."""
     from visualization.emission import (
         plot_break_even_contribution_decomposition,
-        prepare_contribution_decomposition_data,
     )
 
     named_path = os.path.join(data_dir, "all_sensitivity_named.csv")
@@ -2542,7 +2754,7 @@ def _render_break_even_contribution_decomposition(
         data_dir=data_dir,
         exp_config=exp_config,
     )
-    contribution_prepared = prepare_contribution_decomposition_data(
+    contribution_prepared = _prepare_contribution_decomposition_full(
         city_df=city_df,
         data_dir=data_dir,
         named_df=named_df,
