@@ -1663,6 +1663,13 @@ def _add_major_city_detour_reduction_labels(
         "Xian": (-12, -14),
         "Zhengzhou": (8, 8),
     }
+    fallback_offsets = (
+        (8, 8), (8, -12), (-12, 10), (-12, -14),
+        (14, 18), (14, -22), (-28, 18), (-28, -22),
+        (24, 4), (24, -8), (-42, 4), (-42, -8),
+        (4, 26), (4, -30),
+    )
+    pending_labels = []
 
     for city in major_cities:
         rows = plot_df[plot_df["region_name_en"] == city]
@@ -1675,7 +1682,6 @@ def _add_major_city_detour_reduction_labels(
         gef = float(row[group_var])
         axis_name = "low_gef" if gef <= threshold else "high_gef"
         ax = axis_by_group[axis_name]
-        offset = label_offsets.get(city, (8, 8))
         ax.scatter(
             [x],
             [y],
@@ -1687,7 +1693,8 @@ def _add_major_city_detour_reduction_labels(
             zorder=36,
             clip_on=False,
         )
-        ax.annotate(
+        offset = label_offsets.get(city, (8, 8))
+        annotation = ax.annotate(
             city,
             (x, y),
             xytext=offset,
@@ -1703,6 +1710,15 @@ def _add_major_city_detour_reduction_labels(
                 alpha=0.88,
             ),
             zorder=37,
+        )
+        pending_labels.append(
+            {
+                "annotation": annotation,
+                "ax": ax,
+                "offset": offset,
+                "city": city,
+                "axis_name": axis_name,
+            }
         )
         display_point = ax.transData.transform((x, y))
         fig_point = fig.transFigure.inverted().transform(display_point)
@@ -1723,6 +1739,55 @@ def _add_major_city_detour_reduction_labels(
                 "y_figure_fraction": _report_number(fig_point[1]),
             }
         )
+
+    if pending_labels:
+        fig.canvas.draw()
+        renderer = fig.canvas.get_renderer()
+        placed_by_axis = {ax_low: [], ax_high: []}
+        records_by_city = {record["display_name"]: record for record in label_records}
+        for item in pending_labels:
+            annotation = item["annotation"]
+            ax = item["ax"]
+            preferred = item["offset"]
+            candidates = (preferred,) + tuple(
+                offset for offset in fallback_offsets if offset != preferred
+            )
+            axis_bbox = ax.get_window_extent(renderer).expanded(1.02, 1.10)
+            best = None
+            best_score = None
+            for candidate in candidates:
+                annotation.set_position(candidate)
+                fig.canvas.draw()
+                bbox = annotation.get_window_extent(renderer).expanded(1.05, 1.16)
+                overlap_count = sum(
+                    bbox.overlaps(placed_bbox)
+                    for placed_bbox in placed_by_axis[ax]
+                )
+                outside = (
+                    max(axis_bbox.x0 - bbox.x0, 0.0)
+                    + max(bbox.x1 - axis_bbox.x1, 0.0)
+                    + max(axis_bbox.y0 - bbox.y0, 0.0)
+                    + max(bbox.y1 - axis_bbox.y1, 0.0)
+                )
+                distance = (candidate[0] ** 2 + candidate[1] ** 2) ** 0.5
+                score = overlap_count * 10000.0 + outside * 10.0 + distance
+                if best_score is None or score < best_score:
+                    best = (candidate, bbox)
+                    best_score = score
+                if overlap_count == 0 and outside == 0:
+                    break
+
+            final_offset, final_bbox = best
+            annotation.set_position(final_offset)
+            placed_by_axis[ax].append(final_bbox)
+            record = records_by_city.get(item["city"])
+            if record:
+                record["label_offset_points"] = {
+                    "x": final_offset[0],
+                    "y": final_offset[1],
+                }
+                record["label_placement"] = "greedy_nonoverlap"
+        fig.canvas.draw()
 
     return label_records
 
