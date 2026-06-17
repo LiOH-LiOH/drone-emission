@@ -103,26 +103,6 @@ CITY_CONTEXT_GROUP_FIGURES = {
         CITY_CONTEXT_FIGURES["guangzhou_city_context"],
     ),
 }
-CITY_GEF_CONTEXT_BOTTOM_MAJOR_CITIES = (
-    "Beijing",
-    "Shanghai",
-    "Chongqing",
-    "Shenzhen",
-    "Chengdu",
-    "Guangzhou",
-    "Tianjin",
-    "Kunming",
-)
-CITY_GEF_CONTEXT_BOTTOM_LABEL_OFFSETS = {
-    "Beijing": (8, 8),
-    "Shanghai": (8, -12),
-    "Chongqing": (-14, -14),
-    "Shenzhen": (8, 8),
-    "Chengdu": (-12, -14),
-    "Guangzhou": (8, -12),
-    "Tianjin": (8, 8),
-    "Kunming": (-12, 10),
-}
 
 REDUCTION_DETOUR_CACHE_VERSION = 2
 BREAK_EVEN_PHASE_CACHE_VERSION = 1
@@ -1655,8 +1635,36 @@ def _add_major_city_detour_reduction_labels(
         "high_gef": panel_letters[1],
     }
     label_records = []
+    major_cities = (
+        "Beijing",
+        "Shanghai",
+        "Guangzhou",
+        "Shenzhen",
+        "Chengdu",
+        "Chongqing",
+        "Tianjin",
+        "Hangzhou",
+        "Wuhan",
+        "Nanjing",
+        "Xian",
+        "Zhengzhou",
+    )
+    label_offsets = {
+        "Beijing": (8, 8),
+        "Shanghai": (8, -12),
+        "Guangzhou": (8, -12),
+        "Shenzhen": (8, 8),
+        "Chengdu": (-12, -14),
+        "Chongqing": (-14, -14),
+        "Tianjin": (8, 8),
+        "Hangzhou": (8, 8),
+        "Wuhan": (-12, 10),
+        "Nanjing": (8, -12),
+        "Xian": (-12, -14),
+        "Zhengzhou": (8, 8),
+    }
 
-    for city in CITY_GEF_CONTEXT_BOTTOM_MAJOR_CITIES:
+    for city in major_cities:
         rows = plot_df[plot_df["region_name_en"] == city]
         if rows.empty:
             continue
@@ -1667,7 +1675,7 @@ def _add_major_city_detour_reduction_labels(
         gef = float(row[group_var])
         axis_name = "low_gef" if gef <= threshold else "high_gef"
         ax = axis_by_group[axis_name]
-        offset = CITY_GEF_CONTEXT_BOTTOM_LABEL_OFFSETS.get(city, (8, 8))
+        offset = label_offsets.get(city, (8, 8))
         ax.scatter(
             [x],
             [y],
