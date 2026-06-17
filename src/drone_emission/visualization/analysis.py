@@ -368,7 +368,6 @@ def _evaluate_pathway_optimal_curve_point(
     """Evaluate sampled annual CO2 savings and drone share for one pathway point."""
     from dataclasses import replace
 
-    from sensitivity.named_scenarios import _threshold_sweep
     from sensitivity.vectorized_lca import (
         DroneScenario,
         EbikeScenario,
@@ -410,23 +409,192 @@ def _evaluate_pathway_optimal_curve_point(
             ),
         )
 
-    thresholds = _threshold_sweep(road_km)
-    best_total_g = None
-    best_use_drone = None
-    for threshold in thresholds:
-        use_drone = road_km >= threshold
-        annual_total_g = float((np.where(use_drone, drone_g, ebike_g) * annual_sales).sum())
-        if best_total_g is None or annual_total_g < best_total_g:
-            best_total_g = annual_total_g
-            best_use_drone = use_drone
+    use_drone = drone_g < ebike_g
+    oracle_total_g = float((np.where(use_drone, drone_g, ebike_g) * annual_sales).sum())
 
     anchor_g = float((anchor_ebike_g * annual_sales).sum())
-    drone_orders = float(annual_sales[best_use_drone].sum())
+    drone_orders = float(annual_sales[use_drone].sum())
     total_orders = float(annual_sales.sum())
     return {
-        "saved_kg": (anchor_g - best_total_g) * scale / 1000.0,
+        "saved_kg": (anchor_g - oracle_total_g) * scale / 1000.0,
         "drone_share_pct": drone_orders / total_orders * 100.0 if total_orders > 0 else np.nan,
     }
+
+
+def _evaluate_pathway_oracle_city(
+    od_df: pd.DataFrame,
+    ebike_params,
+    drone_params,
+    province_gef_kwh: float,
+    kappa: float,
+    gef_mult: float,
+    rider_weight: float,
+    payload_kg: float,
+    anchor_kappa: float,
+    anchor_gef_mult: float = 1.0,
+) -> dict:
+    """Evaluate a city-level per-OD oracle-min allocation for one pathway scenario."""
+    from dataclasses import replace
+
+    from sensitivity.vectorized_lca import (
+        DroneScenario,
+        EbikeScenario,
+        compute_drone_per_order_g,
+        compute_ebike_per_order_g,
+    )
+
+    required = {"road_distance_m", "distance_km", "annual_sales"}
+    missing = required - set(od_df.columns)
+    if missing:
+        raise KeyError(f"missing OD columns {sorted(missing)}")
+
+    valid = od_df[list(required)].copy()
+    for col in required:
+        valid[col] = pd.to_numeric(valid[col], errors="coerce")
+    valid = valid[
+        (valid["road_distance_m"] >= 0)
+        & (valid["distance_km"] > 0)
+        & (valid["annual_sales"] > 0)
+    ].dropna()
+    if valid.empty:
+        raise ValueError("no valid OD rows with positive annual sales")
+
+    road_km = valid["road_distance_m"].to_numpy(dtype=float) / 1000.0
+    air_km = valid["distance_km"].to_numpy(dtype=float)
+    annual_sales = valid["annual_sales"].to_numpy(dtype=float)
+
+    ebike_pp = replace(ebike_params, e_use=province_gef_kwh)
+    drone_pp = replace(drone_params, e_use=province_gef_kwh)
+    ebike_g = compute_ebike_per_order_g(
+        road_km,
+        ebike_pp,
+        EbikeScenario(
+            kappa=kappa,
+            gef_mult=gef_mult,
+            payload_kg=payload_kg,
+            rider_weight=rider_weight,
+        ),
+    )
+    drone_g = compute_drone_per_order_g(
+        air_km,
+        drone_pp,
+        DroneScenario(gef_mult=gef_mult, payload_kg=payload_kg),
+    )
+    anchor_ebike_g = compute_ebike_per_order_g(
+        road_km,
+        ebike_pp,
+        EbikeScenario(
+            kappa=anchor_kappa,
+            gef_mult=anchor_gef_mult,
+            payload_kg=payload_kg,
+            rider_weight=rider_weight,
+        ),
+    )
+
+    use_drone = drone_g < ebike_g
+    oracle_lifecycle_kg = float(np.sum(np.where(use_drone, drone_g, ebike_g) * annual_sales) / 1000.0)
+    anchor_lifecycle_kg = float(np.sum(anchor_ebike_g * annual_sales) / 1000.0)
+    scenario_ebike_lifecycle_kg = float(np.sum(ebike_g * annual_sales) / 1000.0)
+    drone_orders = float(annual_sales[use_drone].sum())
+    total_orders = float(annual_sales.sum())
+    return {
+        "annual_lifecycle_kg": oracle_lifecycle_kg,
+        "anchor_annual_kg": anchor_lifecycle_kg,
+        "scenario_ebike_annual_kg": scenario_ebike_lifecycle_kg,
+        "drone_ratio_pct": drone_orders / total_orders * 100.0 if total_orders > 0 else np.nan,
+    }
+
+
+def _build_pathway_oracle_panel_rows(
+    stats_df: pd.DataFrame,
+    panels: list[tuple],
+    data_dir: str,
+    exp_config: dict | None,
+    baseline_kappa: float,
+) -> pd.DataFrame:
+    """Build per-city oracle-min rows for the pathway scenario map panels."""
+    from emission.cal_single_delivery import create_drone_params, create_ebike_params
+    from utils.grid_emission_factor import fetch_factor
+
+    if not data_dir:
+        return pd.DataFrame()
+
+    ebike_params = create_ebike_params(exp_config)
+    drone_params = create_drone_params(exp_config)
+    emission_cfg = (exp_config or {}).get("emission_params", {})
+    rider_weight = float(emission_cfg.get("rider_weight", 70.0))
+    payload_kg = float(emission_cfg.get("payload_kg", 1.0))
+    gef_path = (exp_config or {}).get("gef_path")
+    if "region_level" in stats_df.columns:
+        city_rows = stats_df[stats_df["region_level"] == "city"].copy()
+    else:
+        city_rows = stats_df.copy()
+    if city_rows.empty or not {"region_key", "province"}.issubset(city_rows.columns):
+        return pd.DataFrame()
+
+    rows = []
+    skipped = []
+    for _, city in city_rows.iterrows():
+        region_key = city["region_key"]
+        province = city["province"]
+        od_path = os.path.join(data_dir, "city", region_key, f"{region_key}_od_pairs.csv")
+        if not os.path.exists(od_path):
+            skipped.append(region_key)
+            continue
+        try:
+            od_df = pd.read_csv(
+                od_path,
+                usecols=["road_distance_m", "distance_km", "annual_sales"],
+            )
+            province_gef = (
+                fetch_factor(province, gef_path)
+                if gef_path
+                else float(emission_cfg.get("e_use", 0.6))
+            )
+            for label, _title, kappa, gef_mult, _strategy in panels:
+                metrics = _evaluate_pathway_oracle_city(
+                    od_df,
+                    ebike_params,
+                    drone_params,
+                    province_gef,
+                    kappa=kappa,
+                    gef_mult=gef_mult,
+                    rider_weight=rider_weight,
+                    payload_kg=payload_kg,
+                    anchor_kappa=baseline_kappa,
+                    anchor_gef_mult=1.0,
+                )
+                rows.append(
+                    {
+                        "panel_label": label,
+                        "region_key": region_key,
+                        "province": province,
+                        "kappa": kappa,
+                        "strategy": "oracle_min_mixed",
+                        "gef_mult": gef_mult,
+                        "threshold_km": np.nan,
+                        "drone_ratio_pct": metrics["drone_ratio_pct"],
+                        "annual_lifecycle_kg": metrics["annual_lifecycle_kg"],
+                        "anchor_annual_kg": metrics["anchor_annual_kg"],
+                        "scenario_ebike_annual_kg": metrics["scenario_ebike_annual_kg"],
+                        "reduction_vs_anchor_ebike_pct": (
+                            (1.0 - metrics["annual_lifecycle_kg"] / metrics["anchor_annual_kg"]) * 100.0
+                            if metrics["anchor_annual_kg"] > 0
+                            else np.nan
+                        ),
+                    }
+                )
+        except Exception:
+            skipped.append(region_key)
+            continue
+
+    if rows:
+        print(
+            "plot_regions_map_pathway_scenarios: built oracle-min mixed panels "
+            f"from {len({row['region_key'] for row in rows})} cities "
+            f"(skipped {len(set(skipped))})"
+        )
+    return pd.DataFrame(rows)
 
 
 def _build_pathway_curve_data(
@@ -1925,11 +2093,13 @@ def plot_regions_map_pathway_scenarios(
     distribution across cities within that province). Provinces are ordered by
     the weighted all-ebike annual lifecycle baseline, consistent across panels.
 
-    Panels (all from `all_sensitivity_named.csv`):
-        (a) today                    baseline kappa, gef_mult=1.0, optimal_mixed
-        (b) halved GEF               baseline kappa, gef_mult=0.5, optimal_mixed_2030
-        (c) operator bundling        kappa=0.65, gef_mult=1.0, optimal_mixed
-        (d) halved GEF + bundling    kappa=0.65, gef_mult=0.5, optimal_mixed_2030
+    Panels use the per-OD oracle-min mixed allocation when city OD files and
+    experiment config are available. The named threshold-sweep scenarios are
+    retained as a fallback for older artifacts:
+        (a) today                    baseline kappa, gef_mult=1.0
+        (b) halved GEF               baseline kappa, gef_mult=0.5
+        (c) operator bundling        kappa=0.65, gef_mult=1.0
+        (d) halved GEF + bundling    kappa=0.65, gef_mult=0.5
 
     Reduction values (map fill) prefer annual lifecycle totals against the
     weighted all-ebike city baseline from `all_region_stats.csv`, falling back
@@ -1962,6 +2132,25 @@ def plot_regions_map_pathway_scenarios(
     reduction_col = "reduction_vs_anchor_ebike_pct"
     has_annual = "annual_lifecycle_kg" in named.columns
     anchor_rows = _pathway_anchor_annual_kg(named, base, baseline_kappa)
+    oracle_rows = _build_pathway_oracle_panel_rows(
+        base,
+        panels,
+        data_dir=data_dir,
+        exp_config=exp_config,
+        baseline_kappa=baseline_kappa,
+    )
+    if not oracle_rows.empty:
+        has_annual = True
+        anchor_rows = (
+            oracle_rows[["region_key", "anchor_annual_kg"]]
+            .dropna()
+            .drop_duplicates(subset=["region_key"])
+        )
+    else:
+        print(
+            "plot_regions_map_pathway_scenarios: oracle-min panel rows unavailable; "
+            "falling back to named threshold-sweep strategies."
+        )
     if has_annual and anchor_rows.empty:
         print(
             "plot_regions_map_pathway_scenarios: annual scenario totals are present "
@@ -1973,11 +2162,14 @@ def plot_regions_map_pathway_scenarios(
     annual_saved_total_kg = {}
     all_values = []
     for label, _title, k, g, strat in panels:
-        rows = named[
-            np.isclose(named["kappa"], k)
-            & np.isclose(named["gef_mult"], g)
-            & (named["strategy"] == strat)
-        ].copy()
+        if not oracle_rows.empty:
+            rows = oracle_rows[oracle_rows["panel_label"] == label].copy()
+        else:
+            rows = named[
+                np.isclose(named["kappa"], k)
+                & np.isclose(named["gef_mult"], g)
+                & (named["strategy"] == strat)
+            ].copy()
         rows["province_en"] = rows["province"].map(PROVINCE_NAME_EN).fillna(rows["province"])
         panel_named[label] = rows
         share_col = _scenario_drone_share_column(rows) if not rows.empty else "drone_ratio_pct"
