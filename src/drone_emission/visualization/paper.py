@@ -106,7 +106,7 @@ CITY_CONTEXT_GROUP_FIGURES = {
 
 REDUCTION_DETOUR_CACHE_VERSION = 2
 BREAK_EVEN_PHASE_CACHE_VERSION = 1
-CONTRIBUTION_DECOMPOSITION_FULL_CACHE_VERSION = 1
+CONTRIBUTION_DECOMPOSITION_FULL_CACHE_VERSION = 2
 REDUCTION_DETOUR_SELECTION_METRIC = "total_ebike_lifecycle"
 RETIRED_THRESHOLD_METRIC_COLUMNS = {
     "max_lifecycle_reduction_pct",
@@ -287,6 +287,52 @@ def _prepare_reduction_detour_city_stats(city_df):
         )
 
     return city_df.dropna(subset=list(required))
+
+
+def _prepare_contribution_decomposition_city_stats(city_df, gef_df, exp_config):
+    """Return Part-1-scope city stats for contribution decomposition."""
+    required = {
+        "region_key",
+        "region_name_en",
+        "province",
+        "total_ebike_lifecycle",
+    }
+    missing = sorted(required - set(city_df.columns))
+    if missing:
+        print(
+            "break_even_contribution_decomposition skipped — "
+            f"all_region_stats.csv missing columns {missing}"
+        )
+        return city_df.iloc[0:0].copy()
+
+    prepared = city_df.copy()
+    if "gef" in prepared.columns:
+        prepared = prepared.drop(columns=["gef"])
+    if gef_df is not None and not gef_df.empty:
+        prepared = prepared.merge(gef_df, on="province", how="left")
+    else:
+        prepared["gef"] = float((exp_config or {}).get("emission_params", {}).get("e_use", 0.5600))
+
+    prepared["total_ebike_lifecycle"] = pd.to_numeric(
+        prepared["total_ebike_lifecycle"],
+        errors="coerce",
+    )
+    prepared["gef"] = pd.to_numeric(prepared["gef"], errors="coerce")
+    fallback_gef = 0.5600
+    missing_gef = int(prepared["gef"].isna().sum())
+    if missing_gef:
+        print(
+            "break_even_contribution_decomposition: filling "
+            f"{missing_gef} city rows with fallback GEF={fallback_gef:.4f}"
+        )
+        prepared["gef"] = prepared["gef"].fillna(fallback_gef)
+
+    prepared = prepared[
+        prepared["total_ebike_lifecycle"].notna()
+        & (prepared["total_ebike_lifecycle"] > 0)
+        & prepared["gef"].notna()
+    ].copy()
+    return prepared
 
 
 def _build_reduction_detour_binned_by_city(
@@ -2760,6 +2806,7 @@ def _prepare_contribution_decomposition_full(
         "named_file": _optional_file_cache_signature(named_path),
         "od_files": od_files,
         "kappa": _get_ebike_kappa(exp_config),
+        "gef_fallback": 0.5600,
         "max_sample_rows": None,
         "sample_seed": CONTRIBUTION_SAMPLE_SEED,
     }
@@ -3255,11 +3302,16 @@ def render_all(data_dir: str, figures_dir: str, for_latex: bool = False, plot_ti
                 or _want("top6_reduction_detour_grid_random")
             )
             if needs_reduction_detour_city_stats:
-                city_df = df[df["region_level"] == "city"].copy()
+                raw_city_df = df[df["region_level"] == "city"].copy()
                 gef_path = os.path.join(data_dir, "gef_china.csv")
                 gef_df = pd.read_csv(gef_path, encoding="gbk")
                 gef_df.columns = ["province", "gef"]
-                city_df = city_df.merge(gef_df, on="province", how="left")
+                contribution_city_df = _prepare_contribution_decomposition_city_stats(
+                    raw_city_df,
+                    gef_df,
+                    exp_config,
+                )
+                city_df = raw_city_df.merge(gef_df, on="province", how="left")
                 city_df = _prepare_reduction_detour_city_stats(city_df)
 
                 if _want("break_even_contribution_decomposition"):
@@ -3268,7 +3320,7 @@ def render_all(data_dir: str, figures_dir: str, for_latex: bool = False, plot_ti
                         out=out,
                         for_latex=for_latex,
                         plot_title=plot_title,
-                        city_df=city_df,
+                        city_df=contribution_city_df,
                         exp_config=exp_config,
                     )
 

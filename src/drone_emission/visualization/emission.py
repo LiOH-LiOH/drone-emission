@@ -807,7 +807,12 @@ def _format_component_annotation(pp_value: float, kg_value: float) -> str:
     return f"{pp_value:+.2f} pp\n({kg_value / 1e6:+.2f} kt)"
 
 
-def _add_panel_letter(ax, letter: str, fontsize: int = 13):
+def _add_panel_letter(
+    ax,
+    letter: str,
+    fontsize: int = 13,
+    position: tuple[float, float] = (-0.10, 1.03),
+):
     """Add a bold panel letter just above the top-left corner."""
     text_kwargs = {
         "fontsize": fontsize,
@@ -816,9 +821,9 @@ def _add_panel_letter(ax, letter: str, fontsize: int = 13):
         "va": "bottom",
     }
     if hasattr(ax, "text2D"):
-        ax.text2D(-0.10, 1.03, letter, transform=ax.transAxes, **text_kwargs)
+        ax.text2D(position[0], position[1], letter, transform=ax.transAxes, **text_kwargs)
     else:
-        ax.text(-0.10, 1.03, letter, transform=ax.transAxes, **text_kwargs)
+        ax.text(position[0], position[1], letter, transform=ax.transAxes, **text_kwargs)
 
 
 def _plot_contribution_waterfall(ax, national: dict, rotate_xticks: bool = False):
@@ -984,6 +989,7 @@ def _plot_contribution_decomposition_panels(
     legend_anchor: tuple[float, float] = (0.5, 0.98),
     panel_letter_fontsize: int = 13,
     rotate_waterfall_xticks: bool = False,
+    panel_letter_position: tuple[float, float] = (-0.10, 1.03),
 ):
     """Draw contribution-decomposition panels on caller-provided axes."""
     _plot_contribution_waterfall(
@@ -999,8 +1005,18 @@ def _plot_contribution_decomposition_panels(
             fontsize=14,
         )
         ax_b.set_title("Top 15 cities by total emission reduction", fontsize=12)
-    _add_panel_letter(ax_a, panel_letters[0], fontsize=panel_letter_fontsize)
-    _add_panel_letter(ax_b, panel_letters[1], fontsize=panel_letter_fontsize)
+    _add_panel_letter(
+        ax_a,
+        panel_letters[0],
+        fontsize=panel_letter_fontsize,
+        position=panel_letter_position,
+    )
+    _add_panel_letter(
+        ax_b,
+        panel_letters[1],
+        fontsize=panel_letter_fontsize,
+        position=panel_letter_position,
+    )
 
     legend_handles = [
         plt.Rectangle(
@@ -2670,7 +2686,7 @@ def plot_break_even_contribution_decomposition(
         2,
         1,
         height_ratios=[1.0, 0.92],
-        hspace=0.60,
+        hspace=0.42,
     )
     top = outer[0].subgridspec(
         1,
@@ -2710,9 +2726,10 @@ def plot_break_even_contribution_decomposition(
         contribution_prepared,
         plot_title=plot_title,
         panel_letters=("d", "e"),
-        legend_anchor=(0.5, 0.445),
+        legend_anchor=(0.5, 0.485),
         panel_letter_fontsize=12,
         rotate_waterfall_xticks=True,
+        panel_letter_position=(-0.10, 1.13),
     )
 
     if save_path:
