@@ -2670,7 +2670,7 @@ def plot_break_even_contribution_decomposition(
         2,
         1,
         height_ratios=[1.0, 0.92],
-        hspace=0.42,
+        hspace=0.60,
     )
     top = outer[0].subgridspec(
         1,
@@ -2710,7 +2710,7 @@ def plot_break_even_contribution_decomposition(
         contribution_prepared,
         plot_title=plot_title,
         panel_letters=("d", "e"),
-        legend_anchor=(0.5, 0.485),
+        legend_anchor=(0.5, 0.445),
         panel_letter_fontsize=12,
         rotate_waterfall_xticks=True,
     )
