@@ -736,6 +736,11 @@ def _plot_pathway_curve_panel(
     share = curve_df["drone_share_pct"].to_numpy(dtype=float)
     if saved_limits is None:
         saved_limits = _padded_visible_ylim(saved)
+    if saved_as_bar and saved_limits is not None:
+        saved_limits = (
+            min(0.0, float(saved_limits[0])),
+            max(0.0, float(saved_limits[1])),
+        )
     if share_limits is None:
         share_limits = (0, min(105, max(100, np.nanmax(share) * 1.08)))
 
