@@ -721,6 +721,7 @@ def _plot_pathway_curve_panel(
     orientation: str = "horizontal",
     saved_limits: tuple[float, float] = None,
     share_limits: tuple[float, float] = None,
+    saved_as_bar: bool = False,
 ):
     """Draw total saved CO2 and drone share on dual axes."""
     if curve_df is None or curve_df.empty:
@@ -737,8 +738,19 @@ def _plot_pathway_curve_panel(
     if share_limits is None:
         share_limits = (0, min(105, max(100, np.nanmax(share) * 1.08)))
 
+    finite_x = x[np.isfinite(x)]
+    if finite_x.size > 1:
+        x_steps = np.diff(np.sort(np.unique(finite_x)))
+        x_steps = x_steps[x_steps > 0]
+        bar_width = float(x_steps.min() * 0.72) if x_steps.size else 0.08
+    else:
+        bar_width = 0.08
+
     if orientation == "vertical":
-        ax.plot(saved, x, color="#1b7837", marker="o", linewidth=1.8, markersize=4)
+        if saved_as_bar:
+            ax.barh(x, saved, height=bar_width, color="#1b7837", alpha=0.75)
+        else:
+            ax.plot(saved, x, color="#1b7837", marker="o", linewidth=1.8, markersize=4)
         ax.set_xlabel(r"CO$_2$ saved (kt/yr)", fontsize=10, color="#1b7837")
         ax.set_ylabel(axis_label, fontsize=10)
         ax.tick_params(axis="x", labelcolor="#1b7837", labelsize=8)
@@ -754,7 +766,10 @@ def _plot_pathway_curve_panel(
         if share_limits is not None:
             ax_share.set_xlim(*share_limits)
     else:
-        ax.plot(x, saved, color="#1b7837", marker="o", linewidth=1.8, markersize=4)
+        if saved_as_bar:
+            ax.bar(x, saved, width=bar_width, color="#1b7837", alpha=0.75)
+        else:
+            ax.plot(x, saved, color="#1b7837", marker="o", linewidth=1.8, markersize=4)
         ax.set_xlabel(axis_label, fontsize=10)
         ax.set_ylabel(r"CO$_2$ saved (kt/yr)", fontsize=10, color="#1b7837")
         ax.tick_params(axis="y", labelcolor="#1b7837", labelsize=8)
@@ -2386,6 +2401,7 @@ def plot_regions_map_pathway_scenarios(
             orientation="horizontal",
             saved_limits=curve_saved_limits,
             share_limits=curve_share_limits,
+            saved_as_bar=True,
         ),
         _plot_pathway_curve_panel(
             curve_axes[1],
@@ -2395,6 +2411,7 @@ def plot_regions_map_pathway_scenarios(
             orientation="horizontal",
             saved_limits=curve_saved_limits,
             share_limits=curve_share_limits,
+            saved_as_bar=True,
         ),
     ]
 
@@ -6436,12 +6453,12 @@ def _plot_reduction_detour_panel(
 
     if bar_metric == "oracle_drone_share_pct":
         bar_colors = [
-            "#2166ac" if np.isfinite(v) else "#d9d9d9"
+            "#9ecae1" if np.isfinite(v) else "#d9d9d9"
             for v in bar_values
         ]
         bar_label = "Oracle drone share"
         bar_ylabel = "Oracle Drone Share (%)"
-        bar_tick_color = "#2166ac"
+        bar_tick_color = "#3182bd"
     else:
         bar_colors = [
             "#2ca02c" if (np.isfinite(v) and v >= 0) else "#d62728"
@@ -6531,7 +6548,8 @@ def _plot_reduction_detour_panel(
     if saturation_fit_y is not None:
         ylim_values = np.concatenate([ylim_values, saturation_fit_y])
     if bar_metric == "oracle_drone_share_pct":
-        ax_bot.set_ylim(0.0, 100.0)
+        ax_bot.set_ylim(0.0, 150.0)
+        ax_bot.set_yticks([0, 50, 100])
     else:
         visible_pct_ylim = _padded_visible_ylim(ylim_values)
         if visible_pct_ylim is not None:
