@@ -738,7 +738,7 @@ def _plot_pathway_curve_panel(
         saved_limits = _padded_visible_ylim(saved)
     if saved_as_bar and saved_limits is not None:
         saved_limits = (
-            min(0.0, float(saved_limits[0])),
+            0.0,
             max(0.0, float(saved_limits[1])),
         )
     if share_limits is None:
