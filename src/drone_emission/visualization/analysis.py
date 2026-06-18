@@ -1072,16 +1072,21 @@ def _write_regions_map_pathway_scenarios_report(
     bin_edges,
     reduction_edges,
     cbar_ax,
+    panel_display_labels: dict = None,
+    curve_display_labels: dict = None,
 ):
     """Write a compact JSON report for regions_map_pathway_scenarios."""
     report_path = save_path.rsplit(".", 1)[0] + "_report.json"
     scenario_reports = {}
     color_col = "max_lifecycle_reduction_pct"
+    panel_display_labels = panel_display_labels or {}
+    curve_display_labels = curve_display_labels or {}
     for label, title, kappa, gef_mult, _strategy in panels:
         rows = panel_named.get(label, pd.DataFrame())
         share_col = _scenario_drone_share_column(rows) if not rows.empty else "drone_ratio_pct"
         ax_map, ax_box, ax_line = panel_axes[label]
-        scenario_reports[f"{label}_{title.lower().replace(' ', '_').replace('+', 'plus')}"] = (
+        display_label = panel_display_labels.get(label, label)
+        scenario_reports[f"{display_label}_{title.lower().replace(' ', '_').replace('+', 'plus')}"] = (
             _pathway_scenario_panel_report(
                 rows=rows,
                 panel_df=panel_dfs[label],
@@ -1092,7 +1097,7 @@ def _write_regions_map_pathway_scenarios_report(
                 summary_axes=summary_bar_axes.get(label),
                 share_col=share_col,
                 province_order=province_order,
-                panel_label=label,
+                panel_label=display_label,
                 title=title,
                 kappa=kappa,
                 gef_mult=gef_mult,
@@ -1130,16 +1135,16 @@ def _write_regions_map_pathway_scenarios_report(
         },
         "panels": {
             **scenario_reports,
-            "e_kappa_pathway_curve": _pathway_curve_report(
+            f"{curve_display_labels.get('gef', 'a')}_gef_pathway_curve": _pathway_curve_report(
                 curve_axes[0],
                 curve_twins[0],
-                curve_data.get("kappa"),
-                "vertical",
+                curve_data.get("gef"),
+                "horizontal",
             ),
-            "f_gef_pathway_curve": _pathway_curve_report(
+            f"{curve_display_labels.get('kappa', 'd')}_kappa_pathway_curve": _pathway_curve_report(
                 curve_axes[1],
                 curve_twins[1],
-                curve_data.get("gef"),
+                curve_data.get("kappa"),
                 "horizontal",
             ),
         },
@@ -1147,7 +1152,6 @@ def _write_regions_map_pathway_scenarios_report(
     with open(report_path, "w", encoding="utf-8") as f:
         json.dump(payload, f, indent=2, ensure_ascii=False, allow_nan=False)
     print(f"Regions map pathway scenarios report saved to {report_path}")
-
 
 def plot_correlation_heatmap(
     corr_df: pd.DataFrame,
@@ -2082,24 +2086,25 @@ def plot_regions_map_pathway_scenarios(
     data_dir: str = None,
     exp_config: dict = None,
     save_path: str = None,
-    figsize: tuple = (20, 18),
+    figsize: tuple = (20, 12),
     for_latex: bool = False,
     plot_title: bool = False,
 ):
-    """2x2 panel grid: China region choropleth + per-province drone-share boxplot.
+    """3x2 panel grid for pathway curves and scenario maps.
 
-    Each of four scenarios occupies a (map, boxplot) pair, with the boxplot
-    directly under its map. The boxplot has one box per province (drone-share
-    distribution across cities within that province). Provinces are ordered by
-    the weighted all-ebike annual lifecycle baseline, consistent across panels.
+    The left column shows pathway curves, while each of four scenarios occupies
+    a (map, boxplot) pair in the remaining cells, with the boxplot directly
+    under its map. The boxplot has one box per province (drone-share distribution
+    across cities within that province). Provinces are ordered by the weighted
+    all-ebike annual lifecycle baseline, consistent across panels.
 
     Panels use the per-OD oracle-min mixed allocation when city OD files and
     experiment config are available. The named threshold-sweep scenarios are
     retained as a fallback for older artifacts:
-        (a) today                    baseline kappa, gef_mult=1.0
-        (b) halved GEF               baseline kappa, gef_mult=0.5
-        (c) operator bundling        kappa=0.65, gef_mult=1.0
-        (d) halved GEF + bundling    kappa=0.65, gef_mult=0.5
+        today                    baseline kappa, gef_mult=1.0
+        halved GEF               baseline kappa, gef_mult=0.5
+        operator bundling        kappa=0.65, gef_mult=1.0
+        halved GEF + bundling    kappa=0.65, gef_mult=0.5
 
     Reduction values (map fill) prefer annual lifecycle totals against the
     weighted all-ebike city baseline from `all_region_stats.csv`, falling back
@@ -2282,19 +2287,21 @@ def plot_regions_map_pathway_scenarios(
 
     fig = plt.figure(figsize=figsize)
     gs = fig.add_gridspec(
-        5, 3,
-        height_ratios=[1.55, 5, 2.2, 5, 2.2],
-        width_ratios=[0.82, 1, 1],
-        hspace=0.30,
-        wspace=0.24,
+        4, 3,
+        height_ratios=[5, 2.2, 5, 2.2],
+        width_ratios=[1.05, 1, 1],
+        hspace=0.32,
+        wspace=0.26,
     )
-    pos = {"a": (1, 1), "b": (1, 2), "c": (3, 1), "d": (3, 2)}
+    pos = {"a": (0, 1), "b": (0, 2), "c": (2, 1), "d": (2, 2)}
+    panel_display_labels = {"a": "b", "b": "c", "c": "e", "d": "f"}
+    curve_display_labels = {"gef": "a", "kappa": "d"}
     ax_pairs = []
     panel_axes = {}
     summary_bar_axes = {}
     curve_axes = [
-        fig.add_subplot(gs[1:5, 0]),
-        fig.add_subplot(gs[0, 1:3]),
+        fig.add_subplot(gs[0:2, 0]),
+        fig.add_subplot(gs[2:4, 0]),
     ]
 
     box_lines = []  # parallel list of twin axes for line overlay
@@ -2321,7 +2328,7 @@ def plot_regions_map_pathway_scenarios(
         for spine in ax_map.spines.values():
             spine.set_visible(False)
         ax_map.set_title(title, fontsize=12)
-        ax_map.text(-0.02, 1.02, label, transform=ax_map.transAxes,
+        ax_map.text(-0.02, 1.02, panel_display_labels[label], transform=ax_map.transAxes,
                     fontsize=14, fontweight="bold", va="bottom", ha="right")
 
         saved_kt = annual_saved_total_kg.get(label, np.nan) / 1e6
@@ -2373,18 +2380,18 @@ def plot_regions_map_pathway_scenarios(
     curve_twins = [
         _plot_pathway_curve_panel(
             curve_axes[0],
-            curve_data.get("kappa"),
-            "e",
-            r"E-bike bundling factor $\kappa$",
-            orientation="vertical",
+            curve_data.get("gef"),
+            curve_display_labels["gef"],
+            "Grid emission factor multiplier",
+            orientation="horizontal",
             saved_limits=curve_saved_limits,
             share_limits=curve_share_limits,
         ),
         _plot_pathway_curve_panel(
             curve_axes[1],
-            curve_data.get("gef"),
-            "f",
-            "Grid emission factor multiplier",
+            curve_data.get("kappa"),
+            curve_display_labels["kappa"],
+            r"E-bike bundling factor $\kappa$",
             orientation="horizontal",
             saved_limits=curve_saved_limits,
             share_limits=curve_share_limits,
@@ -2415,10 +2422,6 @@ def plot_regions_map_pathway_scenarios(
         new_pos = [map_box.x0, new_y0, map_box.width, box_box.height]
         ax_box.set_position(new_pos)
         ax_line.set_position(new_pos)
-    e_pos = curve_axes[0].get_position()
-    f_pos = curve_axes[1].get_position()
-    e_width = f_pos.height
-    curve_axes[0].set_position([e_pos.x1 - e_width, e_pos.y0, e_width, e_pos.height])
     for ax, ax_twin in zip(curve_axes, curve_twins):
         if ax_twin is not None:
             ax_twin.set_position(ax.get_position())
@@ -2453,6 +2456,8 @@ def plot_regions_map_pathway_scenarios(
             bin_edges=bin_edges,
             reduction_edges=reduction_edges,
             cbar_ax=cbar_ax,
+            panel_display_labels=panel_display_labels,
+            curve_display_labels=curve_display_labels,
         )
     else:
         plt.show()
