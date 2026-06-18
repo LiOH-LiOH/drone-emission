@@ -2443,9 +2443,11 @@ def _plot_break_even_phase_diagram_panels(
                 rstride=1,
                 cstride=1,
                 linewidth=0,
-                antialiased=True,
+                antialiased=False,
                 shade=False,
-                alpha=0.96,
+                alpha=1.0,
+                edgecolor="none",
+                rasterized=True,
             )
         else:
             ax_a.plot_trisurf(
@@ -2456,9 +2458,11 @@ def _plot_break_even_phase_diagram_panels(
                 cmap=surface_cmap,
                 norm=surface_norm,
                 linewidth=0,
-                antialiased=True,
+                antialiased=False,
                 shade=False,
-                alpha=0.96,
+                alpha=1.0,
+                edgecolor="none",
+                rasterized=True,
             )
     elif np.isfinite(break_even_surface).any():
         z_surface = np.ma.masked_invalid(break_even_surface)
@@ -2471,9 +2475,11 @@ def _plot_break_even_phase_diagram_panels(
             rstride=1,
             cstride=1,
             linewidth=0,
-            antialiased=True,
+            antialiased=False,
             shade=False,
-            alpha=0.96,
+            alpha=1.0,
+            edgecolor="none",
+            rasterized=True,
         )
 
     if show_surface_annotations:
