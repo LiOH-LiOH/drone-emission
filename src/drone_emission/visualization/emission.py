@@ -2232,11 +2232,32 @@ def _build_break_even_contour_surface_mesh(
     if not np.isfinite(y_mesh).any():
         return None
 
+    finite = np.isfinite(x_mesh) & np.isfinite(y_mesh) & np.isfinite(z_mesh)
+    vertex_ids = np.full(x_mesh.shape, -1, dtype=int)
+    vertex_ids[finite] = np.arange(int(finite.sum()), dtype=int)
+    triangles = []
+    for row in range(x_mesh.shape[0] - 1):
+        for col in range(x_mesh.shape[1] - 1):
+            ids = (
+                vertex_ids[row, col],
+                vertex_ids[row, col + 1],
+                vertex_ids[row + 1, col],
+                vertex_ids[row + 1, col + 1],
+            )
+            if min(ids) < 0:
+                continue
+            triangles.append((ids[0], ids[1], ids[2]))
+            triangles.append((ids[1], ids[3], ids[2]))
+
+    if not triangles:
+        return None
+
     return {
         "kind": "contour_surface",
-        "x": x_mesh,
-        "y": y_mesh,
-        "z": z_mesh,
+        "x": x_mesh[finite],
+        "y": y_mesh[finite],
+        "z": z_mesh[finite],
+        "triangles": np.asarray(triangles, dtype=int),
     }
 
 
@@ -2433,15 +2454,14 @@ def _plot_break_even_phase_diagram_panels(
     X, Y = np.meshgrid(air_distance_grid_km, detour_ratios)
 
     if surface_mesh:
-        if surface_mesh.get("kind") == "contour_surface":
-            ax_a.plot_surface(
+        if "triangles" in surface_mesh:
+            ax_a.plot_trisurf(
                 surface_mesh["x"],
                 surface_mesh["y"],
                 surface_mesh["z"],
+                triangles=surface_mesh["triangles"],
                 cmap=surface_cmap,
                 norm=surface_norm,
-                rstride=1,
-                cstride=1,
                 linewidth=0,
                 antialiased=False,
                 shade=False,
@@ -2450,13 +2470,14 @@ def _plot_break_even_phase_diagram_panels(
                 rasterized=True,
             )
         else:
-            ax_a.plot_trisurf(
+            ax_a.plot_surface(
                 surface_mesh["x"],
                 surface_mesh["y"],
                 surface_mesh["z"],
-                triangles=surface_mesh["triangles"],
                 cmap=surface_cmap,
                 norm=surface_norm,
+                rstride=1,
+                cstride=1,
                 linewidth=0,
                 antialiased=False,
                 shade=False,
