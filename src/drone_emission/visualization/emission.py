@@ -1093,7 +1093,7 @@ def _break_even_panel_report(prepared: Dict, axes: tuple):
                 "mask_nonzero_cells": int(np.count_nonzero(finite_mask > 0)) if finite_mask.size else 0,
                 "annotation": observed.get("annotation"),
             },
-            "interpretation": "Surface shows GEF* where Delta g = 0; below surface drone wins, above surface e-bike wins.",
+            "interpretation": "Break-even surface where drone and e-bike lifecycle emissions are equal across distance, detour ratio, and grid carbon intensity.",
         },
         "b_c_delta_g_heatmaps": gef_panel_reports,
     }
@@ -1231,7 +1231,7 @@ def _write_break_even_contribution_decomposition_report(
         "",
         "## Panel Reading Guide",
         "",
-        "- a: 3D surface of break-even grid emission factor, GEF*, where drone and e-bike emissions are equal.",
+        "- a: 3D break-even surface where drone and e-bike lifecycle emissions are equal across air distance, road detour ratio, and grid carbon intensity.",
         "- b-c: heatmaps at representative GEF levels; negative Delta g means drone has lower per-order emissions.",
         "- d: national waterfall of mechanism contributions relative to the all-e-bike baseline.",
         "- e: stacked contribution bars for the top 15 cities by net reduction.",
@@ -2208,7 +2208,7 @@ def _build_break_even_contour_surface_mesh(
     delta_zero: np.ndarray,
     delta_slope: np.ndarray,
     gef_limits: tuple[float, float],
-    gef_points: int = 34,
+    gef_points: int = 80,
 ) -> dict | None:
     """Build a lightweight 3D surface by stacking 2D break-even contours."""
     gef_min, gef_max = map(float, gef_limits)
@@ -2323,7 +2323,7 @@ def prepare_break_even_phase_diagram_data(
         delta_slope=delta_slope_grid,
         gef_limits=BREAK_EVEN_GEF_LIMITS,
     )
-    surface_mesh = _build_break_even_implicit_surface_mesh(
+    surface_mesh = _build_break_even_contour_surface_mesh(
         air_distance_grid_km=air_distance_grid_km,
         detour_ratios=detour_ratios,
         delta_zero=delta_zero_grid,
@@ -2331,7 +2331,7 @@ def prepare_break_even_phase_diagram_data(
         gef_limits=BREAK_EVEN_GEF_LIMITS,
     )
     if surface_mesh is None:
-        surface_mesh = _build_break_even_contour_surface_mesh(
+        surface_mesh = _build_break_even_implicit_surface_mesh(
             air_distance_grid_km=air_distance_grid_km,
             detour_ratios=detour_ratios,
             delta_zero=delta_zero_grid,
