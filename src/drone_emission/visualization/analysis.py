@@ -6214,7 +6214,8 @@ def _bin_reduction_and_detour(
 ):
     """Bin OD rows by air distance.
 
-    Returns (centres, reduction_pct, reduction_abs, detour_by_bin, max_km).
+    Returns (centres, reduction_pct, reduction_abs, detour_by_bin, max_km,
+    oracle_drone_share_pct).
     ``reduction_pct`` is (e-bike − drone) / e-bike per bin in percent,
     negative when the drone exceeds e-bike for the bin's OD pairs.
     ``reduction_abs`` is annual absolute emission reduction per bin in tonnes
@@ -6243,6 +6244,7 @@ def _bin_reduction_and_detour(
     bin_idx = np.clip(np.digitize(air_km, edges) - 1, 0, n_bins - 1)
     reduction_pct = np.full(n_bins, np.nan)
     reduction_abs = np.zeros(n_bins)
+    oracle_drone_share_pct = np.full(n_bins, np.nan)
     detour_by_bin = []
     for k in range(n_bins):
         m = bin_idx == k
@@ -6251,8 +6253,12 @@ def _bin_reduction_and_detour(
             continue
         ebike_tot = (ebike_lc[m] * sales[m]).sum()
         drone_tot = (drone_lc[m] * sales[m]).sum()
+        total_orders = sales[m].sum()
+        if total_orders > 0:
+            oracle_drone_share_pct[k] = (
+                sales[m][drone_lc[m] < ebike_lc[m]].sum() / total_orders * 100.0
+            )
         if absolute_reduction_metric == "per_order_g":
-            total_orders = sales[m].sum()
             reduction_abs[k] = (
                 (ebike_tot - drone_tot) / total_orders
                 if total_orders > 0
@@ -6263,7 +6269,7 @@ def _bin_reduction_and_detour(
         if ebike_tot > 0:
             reduction_pct[k] = (ebike_tot - drone_tot) / ebike_tot * 100
         detour_by_bin.append(detour[m])
-    return centres, reduction_pct, reduction_abs, detour_by_bin, max_km
+    return centres, reduction_pct, reduction_abs, detour_by_bin, max_km, oracle_drone_share_pct
 
 
 def _find_reduction_break_even_km(
@@ -6363,8 +6369,14 @@ def _plot_reduction_detour_panel(
     bar_width_fraction: float = 1.0,
     show_absolute_axis: bool = True,
     show_saturation_fit: bool = False,
+    bar_metric: str = "reduction_pct",
 ):
     """Draw one reduction-detour city panel inside an existing figure."""
+    if bar_metric not in {"reduction_pct", "oracle_drone_share_pct"}:
+        raise ValueError(
+            "bar_metric must be 'reduction_pct' or 'oracle_drone_share_pct'"
+        )
+
     if show_detour_boxplot:
         inner = subplot_spec.subgridspec(2, 1, hspace=0.08, height_ratios=[1, 1])
         ax_top = fig.add_subplot(inner[0])
@@ -6376,6 +6388,12 @@ def _plot_reduction_detour_panel(
     centres = np.asarray(binned["centres"], dtype=float)
     reduction_pct = np.asarray(binned["reduction_pct"], dtype=float)
     reduction_abs = np.asarray(binned["reduction_abs"], dtype=float)
+    if bar_metric == "oracle_drone_share_pct":
+        if "oracle_drone_share_pct" not in binned:
+            raise ValueError("binned data missing 'oracle_drone_share_pct'")
+        bar_values = np.asarray(binned["oracle_drone_share_pct"], dtype=float)
+    else:
+        bar_values = reduction_pct
     detour_by_bin = binned.get("detour_by_bin")
     if detour_by_bin is None:
         detour_by_bin = [np.array([]) for _ in centres]
@@ -6416,31 +6434,43 @@ def _plot_reduction_detour_panel(
     elif show_city_label:
         ax_bot.set_title(city_label, fontsize=11, fontweight="bold")
 
-    bar_colors = [
-        "#2ca02c" if (np.isfinite(v) and v >= 0) else "#d62728"
-        for v in reduction_pct
-    ]
+    if bar_metric == "oracle_drone_share_pct":
+        bar_colors = [
+            "#2166ac" if np.isfinite(v) else "#d9d9d9"
+            for v in bar_values
+        ]
+        bar_label = "Oracle drone share"
+        bar_ylabel = "Oracle Drone Share (%)"
+        bar_tick_color = "#2166ac"
+    else:
+        bar_colors = [
+            "#2ca02c" if (np.isfinite(v) and v >= 0) else "#d62728"
+            for v in bar_values
+        ]
+        bar_label = "(E-bike - Drone) / E-bike"
+        bar_ylabel = "(E-bike - Drone) / E-bike (%)"
+        bar_tick_color = "#2ca02c"
     ax_bot.bar(
         centres,
-        reduction_pct,
+        bar_values,
         width=bin_width_km * bar_width_fraction,
         color=bar_colors,
         edgecolor="white",
         linewidth=0.2,
         align="center",
-        label="(E-bike - Drone) / E-bike",
+        label=bar_label,
     )
     ax_bot.axhline(0, color="gray", linewidth=0.5)
     ax_bot.set_xlabel("Air Distance (km)", fontsize=9)
-    ax_bot.set_ylabel("(E-bike - Drone) / E-bike (%)", fontsize=9, color="#2ca02c")
+    ax_bot.set_ylabel(bar_ylabel, fontsize=9, color=bar_tick_color)
     ax_bot.set_xlim(x_min, x_max)
     ax_bot.set_xticks(x_ticks, labels=x_tick_labels)
     ax_bot.tick_params(axis="x", labelsize=8)
-    ax_bot.tick_params(axis="y", labelsize=8, labelcolor="#2ca02c")
+    ax_bot.tick_params(axis="y", labelsize=8, labelcolor=bar_tick_color)
     ax_bot.grid(axis="y", alpha=0.3)
 
     saturation_fit_y = None
-    if show_saturation_fit:
+    if show_saturation_fit and bar_metric == "reduction_pct":
         fit_mask = visible & np.isfinite(centres) & np.isfinite(reduction_pct)
         x_fit_data = centres[fit_mask]
         y_fit_data = reduction_pct[fit_mask]
@@ -6497,14 +6527,17 @@ def _plot_reduction_detour_panel(
             except Exception:
                 saturation_fit_y = None
 
-    ylim_values = reduction_pct[visible]
+    ylim_values = bar_values[visible]
     if saturation_fit_y is not None:
         ylim_values = np.concatenate([ylim_values, saturation_fit_y])
-    visible_pct_ylim = _padded_visible_ylim(ylim_values)
-    if visible_pct_ylim is not None:
-        ax_bot.set_ylim(*visible_pct_ylim)
+    if bar_metric == "oracle_drone_share_pct":
+        ax_bot.set_ylim(0.0, 100.0)
+    else:
+        visible_pct_ylim = _padded_visible_ylim(ylim_values)
+        if visible_pct_ylim is not None:
+            ax_bot.set_ylim(*visible_pct_ylim)
 
-    if mark_reduction_break_even:
+    if mark_reduction_break_even and bar_metric == "reduction_pct":
         break_even_km = _find_reduction_break_even_km(centres, reduction_pct)
         if break_even_km is not None and break_even_km <= x_max:
             ax_bot.axvline(
@@ -6782,7 +6815,14 @@ def plot_reduction_detour_grid(
     """
     binned_by_city = {}
     for key, od_df in od_dfs.items():
-        centres, reduction_pct, reduction_abs, detour_by_bin, max_km = (
+        (
+            centres,
+            reduction_pct,
+            reduction_abs,
+            detour_by_bin,
+            max_km,
+            oracle_drone_share_pct,
+        ) = (
             _bin_reduction_and_detour(
                 od_df, bin_width_km, absolute_reduction_metric
             )
@@ -6793,6 +6833,7 @@ def plot_reduction_detour_grid(
             "reduction_abs": reduction_abs,
             "detour_by_bin": detour_by_bin,
             "max_km": max_km,
+            "oracle_drone_share_pct": oracle_drone_share_pct,
         }
 
     plot_reduction_detour_grid_binned(

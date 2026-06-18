@@ -104,7 +104,7 @@ CITY_CONTEXT_GROUP_FIGURES = {
     ),
 }
 
-REDUCTION_DETOUR_CACHE_VERSION = 2
+REDUCTION_DETOUR_CACHE_VERSION = 3
 BREAK_EVEN_PHASE_CACHE_VERSION = 1
 CONTRIBUTION_DECOMPOSITION_FULL_CACHE_VERSION = 3
 REDUCTION_DETOUR_SELECTION_METRIC = "total_ebike_lifecycle"
@@ -444,7 +444,14 @@ def _build_reduction_detour_binned_by_city(
         road_km = od_df["road_distance_m"].to_numpy(dtype=float) / 1000.0
         od_df = od_df.copy()
         od_df["ebike_lifecycle_g"] = compute_ebike_per_order_g(road_km, ebike_pp, scenario)
-        centres, reduction_pct, reduction_abs, detour_by_bin, max_km = (
+        (
+            centres,
+            reduction_pct,
+            reduction_abs,
+            detour_by_bin,
+            max_km,
+            oracle_drone_share_pct,
+        ) = (
             _bin_reduction_and_detour(
                 od_df, bin_width_km, absolute_reduction_metric
             )
@@ -455,6 +462,7 @@ def _build_reduction_detour_binned_by_city(
             "reduction_abs": reduction_abs,
             "detour_by_bin": detour_by_bin,
             "max_km": max_km,
+            "oracle_drone_share_pct": oracle_drone_share_pct,
         }
 
     if use_binned_cache and binned_by_city:
@@ -827,6 +835,7 @@ def _plot_city_context_combined_ab_panel(
     bin_width_km=0.1,
     min_air_km=0.2,
     max_air_km=5.0,
+    bar_metric="reduction_pct",
 ):
     """Draw percent reduction and absolute reduction on one city-context panel."""
     import numpy as np
@@ -848,6 +857,7 @@ def _plot_city_context_combined_ab_panel(
         bar_width_fraction=0.78,
         show_absolute_axis=False,
         show_saturation_fit=show_saturation_fit,
+        bar_metric=bar_metric,
     )
 
     centres = np.asarray(binned["centres"], dtype=float)
@@ -927,6 +937,7 @@ def _plot_city_context_group_panels(
     panel_start_letter="a",
     label_each_subplot=False,
     show_city_panel_anchors=False,
+    bar_metric="reduction_pct",
 ):
     """Draw the grouped city context panels into a parent subplot spec."""
     from matplotlib.lines import Line2D
@@ -983,6 +994,7 @@ def _plot_city_context_group_panels(
             labels.get(region_key, display_name),
             show_saturation_fit,
             bin_width_km=0.2,
+            bar_metric=bar_metric,
         )
         reduction_axes.append(ax_reduction)
         absolute_axes.append(ax_absolute)
@@ -1334,9 +1346,19 @@ def _city_gef_components_report(df, axes):
     }
 
 
-def _city_context_summary_report(binned_by_city, labels, panel_records):
+def _city_context_summary_report(
+    binned_by_city,
+    labels,
+    panel_records,
+    bar_metric="reduction_pct",
+):
     """Return exact plotted data for the grouped city context row."""
     import numpy as np
+
+    if bar_metric not in {"reduction_pct", "oracle_drone_share_pct"}:
+        raise ValueError(
+            "bar_metric must be 'reduction_pct' or 'oracle_drone_share_pct'"
+        )
 
     reports = []
     for record in panel_records:
@@ -1346,6 +1368,18 @@ def _city_context_summary_report(binned_by_city, labels, panel_records):
         centres = np.asarray(binned["centres"], dtype=float)
         reduction_pct = np.asarray(binned["reduction_pct"], dtype=float)
         reduction_abs = np.asarray(binned["reduction_abs"], dtype=float)
+        oracle_drone_share_pct = np.asarray(
+            binned.get("oracle_drone_share_pct", np.full_like(centres, np.nan)),
+            dtype=float,
+        )
+        if bar_metric == "oracle_drone_share_pct":
+            bar_values = oracle_drone_share_pct
+            bar_color = "#2166ac"
+            bar_label = "oracle_drone_share_pct"
+        else:
+            bar_values = reduction_pct
+            bar_color = None
+            bar_label = "reduction_pct"
         detour_by_bin = binned.get("detour_by_bin") or [np.array([]) for _ in centres]
         max_km = float(binned["max_km"])
         x_min = min(0.2, max_km)
@@ -1377,7 +1411,7 @@ def _city_context_summary_report(binned_by_city, labels, panel_records):
 
         show_saturation_fit = region_key not in {"dalibaizuzizhizhou", "chengdu"}
         saturation_fit = None
-        if show_saturation_fit:
+        if show_saturation_fit and bar_metric == "reduction_pct":
             fit_mask = visible & np.isfinite(centres) & np.isfinite(reduction_pct)
             x_fit_data = centres[fit_mask]
             y_fit_data = reduction_pct[fit_mask]
@@ -1484,9 +1518,11 @@ def _city_context_summary_report(binned_by_city, labels, panel_records):
                 "axes": {
                     "power_mix": _report_axis(record["power_mix_ax"]),
                     "power_legend": _report_axis(record["power_legend_ax"]),
+                    "bar_axis": _report_axis(record["reduction_ax"]),
                     "reduction_bars": _report_axis(record["reduction_ax"]),
                     "absolute_scatter": _report_axis(record["absolute_ax"]),
                 },
+                "bar_metric": bar_label,
                 "power_mix": [
                     {
                         "component": name,
@@ -1500,6 +1536,20 @@ def _city_context_summary_report(binned_by_city, labels, panel_records):
                     {
                         "x_center_air_km": _report_number(center),
                         "bar_width_km": 0.2 * 0.78,
+                        "bar_metric": bar_label,
+                        "bar_height": _report_number(bar_value),
+                        "bar_bottom": 0.0,
+                        "bar_top": _report_number(bar_value),
+                        "bar_color": (
+                            bar_color
+                            if bar_color is not None
+                            else (
+                                "#2ca02c"
+                                if (np.isfinite(pct) and pct >= 0)
+                                else "#d62728"
+                            )
+                        ),
+                        "oracle_drone_share_pct": _report_number(oracle_share),
                         "reduction_pct_height": _report_number(pct),
                         "reduction_bar_bottom": 0.0,
                         "reduction_bar_top": _report_number(pct),
@@ -1512,8 +1562,24 @@ def _city_context_summary_report(binned_by_city, labels, panel_records):
                         "visible_in_panel": bool(is_visible),
                         "detour_ratio_summary": _summary_stats(detours),
                     }
-                    for center, pct, abs_value, detours, is_visible
-                    in zip(centres, reduction_pct, reduction_abs, detour_by_bin, visible)
+                    for (
+                        center,
+                        pct,
+                        oracle_share,
+                        bar_value,
+                        abs_value,
+                        detours,
+                        is_visible,
+                    )
+                    in zip(
+                        centres,
+                        reduction_pct,
+                        oracle_drone_share_pct,
+                        bar_values,
+                        reduction_abs,
+                        detour_by_bin,
+                        visible,
+                    )
                 ],
                 "absolute_scatter_points": [
                     {"x_air_km": _report_number(x), "y_g_co2e_per_order": _report_number(y)}
@@ -2096,7 +2162,11 @@ def _write_city_gef_context_detour_report(
                 f"- Region key: `{city['region_key']}`",
                 f"- Visible distance-bin count: {len(visible_bins)}",
                 f"- Power mix components: {', '.join(item['component'] for item in city['power_mix'])}",
-                "- JSON records every distance bin with air-distance x center, reduction bar height, absolute scatter y value, and compact detour-ratio summary statistics.",
+                f"- Bar metric: `{city['bar_metric']}`",
+                "- JSON records every distance bin with air-distance x center, "
+                "plotted bar height, oracle drone share, reduction metrics, "
+                "absolute scatter y value, and compact detour-ratio summary "
+                "statistics.",
                 "",
             ]
         )
@@ -2329,6 +2399,7 @@ def _render_city_gef_context_detour_summary(
         panel_start_letter="b",
         label_each_subplot=True,
         show_city_panel_anchors=True,
+        bar_metric="oracle_drone_share_pct",
     )
 
     bottom_start_ord = ord("b") + 2 * len(available_contexts)
@@ -2392,6 +2463,7 @@ def _render_city_gef_context_detour_summary(
         binned_by_city,
         labels,
         city_panel_records,
+        bar_metric="oracle_drone_share_pct",
     )
     bottom_report = _detour_reduction_scatter_report(
         df_enriched,
