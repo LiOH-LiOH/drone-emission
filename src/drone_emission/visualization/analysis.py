@@ -4,6 +4,7 @@ import json
 import os
 
 import matplotlib.pyplot as plt
+from matplotlib.patches import Patch
 import numpy as np
 import pandas as pd
 from scipy import stats
@@ -4872,6 +4873,8 @@ def _draw_trip_phase_barplot(
     distance_label,
     body_colors_by_vehicle=None,
     battery_colors_by_vehicle=None,
+    legend_body_color=None,
+    legend_battery_color=None,
 ):
     """Draw stacked body/battery phase emissions for one selected OD trip."""
     x = np.arange(len(df))
@@ -4934,7 +4937,22 @@ def _draw_trip_phase_barplot(
     ax.set_axisbelow(True)
     ax.spines["top"].set_visible(False)
     ax.spines["right"].set_visible(False)
+    legend_handles = [
+        Patch(
+            facecolor=legend_body_color or body_color,
+            edgecolor=edge_color,
+            linewidth=0.8,
+            label=body_label,
+        ),
+        Patch(
+            facecolor=legend_battery_color or battery_color,
+            edgecolor=edge_color,
+            linewidth=0.8,
+            label=battery_label,
+        ),
+    ]
     ax.legend(
+        handles=legend_handles,
         frameon=False,
         loc="upper center",
         bbox_to_anchor=(0.5, 1.15),
@@ -5312,8 +5330,8 @@ def _write_regions_map_city_rank_and_drone_share_report(
                 "Production\n(g CO2e/order)",
                 "Body",
                 "Battery",
-                "#7f8c8d",
-                "#2ca25f",
+                phase_body_colors.get("E-bike", "#d95f35"),
+                phase_battery_colors.get("E-bike", "#f2a07f"),
                 production_distance_context,
                 body_colors_by_vehicle=phase_body_colors,
                 battery_colors_by_vehicle=phase_battery_colors,
@@ -5325,8 +5343,8 @@ def _write_regions_map_city_rank_and_drone_share_report(
                 "EOL\n(g CO2e/order)",
                 "Body",
                 "Battery",
-                "#8b8f97",
-                "#5b8db8",
+                phase_body_colors.get("E-bike", "#d95f35"),
+                phase_battery_colors.get("E-bike", "#f2a07f"),
                 eol_distance_context,
                 body_colors_by_vehicle=phase_body_colors,
                 battery_colors_by_vehicle=phase_battery_colors,
@@ -5591,13 +5609,17 @@ def plot_regions_map_city_rank_and_drone_share(
     eol_distance_context = distance_context
     phase_body_color = "#5f6368"
     phase_battery_color = "#c7c9cc"
+    ebike_body_color = "#d95f35"
+    ebike_battery_color = "#f2a07f"
+    drone_body_color = "#1f77b4"
+    drone_battery_color = "#9ecae1"
     phase_body_colors = {
-        "E-bike": phase_body_color,
-        "Drone": phase_body_color,
+        "E-bike": ebike_body_color,
+        "Drone": drone_body_color,
     }
     phase_battery_colors = {
-        "E-bike": phase_battery_color,
-        "Drone": phase_battery_color,
+        "E-bike": ebike_battery_color,
+        "Drone": drone_battery_color,
     }
     if production_df is None:
         ax_e.text(
@@ -5626,6 +5648,8 @@ def plot_regions_map_city_rank_and_drone_share(
             distance_label=distance_label,
             body_colors_by_vehicle=phase_body_colors,
             battery_colors_by_vehicle=phase_battery_colors,
+            legend_body_color=phase_body_color,
+            legend_battery_color=phase_battery_color,
         )
     if median_trip_od_df is None:
         ax_f.text(
@@ -5706,6 +5730,8 @@ def plot_regions_map_city_rank_and_drone_share(
             distance_label=distance_label,
             body_colors_by_vehicle=phase_body_colors,
             battery_colors_by_vehicle=phase_battery_colors,
+            legend_body_color=phase_body_color,
+            legend_battery_color=phase_battery_color,
         )
     ax_d.text(-0.03, 1.02, "d", transform=ax_d.transAxes,
               fontsize=16, fontweight="bold", va="bottom", ha="right")
