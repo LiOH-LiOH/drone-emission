@@ -754,7 +754,7 @@ def _plot_pathway_curve_panel(
 
     if orientation == "vertical":
         if saved_as_bar:
-            ax.barh(x, saved, height=bar_width, color="#1b7837", alpha=0.75)
+            ax.barh(x, saved, height=bar_width, left=0.0, color="#1b7837", alpha=0.75)
         else:
             ax.plot(saved, x, color="#1b7837", marker="o", linewidth=1.8, markersize=4)
         ax.set_xlabel(r"CO$_2$ saved (kt/yr)", fontsize=10, color="#1b7837")
@@ -764,6 +764,9 @@ def _plot_pathway_curve_panel(
         ax.grid(True, linestyle=":", alpha=0.35)
         if saved_limits is not None:
             ax.set_xlim(*saved_limits)
+        if saved_as_bar:
+            ax.margins(x=0)
+            ax.set_xlim(left=0.0)
 
         ax_share = ax.twiny()
         ax_share.plot(share, x, color="#2166ac", marker="s", linewidth=1.6, markersize=3.5)
@@ -773,7 +776,7 @@ def _plot_pathway_curve_panel(
             ax_share.set_xlim(*share_limits)
     else:
         if saved_as_bar:
-            ax.bar(x, saved, width=bar_width, color="#1b7837", alpha=0.75)
+            ax.bar(x, saved, width=bar_width, bottom=0.0, color="#1b7837", alpha=0.75)
         else:
             ax.plot(x, saved, color="#1b7837", marker="o", linewidth=1.8, markersize=4)
         ax.set_xlabel(axis_label, fontsize=10)
@@ -785,6 +788,10 @@ def _plot_pathway_curve_panel(
             ax.invert_xaxis()
         if saved_limits is not None:
             ax.set_ylim(*saved_limits)
+        if saved_as_bar:
+            ax.margins(y=0)
+            ax.set_ylim(bottom=0.0)
+            ax.spines["bottom"].set_position(("data", 0.0))
 
         ax_share = ax.twinx()
         ax_share.plot(x, share, color="#2166ac", marker="s", linewidth=1.6, markersize=3.5)
