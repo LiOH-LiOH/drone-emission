@@ -1374,7 +1374,7 @@ def _city_context_summary_report(
         )
         if bar_metric == "oracle_drone_share_pct":
             bar_values = oracle_drone_share_pct
-            bar_color = "#2166ac"
+            bar_color = "#9ecae1"
             bar_label = "oracle_drone_share_pct"
         else:
             bar_values = reduction_pct
