@@ -49,7 +49,7 @@ CONTRIBUTION_COMPONENT_KEYS = tuple(
 )
 BREAK_EVEN_REPRESENTATIVE_AIR_DISTANCE_KM = 2.0
 BREAK_EVEN_CURVE_AIR_DISTANCES_KM = (0.5, 1.0, 2.0, 3.0, 5.0)
-BREAK_EVEN_DETOUR_LIMITS = (1.0, 2.2)
+BREAK_EVEN_DETOUR_LIMITS = (1.0, 2.5)
 BREAK_EVEN_GEF_LIMITS = (0.05, 0.80)
 
 
@@ -2315,13 +2315,6 @@ def prepare_break_even_phase_diagram_data(
 
     distance_min, distance_max = 0.2, 5.0
     detour_min, detour_max = BREAK_EVEN_DETOUR_LIMITS
-    sample_detours = pd.to_numeric(
-        observed["samples"].get("detour_ratio", pd.Series(dtype=float)),
-        errors="coerce",
-    ).to_numpy(dtype=float)
-    sample_detours = sample_detours[np.isfinite(sample_detours) & (sample_detours > 0)]
-    if len(sample_detours):
-        detour_max = max(detour_max, float(np.nanpercentile(sample_detours, 97.5)))
     detour_ratios = np.linspace(detour_min, detour_max, 260)
 
     gef_min, gef_max = BREAK_EVEN_GEF_LIMITS
@@ -2432,6 +2425,10 @@ def _plot_break_even_phase_diagram_panels(
     gef_limits = prepared["axes"]["gef_limits"]
 
     break_even_surface = np.asarray(panel_a["break_even_gef"], dtype=float)
+    break_even_surface_raw = np.asarray(
+        panel_a.get("break_even_gef_raw", break_even_surface),
+        dtype=float,
+    )
     surface_mesh = panel_a.get("surface_mesh")
 
     finite_blocks = []
@@ -2453,7 +2450,25 @@ def _plot_break_even_phase_diagram_panels(
     surface_norm = plt.Normalize(vmin=gef_limits[0], vmax=gef_limits[1])
     X, Y = np.meshgrid(air_distance_grid_km, detour_ratios)
 
-    if surface_mesh:
+    if np.isfinite(break_even_surface_raw).any():
+        z_surface = np.clip(break_even_surface_raw, gef_limits[0], gef_limits[1])
+        z_surface[~np.isfinite(break_even_surface_raw)] = np.nan
+        ax_a.plot_surface(
+            X,
+            Y,
+            z_surface,
+            cmap=surface_cmap,
+            norm=surface_norm,
+            rstride=1,
+            cstride=1,
+            linewidth=0,
+            antialiased=False,
+            shade=False,
+            alpha=1.0,
+            edgecolor="none",
+            rasterized=True,
+        )
+    elif surface_mesh:
         if "triangles" in surface_mesh:
             ax_a.plot_trisurf(
                 surface_mesh["x"],
