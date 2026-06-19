@@ -1841,145 +1841,6 @@ def _select_break_even_gef_levels(
     ]
 
 
-def _clip_polygon_against_z_bound(
-    polygon: list[tuple[float, float, float]],
-    bound: float,
-    keep_below: bool,
-) -> list[tuple[float, float, float]]:
-    """Clip a 3D polygon against a horizontal z-plane."""
-    if not polygon:
-        return []
-
-    def _inside(vertex):
-        if keep_below:
-            return vertex[2] <= bound + 1e-12
-        return vertex[2] >= bound - 1e-12
-
-    clipped = []
-    for start, end in zip(polygon, polygon[1:] + polygon[:1]):
-        start_inside = _inside(start)
-        end_inside = _inside(end)
-        if start_inside and end_inside:
-            clipped.append(end)
-            continue
-        if start_inside != end_inside:
-            z0, z1 = start[2], end[2]
-            if abs(z1 - z0) <= 1e-12:
-                point = (end[0], end[1], bound)
-            else:
-                t = (bound - z0) / (z1 - z0)
-                point = (
-                    start[0] + t * (end[0] - start[0]),
-                    start[1] + t * (end[1] - start[1]),
-                    bound,
-                )
-            clipped.append(point)
-            if end_inside:
-                clipped.append(end)
-    return clipped
-
-
-def _build_break_even_surface_triangles(
-    air_distance_grid_km: np.ndarray,
-    detour_ratios: np.ndarray,
-    raw_surface: np.ndarray,
-    gef_limits: tuple[float, float],
-) -> dict | None:
-    """Clip the raw root surface to the visible GEF range and triangulate it."""
-    gef_min, gef_max = map(float, gef_limits)
-    x_grid, y_grid = np.meshgrid(
-        np.asarray(air_distance_grid_km, dtype=float),
-        np.asarray(detour_ratios, dtype=float),
-    )
-    z_grid = np.asarray(raw_surface, dtype=float)
-
-    vertices: list[tuple[float, float, float]] = []
-    triangles: list[tuple[int, int, int]] = []
-    vertex_index: dict[tuple[float, float, float], int] = {}
-
-    def _vertex_id(vertex: tuple[float, float, float]) -> int:
-        key = tuple(round(float(v), 10) for v in vertex)
-        existing = vertex_index.get(key)
-        if existing is not None:
-            return existing
-        idx = len(vertices)
-        vertex_index[key] = idx
-        vertices.append((float(vertex[0]), float(vertex[1]), float(vertex[2])))
-        return idx
-
-    n_rows, n_cols = z_grid.shape
-    for row in range(n_rows - 1):
-        for col in range(n_cols - 1):
-            cell = [
-                (x_grid[row, col], y_grid[row, col], z_grid[row, col]),
-                (x_grid[row, col + 1], y_grid[row, col + 1], z_grid[row, col + 1]),
-                (
-                    x_grid[row + 1, col + 1],
-                    y_grid[row + 1, col + 1],
-                    z_grid[row + 1, col + 1],
-                ),
-                (x_grid[row + 1, col], y_grid[row + 1, col], z_grid[row + 1, col]),
-            ]
-            if not all(np.isfinite(vertex[2]) for vertex in cell):
-                continue
-            polygon = _clip_polygon_against_z_bound(cell, gef_min, keep_below=False)
-            polygon = _clip_polygon_against_z_bound(polygon, gef_max, keep_below=True)
-            if len(polygon) < 3:
-                continue
-            poly_ids = [_vertex_id(vertex) for vertex in polygon]
-            for idx in range(1, len(poly_ids) - 1):
-                a, b, c = poly_ids[0], poly_ids[idx], poly_ids[idx + 1]
-                if a == b or b == c or a == c:
-                    continue
-                triangles.append((a, b, c))
-
-    if not triangles:
-        return None
-
-    xyz = np.asarray(vertices, dtype=float)
-    tri = np.asarray(triangles, dtype=int)
-    return {
-        "x": xyz[:, 0],
-        "y": xyz[:, 1],
-        "z": xyz[:, 2],
-        "triangles": tri,
-    }
-
-
-def _build_break_even_surface_display_mesh(
-    air_distance_grid_km: np.ndarray,
-    detour_ratios: np.ndarray,
-    break_even_surface: np.ndarray,
-    gef_limits: tuple[float, float],
-    distance_points: int = 520,
-    detour_points: int = 420,
-) -> dict | None:
-    """Build a display mesh for the visible theoretical break-even surface."""
-    from scipy.interpolate import RectBivariateSpline
-
-    x_axis = np.asarray(air_distance_grid_km, dtype=float)
-    y_axis = np.asarray(detour_ratios, dtype=float)
-    z_grid = np.asarray(break_even_surface, dtype=float)
-    if not np.isfinite(z_grid).all():
-        return _build_break_even_surface_triangles(
-            air_distance_grid_km=x_axis,
-            detour_ratios=y_axis,
-            raw_surface=z_grid,
-            gef_limits=gef_limits,
-        )
-
-    spline = RectBivariateSpline(y_axis, x_axis, z_grid, kx=3, ky=3, s=0.0)
-    display_x = np.linspace(float(x_axis.min()), float(x_axis.max()), distance_points)
-    display_y = np.linspace(float(y_axis.min()), float(y_axis.max()), detour_points)
-    display_z = spline(display_y, display_x)
-    return _build_break_even_surface_triangles(
-        air_distance_grid_km=display_x,
-        detour_ratios=display_y,
-        raw_surface=display_z,
-        gef_limits=gef_limits,
-    )
-
-
 def _break_even_detour_curve_at_gef(
     detour_ratios: np.ndarray,
     delta_g: np.ndarray,
@@ -2038,181 +1899,18 @@ def _keep_longest_finite_run(values: np.ndarray) -> np.ndarray:
     return values
 
 
-def _subsample_axis_indices(length: int, max_points: int) -> np.ndarray:
-    """Return unique near-uniform indices capped at ``max_points``."""
-    if length <= max_points:
-        return np.arange(length, dtype=int)
-    return np.unique(np.linspace(0, length - 1, int(max_points), dtype=int))
-
-
-def _march_tetrahedron_zero_surface(
-    coords: np.ndarray,
-    values: np.ndarray,
-    atol: float = 1e-12,
-) -> list[tuple[np.ndarray, np.ndarray, np.ndarray]]:
-    """Return triangles from one tetrahedron intersected by the zero level."""
-    below = values < -atol
-    above = values > atol
-    if not below.any() or not above.any():
-        return []
-
-    points = []
-    for start, end in ((0, 1), (0, 2), (0, 3), (1, 2), (1, 3), (2, 3)):
-        v0, v1 = values[start], values[end]
-        if (v0 < -atol and v1 > atol) or (v0 > atol and v1 < -atol):
-            t = -v0 / (v1 - v0)
-            points.append(coords[start] + t * (coords[end] - coords[start]))
-        elif abs(v0) <= atol and (v1 < -atol or v1 > atol):
-            points.append(coords[start])
-        elif abs(v1) <= atol and (v0 < -atol or v0 > atol):
-            points.append(coords[end])
-
-    if len(points) < 3:
-        return []
-
-    unique_points = []
-    seen = set()
-    for point in points:
-        key = tuple(round(float(v), 12) for v in point)
-        if key in seen:
-            continue
-        seen.add(key)
-        unique_points.append(point)
-
-    if len(unique_points) == 3:
-        return [(unique_points[0], unique_points[1], unique_points[2])]
-    if len(unique_points) == 4:
-        return [
-            (unique_points[0], unique_points[1], unique_points[2]),
-            (unique_points[0], unique_points[2], unique_points[3]),
-        ]
-    return []
-
-
-def _build_break_even_implicit_surface_mesh(
+def _build_break_even_zero_surface_mesh(
     air_distance_grid_km: np.ndarray,
     detour_ratios: np.ndarray,
     delta_zero: np.ndarray,
     delta_slope: np.ndarray,
     gef_limits: tuple[float, float],
-    distance_points: int = 62,
-    detour_points: int = 62,
-    gef_points: int = 24,
-    max_active_cubes: int = 9000,
+    gef_points: int = 180,
 ) -> dict | None:
-    """Extract the Delta g = 0 implicit surface with marching tetrahedra."""
-    x_axis_full = np.asarray(air_distance_grid_km, dtype=float)
-    y_axis_full = np.asarray(detour_ratios, dtype=float)
-    delta_zero_full = np.asarray(delta_zero, dtype=float)
-    delta_slope_full = np.asarray(delta_slope, dtype=float)
-
-    x_idx = _subsample_axis_indices(len(x_axis_full), distance_points)
-    y_idx = _subsample_axis_indices(len(y_axis_full), detour_points)
-    x_axis = x_axis_full[x_idx]
-    y_axis = y_axis_full[y_idx]
-    z_axis = np.linspace(float(gef_limits[0]), float(gef_limits[1]), int(gef_points))
-    delta_zero_grid = delta_zero_full[np.ix_(y_idx, x_idx)]
-    delta_slope_grid = delta_slope_full[np.ix_(y_idx, x_idx)]
-    value_grid = (
-        delta_zero_grid[np.newaxis, :, :]
-        + z_axis[:, np.newaxis, np.newaxis] * delta_slope_grid[np.newaxis, :, :]
-    )
-
-    cube_corners = np.array(
-        [
-            [0, 0, 0],
-            [1, 0, 0],
-            [1, 1, 0],
-            [0, 1, 0],
-            [0, 0, 1],
-            [1, 0, 1],
-            [1, 1, 1],
-            [0, 1, 1],
-        ],
-        dtype=int,
-    )
-    tetrahedra = (
-        (0, 5, 1, 6),
-        (0, 1, 2, 6),
-        (0, 2, 3, 6),
-        (0, 3, 7, 6),
-        (0, 7, 4, 6),
-        (0, 4, 5, 6),
-    )
-
-    cube_value_views = [
-        value_grid[
-            iz : iz + len(z_axis) - 1,
-            iy : iy + len(y_axis) - 1,
-            ix : ix + len(x_axis) - 1,
-        ]
-        for ix, iy, iz in cube_corners
-    ]
-    cube_min = np.minimum.reduce(cube_value_views)
-    cube_max = np.maximum.reduce(cube_value_views)
-    cube_finite = np.logical_and.reduce([np.isfinite(view) for view in cube_value_views])
-    active_z, active_y, active_x = np.nonzero(
-        cube_finite & (cube_min <= 0.0) & (cube_max >= 0.0)
-    )
-    if len(active_x) > max_active_cubes:
-        keep = np.linspace(0, len(active_x) - 1, int(max_active_cubes), dtype=int)
-        active_z = active_z[keep]
-        active_y = active_y[keep]
-        active_x = active_x[keep]
-
-    vertices = []
-    triangles = []
-    for z_i, y_i, x_i in zip(active_z, active_y, active_x):
-        xs = (x_axis[x_i], x_axis[x_i + 1])
-        ys = (y_axis[y_i], y_axis[y_i + 1])
-        zs = (z_axis[z_i], z_axis[z_i + 1])
-        corner_coords = np.array(
-            [[xs[ix], ys[iy], zs[iz]] for ix, iy, iz in cube_corners],
-            dtype=float,
-        )
-        corner_values = np.array(
-            [
-                value_grid[z_i + iz, y_i + iy, x_i + ix]
-                for ix, iy, iz in cube_corners
-            ],
-            dtype=float,
-        )
-
-        for tet in tetrahedra:
-            for triangle in _march_tetrahedron_zero_surface(
-                corner_coords[list(tet)],
-                corner_values[list(tet)],
-            ):
-                base = len(vertices)
-                vertices.extend(
-                    tuple(float(v) for v in point) for point in triangle
-                )
-                triangles.append((base, base + 1, base + 2))
-
-    if not triangles:
-        return None
-
-    xyz = np.asarray(vertices, dtype=float)
-    return {
-        "kind": "implicit_surface",
-        "x": xyz[:, 0],
-        "y": xyz[:, 1],
-        "z": xyz[:, 2],
-        "triangles": np.asarray(triangles, dtype=int),
-    }
-
-
-def _build_break_even_contour_surface_mesh(
-    air_distance_grid_km: np.ndarray,
-    detour_ratios: np.ndarray,
-    delta_zero: np.ndarray,
-    delta_slope: np.ndarray,
-    gef_limits: tuple[float, float],
-    gef_points: int = 80,
-) -> dict | None:
-    """Build a lightweight 3D surface by stacking 2D break-even contours."""
+    """Build a triangulated Delta g = 0 surface without clipping artifacts."""
     gef_min, gef_max = map(float, gef_limits)
     x_axis = np.asarray(air_distance_grid_km, dtype=float)
+    y_axis = np.asarray(detour_ratios, dtype=float)
     gef_axis = np.linspace(gef_min, gef_max, int(gef_points))
     delta_zero = np.asarray(delta_zero, dtype=float)
     delta_slope = np.asarray(delta_slope, dtype=float)
@@ -2224,7 +1922,7 @@ def _build_break_even_contour_surface_mesh(
     for row, gef in enumerate(gef_axis):
         delta_g = delta_zero + gef * delta_slope
         y_mesh[row] = _break_even_detour_curve_at_gef(
-            detour_ratios=detour_ratios,
+            detour_ratios=y_axis,
             delta_g=delta_g,
         )
         y_mesh[row] = _keep_longest_finite_run(y_mesh[row])
@@ -2253,7 +1951,7 @@ def _build_break_even_contour_surface_mesh(
         return None
 
     return {
-        "kind": "contour_surface",
+        "kind": "zero_surface",
         "x": x_mesh[finite],
         "y": y_mesh[finite],
         "z": z_mesh[finite],
@@ -2337,21 +2035,13 @@ def prepare_break_even_phase_diagram_data(
         delta_slope=delta_slope_grid,
         gef_limits=BREAK_EVEN_GEF_LIMITS,
     )
-    surface_mesh = _build_break_even_contour_surface_mesh(
+    surface_mesh = _build_break_even_zero_surface_mesh(
         air_distance_grid_km=air_distance_grid_km,
         detour_ratios=detour_ratios,
         delta_zero=delta_zero_grid,
         delta_slope=delta_slope_grid,
         gef_limits=BREAK_EVEN_GEF_LIMITS,
     )
-    if surface_mesh is None:
-        surface_mesh = _build_break_even_implicit_surface_mesh(
-            air_distance_grid_km=air_distance_grid_km,
-            detour_ratios=detour_ratios,
-            delta_zero=delta_zero_grid,
-            delta_slope=delta_slope_grid,
-            gef_limits=BREAK_EVEN_GEF_LIMITS,
-        )
     observed_mask = _break_even_observed_mask_data(
         observed_samples=observed["samples"],
         distance_limits=(distance_min, distance_max),
@@ -2424,11 +2114,6 @@ def _plot_break_even_phase_diagram_panels(
     detour_limits = prepared["axes"]["detour_limits"]
     gef_limits = prepared["axes"]["gef_limits"]
 
-    break_even_surface = np.asarray(panel_a["break_even_gef"], dtype=float)
-    break_even_surface_raw = np.asarray(
-        panel_a.get("break_even_gef_raw", break_even_surface),
-        dtype=float,
-    )
     surface_mesh = panel_a.get("surface_mesh")
 
     finite_blocks = []
@@ -2450,66 +2135,14 @@ def _plot_break_even_phase_diagram_panels(
     surface_norm = plt.Normalize(vmin=gef_limits[0], vmax=gef_limits[1])
     X, Y = np.meshgrid(air_distance_grid_km, detour_ratios)
 
-    if np.isfinite(break_even_surface_raw).any():
-        z_surface = np.clip(break_even_surface_raw, gef_limits[0], gef_limits[1])
-        z_surface[~np.isfinite(break_even_surface_raw)] = np.nan
-        ax_a.plot_surface(
-            X,
-            Y,
-            z_surface,
+    if surface_mesh:
+        ax_a.plot_trisurf(
+            surface_mesh["x"],
+            surface_mesh["y"],
+            surface_mesh["z"],
+            triangles=surface_mesh["triangles"],
             cmap=surface_cmap,
             norm=surface_norm,
-            rstride=1,
-            cstride=1,
-            linewidth=0,
-            antialiased=False,
-            shade=False,
-            alpha=1.0,
-            edgecolor="none",
-            rasterized=True,
-        )
-    elif surface_mesh:
-        if "triangles" in surface_mesh:
-            ax_a.plot_trisurf(
-                surface_mesh["x"],
-                surface_mesh["y"],
-                surface_mesh["z"],
-                triangles=surface_mesh["triangles"],
-                cmap=surface_cmap,
-                norm=surface_norm,
-                linewidth=0,
-                antialiased=False,
-                shade=False,
-                alpha=1.0,
-                edgecolor="none",
-                rasterized=True,
-            )
-        else:
-            ax_a.plot_surface(
-                surface_mesh["x"],
-                surface_mesh["y"],
-                surface_mesh["z"],
-                cmap=surface_cmap,
-                norm=surface_norm,
-                rstride=1,
-                cstride=1,
-                linewidth=0,
-                antialiased=False,
-                shade=False,
-                alpha=1.0,
-                edgecolor="none",
-                rasterized=True,
-            )
-    elif np.isfinite(break_even_surface).any():
-        z_surface = np.ma.masked_invalid(break_even_surface)
-        ax_a.plot_surface(
-            X,
-            Y,
-            z_surface,
-            cmap=surface_cmap,
-            norm=surface_norm,
-            rstride=1,
-            cstride=1,
             linewidth=0,
             antialiased=False,
             shade=False,
