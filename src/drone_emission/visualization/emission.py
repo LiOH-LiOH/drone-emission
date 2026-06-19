@@ -2200,11 +2200,11 @@ def _plot_break_even_phase_diagram_panels(
                 triangles=surface_mesh["triangles"],
                 cmap=line_cmap,
                 norm=line_norm,
-                linewidth=0,
+                linewidth=0.12,
                 antialiased=False,
                 shade=False,
                 alpha=1.0,
-                edgecolor="none",
+                edgecolor=(0.25, 0.25, 0.25, 0.22),
                 rasterized=True,
             )
     else:
@@ -2255,7 +2255,10 @@ def _plot_break_even_phase_diagram_panels(
     ax_a.set_ylabel("Detour ratio (road / air)", fontsize=10.5 * font_scale, labelpad=8)
     ax_a.set_zlabel("GEF (kg CO2e/kWh)", fontsize=10.5 * font_scale, labelpad=8)
     ax_a.set_proj_type("ortho")
-    ax_a.view_init(elev=28, azim=-128)
+    if panel_a_mode == "marching_cubes":
+        ax_a.view_init(elev=25, azim=135)
+    else:
+        ax_a.view_init(elev=28, azim=-128)
     ax_a.grid(alpha=0.2)
     ax_a.xaxis.pane.set_alpha(0.0)
     ax_a.yaxis.pane.set_alpha(0.0)
