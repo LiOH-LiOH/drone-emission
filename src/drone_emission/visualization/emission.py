@@ -11,6 +11,7 @@ from typing import Dict
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from matplotlib.cm import ScalarMappable
 from matplotlib.colors import BoundaryNorm, TwoSlopeNorm
 
 from ._utils import _add_title_suffix
@@ -2182,6 +2183,7 @@ def _plot_break_even_phase_diagram_panels(
     delta_norm = BoundaryNorm(delta_bounds, ncolors=delta_cmap.N, clip=False)
     line_cmap = plt.get_cmap("viridis")
     line_norm = plt.Normalize(vmin=gef_limits[0], vmax=gef_limits[1])
+    surface_colorbar_mappable = None
     X, Y = np.meshgrid(air_distance_grid_km, detour_ratios)
 
     if panel_a_mode == "marching_cubes":
@@ -2207,6 +2209,11 @@ def _plot_break_even_phase_diagram_panels(
                 edgecolor=(0.25, 0.25, 0.25, 0.22),
                 rasterized=True,
             )
+            surface_colorbar_mappable = ScalarMappable(
+                cmap=line_cmap,
+                norm=line_norm,
+            )
+            surface_colorbar_mappable.set_array([])
     else:
         for line in break_even_lines:
             gef = float(line["gef"])
@@ -2256,13 +2263,27 @@ def _plot_break_even_phase_diagram_panels(
     ax_a.set_zlabel("GEF (kg CO2e/kWh)", fontsize=10.5 * font_scale, labelpad=8)
     ax_a.set_proj_type("ortho")
     if panel_a_mode == "marching_cubes":
-        ax_a.view_init(elev=30, azim=225)
+        ax_a.view_init(elev=20, azim=225)
     else:
         ax_a.view_init(elev=28, azim=-128)
     ax_a.grid(alpha=0.2)
     ax_a.xaxis.pane.set_alpha(0.0)
     ax_a.yaxis.pane.set_alpha(0.0)
     ax_a.zaxis.pane.set_alpha(0.0)
+    if surface_colorbar_mappable is not None:
+        surface_colorbar = fig.colorbar(
+            surface_colorbar_mappable,
+            ax=ax_a,
+            fraction=0.035,
+            pad=0.02,
+            shrink=0.62,
+            ticks=np.linspace(gef_limits[0], gef_limits[1], 4),
+        )
+        surface_colorbar.set_label(
+            "GEF (kg CO2e/kWh)",
+            fontsize=9.2 * font_scale,
+        )
+        surface_colorbar.ax.tick_params(labelsize=8.5 * font_scale)
 
     heatmap_axes = [ax_b, ax_c]
     heatmap_detour_limits = (detour_limits[0], min(detour_limits[1], 2.4))
