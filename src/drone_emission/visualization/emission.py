@@ -2180,6 +2180,7 @@ def _plot_break_even_phase_diagram_panels(
     panel_letter_fontsize: int = 13,
     show_surface_annotations: bool = True,
     panel_a_mode: str = "lines",
+    heatmap_height_scale: float = 1.0,
 ):
     """Draw break-even phase-diagram panels on caller-provided axes."""
     air_distance_grid_km = prepared["air_distance_grid_km"]
@@ -2318,7 +2319,7 @@ def _plot_break_even_phase_diagram_panels(
             surface_colorbar_mappable,
             ax=ax_a,
             fraction=0.035,
-            pad=0.02,
+            pad=0.05,
             shrink=0.62,
             ticks=np.linspace(gef_limits[0], gef_limits[1], 4),
         )
@@ -2394,6 +2395,13 @@ def _plot_break_even_phase_diagram_panels(
             },
             zorder=7,
         )
+
+    if heatmap_height_scale != 1.0:
+        for ax in heatmap_axes:
+            pos = ax.get_position()
+            new_height = pos.height * heatmap_height_scale
+            y0 = pos.y0 + (pos.height - new_height) / 2
+            ax.set_position([pos.x0, y0, pos.width, new_height])
 
     colorbar = fig.colorbar(
         heatmap_mappable,
@@ -2535,6 +2543,7 @@ def plot_break_even_contribution_decomposition(
         panel_letter_fontsize=12,
         show_surface_annotations=False,
         panel_a_mode=panel_a_mode,
+        heatmap_height_scale=0.84,
     )
     _plot_contribution_decomposition_panels(
         fig,
