@@ -2506,8 +2506,8 @@ def plot_break_even_contribution_decomposition(
     )
     top = outer[0].subgridspec(
         1,
-        3,
-        width_ratios=[1.2, 1.0, 1.0],
+        4,
+        width_ratios=[1.2, 0.16, 1.0, 1.0],
         wspace=0.18,
     )
     bottom = outer[1].subgridspec(
@@ -2518,8 +2518,8 @@ def plot_break_even_contribution_decomposition(
     )
 
     ax_a = fig.add_subplot(top[0, 0], projection="3d")
-    ax_b = fig.add_subplot(top[0, 1])
-    ax_c = fig.add_subplot(top[0, 2])
+    ax_b = fig.add_subplot(top[0, 2])
+    ax_c = fig.add_subplot(top[0, 3])
     ax_d = fig.add_subplot(bottom[0, 0])
     ax_e = fig.add_subplot(bottom[0, 1])
 
