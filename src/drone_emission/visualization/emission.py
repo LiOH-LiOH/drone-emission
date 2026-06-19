@@ -1846,64 +1846,6 @@ def _select_break_even_gef_levels(
     ]
 
 
-def _break_even_detour_curve_at_gef(
-    detour_ratios: np.ndarray,
-    delta_g: np.ndarray,
-) -> np.ndarray:
-    """Return detour-ratio roots for Delta g = 0 at one fixed GEF."""
-    detour_axis = np.asarray(detour_ratios, dtype=float)
-    values = np.asarray(delta_g, dtype=float)
-    roots = np.full(values.shape[1], np.nan, dtype=float)
-
-    for col in range(values.shape[1]):
-        column = values[:, col]
-        finite = np.isfinite(column) & np.isfinite(detour_axis)
-        if finite.sum() < 2:
-            continue
-
-        y = detour_axis[finite]
-        v = column[finite]
-        zero_idx = np.flatnonzero(np.isclose(v, 0.0, atol=1e-10))
-        if zero_idx.size:
-            roots[col] = y[zero_idx[0]]
-            continue
-
-        signs_cross = (v[:-1] <= 0.0) & (v[1:] >= 0.0)
-        signs_cross |= (v[:-1] >= 0.0) & (v[1:] <= 0.0)
-        crossings = np.flatnonzero(signs_cross)
-        if not crossings.size:
-            continue
-
-        idx = crossings[0]
-        y0, y1 = y[idx], y[idx + 1]
-        v0, v1 = v[idx], v[idx + 1]
-        if abs(v1 - v0) <= 1e-12:
-            roots[col] = 0.5 * (y0 + y1)
-        else:
-            roots[col] = y0 - v0 * (y1 - y0) / (v1 - v0)
-
-    return roots
-
-
-def _keep_longest_finite_run(values: np.ndarray) -> np.ndarray:
-    """Mask all but the longest contiguous finite run in a 1D curve."""
-    values = np.asarray(values, dtype=float).copy()
-    finite = np.isfinite(values)
-    if not finite.any():
-        return values
-
-    padded = np.concatenate(([False], finite, [False]))
-    changes = np.diff(padded.astype(int))
-    starts = np.flatnonzero(changes == 1)
-    ends = np.flatnonzero(changes == -1)
-    longest = int(np.argmax(ends - starts))
-
-    keep = np.zeros_like(finite, dtype=bool)
-    keep[starts[longest] : ends[longest]] = True
-    values[~keep] = np.nan
-    return values
-
-
 def _build_break_even_zero_lines(
     air_distance_grid_km: np.ndarray,
     detour_ratios: np.ndarray,
@@ -1924,27 +1866,63 @@ def _build_break_even_zero_lines(
     delta_zero = np.asarray(delta_zero, dtype=float)
     delta_slope = np.asarray(delta_slope, dtype=float)
 
+    def _smooth_segment(segment: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        x_segment = np.asarray(segment[:, 0], dtype=float)
+        y_segment = np.asarray(segment[:, 1], dtype=float)
+        finite = np.isfinite(x_segment) & np.isfinite(y_segment)
+        x_segment = x_segment[finite]
+        y_segment = y_segment[finite]
+        if len(x_segment) < 2:
+            return x_segment, y_segment
+
+        deltas = np.hypot(np.diff(x_segment), np.diff(y_segment))
+        keep = np.concatenate(([True], deltas > 1e-10))
+        x_segment = x_segment[keep]
+        y_segment = y_segment[keep]
+        if len(x_segment) < 4:
+            return x_segment, y_segment
+
+        distance = np.concatenate(
+            ([0.0], np.cumsum(np.hypot(np.diff(x_segment), np.diff(y_segment))))
+        )
+        if distance[-1] <= 1e-10:
+            return x_segment, y_segment
+
+        line_distance = np.linspace(0.0, float(distance[-1]), line_points)
+        x_line = PchipInterpolator(distance, x_segment)(line_distance)
+        y_line = PchipInterpolator(distance, y_segment)(line_distance)
+        return x_line, y_line
+
     lines = []
     for gef in gef_axis:
         delta_g = delta_zero + gef * delta_slope
-        roots = _break_even_detour_curve_at_gef(
-            detour_ratios=y_axis,
-            delta_g=delta_g,
-        )
-        roots = _keep_longest_finite_run(roots)
-        finite = np.isfinite(x_axis) & np.isfinite(roots)
-        if finite.sum() < 2:
+        finite_delta = delta_g[np.isfinite(delta_g)]
+        if not len(finite_delta) or finite_delta.min() > 0.0 or finite_delta.max() < 0.0:
             continue
 
-        x_valid = x_axis[finite]
-        y_valid = roots[finite]
-        if finite.sum() >= 4:
-            x_line = np.linspace(float(x_valid.min()), float(x_valid.max()), line_points)
-            y_line = PchipInterpolator(x_valid, y_valid)(x_line)
-        else:
-            x_line = x_valid
-            y_line = y_valid
+        contour_fig, contour_ax = plt.subplots(figsize=(1, 1))
+        try:
+            contour = contour_ax.contour(
+                x_axis,
+                y_axis,
+                delta_g,
+                levels=[0.0],
+            )
+            segments = [
+                np.asarray(segment, dtype=float)
+                for segment in contour.allsegs[0]
+                if len(segment) >= 2
+            ]
+        finally:
+            plt.close(contour_fig)
 
+        if not segments:
+            continue
+
+        segment = max(segments, key=len)
+        x_line, y_line = _smooth_segment(segment)
+        if len(x_line) < 2:
+            continue
         lines.append(
             {
                 "gef": float(gef),
@@ -2132,23 +2110,10 @@ def _plot_break_even_phase_diagram_panels(
     line_cmap = plt.get_cmap("viridis")
     line_norm = plt.Normalize(vmin=gef_limits[0], vmax=gef_limits[1])
     X, Y = np.meshgrid(air_distance_grid_km, detour_ratios)
-    plane_x = np.linspace(distance_limits[0], distance_limits[1], 7)
-    plane_y = np.linspace(detour_limits[0], detour_limits[1], 7)
-    plane_X, plane_Y = np.meshgrid(plane_x, plane_y)
 
     for line in break_even_lines:
         gef = float(line["gef"])
         line_color = line_cmap(line_norm(gef))
-        ax_a.plot_wireframe(
-            plane_X,
-            plane_Y,
-            np.full_like(plane_X, gef, dtype=float),
-            color=line_color,
-            linewidth=0.32,
-            alpha=0.14,
-            rstride=1,
-            cstride=1,
-        )
         ax_a.plot(
             line["x"],
             line["y"],
