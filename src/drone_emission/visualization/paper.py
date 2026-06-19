@@ -30,6 +30,7 @@ Available figures:
     city_gef_scatter_components,
     city_gef_context_detour_summary,
     break_even_contribution_decomposition,
+    break_even_contribution_decomposition_marching_cubes,
     contribution_decomposition,
     break_even_phase_diagram,
     regions_map,
@@ -2926,10 +2927,13 @@ def _render_break_even_contribution_decomposition(
     plot_title,
     city_df,
     exp_config,
+    render_base=True,
+    render_marching_cubes=False,
 ):
     """Render the stacked break-even and contribution-decomposition figure."""
     from visualization.emission import (
         plot_break_even_contribution_decomposition,
+        plot_break_even_contribution_decomposition_marching_cubes,
     )
 
     named_path = os.path.join(data_dir, "all_sensitivity_named.csv")
@@ -2955,13 +2959,25 @@ def _render_break_even_contribution_decomposition(
     if break_even_prepared is None or contribution_prepared is None:
         return
 
-    plot_break_even_contribution_decomposition(
-        break_even_prepared,
-        contribution_prepared,
-        save_path=os.path.join(out, "break_even_contribution_decomposition.png"),
-        for_latex=for_latex,
-        plot_title=plot_title,
-    )
+    if render_base:
+        plot_break_even_contribution_decomposition(
+            break_even_prepared,
+            contribution_prepared,
+            save_path=os.path.join(out, "break_even_contribution_decomposition.png"),
+            for_latex=for_latex,
+            plot_title=plot_title,
+        )
+    if render_marching_cubes:
+        plot_break_even_contribution_decomposition_marching_cubes(
+            break_even_prepared,
+            contribution_prepared,
+            save_path=os.path.join(
+                out,
+                "break_even_contribution_decomposition_marching_cubes.png",
+            ),
+            for_latex=for_latex,
+            plot_title=plot_title,
+        )
 
 
 def _render_distance_comparison_grid(data_dir, out, for_latex, plot_title, extreme):
@@ -3287,6 +3303,7 @@ def render_all(data_dir: str, figures_dir: str, for_latex: bool = False, plot_ti
         "city_gef_scatter_components",
         "city_gef_context_detour_summary",
         "break_even_contribution_decomposition",
+        "break_even_contribution_decomposition_marching_cubes",
         "contribution_decomposition",
         "scatter_detour_ratio_vs_reduction_by_gef",
         "regions_map_and_gef_scatter",
@@ -3370,6 +3387,7 @@ def render_all(data_dir: str, figures_dir: str, for_latex: bool = False, plot_ti
                 or any(_want(figure_name) for figure_name in CITY_CONTEXT_GROUP_FIGURES)
                 or _want("city_gef_context_detour_summary")
                 or _want("break_even_contribution_decomposition")
+                or _want("break_even_contribution_decomposition_marching_cubes")
                 or (only is not None and _want("contribution_decomposition"))
                 or _want("top6_reduction_detour_grid")
                 or _want("top6_reduction_detour_grid_low_gef")
@@ -3388,7 +3406,10 @@ def render_all(data_dir: str, figures_dir: str, for_latex: bool = False, plot_ti
                 city_df = raw_city_df.merge(gef_df, on="province", how="left")
                 city_df = _prepare_reduction_detour_city_stats(city_df)
 
-                if _want("break_even_contribution_decomposition"):
+                if (
+                    _want("break_even_contribution_decomposition")
+                    or _want("break_even_contribution_decomposition_marching_cubes")
+                ):
                     _render_break_even_contribution_decomposition(
                         data_dir=data_dir,
                         out=out,
@@ -3396,6 +3417,10 @@ def render_all(data_dir: str, figures_dir: str, for_latex: bool = False, plot_ti
                         plot_title=plot_title,
                         city_df=contribution_city_df,
                         exp_config=exp_config,
+                        render_base=_want("break_even_contribution_decomposition"),
+                        render_marching_cubes=_want(
+                            "break_even_contribution_decomposition_marching_cubes"
+                        ),
                     )
 
                 if only is not None and _want("contribution_decomposition"):

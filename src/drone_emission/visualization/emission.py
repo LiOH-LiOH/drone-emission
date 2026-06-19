@@ -1042,7 +1042,7 @@ def _write_contribution_decomposition_report(prepared: Dict, save_path: str):
     print(f"Contribution decomposition report saved to {report_path}")
 
 
-def _break_even_panel_report(prepared: Dict, axes: tuple):
+def _break_even_panel_report(prepared: Dict, axes: tuple, panel_a_mode: str = "lines"):
     """Return compact report data for break-even phase panels."""
     ax_a, ax_b, ax_c = axes
     panel_a = prepared["panel_a"]
@@ -1076,30 +1076,50 @@ def _break_even_panel_report(prepared: Dict, axes: tuple):
             }
         )
 
-    return {
-        "a_break_even_gef_lines": {
-            "axis": _report_axis(ax_a),
-            "zlim_data": _report_array(ax_a.get_zlim()),
+    panel_a_common = {
+        "axis": _report_axis(ax_a),
+        "zlim_data": _report_array(ax_a.get_zlim()),
+        "distance_grid_km": {
+            "count": int(len(prepared["air_distance_grid_km"])),
+            "min": _report_number(np.min(prepared["air_distance_grid_km"])),
+            "max": _report_number(np.max(prepared["air_distance_grid_km"])),
+        },
+        "detour_ratio_grid": {
+            "count": int(len(prepared["detour_ratios"])),
+            "min": _report_number(np.min(prepared["detour_ratios"])),
+            "max": _report_number(np.max(prepared["detour_ratios"])),
+        },
+        "observed_context": {
+            "city_count": int(len(city_reports)),
+            "sample_count": int(len(observed_samples))
+            if hasattr(observed_samples, "__len__")
+            else 0,
+            "mask_nonzero_cells": int(np.count_nonzero(finite_mask > 0))
+            if finite_mask.size
+            else 0,
+            "annotation": observed.get("annotation"),
+        },
+        "interpretation": (
+            "Break-even surface where drone and e-bike lifecycle emissions are "
+            "equal across distance, detour ratio, and grid carbon intensity."
+        ),
+    }
+    if panel_a_mode == "marching_cubes":
+        panel_a_key = "a_break_even_marching_cubes_surface"
+        panel_a_report = {
+            **panel_a_common,
+            "surface_method": "skimage.measure.marching_cubes on Delta g = 0",
+        }
+    else:
+        panel_a_key = "a_break_even_gef_lines"
+        panel_a_report = {
+            **panel_a_common,
             "line_count": int(len(break_even_lines)),
             "line_gef_summary_kg_co2e_per_kwh": _array_summary(line_gefs),
-            "distance_grid_km": {
-                "count": int(len(prepared["air_distance_grid_km"])),
-                "min": _report_number(np.min(prepared["air_distance_grid_km"])),
-                "max": _report_number(np.max(prepared["air_distance_grid_km"])),
-            },
-            "detour_ratio_grid": {
-                "count": int(len(prepared["detour_ratios"])),
-                "min": _report_number(np.min(prepared["detour_ratios"])),
-                "max": _report_number(np.max(prepared["detour_ratios"])),
-            },
-            "observed_context": {
-                "city_count": int(len(city_reports)),
-                "sample_count": int(len(observed_samples)) if hasattr(observed_samples, "__len__") else 0,
-                "mask_nonzero_cells": int(np.count_nonzero(finite_mask > 0)) if finite_mask.size else 0,
-                "annotation": observed.get("annotation"),
-            },
-            "interpretation": "Break-even surface where drone and e-bike lifecycle emissions are equal across distance, detour ratio, and grid carbon intensity.",
-        },
+        }
+
+    return {
+        panel_a_key: panel_a_report,
         "b_c_delta_g_heatmaps": gef_panel_reports,
     }
 
@@ -1188,6 +1208,8 @@ def _write_break_even_contribution_decomposition_report(
     save_path: str,
     figsize: tuple,
     axes: tuple,
+    figure_name: str = "break_even_contribution_decomposition",
+    panel_a_mode: str = "lines",
 ):
     """Write compact JSON and Markdown reports for the combined figure."""
     report_base = save_path.rsplit(".", 1)[0] + "_report"
@@ -1197,13 +1219,14 @@ def _write_break_even_contribution_decomposition_report(
     break_even_report = _break_even_panel_report(
         break_even_prepared,
         axes=(ax_a, ax_b, ax_c),
+        panel_a_mode=panel_a_mode,
     )
     contribution_report = _contribution_panel_report(
         contribution_prepared,
         axes=(ax_d, ax_e),
     )
     payload = {
-        "figure_name": "break_even_contribution_decomposition",
+        "figure_name": figure_name,
         "figure_path": save_path,
         "figure_size_inches": {"width": figsize[0], "height": figsize[1]},
         "coordinate_convention": (
@@ -1224,7 +1247,7 @@ def _write_break_even_contribution_decomposition_report(
 
     national = contribution_prepared["national"]
     lines = [
-        "# break_even_contribution_decomposition",
+        f"# {figure_name}",
         "",
         f"- Figure path: `{save_path}`",
         f"- Figure size: {figsize[0]} x {figsize[1]} inches",
@@ -1935,6 +1958,55 @@ def _build_break_even_zero_lines(
     return lines
 
 
+def _build_break_even_marching_cubes_surface(
+    air_distance_grid_km: np.ndarray,
+    detour_ratios: np.ndarray,
+    delta_zero: np.ndarray,
+    delta_slope: np.ndarray,
+    gef_limits: tuple[float, float],
+    gef_points: int = 96,
+) -> dict | None:
+    """Extract the Delta g = 0 surface with skimage marching cubes."""
+    from skimage.measure import marching_cubes
+
+    x_axis = np.asarray(air_distance_grid_km, dtype=float)
+    y_axis = np.asarray(detour_ratios, dtype=float)
+    z_axis = np.linspace(float(gef_limits[0]), float(gef_limits[1]), int(gef_points))
+    delta_zero = np.asarray(delta_zero, dtype=float)
+    delta_slope = np.asarray(delta_slope, dtype=float)
+    volume = (
+        delta_zero[np.newaxis, :, :]
+        + z_axis[:, np.newaxis, np.newaxis] * delta_slope[np.newaxis, :, :]
+    )
+    finite_volume = volume[np.isfinite(volume)]
+    if not len(finite_volume) or finite_volume.min() > 0.0 or finite_volume.max() < 0.0:
+        return None
+
+    dz = float(z_axis[1] - z_axis[0]) if len(z_axis) > 1 else 1.0
+    dy = float(y_axis[1] - y_axis[0]) if len(y_axis) > 1 else 1.0
+    dx = float(x_axis[1] - x_axis[0]) if len(x_axis) > 1 else 1.0
+    vertices, faces, _, _ = marching_cubes(
+        volume,
+        level=0.0,
+        spacing=(dz, dy, dx),
+        step_size=2,
+        allow_degenerate=False,
+    )
+    if not len(vertices) or not len(faces):
+        return None
+
+    z = vertices[:, 0] + float(z_axis[0])
+    y = vertices[:, 1] + float(y_axis[0])
+    x = vertices[:, 2] + float(x_axis[0])
+    return {
+        "kind": "marching_cubes_surface",
+        "x": x,
+        "y": y,
+        "z": z,
+        "triangles": faces,
+    }
+
+
 def prepare_break_even_phase_diagram_data(
     data_dir: str = None,
     city_df: pd.DataFrame = None,
@@ -2080,6 +2152,7 @@ def _plot_break_even_phase_diagram_panels(
     font_scale: float = 1.0,
     panel_letter_fontsize: int = 13,
     show_surface_annotations: bool = True,
+    panel_a_mode: str = "lines",
 ):
     """Draw break-even phase-diagram panels on caller-provided axes."""
     air_distance_grid_km = prepared["air_distance_grid_km"]
@@ -2111,24 +2184,55 @@ def _plot_break_even_phase_diagram_panels(
     line_norm = plt.Normalize(vmin=gef_limits[0], vmax=gef_limits[1])
     X, Y = np.meshgrid(air_distance_grid_km, detour_ratios)
 
-    for line in break_even_lines:
-        gef = float(line["gef"])
-        line_color = line_cmap(line_norm(gef))
-        ax_a.plot(
-            line["x"],
-            line["y"],
-            line["z"],
-            color=line_color,
-            linewidth=1.55,
-            alpha=0.95,
+    if panel_a_mode == "marching_cubes":
+        surface_mesh = _build_break_even_marching_cubes_surface(
+            air_distance_grid_km=air_distance_grid_km,
+            detour_ratios=detour_ratios,
+            delta_zero=panel_a["delta_zero"],
+            delta_slope=panel_a["delta_slope"],
+            gef_limits=gef_limits,
         )
+        if surface_mesh:
+            ax_a.plot_trisurf(
+                surface_mesh["x"],
+                surface_mesh["y"],
+                surface_mesh["z"],
+                triangles=surface_mesh["triangles"],
+                cmap=line_cmap,
+                norm=line_norm,
+                linewidth=0,
+                antialiased=False,
+                shade=False,
+                alpha=1.0,
+                edgecolor="none",
+                rasterized=True,
+            )
+    else:
+        for line in break_even_lines:
+            gef = float(line["gef"])
+            line_color = line_cmap(line_norm(gef))
+            ax_a.plot(
+                line["x"],
+                line["y"],
+                line["z"],
+                color=line_color,
+                linewidth=1.55,
+                alpha=0.95,
+            )
 
     if show_surface_annotations:
-        annotation_specs = (
-            (0.90, "Break-even curves at fixed GEF", 9.5, "#444444"),
-            (0.82, "GEF spacing = 0.05 kg CO2e/kWh", 8.8, "#555555"),
-            (0.05, "Each line marks Delta g = 0", 8.4, "#555555"),
-        )
+        if panel_a_mode == "marching_cubes":
+            annotation_specs = (
+                (0.90, "Break-even surface from marching cubes", 9.5, "#444444"),
+                (0.82, "Delta g = 0 implicit surface", 8.8, "#555555"),
+                (0.05, "Surface marks Delta g = 0", 8.4, "#555555"),
+            )
+        else:
+            annotation_specs = (
+                (0.90, "Break-even curves at fixed GEF", 9.5, "#444444"),
+                (0.82, "GEF spacing = 0.05 kg CO2e/kWh", 8.8, "#555555"),
+                (0.05, "Each line marks Delta g = 0", 8.4, "#555555"),
+            )
         for y, text, fontsize, color in annotation_specs:
             ax_a.text2D(
                 0.02,
@@ -2239,7 +2343,11 @@ def _plot_break_even_phase_diagram_panels(
     )
 
     if plot_title:
-        ax_a.set_title("Break-even curves by GEF", fontsize=12 * font_scale, pad=10)
+        if panel_a_mode == "marching_cubes":
+            title = "Break-even surface by marching cubes"
+        else:
+            title = "Break-even curves by GEF"
+        ax_a.set_title(title, fontsize=12 * font_scale, pad=10)
 
     _add_panel_letter(ax_a, panel_letters[0], fontsize=panel_letter_fontsize)
     _add_panel_letter(ax_b, panel_letters[1], fontsize=panel_letter_fontsize)
@@ -2304,6 +2412,8 @@ def plot_break_even_contribution_decomposition(
     figsize: tuple = (15.0, 10.2),
     for_latex: bool = False,
     plot_title: bool = False,
+    panel_a_mode: str = "lines",
+    figure_name: str = "break_even_contribution_decomposition",
 ):
     """Stack break-even phase diagram above contribution decomposition.
 
@@ -2356,6 +2466,7 @@ def plot_break_even_contribution_decomposition(
         font_scale=0.92,
         panel_letter_fontsize=12,
         show_surface_annotations=False,
+        panel_a_mode=panel_a_mode,
     )
     _plot_contribution_decomposition_panels(
         fig,
@@ -2383,12 +2494,44 @@ def plot_break_even_contribution_decomposition(
             save_path,
             figsize,
             axes=(ax_a, ax_b, ax_c, ax_d, ax_e),
+            figure_name=figure_name,
+            panel_a_mode=panel_a_mode,
         )
         plt.close(fig)
-        print(f"Break-even contribution decomposition saved to {save_path}")
+        print(f"{figure_name.replace('_', ' ').capitalize()} saved to {save_path}")
     else:
         plt.show()
         plt.close(fig)
+
+
+def plot_break_even_contribution_decomposition_marching_cubes(
+    break_even_prepared: Dict,
+    contribution_prepared: Dict,
+    save_path: str = None,
+    figsize: tuple = (15.0, 10.2),
+    for_latex: bool = False,
+    plot_title: bool = False,
+):
+    """Stack contribution decomposition with a marching-cubes break-even surface.
+
+    Args:
+        break_even_prepared: Output of ``prepare_break_even_phase_diagram_data``.
+        contribution_prepared: Output of ``prepare_contribution_decomposition_data``.
+        save_path: Path to save figure (with extension). Shows plot if None.
+        figsize: Figure size tuple.
+        for_latex: If True, save as PDF.
+        plot_title: If True, show title.
+    """
+    plot_break_even_contribution_decomposition(
+        break_even_prepared,
+        contribution_prepared,
+        save_path=save_path,
+        figsize=figsize,
+        for_latex=for_latex,
+        plot_title=plot_title,
+        panel_a_mode="marching_cubes",
+        figure_name="break_even_contribution_decomposition_marching_cubes",
+    )
 
 
 def add_experiment_info_box(
