@@ -1105,17 +1105,17 @@ def _break_even_panel_report(prepared: Dict, axes: tuple, panel_a_mode: str = "l
             "equal across distance, detour ratio, and grid carbon intensity."
         ),
     }
-    if panel_a_mode == "root_surface":
-        panel_a_key = "a_break_even_root_surface"
-        panel_a_report = {
-            **panel_a_common,
-            "surface_method": "analytic root GEF* = -Delta g0 / Delta g slope",
-        }
-    elif panel_a_mode == "marching_cubes":
+    if panel_a_mode == "marching_cubes":
         panel_a_key = "a_break_even_marching_cubes_surface"
         panel_a_report = {
             **panel_a_common,
-            "surface_method": "skimage.measure.marching_cubes on Delta g = 0",
+            "surface_method": (
+                "skimage.measure.marching_cubes on Delta g = 0 with step_size = 1"
+            ),
+            "surface_overlay": (
+                "Sparse fixed-GEF Delta g = 0 curves drawn independently of the "
+                "marching-cubes mesh."
+            ),
         }
     else:
         panel_a_key = "a_break_even_gef_lines"
@@ -1996,7 +1996,7 @@ def _build_break_even_marching_cubes_surface(
         volume,
         level=0.0,
         spacing=(dz, dy, dx),
-        step_size=6,
+        step_size=1,
         allow_degenerate=False,
     )
     if not len(vertices) or not len(faces):
@@ -2014,42 +2014,24 @@ def _build_break_even_marching_cubes_surface(
     }
 
 
-def _build_break_even_root_surface(
-    air_distance_grid_km: np.ndarray,
-    detour_ratios: np.ndarray,
-    delta_zero: np.ndarray,
-    delta_slope: np.ndarray,
-    gef_limits: tuple[float, float],
-) -> dict | None:
-    """Build the Delta g = 0 surface from the analytic GEF root."""
-    x_axis = np.asarray(air_distance_grid_km, dtype=float)
-    y_axis = np.asarray(detour_ratios, dtype=float)
-    delta_zero = np.asarray(delta_zero, dtype=float)
-    delta_slope = np.asarray(delta_slope, dtype=float)
-    gef_min, gef_max = map(float, gef_limits)
+def _select_sparse_break_even_overlay_curves(
+    break_even_lines: list[dict],
+    max_curves: int = 5,
+) -> list[dict]:
+    """Return a low-frequency subset of fixed-GEF break-even curves."""
+    if not break_even_lines:
+        return []
 
-    roots = np.full_like(delta_zero, np.nan, dtype=float)
-    valid = (
-        np.isfinite(delta_zero)
-        & np.isfinite(delta_slope)
-        & (np.abs(delta_slope) > 1e-12)
+    sorted_lines = sorted(
+        break_even_lines,
+        key=lambda line: float(line.get("gef", np.nan)),
     )
-    roots[valid] = -delta_zero[valid] / delta_slope[valid]
-    in_domain = valid & (roots >= gef_min) & (roots <= gef_max)
-    if not np.any(in_domain):
-        return None
+    if len(sorted_lines) <= max_curves:
+        return sorted_lines
 
-    z = np.where(in_domain, roots, np.nan)
-    x, y = np.meshgrid(x_axis, y_axis)
-    return {
-        "kind": "analytic_root_surface",
-        "x": x,
-        "y": y,
-        "z": z,
-        "z_min": float(np.nanmin(z)),
-        "z_max": float(np.nanmax(z)),
-        "valid_points": int(np.count_nonzero(in_domain)),
-    }
+    indices = np.linspace(0, len(sorted_lines) - 1, max_curves)
+    unique_indices = np.unique(np.rint(indices).astype(int))
+    return [sorted_lines[idx] for idx in unique_indices]
 
 
 def prepare_break_even_phase_diagram_data(
@@ -2230,45 +2212,7 @@ def _plot_break_even_phase_diagram_panels(
     surface_colorbar_mappable = None
     X, Y = np.meshgrid(air_distance_grid_km, detour_ratios)
 
-    if panel_a_mode == "root_surface":
-        root_surface = _build_break_even_root_surface(
-            air_distance_grid_km=air_distance_grid_km,
-            detour_ratios=detour_ratios,
-            delta_zero=panel_a["delta_zero"],
-            delta_slope=panel_a["delta_slope"],
-            gef_limits=gef_limits,
-        )
-        if root_surface:
-            z_surface = np.ma.masked_invalid(root_surface["z"])
-            ax_a.plot_surface(
-                root_surface["x"],
-                root_surface["y"],
-                z_surface,
-                cmap=line_cmap,
-                norm=line_norm,
-                rcount=len(detour_ratios),
-                ccount=len(air_distance_grid_km),
-                linewidth=0,
-                antialiased=False,
-                shade=False,
-                alpha=1.0,
-                rasterized=True,
-            )
-            ax_a.plot_wireframe(
-                root_surface["x"],
-                root_surface["y"],
-                z_surface,
-                rstride=18,
-                cstride=18,
-                color=(0.25, 0.25, 0.25, 0.28),
-                linewidth=0.35,
-            )
-            surface_colorbar_mappable = ScalarMappable(
-                cmap=line_cmap,
-                norm=line_norm,
-            )
-            surface_colorbar_mappable.set_array([])
-    elif panel_a_mode == "marching_cubes":
+    if panel_a_mode == "marching_cubes":
         surface_mesh = _build_break_even_marching_cubes_surface(
             air_distance_grid_km=air_distance_grid_km,
             detour_ratios=detour_ratios,
@@ -2284,13 +2228,25 @@ def _plot_break_even_phase_diagram_panels(
                 triangles=surface_mesh["triangles"],
                 cmap=line_cmap,
                 norm=line_norm,
-                linewidth=0.12,
+                linewidth=0.0,
                 antialiased=False,
                 shade=False,
                 alpha=1.0,
-                edgecolor=(0.25, 0.25, 0.25, 0.22),
+                edgecolor="none",
                 rasterized=True,
             )
+            for overlay_line in _select_sparse_break_even_overlay_curves(
+                break_even_lines,
+                max_curves=5,
+            ):
+                ax_a.plot(
+                    overlay_line["x"],
+                    overlay_line["y"],
+                    overlay_line["z"],
+                    color=(0.16, 0.16, 0.16, 0.45),
+                    linewidth=0.8,
+                    solid_capstyle="round",
+                )
             surface_colorbar_mappable = ScalarMappable(
                 cmap=line_cmap,
                 norm=line_norm,
@@ -2310,16 +2266,15 @@ def _plot_break_even_phase_diagram_panels(
             )
 
     if show_surface_annotations:
-        if panel_a_mode == "root_surface":
-            annotation_specs = (
-                (0.90, "Break-even surface from analytic roots", 9.5, "#444444"),
-                (0.82, "GEF* = -Delta g0 / Delta g slope", 8.8, "#555555"),
-                (0.05, "Surface marks Delta g = 0", 8.4, "#555555"),
-            )
-        elif panel_a_mode == "marching_cubes":
+        if panel_a_mode == "marching_cubes":
             annotation_specs = (
                 (0.90, "Break-even surface from marching cubes", 9.5, "#444444"),
-                (0.82, "Delta g = 0 implicit surface", 8.8, "#555555"),
+                (
+                    0.82,
+                    "Sparse fixed-GEF curves over a complete Delta g = 0 surface",
+                    8.8,
+                    "#555555",
+                ),
                 (0.05, "Surface marks Delta g = 0", 8.4, "#555555"),
             )
         else:
@@ -2350,7 +2305,7 @@ def _plot_break_even_phase_diagram_panels(
     ax_a.set_ylabel("Detour ratio (road / air)", fontsize=10.5 * font_scale, labelpad=8)
     ax_a.set_zlabel("GEF (kg CO2e/kWh)", fontsize=10.5 * font_scale, labelpad=8)
     ax_a.set_proj_type("ortho")
-    if panel_a_mode in {"marching_cubes", "root_surface"}:
+    if panel_a_mode == "marching_cubes":
         ax_a.view_init(elev=20, azim=225)
     else:
         ax_a.view_init(elev=28, azim=-128)
@@ -2456,9 +2411,7 @@ def _plot_break_even_phase_diagram_panels(
     )
 
     if plot_title:
-        if panel_a_mode == "root_surface":
-            title = "Break-even surface by analytic roots"
-        elif panel_a_mode == "marching_cubes":
+        if panel_a_mode == "marching_cubes":
             title = "Break-even surface by marching cubes"
         else:
             title = "Break-even curves by GEF"
@@ -2627,7 +2580,7 @@ def plot_break_even_contribution_decomposition_marching_cubes(
     for_latex: bool = False,
     plot_title: bool = False,
 ):
-    """Stack contribution decomposition with an analytic break-even surface.
+    """Stack contribution decomposition with a marching-cubes break-even surface.
 
     Args:
         break_even_prepared: Output of ``prepare_break_even_phase_diagram_data``.
@@ -2644,7 +2597,7 @@ def plot_break_even_contribution_decomposition_marching_cubes(
         figsize=figsize,
         for_latex=for_latex,
         plot_title=plot_title,
-        panel_a_mode="root_surface",
+        panel_a_mode="marching_cubes",
         figure_name="break_even_contribution_decomposition_marching_cubes",
     )
 
