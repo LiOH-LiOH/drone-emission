@@ -819,15 +819,22 @@ def _add_panel_letter(
         ax.text(position[0], position[1], letter, transform=ax.transAxes, **text_kwargs)
 
 
-def _plot_contribution_waterfall(ax, national: dict, rotate_xticks: bool = False):
+def _plot_contribution_waterfall(
+    ax,
+    national: dict,
+    rotate_xticks: bool = False,
+    ylim_expand: float | None = None,
+):
     """Draw the national contribution waterfall."""
     x = np.arange(len(CONTRIBUTION_COMPONENT_SPECS) + 1, dtype=float)
     cumulative = 0.0
     xticklabels = []
+    y_values = [0.0]
     for idx, spec in enumerate(CONTRIBUTION_COMPONENT_SPECS):
         value = float(national[f"{spec['key']}_pp"])
         start = cumulative
         end = cumulative + value
+        y_values.extend([start, end, end + (0.12 if value >= 0 else -0.12)])
         bottom = min(start, end)
         height = abs(value)
         ax.bar(
@@ -862,6 +869,7 @@ def _plot_contribution_waterfall(ax, national: dict, rotate_xticks: bool = False
 
     total_pp = float(national["total_net_pp"])
     total_bottom = min(0.0, total_pp)
+    y_values.extend([total_bottom, total_pp, total_pp + (0.12 if total_pp >= 0 else -0.12)])
     ax.bar(
         x[-1],
         abs(total_pp),
@@ -895,6 +903,12 @@ def _plot_contribution_waterfall(ax, national: dict, rotate_xticks: bool = False
     ax.set_ylabel("Contribution to national all-e-bike baseline (pp)", fontsize=12)
     ax.grid(axis="y", alpha=0.25)
     ax.set_xlim(-0.6, len(x) - 0.4)
+    if ylim_expand is not None:
+        y_min = min(y_values)
+        y_max = max(y_values)
+        y_span = max(y_max - y_min, 1.0)
+        pad = y_span * ylim_expand
+        ax.set_ylim(y_min - pad, y_max + pad)
 
 
 def _plot_top_city_contribution_bars(ax, rows: list[dict]):
@@ -984,12 +998,14 @@ def _plot_contribution_decomposition_panels(
     rotate_waterfall_xticks: bool = False,
     panel_letter_position: tuple[float, float] = (-0.10, 1.03),
     legend_inside_second_axis: bool = False,
+    waterfall_ylim_expand: float | None = None,
 ):
     """Draw contribution-decomposition panels on caller-provided axes."""
     _plot_contribution_waterfall(
         ax_a,
         prepared["national"],
         rotate_xticks=rotate_waterfall_xticks,
+        ylim_expand=waterfall_ylim_expand,
     )
     _plot_top_city_contribution_bars(ax_b, prepared.get("top_cities", [])[:15])
 
@@ -2509,6 +2525,8 @@ def plot_break_even_contribution_decomposition(
     panel_a_mode: str = "lines",
     figure_name: str = "break_even_contribution_decomposition",
     legend_inside_second_axis: bool = False,
+    contribution_panel_letter_position: tuple[float, float] = (-0.10, 1.22),
+    contribution_waterfall_ylim_expand: float | None = None,
 ):
     """Stack break-even phase diagram above contribution decomposition.
 
@@ -2574,8 +2592,9 @@ def plot_break_even_contribution_decomposition(
         legend_anchor=(0.5, 0.455),
         panel_letter_fontsize=12,
         rotate_waterfall_xticks=True,
-        panel_letter_position=(-0.10, 1.22),
+        panel_letter_position=contribution_panel_letter_position,
         legend_inside_second_axis=legend_inside_second_axis,
+        waterfall_ylim_expand=contribution_waterfall_ylim_expand,
     )
 
     if save_path:
@@ -2629,6 +2648,8 @@ def plot_break_even_contribution_decomposition_marching_cubes(
         panel_a_mode="marching_cubes",
         figure_name="break_even_contribution_decomposition_marching_cubes",
         legend_inside_second_axis=True,
+        contribution_panel_letter_position=(-0.10, 1.12),
+        contribution_waterfall_ylim_expand=0.12,
     )
 
 
