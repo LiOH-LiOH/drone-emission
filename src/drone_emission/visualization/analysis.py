@@ -950,7 +950,14 @@ def _add_map_summary_bars(
     return inset, inset_saved
 
 
-def _pathway_curve_report(ax, ax_twin, curve_df: pd.DataFrame, orientation: str):
+def _pathway_curve_report(
+    ax,
+    ax_twin,
+    curve_df: pd.DataFrame,
+    orientation: str,
+    co2_saved_mark: str = "line",
+    co2_saved_baseline: float = None,
+):
     """Return plotted pathway curve points and axis metadata."""
     points = []
     if curve_df is not None and not curve_df.empty:
@@ -966,7 +973,10 @@ def _pathway_curve_report(ax, ax_twin, curve_df: pd.DataFrame, orientation: str)
         "axis_primary": _axis_report(ax),
         "axis_secondary": _axis_report(ax_twin) if ax_twin is not None else None,
         "orientation": orientation,
+        "co2_saved_mark": co2_saved_mark,
+        "co2_saved_baseline": _json_safe_scalar(co2_saved_baseline),
         "co2_saved_color": "#1b7837",
+        "drone_share_mark": "line",
         "drone_share_color": "#2166ac",
         "points": points,
     }
@@ -1156,6 +1166,13 @@ def _write_regions_map_pathway_scenarios_report(
                 "co2_saved": "#1b7837",
                 "drone_share": "#2166ac",
             },
+            "curve_marks": {
+                "co2_saved": "bar",
+                "drone_share": "line",
+            },
+            "curve_baselines": {
+                "co2_saved": 0.0,
+            },
             "scenario_summary_bar_colors": {
                 "drone_share": "#2166ac",
                 "co2_saved": "#1b7837",
@@ -1168,12 +1185,16 @@ def _write_regions_map_pathway_scenarios_report(
                 curve_twins[0],
                 curve_data.get("gef"),
                 "horizontal",
+                co2_saved_mark="bar",
+                co2_saved_baseline=0.0,
             ),
             f"{curve_display_labels.get('kappa', 'd')}_kappa_pathway_curve": _pathway_curve_report(
                 curve_axes[1],
                 curve_twins[1],
                 curve_data.get("kappa"),
                 "horizontal",
+                co2_saved_mark="bar",
+                co2_saved_baseline=0.0,
             ),
         },
     }
