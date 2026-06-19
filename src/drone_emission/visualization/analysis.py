@@ -883,6 +883,130 @@ def _build_pathway_prepared_data_with_cache(
     return oracle_rows, curve_data
 
 
+def _pathway_scenario_definitions(baseline_kappa: float) -> list[tuple]:
+    """Return the standard pathway scenario definitions."""
+    return [
+        ("a", "Today", baseline_kappa, 1.0, "optimal_mixed"),
+        ("b", "Halved GEF", baseline_kappa, 0.5, "optimal_mixed_2030"),
+        ("c", "Operator bundling", 0.65, 1.0, "optimal_mixed"),
+        ("d", "Halved GEF + bundling", 0.65, 0.5, "optimal_mixed_2030"),
+    ]
+
+
+def _prepare_pathway_scenario_data(
+    named_csv_path: str,
+    stats_csv_path: str,
+    data_dir: str = None,
+    exp_config: dict = None,
+):
+    """Return cache-backed pathway scenario tables used by map figures."""
+    named = pd.read_csv(named_csv_path)
+    base = pd.read_csv(stats_csv_path)
+
+    baseline_kappa = _baseline_kappa_for_pathway(named, base)
+    panels = _pathway_scenario_definitions(baseline_kappa)
+
+    reduction_col = "reduction_vs_anchor_ebike_pct"
+    has_annual = "annual_lifecycle_kg" in named.columns
+    anchor_rows = _pathway_anchor_annual_kg(named, base, baseline_kappa)
+    oracle_rows, curve_data = _build_pathway_prepared_data_with_cache(
+        named_csv_path=named_csv_path,
+        stats_csv_path=stats_csv_path,
+        stats_df=base,
+        data_dir=data_dir,
+        exp_config=exp_config,
+        panels=panels,
+        baseline_kappa=baseline_kappa,
+    )
+    if not oracle_rows.empty:
+        has_annual = True
+        anchor_rows = (
+            oracle_rows[["region_key", "anchor_annual_kg"]]
+            .dropna()
+            .drop_duplicates(subset=["region_key"])
+        )
+    else:
+        print(
+            "pathway scenario maps: oracle-min panel rows unavailable; "
+            "falling back to named threshold-sweep strategies."
+        )
+    if has_annual and anchor_rows.empty:
+        print(
+            "pathway scenario maps: annual scenario totals are present "
+            "but no weighted all-ebike anchor was found; falling back to named reductions."
+        )
+
+    panel_dfs = {}
+    panel_named = {}
+    drone_share_median = {}
+    annual_saved_total_kg = {}
+    all_values = []
+    for label, _title, k, g, strat in panels:
+        if not oracle_rows.empty:
+            rows = oracle_rows[oracle_rows["panel_label"] == label].copy()
+        else:
+            rows = named[
+                np.isclose(named["kappa"], k)
+                & np.isclose(named["gef_mult"], g)
+                & (named["strategy"] == strat)
+            ].copy()
+        rows["province_en"] = rows["province"].map(PROVINCE_NAME_EN).fillna(
+            rows["province"]
+        )
+        panel_named[label] = rows
+        share_col = (
+            _scenario_drone_share_column(rows)
+            if not rows.empty
+            else "drone_ratio_pct"
+        )
+        if has_annual and not anchor_rows.empty:
+            sub = rows[["region_key", "annual_lifecycle_kg"]].merge(
+                anchor_rows, on="region_key", how="left"
+            )
+            sub["max_lifecycle_reduction_pct"] = np.where(
+                sub["anchor_annual_kg"] > 0,
+                (
+                    1.0
+                    - pd.to_numeric(sub["annual_lifecycle_kg"], errors="coerce")
+                    / sub["anchor_annual_kg"]
+                ) * 100.0,
+                np.nan,
+            )
+            sub = sub[["region_key", "max_lifecycle_reduction_pct"]]
+        else:
+            sub = rows[["region_key", reduction_col]].rename(
+                columns={reduction_col: "max_lifecycle_reduction_pct"}
+            )
+        merged = base.drop(columns=["max_lifecycle_reduction_pct"], errors="ignore").merge(
+            sub, on="region_key", how="left"
+        )
+        panel_dfs[label] = merged
+        all_values.extend(merged["max_lifecycle_reduction_pct"].dropna().tolist())
+        drone_share_median[label] = float(rows[share_col].median()) if len(rows) else float("nan")
+        if has_annual and not anchor_rows.empty:
+            joined = rows[["region_key", "annual_lifecycle_kg"]].merge(
+                anchor_rows, on="region_key", how="inner"
+            )
+            annual_saved_total_kg[label] = float(
+                (joined["anchor_annual_kg"] - joined["annual_lifecycle_kg"]).sum()
+            )
+
+    return {
+        "named": named,
+        "base": base,
+        "baseline_kappa": baseline_kappa,
+        "panels": panels,
+        "has_annual": has_annual,
+        "anchor_rows": anchor_rows,
+        "panel_dfs": panel_dfs,
+        "panel_named": panel_named,
+        "drone_share_median": drone_share_median,
+        "annual_saved_total_kg": annual_saved_total_kg,
+        "all_values": all_values,
+        "curve_data": curve_data,
+    }
+
+
 def _plot_pathway_curve_panel(
     ax,
     curve_df: pd.DataFrame,
@@ -2298,6 +2422,219 @@ def plot_regions_map_kappa_panels(
     plt.close(fig)
 
 
+def plot_regions_map_pathway_scenario_maps(
+    named_csv_path: str,
+    stats_csv_path: str,
+    data_dir: str = None,
+    exp_config: dict = None,
+    save_path: str = None,
+    figsize: tuple = (14, 10),
+    for_latex: bool = False,
+    plot_title: bool = False,
+):
+    """2x2 region-map grid for base and operator-bundling pathway scenarios.
+
+    Panels show emission reduction and drone share for today's base pathway
+    scenario and the operator-bundling pathway scenario. Values use the same
+    cache-backed scenario preparation as `plot_regions_map_pathway_scenarios`.
+
+    Args:
+        named_csv_path: Path to all_sensitivity_named.csv.
+        stats_csv_path: Path to all_region_stats.csv (provides region_name_cn lookup).
+        data_dir: Data root containing city OD-pair CSVs for oracle-min scenarios.
+        exp_config: Experiment config for vehicle parameters and GEF path.
+        save_path: Path to save figure. Shows plot if None.
+        figsize: Figure size tuple.
+        for_latex: If True, save as PDF.
+        plot_title: If True, show figure-level title.
+    """
+    from visualization.regions import plot_regions_on_china_map
+
+    scenario_data = _prepare_pathway_scenario_data(
+        named_csv_path=named_csv_path,
+        stats_csv_path=stats_csv_path,
+        data_dir=data_dir,
+        exp_config=exp_config,
+    )
+    base = scenario_data["base"]
+    panel_dfs = scenario_data["panel_dfs"]
+    panel_named = scenario_data["panel_named"]
+    all_values = scenario_data["all_values"]
+
+    scenario_labels = ("a", "c")
+    share_col_out = "pathway_drone_share_pct"
+    share_dfs = {}
+    for label in scenario_labels:
+        rows = panel_named.get(label, pd.DataFrame())
+        if rows.empty:
+            sub = pd.DataFrame(columns=["region_key", share_col_out])
+        else:
+            share_col = _scenario_drone_share_column(rows)
+            sub = rows[["region_key", share_col]].rename(
+                columns={share_col: share_col_out}
+            )
+        share_dfs[label] = base.drop(columns=[share_col_out], errors="ignore").merge(
+            sub,
+            on="region_key",
+            how="left",
+        )
+
+    if not all_values:
+        print(
+            "plot_regions_map_pathway_scenario_maps: no scenario rows matched any "
+            "region in stats — rendering empty maps. Run sensitivity --stages named first."
+        )
+        v_max = 1.0
+    else:
+        v_max = max(max(all_values), 0.0)
+    reduction_cmap, reduction_norm, reduction_bins, reduction_edges = _build_reduction_cmap(
+        v_max
+    )
+    share_cmap, share_norm, share_bins, share_edges = _build_drone_share_cmap()
+
+    fig, axes = plt.subplots(2, 2, figsize=figsize)
+    panel_specs = [
+        (
+            "a",
+            "a",
+            "Today",
+            "Emission reduction",
+            "max_lifecycle_reduction_pct",
+            reduction_cmap,
+            reduction_norm,
+        ),
+        ("b", "a", "Today", "Drone share", share_col_out, share_cmap, share_norm),
+        (
+            "c",
+            "c",
+            "Operator bundling",
+            "Emission reduction",
+            "max_lifecycle_reduction_pct",
+            reduction_cmap,
+            reduction_norm,
+        ),
+        (
+            "d",
+            "c",
+            "Operator bundling",
+            "Drone share",
+            share_col_out,
+            share_cmap,
+            share_norm,
+        ),
+    ]
+
+    for (
+        ax,
+        (
+            panel_letter,
+            scenario_label,
+            scenario_title,
+            metric_title,
+            color_col,
+            cmap,
+            norm,
+        ),
+    ) in zip(
+        axes.flat,
+        panel_specs,
+    ):
+        map_df = (
+            panel_dfs[scenario_label]
+            if color_col == "max_lifecycle_reduction_pct"
+            else share_dfs[scenario_label]
+        )
+        plot_regions_on_china_map(
+            df=map_df,
+            color_by=color_col,
+            ax=ax,
+            plot_title=False,
+            cmap=cmap,
+            norm=norm,
+            draw_colorbar=False,
+            draw_legend=False,
+        )
+        ax.set_xlabel("")
+        ax.set_ylabel("")
+        ax.set_xticks([])
+        ax.set_yticks([])
+        ax.grid(False)
+        for spine in ax.spines.values():
+            spine.set_visible(False)
+        ax.text(
+            -0.02,
+            1.02,
+            panel_letter,
+            transform=ax.transAxes,
+            fontsize=14,
+            fontweight="bold",
+            va="bottom",
+            ha="right",
+        )
+        ax.text(
+            0.02,
+            0.98,
+            f"{scenario_title}\n{metric_title}",
+            transform=ax.transAxes,
+            fontsize=10,
+            va="top",
+            ha="left",
+            bbox=dict(
+                facecolor="white",
+                edgecolor="gray",
+                alpha=0.85,
+                boxstyle="round,pad=0.3",
+            ),
+        )
+
+    if plot_title:
+        fig.suptitle(
+            "Pathway scenario region maps: base and operator bundling",
+            fontsize=14,
+            fontweight="bold",
+        )
+
+    fig.tight_layout(rect=(0, 0.02, 0.90, 0.98))
+    fig.canvas.draw()
+
+    cbar_ax_reduction = fig.add_axes((0.915, 0.55, 0.014, 0.34))
+    cbar_reduction, n_reduction_bands = _draw_discrete_reduction_colorbar(
+        fig,
+        cbar_ax_reduction,
+        reduction_cmap,
+        reduction_norm,
+        reduction_bins,
+        reduction_edges,
+        r"Reduction vs today's all-ebike anchor (%)",
+    )
+    _annotate_unstudied(fig, cbar_reduction, cbar_ax_reduction, n_reduction_bands)
+
+    cbar_ax_share = fig.add_axes((0.915, 0.12, 0.014, 0.34))
+    cbar_share, n_share_bands = _draw_discrete_reduction_colorbar(
+        fig,
+        cbar_ax_share,
+        share_cmap,
+        share_norm,
+        share_bins,
+        share_edges,
+        "Drone share (%)",
+    )
+    _annotate_unstudied(fig, cbar_share, cbar_ax_share, n_share_bands)
+
+    if save_path:
+        if for_latex and not save_path.endswith(".pdf"):
+            save_path = save_path.rsplit(".", 1)[0] + ".pdf"
+        if plot_title:
+            save_path = _add_title_suffix(save_path)
+        os.makedirs(os.path.dirname(save_path), exist_ok=True)
+        plt.savefig(save_path, dpi=300, bbox_inches="tight")
+        print(f"Regions map pathway scenario maps saved to {save_path}")
+    else:
+        plt.show()
+
+    plt.close(fig)
+
+
 def plot_regions_map_pathway_scenarios(
     named_csv_path: str,
     stats_csv_path: str,
@@ -2341,90 +2678,23 @@ def plot_regions_map_pathway_scenarios(
     """
     from visualization.regions import plot_regions_on_china_map
 
-    named = pd.read_csv(named_csv_path)
-    base = pd.read_csv(stats_csv_path)
-
-    baseline_kappa = _baseline_kappa_for_pathway(named, base)
-    panels = [
-        ("a", "Today",                    baseline_kappa, 1.0, "optimal_mixed"),
-        ("b", "Halved GEF",               baseline_kappa, 0.5, "optimal_mixed_2030"),
-        ("c", "Operator bundling",        0.65, 1.0, "optimal_mixed"),
-        ("d", "Halved GEF + bundling",    0.65, 0.5, "optimal_mixed_2030"),
-    ]
-
-    reduction_col = "reduction_vs_anchor_ebike_pct"
-    has_annual = "annual_lifecycle_kg" in named.columns
-    anchor_rows = _pathway_anchor_annual_kg(named, base, baseline_kappa)
-    oracle_rows, curve_data = _build_pathway_prepared_data_with_cache(
+    scenario_data = _prepare_pathway_scenario_data(
         named_csv_path=named_csv_path,
         stats_csv_path=stats_csv_path,
-        stats_df=base,
         data_dir=data_dir,
         exp_config=exp_config,
-        panels=panels,
-        baseline_kappa=baseline_kappa,
     )
-    if not oracle_rows.empty:
-        has_annual = True
-        anchor_rows = (
-            oracle_rows[["region_key", "anchor_annual_kg"]]
-            .dropna()
-            .drop_duplicates(subset=["region_key"])
-        )
-    else:
-        print(
-            "plot_regions_map_pathway_scenarios: oracle-min panel rows unavailable; "
-            "falling back to named threshold-sweep strategies."
-        )
-    if has_annual and anchor_rows.empty:
-        print(
-            "plot_regions_map_pathway_scenarios: annual scenario totals are present "
-            "but no weighted all-ebike anchor was found; falling back to named reductions."
-        )
-    panel_dfs = {}
-    panel_named = {}
-    drone_share_median = {}
-    annual_saved_total_kg = {}
-    all_values = []
-    for label, _title, k, g, strat in panels:
-        if not oracle_rows.empty:
-            rows = oracle_rows[oracle_rows["panel_label"] == label].copy()
-        else:
-            rows = named[
-                np.isclose(named["kappa"], k)
-                & np.isclose(named["gef_mult"], g)
-                & (named["strategy"] == strat)
-            ].copy()
-        rows["province_en"] = rows["province"].map(PROVINCE_NAME_EN).fillna(rows["province"])
-        panel_named[label] = rows
-        share_col = _scenario_drone_share_column(rows) if not rows.empty else "drone_ratio_pct"
-        if has_annual and not anchor_rows.empty:
-            sub = rows[["region_key", "annual_lifecycle_kg"]].merge(
-                anchor_rows, on="region_key", how="left"
-            )
-            sub["max_lifecycle_reduction_pct"] = np.where(
-                sub["anchor_annual_kg"] > 0,
-                (
-                    1.0
-                    - pd.to_numeric(sub["annual_lifecycle_kg"], errors="coerce")
-                    / sub["anchor_annual_kg"]
-                ) * 100.0,
-                np.nan,
-            )
-            sub = sub[["region_key", "max_lifecycle_reduction_pct"]]
-        else:
-            sub = rows[["region_key", reduction_col]].rename(
-                columns={reduction_col: "max_lifecycle_reduction_pct"}
-            )
-        merged = base.drop(columns=["max_lifecycle_reduction_pct"], errors="ignore").merge(
-            sub, on="region_key", how="left"
-        )
-        panel_dfs[label] = merged
-        all_values.extend(merged["max_lifecycle_reduction_pct"].dropna().tolist())
-        drone_share_median[label] = float(rows[share_col].median()) if len(rows) else float("nan")
-        if has_annual and not anchor_rows.empty:
-            joined = rows[["region_key", "annual_lifecycle_kg"]].merge(anchor_rows, on="region_key", how="inner")
-            annual_saved_total_kg[label] = float((joined["anchor_annual_kg"] - joined["annual_lifecycle_kg"]).sum())
+    base = scenario_data["base"]
+    anchor_rows = scenario_data["anchor_rows"]
+    panels = scenario_data["panels"]
+    panel_dfs = scenario_data["panel_dfs"]
+    panel_named = scenario_data["panel_named"]
+    drone_share_median = scenario_data["drone_share_median"]
+    annual_saved_total_kg = scenario_data["annual_saved_total_kg"]
+    all_values = scenario_data["all_values"]
+    curve_data = scenario_data["curve_data"]
+    has_annual = scenario_data["has_annual"]
+    baseline_kappa = scenario_data["baseline_kappa"]
 
     if "kappa" in curve_data:
         curve_data["kappa"] = _override_pathway_curve_endpoint(

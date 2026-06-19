@@ -3048,6 +3048,7 @@ def render_all(data_dir: str, figures_dir: str, for_latex: bool = False, plot_ti
         plot_regions_map_city_rank_inset,
         plot_regions_map_kappa_panels,
         plot_regions_map_optimal_drone_share,
+        plot_regions_map_pathway_scenario_maps,
         plot_regions_map_pathway_scenarios,
     )
     from visualization.concepts import (
@@ -3304,6 +3305,7 @@ def render_all(data_dir: str, figures_dir: str, for_latex: bool = False, plot_ti
         "regions_map_city_province_ranks",
         "regions_map_city_rank_inset",
         "regions_map_kappa_panels",
+        "regions_map_pathway_scenario_maps",
         "regions_map_pathway_scenarios",
         *CITY_CONTEXT_FIGURES,
         *CITY_CONTEXT_GROUP_FIGURES,
@@ -3587,6 +3589,27 @@ def render_all(data_dir: str, figures_dir: str, for_latex: bool = False, plot_ti
                         data_dir=data_dir,
                         exp_config=exp_config,
                         save_path=os.path.join(out, "regions_map_pathway_scenarios.png"),
+                        for_latex=for_latex,
+                        plot_title=plot_title,
+                    )
+
+            if _want("regions_map_pathway_scenario_maps"):
+                named_path = os.path.join(data_dir, "all_sensitivity_named.csv")
+                if not os.path.exists(named_path):
+                    print(
+                        "regions_map_pathway_scenario_maps skipped — missing "
+                        f"{named_path}; run sensitivity --stages named first"
+                    )
+                else:
+                    plot_regions_map_pathway_scenario_maps(
+                        named_csv_path=named_path,
+                        stats_csv_path=stats_path,
+                        data_dir=data_dir,
+                        exp_config=exp_config,
+                        save_path=os.path.join(
+                            out,
+                            "regions_map_pathway_scenario_maps.png",
+                        ),
                         for_latex=for_latex,
                         plot_title=plot_title,
                     )
