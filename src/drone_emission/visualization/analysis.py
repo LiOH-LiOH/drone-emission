@@ -2428,15 +2428,16 @@ def plot_regions_map_pathway_scenario_maps(
     data_dir: str = None,
     exp_config: dict = None,
     save_path: str = None,
-    figsize: tuple = (14, 10),
+    figsize: tuple = (18, 10),
     for_latex: bool = False,
     plot_title: bool = False,
 ):
-    """2x2 region-map grid for base and operator-bundling pathway scenarios.
+    """2x3 region-map grid for base, bundling, and delta pathway scenarios.
 
     Panels show emission reduction and drone share for today's base pathway
-    scenario and the operator-bundling pathway scenario. Values use the same
-    cache-backed scenario preparation as `plot_regions_map_pathway_scenarios`.
+    scenario, the operator-bundling pathway scenario, and the signed delta
+    (today minus operator bundling). Values use the same cache-backed scenario
+    preparation as `plot_regions_map_pathway_scenarios`.
 
     Args:
         named_csv_path: Path to all_sensitivity_named.csv.
@@ -2479,6 +2480,48 @@ def plot_regions_map_pathway_scenario_maps(
             how="left",
         )
 
+    delta_reduction_col = "delta_lifecycle_reduction_pct"
+    delta_share_col = "delta_drone_share_pct"
+    delta_reduction_df = (
+        panel_dfs["a"][["region_key", "max_lifecycle_reduction_pct"]]
+        .rename(columns={"max_lifecycle_reduction_pct": "today_reduction_pct"})
+        .merge(
+            panel_dfs["c"][["region_key", "max_lifecycle_reduction_pct"]]
+            .rename(columns={"max_lifecycle_reduction_pct": "bundling_reduction_pct"}),
+            on="region_key",
+            how="outer",
+        )
+    )
+    delta_reduction_df[delta_reduction_col] = (
+        delta_reduction_df["today_reduction_pct"]
+        - delta_reduction_df["bundling_reduction_pct"]
+    )
+    delta_reduction_df = base.drop(columns=[delta_reduction_col], errors="ignore").merge(
+        delta_reduction_df[["region_key", delta_reduction_col]],
+        on="region_key",
+        how="left",
+    )
+
+    delta_share_df = (
+        share_dfs["a"][["region_key", share_col_out]]
+        .rename(columns={share_col_out: "today_drone_share_pct"})
+        .merge(
+            share_dfs["c"][["region_key", share_col_out]]
+            .rename(columns={share_col_out: "bundling_drone_share_pct"}),
+            on="region_key",
+            how="outer",
+        )
+    )
+    delta_share_df[delta_share_col] = (
+        delta_share_df["today_drone_share_pct"]
+        - delta_share_df["bundling_drone_share_pct"]
+    )
+    delta_share_df = base.drop(columns=[delta_share_col], errors="ignore").merge(
+        delta_share_df[["region_key", delta_share_col]],
+        on="region_key",
+        how="left",
+    )
+
     if not all_values:
         print(
             "plot_regions_map_pathway_scenario_maps: no scenario rows matched any "
@@ -2492,7 +2535,24 @@ def plot_regions_map_pathway_scenario_maps(
     )
     share_cmap, share_norm, share_bins, share_edges = _build_drone_share_cmap()
 
-    fig, axes = plt.subplots(2, 2, figsize=figsize)
+    from matplotlib.colors import LinearSegmentedColormap, TwoSlopeNorm
+
+    delta_values = pd.concat(
+        [
+            delta_reduction_df[delta_reduction_col],
+            delta_share_df[delta_share_col],
+        ],
+        ignore_index=True,
+    )
+    delta_abs = pd.to_numeric(delta_values, errors="coerce").abs().max(skipna=True)
+    delta_abs = float(delta_abs) if np.isfinite(delta_abs) and delta_abs > 0 else 1.0
+    delta_cmap = LinearSegmentedColormap.from_list(
+        "pathway_delta_diverging",
+        ["#762a83", "#f7f7f7", "#1b7837"],
+    )
+    delta_norm = TwoSlopeNorm(vmin=-delta_abs, vcenter=0.0, vmax=delta_abs)
+
+    fig, axes = plt.subplots(2, 3, figsize=figsize)
     panel_specs = [
         (
             "a",
@@ -2503,7 +2563,6 @@ def plot_regions_map_pathway_scenario_maps(
             reduction_cmap,
             reduction_norm,
         ),
-        ("b", "a", "Today", "Drone share", share_col_out, share_cmap, share_norm),
         (
             "c",
             "c",
@@ -2514,6 +2573,17 @@ def plot_regions_map_pathway_scenario_maps(
             reduction_norm,
         ),
         (
+            "e",
+            None,
+            "Today - Operator bundling",
+            "Delta emission reduction",
+            delta_reduction_col,
+            delta_cmap,
+            delta_norm,
+            delta_reduction_df,
+        ),
+        ("b", "a", "Today", "Drone share", share_col_out, share_cmap, share_norm),
+        (
             "d",
             "c",
             "Operator bundling",
@@ -2521,6 +2591,16 @@ def plot_regions_map_pathway_scenario_maps(
             share_col_out,
             share_cmap,
             share_norm,
+        ),
+        (
+            "f",
+            None,
+            "Today - Operator bundling",
+            "Delta drone share",
+            delta_share_col,
+            delta_cmap,
+            delta_norm,
+            delta_share_df,
         ),
     ]
 
@@ -2534,16 +2614,20 @@ def plot_regions_map_pathway_scenario_maps(
             color_col,
             cmap,
             norm,
+            *explicit_df,
         ),
     ) in zip(
         axes.flat,
         panel_specs,
     ):
-        map_df = (
-            panel_dfs[scenario_label]
-            if color_col == "max_lifecycle_reduction_pct"
-            else share_dfs[scenario_label]
-        )
+        if explicit_df:
+            map_df = explicit_df[0]
+        else:
+            map_df = (
+                panel_dfs[scenario_label]
+                if color_col == "max_lifecycle_reduction_pct"
+                else share_dfs[scenario_label]
+            )
         plot_regions_on_china_map(
             df=map_df,
             color_by=color_col,
@@ -2589,7 +2673,7 @@ def plot_regions_map_pathway_scenario_maps(
 
     if plot_title:
         fig.suptitle(
-            "Pathway scenario region maps: base and operator bundling",
+            "Pathway scenario region maps: base, operator bundling, and delta",
             fontsize=14,
             fontweight="bold",
         )
@@ -2597,7 +2681,7 @@ def plot_regions_map_pathway_scenario_maps(
     fig.tight_layout(rect=(0, 0.02, 0.90, 0.98))
     fig.canvas.draw()
 
-    cbar_ax_reduction = fig.add_axes((0.915, 0.55, 0.014, 0.34))
+    cbar_ax_reduction = fig.add_axes((0.915, 0.62, 0.014, 0.26))
     cbar_reduction, n_reduction_bands = _draw_discrete_reduction_colorbar(
         fig,
         cbar_ax_reduction,
@@ -2609,7 +2693,7 @@ def plot_regions_map_pathway_scenario_maps(
     )
     _annotate_unstudied(fig, cbar_reduction, cbar_ax_reduction, n_reduction_bands)
 
-    cbar_ax_share = fig.add_axes((0.915, 0.12, 0.014, 0.34))
+    cbar_ax_share = fig.add_axes((0.915, 0.34, 0.014, 0.22))
     cbar_share, n_share_bands = _draw_discrete_reduction_colorbar(
         fig,
         cbar_ax_share,
@@ -2620,6 +2704,14 @@ def plot_regions_map_pathway_scenario_maps(
         "Drone share (%)",
     )
     _annotate_unstudied(fig, cbar_share, cbar_ax_share, n_share_bands)
+
+    cbar_ax_delta = fig.add_axes((0.915, 0.10, 0.014, 0.18))
+    sm_delta = plt.cm.ScalarMappable(cmap=delta_cmap, norm=delta_norm)
+    sm_delta.set_array([])
+    cbar_delta = fig.colorbar(sm_delta, cax=cbar_ax_delta)
+    cbar_delta.set_label("Delta: Today - bundling (pp)", fontsize=11)
+    cbar_delta.outline.set_linewidth(0.6)
+    cbar_delta.ax.tick_params(labelsize=9, length=2)
 
     if save_path:
         if for_latex and not save_path.endswith(".pdf"):
