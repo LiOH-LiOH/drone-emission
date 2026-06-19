@@ -1964,7 +1964,7 @@ def _build_break_even_marching_cubes_surface(
     delta_zero: np.ndarray,
     delta_slope: np.ndarray,
     gef_limits: tuple[float, float],
-    gef_points: int = 96,
+    gef_points: int = 72,
 ) -> dict | None:
     """Extract the Delta g = 0 surface with skimage marching cubes."""
     from skimage.measure import marching_cubes
@@ -1989,7 +1989,7 @@ def _build_break_even_marching_cubes_surface(
         volume,
         level=0.0,
         spacing=(dz, dy, dx),
-        step_size=2,
+        step_size=4,
         allow_degenerate=False,
     )
     if not len(vertices) or not len(faces):
@@ -2256,7 +2256,7 @@ def _plot_break_even_phase_diagram_panels(
     ax_a.set_zlabel("GEF (kg CO2e/kWh)", fontsize=10.5 * font_scale, labelpad=8)
     ax_a.set_proj_type("ortho")
     if panel_a_mode == "marching_cubes":
-        ax_a.view_init(elev=25, azim=135)
+        ax_a.view_init(elev=30, azim=45)
     else:
         ax_a.view_init(elev=28, azim=-128)
     ax_a.grid(alpha=0.2)
