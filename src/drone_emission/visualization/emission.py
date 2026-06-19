@@ -983,6 +983,7 @@ def _plot_contribution_decomposition_panels(
     panel_letter_fontsize: int = 13,
     rotate_waterfall_xticks: bool = False,
     panel_letter_position: tuple[float, float] = (-0.10, 1.03),
+    legend_inside_second_axis: bool = False,
 ):
     """Draw contribution-decomposition panels on caller-provided axes."""
     _plot_contribution_waterfall(
@@ -1022,13 +1023,30 @@ def _plot_contribution_decomposition_panels(
         )
         for spec in CONTRIBUTION_COMPONENT_SPECS
     ]
-    fig.legend(
-        handles=legend_handles,
-        loc="upper center",
-        ncol=4,
-        frameon=False,
-        bbox_to_anchor=legend_anchor,
-    )
+    if legend_inside_second_axis:
+        ax_b.legend(
+            handles=legend_handles,
+            loc="upper right",
+            ncol=2,
+            frameon=True,
+            framealpha=0.92,
+            facecolor="white",
+            edgecolor="#cccccc",
+            fontsize=9,
+            borderpad=0.45,
+            labelspacing=0.45,
+            columnspacing=0.9,
+            handlelength=1.2,
+            handletextpad=0.45,
+        )
+    else:
+        fig.legend(
+            handles=legend_handles,
+            loc="upper center",
+            ncol=4,
+            frameon=False,
+            bbox_to_anchor=legend_anchor,
+        )
 
 
 def _write_contribution_decomposition_report(prepared: Dict, save_path: str):
@@ -2556,6 +2574,7 @@ def plot_break_even_contribution_decomposition(
         panel_letter_fontsize=12,
         rotate_waterfall_xticks=True,
         panel_letter_position=(-0.10, 1.22),
+        legend_inside_second_axis=True,
     )
 
     if save_path:
