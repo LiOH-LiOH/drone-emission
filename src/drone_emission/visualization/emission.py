@@ -49,7 +49,7 @@ CONTRIBUTION_COMPONENT_KEYS = tuple(
 )
 BREAK_EVEN_REPRESENTATIVE_AIR_DISTANCE_KM = 2.0
 BREAK_EVEN_CURVE_AIR_DISTANCES_KM = (0.5, 1.0, 2.0, 3.0, 5.0)
-BREAK_EVEN_DETOUR_LIMITS = (1.0, 2.5)
+BREAK_EVEN_DETOUR_LIMITS = (1.0, 2.4)
 BREAK_EVEN_GEF_LIMITS = (0.05, 0.80)
 
 
@@ -1910,7 +1910,7 @@ def _build_break_even_zero_lines(
     delta_zero: np.ndarray,
     delta_slope: np.ndarray,
     gef_limits: tuple[float, float],
-    gef_step: float = 0.02,
+    gef_step: float = 0.05,
     line_points: int = 320,
 ) -> list[dict]:
     """Build fixed-GEF break-even curves in 3D space."""
@@ -2132,22 +2132,36 @@ def _plot_break_even_phase_diagram_panels(
     line_cmap = plt.get_cmap("viridis")
     line_norm = plt.Normalize(vmin=gef_limits[0], vmax=gef_limits[1])
     X, Y = np.meshgrid(air_distance_grid_km, detour_ratios)
+    plane_x = np.linspace(distance_limits[0], distance_limits[1], 7)
+    plane_y = np.linspace(detour_limits[0], detour_limits[1], 7)
+    plane_X, plane_Y = np.meshgrid(plane_x, plane_y)
 
     for line in break_even_lines:
         gef = float(line["gef"])
+        line_color = line_cmap(line_norm(gef))
+        ax_a.plot_wireframe(
+            plane_X,
+            plane_Y,
+            np.full_like(plane_X, gef, dtype=float),
+            color=line_color,
+            linewidth=0.32,
+            alpha=0.14,
+            rstride=1,
+            cstride=1,
+        )
         ax_a.plot(
             line["x"],
             line["y"],
             line["z"],
-            color=line_cmap(line_norm(gef)),
-            linewidth=1.35,
+            color=line_color,
+            linewidth=1.55,
             alpha=0.95,
         )
 
     if show_surface_annotations:
         annotation_specs = (
             (0.90, "Break-even curves at fixed GEF", 9.5, "#444444"),
-            (0.82, "GEF spacing = 0.02 kg CO2e/kWh", 8.8, "#555555"),
+            (0.82, "GEF spacing = 0.05 kg CO2e/kWh", 8.8, "#555555"),
             (0.05, "Each line marks Delta g = 0", 8.4, "#555555"),
         )
         for y, text, fontsize, color in annotation_specs:
@@ -2179,7 +2193,7 @@ def _plot_break_even_phase_diagram_panels(
     ax_a.zaxis.pane.set_alpha(0.0)
 
     heatmap_axes = [ax_b, ax_c]
-    heatmap_detour_limits = (detour_limits[0], min(detour_limits[1], 2.5))
+    heatmap_detour_limits = (detour_limits[0], min(detour_limits[1], 2.4))
     heatmap_mappable = None
     for ax, gef_panel in zip(heatmap_axes, panel_b["gef_panels"]):
         delta_g = np.asarray(gef_panel["delta_g"], dtype=float)
