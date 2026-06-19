@@ -2,6 +2,7 @@
 
 import json
 import os
+import pickle
 
 import matplotlib.pyplot as plt
 from matplotlib.patches import Patch
@@ -26,6 +27,7 @@ WEIGHTED_DRONE_SHARE_COLUMNS = (
 )
 ORACLE_REDUCTION_KG_COL = "oracle_min_reduction_vs_ebike_kg"
 ORACLE_REDUCTION_T_COL = "oracle_min_reduction_vs_ebike_t"
+PATHWAY_SCENARIOS_CACHE_VERSION = 1
 
 
 def _first_available_column(df: pd.DataFrame, candidates: tuple[str, ...], purpose: str) -> str:
@@ -712,6 +714,173 @@ def _build_pathway_curve_data(
         "kappa": pd.DataFrame(kappa_curve),
         "gef": pd.DataFrame(gef_curve),
     }
+
+
+def _pathway_cache_file_signature(path: str):
+    """Return file metadata used to invalidate pathway figure data cache."""
+    stat = os.stat(path)
+    return {
+        "path": os.path.abspath(path),
+        "size": stat.st_size,
+        "mtime_ns": stat.st_mtime_ns,
+    }
+
+
+def _pathway_optional_cache_file_signature(path: str):
+    """Return cache signature for an optional pathway source file."""
+    if not path or not os.path.exists(path):
+        return None
+    return _pathway_cache_file_signature(path)
+
+
+def _pathway_exp_config_cache_signature(exp_config: dict | None):
+    """Return relevant experiment config fields for pathway cache invalidation."""
+    cfg = exp_config or {}
+    return {
+        "emission_params": cfg.get("emission_params", {}),
+        "gef_path": cfg.get("gef_path"),
+        "cache_dir": cfg.get("cache_dir"),
+    }
+
+
+def _pathway_city_od_cache_signatures(stats_df: pd.DataFrame, data_dir: str):
+    """Return source signatures for available city OD files used by this figure."""
+    if not data_dir:
+        return {}
+    if "region_level" in stats_df.columns:
+        city_rows = stats_df[stats_df["region_level"] == "city"].copy()
+    else:
+        city_rows = stats_df.copy()
+    if "region_key" not in city_rows.columns:
+        return {}
+
+    source_files = {}
+    for region_key in city_rows["region_key"].dropna().astype(str):
+        od_path = os.path.join(data_dir, "city", region_key, f"{region_key}_od_pairs.csv")
+        if os.path.exists(od_path):
+            source_files[region_key] = _pathway_cache_file_signature(od_path)
+    return source_files
+
+
+def _pathway_scenarios_cache_meta(
+    named_csv_path: str,
+    stats_csv_path: str,
+    stats_df: pd.DataFrame,
+    data_dir: str,
+    exp_config: dict | None,
+    panels: list[tuple],
+    baseline_kappa: float,
+):
+    """Return metadata used to invalidate regions_map_pathway_scenarios cache."""
+    return {
+        "version": PATHWAY_SCENARIOS_CACHE_VERSION,
+        "figure_name": "regions_map_pathway_scenarios",
+        "named_file": _pathway_cache_file_signature(named_csv_path),
+        "stats_file": _pathway_cache_file_signature(stats_csv_path),
+        "gef_file": _pathway_optional_cache_file_signature(
+            (exp_config or {}).get("gef_path")
+        ),
+        "data_dir": os.path.abspath(data_dir) if data_dir else None,
+        "od_files": _pathway_city_od_cache_signatures(stats_df, data_dir),
+        "exp_config": _pathway_exp_config_cache_signature(exp_config),
+        "baseline_kappa": float(baseline_kappa),
+        "panels": [
+            {
+                "label": label,
+                "title": title,
+                "kappa": float(kappa),
+                "gef_mult": float(gef_mult),
+                "strategy": strategy,
+            }
+            for label, title, kappa, gef_mult, strategy in panels
+        ],
+    }
+
+
+def _build_pathway_prepared_data_with_cache(
+    named_csv_path: str,
+    stats_csv_path: str,
+    stats_df: pd.DataFrame,
+    data_dir: str,
+    exp_config: dict | None,
+    panels: list[tuple],
+    baseline_kappa: float,
+):
+    """Return oracle panel rows and curve data with a prepared-data cache."""
+    from utils.config import get_cache_dir
+
+    if not data_dir:
+        return (
+            _build_pathway_oracle_panel_rows(
+                stats_df,
+                panels,
+                data_dir=data_dir,
+                exp_config=exp_config,
+                baseline_kappa=baseline_kappa,
+            ),
+            _build_pathway_curve_data(
+                stats_df,
+                data_dir=data_dir,
+                exp_config=exp_config,
+                baseline_kappa=baseline_kappa,
+            ),
+        )
+
+    cache_path = os.path.join(
+        get_cache_dir("visualization", "paper"),
+        "regions_map_pathway_scenarios_prepared.pkl",
+    )
+    cache_meta = _pathway_scenarios_cache_meta(
+        named_csv_path=named_csv_path,
+        stats_csv_path=stats_csv_path,
+        stats_df=stats_df,
+        data_dir=data_dir,
+        exp_config=exp_config,
+        panels=panels,
+        baseline_kappa=baseline_kappa,
+    )
+    if os.path.exists(cache_path):
+        try:
+            with open(cache_path, "rb") as f:
+                cache = pickle.load(f)
+            if cache.get("meta") == cache_meta:
+                print(
+                    "regions_map_pathway_scenarios: loading prepared data cache "
+                    f"{cache_path}"
+                )
+                return cache["oracle_rows"], cache["curve_data"]
+            print("regions_map_pathway_scenarios: prepared data cache is stale; rebuilding")
+        except Exception as exc:
+            print(
+                "regions_map_pathway_scenarios: failed to load prepared cache "
+                f"({exc}); rebuilding"
+            )
+
+    oracle_rows = _build_pathway_oracle_panel_rows(
+        stats_df,
+        panels,
+        data_dir=data_dir,
+        exp_config=exp_config,
+        baseline_kappa=baseline_kappa,
+    )
+    curve_data = _build_pathway_curve_data(
+        stats_df,
+        data_dir=data_dir,
+        exp_config=exp_config,
+        baseline_kappa=baseline_kappa,
+    )
+    with open(cache_path, "wb") as f:
+        pickle.dump(
+            {
+                "meta": cache_meta,
+                "oracle_rows": oracle_rows,
+                "curve_data": curve_data,
+            },
+            f,
+            protocol=pickle.HIGHEST_PROTOCOL,
+        )
+    print(f"regions_map_pathway_scenarios: wrote prepared data cache {cache_path}")
+    return oracle_rows, curve_data
 
 
 def _plot_pathway_curve_panel(
@@ -2186,11 +2355,13 @@ def plot_regions_map_pathway_scenarios(
     reduction_col = "reduction_vs_anchor_ebike_pct"
     has_annual = "annual_lifecycle_kg" in named.columns
     anchor_rows = _pathway_anchor_annual_kg(named, base, baseline_kappa)
-    oracle_rows = _build_pathway_oracle_panel_rows(
-        base,
-        panels,
+    oracle_rows, curve_data = _build_pathway_prepared_data_with_cache(
+        named_csv_path=named_csv_path,
+        stats_csv_path=stats_csv_path,
+        stats_df=base,
         data_dir=data_dir,
         exp_config=exp_config,
+        panels=panels,
         baseline_kappa=baseline_kappa,
     )
     if not oracle_rows.empty:
@@ -2255,12 +2426,6 @@ def plot_regions_map_pathway_scenarios(
             joined = rows[["region_key", "annual_lifecycle_kg"]].merge(anchor_rows, on="region_key", how="inner")
             annual_saved_total_kg[label] = float((joined["anchor_annual_kg"] - joined["annual_lifecycle_kg"]).sum())
 
-    curve_data = _build_pathway_curve_data(
-        base,
-        data_dir=data_dir,
-        exp_config=exp_config,
-        baseline_kappa=baseline_kappa,
-    )
     if "kappa" in curve_data:
         curve_data["kappa"] = _override_pathway_curve_endpoint(
             curve_data["kappa"],
