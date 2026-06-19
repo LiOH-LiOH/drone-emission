@@ -1051,7 +1051,11 @@ def _break_even_panel_report(prepared: Dict, axes: tuple):
     observed_samples = observed.get("samples", pd.DataFrame())
     city_reports = observed.get("city_reports", [])
 
-    surface = np.asarray(panel_a.get("break_even_gef"), dtype=float)
+    break_even_lines = panel_a.get("break_even_lines", [])
+    line_gefs = np.array(
+        [line.get("gef", np.nan) for line in break_even_lines],
+        dtype=float,
+    )
     observed_mask = panel_a.get("observed_mask") or {}
     mask_values = np.asarray(observed_mask.get("mask"), dtype=float)
     finite_mask = mask_values[np.isfinite(mask_values)] if mask_values.size else np.array([])
@@ -1073,10 +1077,11 @@ def _break_even_panel_report(prepared: Dict, axes: tuple):
         )
 
     return {
-        "a_break_even_gef_surface": {
+        "a_break_even_gef_lines": {
             "axis": _report_axis(ax_a),
             "zlim_data": _report_array(ax_a.get_zlim()),
-            "surface_gef_summary_kg_co2e_per_kwh": _array_summary(surface),
+            "line_count": int(len(break_even_lines)),
+            "line_gef_summary_kg_co2e_per_kwh": _array_summary(line_gefs),
             "distance_grid_km": {
                 "count": int(len(prepared["air_distance_grid_km"])),
                 "min": _report_number(np.min(prepared["air_distance_grid_km"])),
@@ -1899,64 +1904,57 @@ def _keep_longest_finite_run(values: np.ndarray) -> np.ndarray:
     return values
 
 
-def _build_break_even_zero_surface_mesh(
+def _build_break_even_zero_lines(
     air_distance_grid_km: np.ndarray,
     detour_ratios: np.ndarray,
     delta_zero: np.ndarray,
     delta_slope: np.ndarray,
     gef_limits: tuple[float, float],
-    gef_points: int = 180,
-) -> dict | None:
-    """Build a triangulated Delta g = 0 surface without clipping artifacts."""
+    gef_step: float = 0.02,
+    line_points: int = 320,
+) -> list[dict]:
+    """Build fixed-GEF break-even curves in 3D space."""
+    from scipy.interpolate import PchipInterpolator
+
     gef_min, gef_max = map(float, gef_limits)
     x_axis = np.asarray(air_distance_grid_km, dtype=float)
     y_axis = np.asarray(detour_ratios, dtype=float)
-    gef_axis = np.linspace(gef_min, gef_max, int(gef_points))
+    gef_axis = np.arange(gef_min, gef_max + 1e-12, float(gef_step))
+    gef_axis = gef_axis[gef_axis <= gef_max + 1e-12]
     delta_zero = np.asarray(delta_zero, dtype=float)
     delta_slope = np.asarray(delta_slope, dtype=float)
 
-    x_mesh = np.tile(x_axis, (len(gef_axis), 1))
-    z_mesh = np.tile(gef_axis[:, np.newaxis], (1, len(x_axis)))
-    y_mesh = np.full_like(x_mesh, np.nan, dtype=float)
-
-    for row, gef in enumerate(gef_axis):
+    lines = []
+    for gef in gef_axis:
         delta_g = delta_zero + gef * delta_slope
-        y_mesh[row] = _break_even_detour_curve_at_gef(
+        roots = _break_even_detour_curve_at_gef(
             detour_ratios=y_axis,
             delta_g=delta_g,
         )
-        y_mesh[row] = _keep_longest_finite_run(y_mesh[row])
+        roots = _keep_longest_finite_run(roots)
+        finite = np.isfinite(x_axis) & np.isfinite(roots)
+        if finite.sum() < 2:
+            continue
 
-    if not np.isfinite(y_mesh).any():
-        return None
+        x_valid = x_axis[finite]
+        y_valid = roots[finite]
+        if finite.sum() >= 4:
+            x_line = np.linspace(float(x_valid.min()), float(x_valid.max()), line_points)
+            y_line = PchipInterpolator(x_valid, y_valid)(x_line)
+        else:
+            x_line = x_valid
+            y_line = y_valid
 
-    finite = np.isfinite(x_mesh) & np.isfinite(y_mesh) & np.isfinite(z_mesh)
-    vertex_ids = np.full(x_mesh.shape, -1, dtype=int)
-    vertex_ids[finite] = np.arange(int(finite.sum()), dtype=int)
-    triangles = []
-    for row in range(x_mesh.shape[0] - 1):
-        for col in range(x_mesh.shape[1] - 1):
-            ids = (
-                vertex_ids[row, col],
-                vertex_ids[row, col + 1],
-                vertex_ids[row + 1, col],
-                vertex_ids[row + 1, col + 1],
-            )
-            if min(ids) < 0:
-                continue
-            triangles.append((ids[0], ids[1], ids[2]))
-            triangles.append((ids[1], ids[3], ids[2]))
+        lines.append(
+            {
+                "gef": float(gef),
+                "x": np.asarray(x_line, dtype=float),
+                "y": np.asarray(y_line, dtype=float),
+                "z": np.full_like(x_line, float(gef), dtype=float),
+            }
+        )
 
-    if not triangles:
-        return None
-
-    return {
-        "kind": "zero_surface",
-        "x": x_mesh[finite],
-        "y": y_mesh[finite],
-        "z": z_mesh[finite],
-        "triangles": np.asarray(triangles, dtype=int),
-    }
+    return lines
 
 
 def prepare_break_even_phase_diagram_data(
@@ -2035,7 +2033,7 @@ def prepare_break_even_phase_diagram_data(
         delta_slope=delta_slope_grid,
         gef_limits=BREAK_EVEN_GEF_LIMITS,
     )
-    surface_mesh = _build_break_even_zero_surface_mesh(
+    break_even_lines = _build_break_even_zero_lines(
         air_distance_grid_km=air_distance_grid_km,
         detour_ratios=detour_ratios,
         delta_zero=delta_zero_grid,
@@ -2077,7 +2075,7 @@ def prepare_break_even_phase_diagram_data(
             "break_even_gef_raw": break_even_surface_raw,
             "delta_zero": delta_zero_grid,
             "delta_slope": delta_slope_grid,
-            "surface_mesh": surface_mesh,
+            "break_even_lines": break_even_lines,
             "observed_mask": observed_mask,
         },
         "panel_b": {
@@ -2114,7 +2112,7 @@ def _plot_break_even_phase_diagram_panels(
     detour_limits = prepared["axes"]["detour_limits"]
     gef_limits = prepared["axes"]["gef_limits"]
 
-    surface_mesh = panel_a.get("surface_mesh")
+    break_even_lines = panel_a.get("break_even_lines", [])
 
     finite_blocks = []
     for gef_panel in panel_b["gef_panels"]:
@@ -2131,32 +2129,26 @@ def _plot_break_even_phase_diagram_panels(
     delta_bounds = np.linspace(-max_abs, max_abs, 9)
     delta_cmap = plt.get_cmap("RdBu_r", len(delta_bounds) - 1)
     delta_norm = BoundaryNorm(delta_bounds, ncolors=delta_cmap.N, clip=False)
-    surface_cmap = plt.get_cmap("viridis")
-    surface_norm = plt.Normalize(vmin=gef_limits[0], vmax=gef_limits[1])
+    line_cmap = plt.get_cmap("viridis")
+    line_norm = plt.Normalize(vmin=gef_limits[0], vmax=gef_limits[1])
     X, Y = np.meshgrid(air_distance_grid_km, detour_ratios)
 
-    if surface_mesh:
-        ax_a.plot_trisurf(
-            surface_mesh["x"],
-            surface_mesh["y"],
-            surface_mesh["z"],
-            triangles=surface_mesh["triangles"],
-            cmap=surface_cmap,
-            norm=surface_norm,
-            linewidth=0,
-            antialiased=False,
-            shade=False,
-            alpha=1.0,
-            edgecolor="none",
-            rasterized=True,
+    for line in break_even_lines:
+        gef = float(line["gef"])
+        ax_a.plot(
+            line["x"],
+            line["y"],
+            line["z"],
+            color=line_cmap(line_norm(gef)),
+            linewidth=1.35,
+            alpha=0.95,
         )
 
     if show_surface_annotations:
         annotation_specs = (
-            (0.90, "Below surface: drone wins", 9.5, "#1f5aa6"),
-            (0.82, "Above surface: e-bike wins", 9.5, "#9f2f2f"),
-            (0.74, "Surface shows GEF* where Delta g = 0", 8.8, "#444444"),
-            (0.05, "Theoretical boundary from lifecycle model", 8.4, "#555555"),
+            (0.90, "Break-even curves at fixed GEF", 9.5, "#444444"),
+            (0.82, "GEF spacing = 0.02 kg CO2e/kWh", 8.8, "#555555"),
+            (0.05, "Each line marks Delta g = 0", 8.4, "#555555"),
         )
         for y, text, fontsize, color in annotation_specs:
             ax_a.text2D(
@@ -2178,7 +2170,7 @@ def _plot_break_even_phase_diagram_panels(
     ax_a.set_zlim(*gef_limits)
     ax_a.set_xlabel("Air distance (km)", fontsize=10.5 * font_scale, labelpad=8)
     ax_a.set_ylabel("Detour ratio (road / air)", fontsize=10.5 * font_scale, labelpad=8)
-    ax_a.set_zlabel("Break-even GEF* (kg CO2e/kWh)", fontsize=10.5 * font_scale, labelpad=8)
+    ax_a.set_zlabel("GEF (kg CO2e/kWh)", fontsize=10.5 * font_scale, labelpad=8)
     ax_a.set_proj_type("ortho")
     ax_a.view_init(elev=28, azim=-128)
     ax_a.grid(alpha=0.2)
@@ -2268,7 +2260,7 @@ def _plot_break_even_phase_diagram_panels(
     )
 
     if plot_title:
-        ax_a.set_title("Break-even GEF surface", fontsize=12 * font_scale, pad=10)
+        ax_a.set_title("Break-even curves by GEF", fontsize=12 * font_scale, pad=10)
 
     _add_panel_letter(ax_a, panel_letters[0], fontsize=panel_letter_fontsize)
     _add_panel_letter(ax_b, panel_letters[1], fontsize=panel_letter_fontsize)
