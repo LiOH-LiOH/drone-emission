@@ -2279,9 +2279,10 @@ def _plot_break_even_phase_diagram_panels(
             shrink=0.62,
             ticks=np.linspace(gef_limits[0], gef_limits[1], 4),
         )
-        surface_colorbar.set_label(
-            "GEF (kg CO2e/kWh)",
-            fontsize=9.2 * font_scale,
+        surface_colorbar.ax.set_title(
+            "GEF\n(kg CO2e/kWh)",
+            fontsize=8.2 * font_scale,
+            pad=4,
         )
         surface_colorbar.ax.tick_params(labelsize=8.5 * font_scale)
 
