@@ -2508,6 +2508,7 @@ def plot_break_even_contribution_decomposition(
     plot_title: bool = False,
     panel_a_mode: str = "lines",
     figure_name: str = "break_even_contribution_decomposition",
+    legend_inside_second_axis: bool = False,
 ):
     """Stack break-even phase diagram above contribution decomposition.
 
@@ -2574,7 +2575,7 @@ def plot_break_even_contribution_decomposition(
         panel_letter_fontsize=12,
         rotate_waterfall_xticks=True,
         panel_letter_position=(-0.10, 1.22),
-        legend_inside_second_axis=True,
+        legend_inside_second_axis=legend_inside_second_axis,
     )
 
     if save_path:
@@ -2627,6 +2628,7 @@ def plot_break_even_contribution_decomposition_marching_cubes(
         plot_title=plot_title,
         panel_a_mode="marching_cubes",
         figure_name="break_even_contribution_decomposition_marching_cubes",
+        legend_inside_second_axis=True,
     )
 
 
