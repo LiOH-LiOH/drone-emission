@@ -2898,7 +2898,17 @@ def plot_regions_map_pathway_scenario_maps(
         if ax_twin is not None:
             ax_twin.set_position(ax.get_position())
 
-    cbar_ax_reduction = fig.add_axes((0.915, 0.64, 0.014, 0.24))
+    def _row_colorbar_position(row_axes, x0=0.915, width=0.014, height_scale=1.12):
+        positions = [ax.get_position() for ax in row_axes]
+        row_y0 = min(pos.y0 for pos in positions)
+        row_y1 = max(pos.y1 for pos in positions)
+        row_center = (row_y0 + row_y1) / 2
+        height = (row_y1 - row_y0) * height_scale
+        return (x0, row_center - height / 2, width, height)
+
+    cbar_ax_reduction = fig.add_axes(
+        _row_colorbar_position([spec[0] for spec in panel_specs[:3]])
+    )
     cbar_reduction, n_reduction_bands = _draw_discrete_reduction_colorbar(
         fig,
         cbar_ax_reduction,
@@ -2910,7 +2920,9 @@ def plot_regions_map_pathway_scenario_maps(
     )
     _annotate_unstudied(fig, cbar_reduction, cbar_ax_reduction, n_reduction_bands)
 
-    cbar_ax_share = fig.add_axes((0.915, 0.38, 0.014, 0.22))
+    cbar_ax_share = fig.add_axes(
+        _row_colorbar_position([spec[0] for spec in panel_specs[3:]])
+    )
     cbar_share, n_share_bands = _draw_discrete_reduction_colorbar(
         fig,
         cbar_ax_share,
