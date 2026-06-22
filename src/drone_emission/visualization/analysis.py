@@ -2834,7 +2834,6 @@ def plot_regions_map_pathway_scenario_maps(
         ax.set_xticks([])
         ax.set_yticks([])
         ax.grid(False)
-        ax.set_title(f"{scenario_title}: {metric_title}", fontsize=10, pad=2)
         for spine in ax.spines.values():
             spine.set_visible(False)
         ax.text(
