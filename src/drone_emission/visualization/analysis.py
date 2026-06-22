@@ -1508,6 +1508,200 @@ def _write_regions_map_pathway_scenarios_report(
         json.dump(payload, f, indent=2, ensure_ascii=False, allow_nan=False)
     print(f"Regions map pathway scenarios report saved to {report_path}")
 
+
+def _pathway_scenario_maps_panel_report(
+    panel_df: pd.DataFrame,
+    color_col: str,
+    ax_map,
+    panel_label: str,
+    title: str,
+    metric_title: str,
+    kappa: float,
+    gef_mult: float,
+    annual_saved_kg: float,
+    drone_share_median: float,
+):
+    """Return compact metadata for one scenario-map panel."""
+    city_values = panel_df.reindex(
+        columns=[
+            "region_key",
+            "region_name_en",
+            "region_name_cn",
+            "province",
+            color_col,
+        ]
+    ).copy()
+    city_values[color_col] = pd.to_numeric(city_values[color_col], errors="coerce")
+    ranked = city_values.dropna(subset=[color_col]).sort_values(color_col, ascending=False)
+
+    def compact_city_records(frame):
+        records = []
+        for _, row in frame.iterrows():
+            records.append(
+                {
+                    "region_key": _json_safe_scalar(row.get("region_key")),
+                    "region_name_en": _json_safe_scalar(row.get("region_name_en")),
+                    "region_name_cn": _json_safe_scalar(row.get("region_name_cn")),
+                    "province": _json_safe_scalar(row.get("province")),
+                    color_col: _json_safe_scalar(row.get(color_col)),
+                }
+            )
+        return records
+
+    return {
+        "panel_letter": panel_label,
+        "title": title,
+        "metric": metric_title,
+        "scenario": {
+            "kappa": _json_safe_scalar(kappa),
+            "gef_multiplier": _json_safe_scalar(gef_mult),
+            "annual_co2_saved_kt_per_year": _json_safe_scalar(annual_saved_kg / 1e6),
+            "median_city_drone_share_pct": _json_safe_scalar(drone_share_median),
+        },
+        "map_axis": _axis_report(ax_map),
+        "map_color_by": color_col,
+        "top_10_cities_by_map_value": compact_city_records(ranked.head(10)),
+        "bottom_10_cities_by_map_value": compact_city_records(
+            ranked.tail(10).sort_values(color_col)
+        ),
+    }
+
+
+def _write_regions_map_pathway_scenario_maps_report(
+    save_path: str,
+    figsize: tuple,
+    named_csv_path: str,
+    stats_csv_path: str,
+    panels: list[tuple],
+    panel_dfs: dict,
+    share_dfs: dict,
+    map_panel_specs: list[tuple],
+    curve_data: dict,
+    curve_axes: list,
+    curve_twins: list,
+    annual_saved_total_kg: dict,
+    drone_share_median: dict,
+    reduction_cmap,
+    reduction_bins,
+    reduction_edges,
+    reduction_cbar_ax,
+    share_cmap,
+    share_bins,
+    share_edges,
+    share_cbar_ax,
+):
+    """Write a compact JSON report for regions_map_pathway_scenario_maps."""
+    report_path = save_path.rsplit(".", 1)[0] + "_report.json"
+    scenario_by_label = {
+        label: (title, kappa, gef_mult, strategy)
+        for label, title, kappa, gef_mult, strategy in panels
+    }
+    panel_reports = {}
+    for (
+        ax,
+        panel_letter,
+        scenario_label,
+        scenario_title,
+        metric_title,
+        color_col,
+        _cmap,
+        _norm,
+    ) in map_panel_specs:
+        title, kappa, gef_mult, _strategy = scenario_by_label[scenario_label]
+        panel_df = (
+            panel_dfs[scenario_label]
+            if color_col == "max_lifecycle_reduction_pct"
+            else share_dfs[scenario_label]
+        )
+        key = f"{panel_letter}_{scenario_title.lower().replace(' ', '_')}_{metric_title.lower().replace(' ', '_')}"
+        panel_reports[key] = _pathway_scenario_maps_panel_report(
+            panel_df=panel_df,
+            color_col=color_col,
+            ax_map=ax,
+            panel_label=panel_letter,
+            title=title,
+            metric_title=metric_title,
+            kappa=kappa,
+            gef_mult=gef_mult,
+            annual_saved_kg=annual_saved_total_kg.get(scenario_label, np.nan),
+            drone_share_median=drone_share_median.get(scenario_label, np.nan),
+        )
+
+    payload = {
+        "figure_name": "regions_map_pathway_scenario_maps",
+        "figure_path": save_path,
+        "source_named_csv_path": named_csv_path,
+        "source_stats_csv_path": stats_csv_path,
+        "figure_size_inches": {"width": figsize[0], "height": figsize[1]},
+        "coordinate_convention": (
+            "Axis bbox values are figure-fraction coordinates. Map colors encode "
+            "scenario reduction or drone share; gray indicates unstudied regions."
+        ),
+        "layout": {
+            "row_1": "Emission reduction maps: Halved GEF, Today, Operator bundling",
+            "row_2": "Drone share maps: Halved GEF, Today, Operator bundling",
+            "row_3": "Pathway curves: mirrored GEF curve and kappa curve",
+        },
+        "global_encodings": {
+            "reduction_map_colorbar": _colorbar_report(
+                reduction_cbar_ax,
+                reduction_bins,
+                reduction_edges,
+                "Reduction vs today's all-ebike anchor (%)",
+                reduction_cmap,
+            ),
+            "drone_share_map_colorbar": _colorbar_report(
+                share_cbar_ax,
+                share_bins,
+                share_edges,
+                "Drone share (%)",
+                share_cmap,
+            ),
+            "curve_colors": {
+                "co2_saved": "#1b7837",
+                "drone_share": "#2166ac",
+            },
+            "curve_marks": {
+                "co2_saved": "bar",
+                "drone_share": "line",
+            },
+            "curve_baselines": {
+                "co2_saved": 0.0,
+            },
+        },
+        "panels": {
+            **panel_reports,
+            "g_gef_pathway_curve": {
+                **_pathway_curve_report(
+                    curve_axes[0],
+                    curve_twins[0],
+                    curve_data.get("gef"),
+                    "horizontal",
+                    co2_saved_mark="bar",
+                    co2_saved_baseline=0.0,
+                ),
+                "mirrored_x_axis": True,
+                "visible_y_axis": "co2_saved",
+            },
+            "h_kappa_pathway_curve": {
+                **_pathway_curve_report(
+                    curve_axes[1],
+                    curve_twins[1],
+                    curve_data.get("kappa"),
+                    "horizontal",
+                    co2_saved_mark="bar",
+                    co2_saved_baseline=0.0,
+                ),
+                "mirrored_x_axis": False,
+                "visible_y_axis": "drone_share",
+            },
+        },
+    }
+    with open(report_path, "w", encoding="utf-8") as f:
+        json.dump(payload, f, indent=2, ensure_ascii=False, allow_nan=False)
+    print(f"Regions map pathway scenario maps report saved to {report_path}")
+
+
 def plot_correlation_heatmap(
     corr_df: pd.DataFrame,
     save_path: str = None,
@@ -2475,6 +2669,7 @@ def plot_regions_map_pathway_scenario_maps(
     panel_dfs = scenario_data["panel_dfs"]
     panel_named = scenario_data["panel_named"]
     all_values = scenario_data["all_values"]
+    panels = scenario_data["panels"]
     curve_data = scenario_data["curve_data"]
     drone_share_median = scenario_data["drone_share_median"]
     annual_saved_total_kg = scenario_data["annual_saved_total_kg"]
@@ -2695,7 +2890,7 @@ def plot_regions_map_pathway_scenario_maps(
     fig.canvas.draw()
     for ax in curve_axes:
         pos = ax.get_position()
-        width = pos.width * 0.82
+        width = pos.width * 0.94
         height = pos.height * 0.72
         x0 = pos.x0 + (pos.width - width) / 2
         y0 = pos.y0 + (pos.height - height) / 2
@@ -2736,6 +2931,29 @@ def plot_regions_map_pathway_scenario_maps(
         os.makedirs(os.path.dirname(save_path), exist_ok=True)
         plt.savefig(save_path, dpi=300, bbox_inches="tight")
         print(f"Regions map pathway scenario maps saved to {save_path}")
+        _write_regions_map_pathway_scenario_maps_report(
+            save_path=save_path,
+            figsize=figsize,
+            named_csv_path=named_csv_path,
+            stats_csv_path=stats_csv_path,
+            panels=panels,
+            panel_dfs=panel_dfs,
+            share_dfs=share_dfs,
+            map_panel_specs=panel_specs,
+            curve_data=curve_data,
+            curve_axes=curve_axes,
+            curve_twins=curve_twins,
+            annual_saved_total_kg=annual_saved_total_kg,
+            drone_share_median=drone_share_median,
+            reduction_cmap=reduction_cmap,
+            reduction_bins=reduction_bins,
+            reduction_edges=reduction_edges,
+            reduction_cbar_ax=cbar_ax_reduction,
+            share_cmap=share_cmap,
+            share_bins=share_bins,
+            share_edges=share_edges,
+            share_cbar_ax=cbar_ax_share,
+        )
     else:
         plt.show()
 
