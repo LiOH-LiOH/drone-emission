@@ -2428,15 +2428,17 @@ def plot_regions_map_pathway_scenario_maps(
     data_dir: str = None,
     exp_config: dict = None,
     save_path: str = None,
-    figsize: tuple = (18, 10),
+    figsize: tuple = (18, 14),
     for_latex: bool = False,
     plot_title: bool = False,
 ):
-    """2x3 region-map grid for selected pathway scenarios.
+    """Region maps plus pathway curves for selected pathway scenarios.
 
     Panels show emission reduction and drone share for the halved-GEF, today's
-    base, and operator-bundling pathway scenarios. Values use the same
-    cache-backed scenario preparation as `plot_regions_map_pathway_scenarios`.
+    base, and operator-bundling pathway scenarios, followed by the GEF and
+    kappa pathway curves from `plot_regions_map_pathway_scenarios`. Values use
+    the same cache-backed scenario preparation as
+    `plot_regions_map_pathway_scenarios`.
 
     Args:
         named_csv_path: Path to all_sensitivity_named.csv.
@@ -2460,6 +2462,10 @@ def plot_regions_map_pathway_scenario_maps(
     panel_dfs = scenario_data["panel_dfs"]
     panel_named = scenario_data["panel_named"]
     all_values = scenario_data["all_values"]
+    curve_data = scenario_data["curve_data"]
+    drone_share_median = scenario_data["drone_share_median"]
+    annual_saved_total_kg = scenario_data["annual_saved_total_kg"]
+    baseline_kappa = scenario_data["baseline_kappa"]
 
     scenario_labels = ("b", "a", "c")
     share_col_out = "pathway_drone_share_pct"
@@ -2492,9 +2498,44 @@ def plot_regions_map_pathway_scenario_maps(
     )
     share_cmap, share_norm, share_bins, share_edges = _build_drone_share_cmap()
 
-    fig, axes = plt.subplots(2, 3, figsize=figsize)
+    if "kappa" in curve_data:
+        curve_data["kappa"] = _override_pathway_curve_endpoint(
+            curve_data["kappa"],
+            baseline_kappa,
+            annual_saved_total_kg.get("a", np.nan) / 1e6,
+            drone_share_median.get("a", np.nan),
+        )
+        curve_data["kappa"] = _override_pathway_curve_endpoint(
+            curve_data["kappa"],
+            0.65,
+            annual_saved_total_kg.get("c", np.nan) / 1e6,
+            drone_share_median.get("c", np.nan),
+        )
+    if "gef" in curve_data:
+        curve_data["gef"] = _override_pathway_curve_endpoint(
+            curve_data["gef"],
+            1.0,
+            annual_saved_total_kg.get("a", np.nan) / 1e6,
+            drone_share_median.get("a", np.nan),
+        )
+        curve_data["gef"] = _override_pathway_curve_endpoint(
+            curve_data["gef"],
+            0.5,
+            annual_saved_total_kg.get("b", np.nan) / 1e6,
+            drone_share_median.get("b", np.nan),
+        )
+
+    fig = plt.figure(figsize=figsize)
+    gs = fig.add_gridspec(
+        3,
+        6,
+        height_ratios=[1, 1, 0.75],
+        hspace=0.16,
+        wspace=0.18,
+    )
     panel_specs = [
         (
+            fig.add_subplot(gs[0, 0:2]),
             "a",
             "b",
             "Halved GEF",
@@ -2504,6 +2545,7 @@ def plot_regions_map_pathway_scenario_maps(
             reduction_norm,
         ),
         (
+            fig.add_subplot(gs[0, 2:4]),
             "b",
             "a",
             "Today",
@@ -2513,6 +2555,7 @@ def plot_regions_map_pathway_scenario_maps(
             reduction_norm,
         ),
         (
+            fig.add_subplot(gs[0, 4:6]),
             "c",
             "c",
             "Operator bundling",
@@ -2521,9 +2564,28 @@ def plot_regions_map_pathway_scenario_maps(
             reduction_cmap,
             reduction_norm,
         ),
-        ("d", "b", "Halved GEF", "Drone share", share_col_out, share_cmap, share_norm),
-        ("e", "a", "Today", "Drone share", share_col_out, share_cmap, share_norm),
         (
+            fig.add_subplot(gs[1, 0:2]),
+            "d",
+            "b",
+            "Halved GEF",
+            "Drone share",
+            share_col_out,
+            share_cmap,
+            share_norm,
+        ),
+        (
+            fig.add_subplot(gs[1, 2:4]),
+            "e",
+            "a",
+            "Today",
+            "Drone share",
+            share_col_out,
+            share_cmap,
+            share_norm,
+        ),
+        (
+            fig.add_subplot(gs[1, 4:6]),
             "f",
             "c",
             "Operator bundling",
@@ -2536,19 +2598,14 @@ def plot_regions_map_pathway_scenario_maps(
 
     for (
         ax,
-        (
-            panel_letter,
-            scenario_label,
-            scenario_title,
-            metric_title,
-            color_col,
-            cmap,
-            norm,
-        ),
-    ) in zip(
-        axes.flat,
-        panel_specs,
-    ):
+        panel_letter,
+        scenario_label,
+        scenario_title,
+        metric_title,
+        color_col,
+        cmap,
+        norm,
+    ) in panel_specs:
         map_df = (
             panel_dfs[scenario_label]
             if color_col == "max_lifecycle_reduction_pct"
@@ -2569,6 +2626,7 @@ def plot_regions_map_pathway_scenario_maps(
         ax.set_xticks([])
         ax.set_yticks([])
         ax.grid(False)
+        ax.set_title(f"{scenario_title}: {metric_title}", fontsize=10, pad=2)
         for spine in ax.spines.values():
             spine.set_visible(False)
         ax.text(
@@ -2581,33 +2639,49 @@ def plot_regions_map_pathway_scenario_maps(
             va="bottom",
             ha="right",
         )
-        ax.text(
-            0.02,
-            0.98,
-            f"{scenario_title}\n{metric_title}",
-            transform=ax.transAxes,
-            fontsize=10,
-            va="top",
-            ha="left",
-            bbox=dict(
-                facecolor="white",
-                edgecolor="gray",
-                alpha=0.85,
-                boxstyle="round,pad=0.3",
-            ),
-        )
+
+    curve_axes = [
+        fig.add_subplot(gs[2, 0:3]),
+        fig.add_subplot(gs[2, 3:6]),
+    ]
+    curve_saved_limits, curve_share_limits = _pathway_curve_metric_limits(curve_data)
+    curve_twins = [
+        _plot_pathway_curve_panel(
+            curve_axes[0],
+            curve_data.get("gef"),
+            "g",
+            "Grid emission factor multiplier",
+            orientation="horizontal",
+            saved_limits=curve_saved_limits,
+            share_limits=curve_share_limits,
+            saved_as_bar=True,
+        ),
+        _plot_pathway_curve_panel(
+            curve_axes[1],
+            curve_data.get("kappa"),
+            "h",
+            r"E-bike bundling factor $\kappa$",
+            orientation="horizontal",
+            saved_limits=curve_saved_limits,
+            share_limits=curve_share_limits,
+            saved_as_bar=True,
+        ),
+    ]
 
     if plot_title:
         fig.suptitle(
-            "Pathway scenario region maps: halved GEF, base, and operator bundling",
+            "Pathway scenario maps and transition curves",
             fontsize=14,
             fontweight="bold",
         )
 
     fig.tight_layout(rect=(0, 0.02, 0.90, 0.98))
     fig.canvas.draw()
+    for ax, ax_twin in zip(curve_axes, curve_twins):
+        if ax_twin is not None:
+            ax_twin.set_position(ax.get_position())
 
-    cbar_ax_reduction = fig.add_axes((0.915, 0.56, 0.014, 0.32))
+    cbar_ax_reduction = fig.add_axes((0.915, 0.64, 0.014, 0.24))
     cbar_reduction, n_reduction_bands = _draw_discrete_reduction_colorbar(
         fig,
         cbar_ax_reduction,
@@ -2619,7 +2693,7 @@ def plot_regions_map_pathway_scenario_maps(
     )
     _annotate_unstudied(fig, cbar_reduction, cbar_ax_reduction, n_reduction_bands)
 
-    cbar_ax_share = fig.add_axes((0.915, 0.14, 0.014, 0.32))
+    cbar_ax_share = fig.add_axes((0.915, 0.38, 0.014, 0.22))
     cbar_share, n_share_bands = _draw_discrete_reduction_colorbar(
         fig,
         cbar_ax_share,
