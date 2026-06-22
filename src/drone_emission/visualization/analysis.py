@@ -1016,6 +1016,9 @@ def _plot_pathway_curve_panel(
     saved_limits: tuple[float, float] = None,
     share_limits: tuple[float, float] = None,
     saved_as_bar: bool = False,
+    show_saved_axis: bool = True,
+    show_share_axis: bool = True,
+    mirror_x: bool = False,
 ):
     """Draw total saved CO2 and drone share on dual axes."""
     if curve_df is None or curve_df.empty:
@@ -1092,6 +1095,16 @@ def _plot_pathway_curve_panel(
         ax_share.tick_params(axis="y", labelcolor="#2166ac", labelsize=8)
         if share_limits is not None:
             ax_share.set_ylim(*share_limits)
+        if mirror_x:
+            ax.invert_xaxis()
+        if not show_saved_axis:
+            ax.set_ylabel("")
+            ax.tick_params(axis="y", left=False, labelleft=False)
+            ax.spines["left"].set_visible(False)
+        if not show_share_axis:
+            ax_share.set_ylabel("")
+            ax_share.tick_params(axis="y", right=False, labelright=False)
+            ax_share.spines["right"].set_visible(False)
 
     ax.text(-0.08, 1.03, panel_label, transform=ax.transAxes,
             fontsize=14, fontweight="bold", va="bottom", ha="right")
@@ -2655,6 +2668,8 @@ def plot_regions_map_pathway_scenario_maps(
             saved_limits=curve_saved_limits,
             share_limits=curve_share_limits,
             saved_as_bar=True,
+            show_share_axis=False,
+            mirror_x=True,
         ),
         _plot_pathway_curve_panel(
             curve_axes[1],
@@ -2665,6 +2680,7 @@ def plot_regions_map_pathway_scenario_maps(
             saved_limits=curve_saved_limits,
             share_limits=curve_share_limits,
             saved_as_bar=True,
+            show_saved_axis=False,
         ),
     ]
 
@@ -2677,6 +2693,13 @@ def plot_regions_map_pathway_scenario_maps(
 
     fig.tight_layout(rect=(0, 0.02, 0.90, 0.98))
     fig.canvas.draw()
+    for ax in curve_axes:
+        pos = ax.get_position()
+        width = pos.width * 0.82
+        height = pos.height * 0.72
+        x0 = pos.x0 + (pos.width - width) / 2
+        y0 = pos.y0 + (pos.height - height) / 2
+        ax.set_position([x0, y0, width, height])
     for ax, ax_twin in zip(curve_axes, curve_twins):
         if ax_twin is not None:
             ax_twin.set_position(ax.get_position())
