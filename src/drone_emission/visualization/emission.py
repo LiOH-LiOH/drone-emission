@@ -2527,6 +2527,7 @@ def plot_break_even_contribution_decomposition(
     legend_inside_second_axis: bool = False,
     contribution_panel_letter_position: tuple[float, float] = (-0.10, 1.22),
     contribution_waterfall_ylim_expand: float | None = None,
+    row_hspace: float = 0.42,
 ):
     """Stack break-even phase diagram above contribution decomposition.
 
@@ -2547,7 +2548,7 @@ def plot_break_even_contribution_decomposition(
         2,
         1,
         height_ratios=[1.0, 0.92],
-        hspace=0.42,
+        hspace=row_hspace,
     )
     top = outer[0].subgridspec(
         1,
@@ -2650,6 +2651,7 @@ def plot_break_even_contribution_decomposition_marching_cubes(
         legend_inside_second_axis=True,
         contribution_panel_letter_position=(-0.10, 1.12),
         contribution_waterfall_ylim_expand=0.12,
+        row_hspace=0.30,
     )
 
 
