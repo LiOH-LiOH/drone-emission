@@ -2548,7 +2548,7 @@ def plot_regions_map_pathway_scenario_maps(
     delta_abs = float(delta_abs) if np.isfinite(delta_abs) and delta_abs > 0 else 1.0
     delta_cmap = LinearSegmentedColormap.from_list(
         "pathway_delta_diverging",
-        ["#762a83", "#f7f7f7", "#1b7837"],
+        ["#b35806", "#f7f7f7", "#762a83"],
     )
     delta_norm = TwoSlopeNorm(vmin=-delta_abs, vcenter=0.0, vmax=delta_abs)
 
