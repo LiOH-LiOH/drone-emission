@@ -268,8 +268,8 @@ def _render_reduction_distribution(
         .head(5)
     )
     top_lines = [
-        f"{row.region_name_en} {row._reduction_value:.1f}%"
-        for row in top_relative.itertuples(index=False)
+        f"{row['region_name_en']} {row['_reduction_value']:.1f}%"
+        for _, row in top_relative.iterrows()
     ]
     ax.text(
         0.98,
