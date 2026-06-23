@@ -820,304 +820,164 @@
 \end{frame}
 \fi
 
-\begin{frame}{Study Regions}
+\begin{frame}{National Reduction Under the Optimal Allocation}
   \begin{figure}
     \centering
-    \includegraphics[width=0.8\linewidth]{../../figures/analysis/regions_map.pdf}
-    \caption{\textbf{312 cities across 34 provinces.} Covering 12 million~km$^2$, 992K stores, and 115M OD pairs. Regions span diverse geographic and urban contexts, from dense coastal megacities to inland prefectures.}
-    \label{fig:regions_map}
+    \includegraphics[width=0.86\linewidth]{../../figures/slides/slide_city_reduction_map.pdf}
+    \caption{\textbf{National lifecycle reduction across 314 mapped cities.} The empirically grounded 115 million-trip system saves 49.1~kt~CO$_2$e~yr$^{-1}$, equal to 14.2\% of the 346.6~kt all-e-bike baseline. The largest absolute savings occur in Beijing (3.27~kt), Guangzhou (2.52~kt), Shenzhen (2.22~kt), Shanghai (2.14~kt), and Chengdu (2.01~kt).}
   \end{figure}
 \end{frame}
 
-\begin{frame}{Cross-Region Emission Summary}
-  \begin{columns}
-    \begin{column}{0.48\textwidth}
-      \begin{figure}
-        \centering
-        \includegraphics[width=\linewidth]{../../figures/analysis/emission_distribution.pdf}
-        \caption{\textbf{Distribution of max lifecycle emission reduction across 312 cities.} Mean reduction 29.2\% (median 27.2\%), ranging from 11.5\% to 55.0\%. 93\% of cities achieve $>$20\% reduction.}
-        \label{fig:emission_distribution}
-      \end{figure}
-    \end{column}
-    \begin{column}{0.48\textwidth}
-      \begin{figure}
-        \centering
-        \includegraphics[width=\linewidth]{../../figures/analysis/annual_emissions_comparison.pdf}
-        \caption{\textbf{Annual lifecycle emissions comparison.} All e-bike, all drone, and optimal mixed scenarios across regions.}
-        \label{fig:annual_emissions_comparison}
-      \end{figure}
-    \end{column}
-  \end{columns}
-\end{frame}
-
-\begin{frame}{City Emission Reduction Ranking}
+\begin{frame}{City-Level Reduction Distribution}
   \begin{figure}
     \centering
-    \includegraphics[width=0.85\linewidth]{../../figures/analysis/city_emission_ranking.pdf}
-    \caption{\textbf{312 cities ranked by max lifecycle emission reduction.} Zhaotong (55.0\%) leads; Zhongwei (11.5\%) trails. Percentile markers highlight the distribution spread.}
-    \label{fig:city_emission_ranking}
+    \includegraphics[width=0.82\linewidth]{../../figures/slides/slide_reduction_distribution.pdf}
+    \caption{\textbf{Relative savings are positive but uneven.} The city-level distribution has a median reduction of 11.3\%, a mean of 14.4\%, and 250 of 314 cities between 5\% and 20\%. The strongest relative reductions are in Panzhihua (45.0\%), Zhaotong (42.2\%), Kunming (40.7\%), Xishuangbanna (40.4\%), and Qujing (40.1\%).}
   \end{figure}
 \end{frame}
 
-\begin{frame}{Geographic Pattern}
-  \begin{figure}
-    \centering
-    \includegraphics[width=0.8\linewidth]{../../figures/analysis/geographic_pattern.pdf}
-    \caption{\textbf{Geographic pattern of emission reduction potential} (n=312). Southern/western cities (clean grids, mountainous terrain) consistently outperform northern/eastern cities (coal grids, flat plains).}
-    \label{fig:geographic_pattern}
-  \end{figure}
-\end{frame}
-
-\begin{frame}{Correlation Analysis}
+\begin{frame}{Trip-Level Mechanism}
   \begin{columns}[T]
+    \begin{column}{0.46\textwidth}
+      \centering
+      \includegraphics[width=\linewidth]{../../figures/slides/slide_detour_route_mechanism.pdf}
+    \end{column}
     \begin{column}{0.52\textwidth}
-      \begin{figure}
-        \centering
-        \includegraphics[width=\linewidth]{../../figures/analysis/correlation_heatmap.pdf}
-        \caption{\textbf{Feature--outcome correlation heatmap.} Pearson correlations between 24 urban features and 3 emission outcomes across 312 cities.}
-        \label{fig:correlation_heatmap}
-      \end{figure}
-    \end{column}
-    \begin{column}{0.46\textwidth}
-      \begin{table}
-        \centering
-        \caption{\textbf{Top predictors of max lifecycle reduction.} Pearson and Spearman correlation coefficients with max emission reduction ($n$=312).}
-        \label{tab:top_correlations}
-        {\scriptsize
-        \begin{tabular}{lrr}
-          \toprule
-          \textbf{Feature} & \textbf{Pearson} & \textbf{Spearman} \\
-          \midrule
-          Grid emission factor & $-0.84$ & $-0.62$ \\
-          Detour ratio         & $+0.45$ & $+0.62$ \\
-          Latitude             & $-0.48$ & $-0.53$ \\
-          Avg block length     & $-0.47$ & $-0.48$ \\
-          Avg street length    & $-0.47$ & $-0.47$ \\
-          Road connectivity    & $-0.30$ & $-0.46$ \\
-          Orientation entropy  & $+0.27$ & $+0.33$ \\
-          Dead-end proportion  & $-0.25$ & $-0.30$ \\
-          \bottomrule
-        \end{tabular}
-        }
-      \end{table}
-      \vspace{-0.3em}
-      \textbf{Key insights:}
-      \begin{itemize}\setlength{\itemsep}{2pt}
-        \item Grid cleanliness dominates ($r=-0.84$)
-        \item Detour ratio is the strongest network feature ($r_s=0.62$)
-        \item Road structure metrics independently significant
-      \end{itemize}
+      \centering
+      \includegraphics[width=\linewidth]{../../figures/slides/slide_selected_trip_lifecycle.pdf}
     \end{column}
   \end{columns}
+  \vspace{0.4em}
+  \footnotesize
+  For the selected Beijing median trip, the drone flies 1.82~km while the e-bike travels 2.76~km on roads (detour ratio 1.52). The drone's lower production and end-of-life burdens outweigh its higher use-phase electricity demand, reducing lifecycle emissions from 47.8 to 40.7~g~CO$_2$e per order.
 \end{frame}
 
-\begin{frame}{Dominant Predictor: Grid Emission Factor}
-  \begin{columns}[T]
-    \begin{column}{0.48\textwidth}
-      \begin{figure}
-        \centering
-        \includegraphics[width=\linewidth]{../../figures/analysis/scatter_grid_emission_factor_vs_max_lifecycle_reduction_pct.pdf}
-        \caption{\textbf{Grid emission factor vs.\ max lifecycle reduction.} Pearson $r=-0.84$ ($p<10^{-74}$): the carbon intensity of the electricity grid is the strongest predictor of drone delivery's environmental advantage.}
-        \label{fig:scatter_gef_reduction}
-      \end{figure}
-    \end{column}
-    \begin{column}{0.48\textwidth}
-      \textbf{Mechanism:}
-      \begin{itemize}
-        \item Drones consume $\sim$3$\times$ more energy per delivery than e-bikes
-        \item Clean grid (GEF=0.11, Yunnan): production phase dominates $\rightarrow$ drones win $\sim$50\% reduction
-        \item Dirty grid (GEF=0.73, Hebei): use-phase amplified $\rightarrow$ drones only win $\sim$20\% reduction
-      \end{itemize}
-      \vspace{0.5em}
-      \textbf{Implication:}\\
-      Grid decarbonization \emph{amplifies} drone delivery's sustainability benefit.
-    \end{column}
-  \end{columns}
-\end{frame}
-
-\begin{frame}{Detour Ratio and Grid Emission Factor}
+\begin{frame}{Grid Carbon Intensity Changes the Lifecycle Balance}
   \begin{figure}
     \centering
-    \includegraphics[width=\linewidth]{../../figures/analysis/scatter_detour_ratio_vs_reduction_by_gef.pdf}
-    \caption{Both clean (green, $r$=0.72, $n$=41) and dirty grids (red, $r$=0.83, $n$=238) show higher detour ratio $\rightarrow$ greater drone advantage, but at different baselines.}
-    \label{fig:scatter_detour_reduction}
+    \includegraphics[width=0.88\linewidth]{../../figures/slides/slide_gef_component_bins.pdf}
+    \caption{\textbf{GEF reshapes the use-phase penalty.} In low-GEF bins, drones retain most of their embodied-emission advantage; in the 0.7--0.8~kg~CO$_2$e~kWh$^{-1}$ bin, the drone and e-bike totals converge to 90.9 and 93.2~g~CO$_2$e per order.}
   \end{figure}
 \end{frame}
 
-\begin{frame}{Road Structure: Block Length}
-  \begin{figure}
-    \centering
-    \includegraphics[width=0.65\linewidth]{../../figures/analysis/scatter_avg_block_length_vs_max_lifecycle_reduction_pct.pdf}
-    \caption{\textbf{Avg block length vs.\ max lifecycle reduction.} Spearman $r=-0.48$ ($p<10^{-17}$): shorter road segments between intersections correlate with greater drone delivery advantage.}
-    \label{fig:scatter_block_length_reduction}
-  \end{figure}
-\end{frame}
-
-\begin{frame}{Geographic Correlations}
+\begin{frame}{Low-GEF City Contexts}
   \begin{columns}[T]
-    \begin{column}{0.48\textwidth}
-      \begin{figure}
-        \centering
-        \includegraphics[width=\linewidth]{../../figures/analysis/scatter_latitude_vs_max_lifecycle_reduction_pct.pdf}
-        \caption{\textbf{Latitude vs.\ max lifecycle reduction.} Spearman $r=-0.53$ ($p<10^{-23}$): southern cities perform better, reflecting cleaner grids and more mountainous terrain.}
-        \label{fig:scatter_latitude_reduction}
-      \end{figure}
+    \begin{column}{0.49\textwidth}
+      \centering
+      \includegraphics[width=\linewidth]{../../figures/slides/slide_city_context_dali.pdf}
     \end{column}
-    \begin{column}{0.48\textwidth}
-      \textbf{Geographic pattern:}
-      \begin{itemize}
-        \item Southern/western $\rightarrow$ hydro grids + mountains
-        \item Northern/eastern $\rightarrow$ coal grids + flat plains
-      \end{itemize}
-      \vspace{0.5em}
-      \textbf{Road structure features:}
-      \begin{itemize}
-        \item Orientation entropy ($r=0.33$): grid-like streets favor drones
-        \item Dead-end proportion ($r=-0.32$): cul-de-sacs reduce drone advantage
-        \item Avg block length ($r=-0.48$): shorter blocks favor drones
-      \end{itemize}
-      \vspace{0.5em}
-      Grid carbon intensity and road network geometry are the key predictors; building density is insignificant.
+    \begin{column}{0.49\textwidth}
+      \centering
+      \includegraphics[width=\linewidth]{../../figures/slides/slide_city_context_chengdu.pdf}
     \end{column}
   \end{columns}
+  \vspace{0.4em}
+  \footnotesize
+  In hydropower-rich Dali and Chengdu, drones are already favorable for most short trips: drone shares at 0.3~km reach 98.7\% and 85.2\%, respectively.
 \end{frame}
 
-\begin{frame}{Hierarchical Regression --- Emission Reduction}
+\begin{frame}{High-GEF City Contexts}
   \begin{columns}[T]
-    \begin{column}{0.46\textwidth}
-      \textbf{Nested OLS models} (N=279):
-      \begin{footnotesize}
-      \begin{tabular}{lrrr}
-        \toprule
-        \textbf{Model} & \textbf{R\textsuperscript{2}} & \textbf{$\Delta$R\textsuperscript{2}} & \textbf{p($\Delta$F)} \\
-        \midrule
-        M1: GEF only         & 0.70 & 0.70 & $<$0.001 \\
-        M2: + Detour ratio   & 0.83 & 0.13 & $<$0.001 \\
-        M3: + Entropy, Block & 0.86 & 0.03 & $<$0.001 \\
-        \bottomrule
-      \end{tabular}
-      \end{footnotesize}
-      \vspace{0.3em}
-
-      \textbf{M3 standardized coefficients:}
-      \begin{footnotesize}
-      \begin{tabular}{lr}
-        \toprule
-        \textbf{Variable} & \textbf{$\beta$} \\
-        \midrule
-        Grid emission factor & $-0.88$*** \\
-        Detour ratio         & $+0.35$*** \\
-        Orientation entropy  & $-0.21$*** \\
-        Avg block length     & $-0.12$*** \\
-        \bottomrule
-      \end{tabular}
-      \end{footnotesize}
+    \begin{column}{0.49\textwidth}
+      \centering
+      \includegraphics[width=\linewidth]{../../figures/slides/slide_city_context_tianjin.pdf}
     \end{column}
-    \begin{column}{0.50\textwidth}
-      \textbf{Interpretation:}
-      \begin{itemize}\setlength{\itemsep}{2pt}
-        \item GEF alone explains \textbf{70\%} of variance
-        \item Detour ratio adds \textbf{13\%}: circuitous roads $\rightarrow$ drones save more
-        \item Road structure adds \textbf{3\%}: low entropy (grid streets) and short blocks (dense intersections) favor drones
-        \item 4 features $\rightarrow$ \textbf{R\textsuperscript{2}=0.86}; density/demand features are not significant
-      \end{itemize}
+    \begin{column}{0.49\textwidth}
+      \centering
+      \includegraphics[width=\linewidth]{../../figures/slides/slide_city_context_guangzhou.pdf}
     \end{column}
   \end{columns}
+  \vspace{0.4em}
+  \footnotesize
+  Under more carbon-intensive grids, short trips are less favorable: at 0.3~km Tianjin reaches only 19.4\% drone share and $-24.8\%$ reduction, while Guangzhou reaches 33.0\% and $-3.3\%$. By 4.9~km, Guangzhou rises to 96.7\% drone share and 18.5\% reduction.
 \end{frame}
 
-\begin{frame}{Regression --- All Three Targets}
+\begin{frame}{Detour Ratio Matters Within Each Grid Regime}
   \begin{columns}[T]
-    \begin{column}{0.48\textwidth}
-      \begin{figure}
-        \centering
-        \includegraphics[width=\linewidth]{../../figures/analysis/hierarchical_r2_max_lifecycle_reduction_pct.pdf}
-        \caption{\textbf{Hierarchical R\textsuperscript{2} comparison} for max lifecycle reduction. Each bar adds one group of predictors; Lasso (dashed) confirms with R\textsuperscript{2}=0.91 using 17 features.}
-        \label{fig:hierarchical_r2}
-      \end{figure}
+    \begin{column}{0.49\textwidth}
+      \centering
+      \includegraphics[width=\linewidth]{../../figures/slides/slide_detour_reduction_low_gef.pdf}
     \end{column}
-    \begin{column}{0.48\textwidth}
-      \textbf{Summary across targets:}
-      \vspace{0.3em}
-      \begin{footnotesize}
-      \begin{tabular}{lcc}
-        \toprule
-        \textbf{Target} & \textbf{M1} & \textbf{M3} \\
-        \midrule
-        Max reduction (\%)    & 0.70 & \textbf{0.86} \\
-        Optimal threshold (km) & 0.64 & 0.66 \\
-        Optimal drone ratio (\%) & 0.26 & \textbf{0.46} \\
-        \bottomrule
-      \end{tabular}
-      \end{footnotesize}
-      \vspace{0.5em}
-
-      \textbf{Key finding:}
-      \begin{itemize}
-        \item \textbf{Emission reduction}: GEF dominates, road features refine
-        \item \textbf{Distance threshold}: almost entirely driven by GEF
-        \item \textbf{Drone ratio}: road structure adds \textbf{20\%} R\textsuperscript{2} --- orientation entropy ($\beta=-0.44$) and block length ($\beta=-0.30$) are the strongest predictors after GEF
-      \end{itemize}
+    \begin{column}{0.49\textwidth}
+      \centering
+      \includegraphics[width=\linewidth]{../../figures/slides/slide_detour_reduction_high_gef.pdf}
     \end{column}
   \end{columns}
+  \vspace{0.4em}
+  \footnotesize
+  Splitting cities at GEF~=~0.3~kg~CO$_2$e~kWh$^{-1}$ shows a positive detour--reduction relationship in both regimes: low-GEF cities ($n=41$) span 17.2--45.0\% reduction with $r=0.73$, while high-GEF cities ($n=235$) span 3.2--26.2\% with $r=0.94$.
 \end{frame}
 
-\begin{frame}{Provincial Variation}
-  \begin{figure}
-    \centering
-    \includegraphics[width=0.55\linewidth]{../../figures/analysis/province_boxplot_max_lifecycle_reduction_pct.pdf}
-    \caption{\textbf{Max lifecycle emission reduction by province} (n=312). Yunnan (49.5\%, GEF=0.11) and Sichuan (46.2\%, GEF=0.14) lead; Ningxia ($\sim$16\%) and Xinjiang ($\sim$19\%) trail.}
-    \label{fig:province_boxplot}
-  \end{figure}
-\end{frame}
-
-\begin{frame}{Top and Bottom Cities}
+\begin{frame}{Break-Even Operating Envelope}
   \begin{columns}[T]
-    \begin{column}{0.48\textwidth}
-      \textbf{Top 10 cities:}
-      \begin{footnotesize}
-      \begin{tabular}{lrr}
-        \toprule
-        City & Reduction & GEF \\
-        \midrule
-        Zhaotong (YN)     & 55.0\% & 0.11 \\
-        Panzhihua (SC)    & 54.9\% & 0.14 \\
-        Xishuangbanna (YN) & 52.3\% & 0.11 \\
-        Macau             & 52.3\% & N/A \\
-        Kunming (YN)      & 51.8\% & 0.11 \\
-        Lijiang (YN)      & 51.4\% & 0.11 \\
-        Qujing (YN)       & 50.9\% & 0.11 \\
-        Honghe (YN)       & 49.9\% & 0.11 \\
-        Bazhong (SC)      & 49.3\% & 0.14 \\
-        Dali (YN)         & 49.2\% & 0.11 \\
-        \bottomrule
-      \end{tabular}
-      \end{footnotesize}
+    \begin{column}{0.34\textwidth}
+      \centering
+      \includegraphics[width=\linewidth]{../../figures/slides/slide_break_even_surface.pdf}
     \end{column}
-    \begin{column}{0.48\textwidth}
-      \textbf{Bottom 10 cities:}
-      \begin{footnotesize}
-      \begin{tabular}{lrr}
-        \toprule
-        City & Reduction & GEF \\
-        \midrule
-        Zhongwei (NX)     & 11.5\% & N/A \\
-        Shizuishan (NX)   & 15.4\% & N/A \\
-        Kizilsu (XJ)      & 15.9\% & 0.62 \\
-        Tongchuan (SN)    & 16.4\% & 0.66 \\
-        Wuzhong (NX)      & 16.6\% & N/A \\
-        Jixi (HL)         & 16.7\% & 0.54 \\
-        Bortala (XJ)      & 16.8\% & N/A \\
-        Guyuan (NX)       & 17.3\% & N/A \\
-        Suihua (HL)       & 17.4\% & 0.54 \\
-        Xingan (IM)       & 17.8\% & 0.68 \\
-        \bottomrule
-      \end{tabular}
-      \end{footnotesize}
+    \begin{column}{0.31\textwidth}
+      \centering
+      \includegraphics[width=\linewidth]{../../figures/slides/slide_break_even_low_gef.pdf}
+    \end{column}
+    \begin{column}{0.31\textwidth}
+      \centering
+      \includegraphics[width=\linewidth]{../../figures/slides/slide_break_even_high_gef.pdf}
     \end{column}
   \end{columns}
-  \vspace{0.5em}
-  \centering
-  \footnotesize{YN=Yunnan, SC=Sichuan, NX=Ningxia, XJ=Xinjiang, SN=Shaanxi, HL=Heilongjiang, IM=Inner Mongolia}
+  \vspace{0.4em}
+  \footnotesize
+  The break-even surface turns the city pattern into a trip-level rule: cleaner grids, longer air distances, and larger road detours expand the drone-favorable region. At GEF~=~0.1404 the median $\Delta g$ is $-22.9$~g~CO$_2$e per order; at GEF~=~0.49 the field widens and short, low-detour trips remain e-bike-favorable.
+\end{frame}
+
+\begin{frame}{National Mechanism Decomposition}
+  \begin{columns}[T]
+    \begin{column}{0.43\textwidth}
+      \centering
+      \includegraphics[width=\linewidth]{../../figures/slides/slide_contribution_waterfall.pdf}
+    \end{column}
+    \begin{column}{0.55\textwidth}
+      \centering
+      \includegraphics[width=\linewidth]{../../figures/slides/slide_top_city_contributions.pdf}
+    \end{column}
+  \end{columns}
+  \vspace{0.4em}
+  \footnotesize
+  Relative to the all-e-bike lifecycle baseline, lower production plus end-of-life emissions add 9.55 percentage points and avoided road detours add 33.84 percentage points, partly offset by higher drone electricity use ($-9.16$ points) and e-bike bundling ($-20.02$ points), leaving a net 14.20-point national reduction.
+\end{frame}
+
+\begin{frame}{Pathway Scenario Maps}
+  \begin{columns}[T]
+    \begin{column}{0.33\textwidth}
+      \centering
+      \includegraphics[width=\linewidth]{../../figures/slides/slide_pathway_current_reduction.pdf}
+    \end{column}
+    \begin{column}{0.33\textwidth}
+      \centering
+      \includegraphics[width=\linewidth]{../../figures/slides/slide_pathway_clean_grid_reduction.pdf}
+    \end{column}
+    \begin{column}{0.33\textwidth}
+      \centering
+      \includegraphics[width=\linewidth]{../../figures/slides/slide_pathway_bundling_reduction.pdf}
+    \end{column}
+  \end{columns}
+  \vspace{0.4em}
+  \footnotesize
+  Under today's grid and today's weighted bundling value ($\kappa=0.769$), the optimal mixed strategy saves 49~kt~CO$_2$e per year and assigns a median 47\% of orders to drones. Halving provincial GEF values lifts savings to 185~kt and the median drone share to 77\%; stronger bundling ($\kappa=0.65$) raises savings to 72~kt but lowers the median drone share to 20\%.
+\end{frame}
+
+\begin{frame}{Pathway Response Curves}
+  \begin{columns}[T]
+    \begin{column}{0.49\textwidth}
+      \centering
+      \includegraphics[width=\linewidth]{../../figures/slides/slide_pathway_gef_curve.pdf}
+    \end{column}
+    \begin{column}{0.49\textwidth}
+      \centering
+      \includegraphics[width=\linewidth]{../../figures/slides/slide_pathway_kappa_curve.pdf}
+    \end{column}
+  \end{columns}
+  \vspace{0.4em}
+  \footnotesize
+  Grid decarbonization expands both the carbon value and the feasible scale of drone substitution: as the GEF multiplier falls from 1.0 to 0.5, annual savings rise from 49 to 185~kt~CO$_2$e and median drone share rises from 47\% to 77\%. Lower $\kappa$ improves the e-bike counterfactual instead, so the system saves more CO$_2$e against today's anchor while assigning fewer orders to drones.
 \end{frame}
 
 \section{Robustness}
@@ -1242,35 +1102,36 @@
 \begin{frame}{Discussion and Future Work}
   \begin{columns}
     \begin{column}{0.48\textwidth}
-      \textbf{Key Findings (n=313):}
+      \textbf{Key Findings (n=314):}
       \begin{itemize}
-        \item Mean lifecycle emission reduction: \textbf{29.2\%} (range: 11.5--55.0\%)
-        \item Optimal threshold \textbf{0.99\,km}, drone ratio \textbf{85\%}
-        \item \textbf{100\%} of cities benefit at no-bundling baseline; \textbf{$\sim$79\%} still benefit at $\kappa{=}0.6$
-        \item Conservative 2-km threshold captures \textbf{$\sim$90\%} of optimal benefit
+        \item National optimal allocation saves \textbf{49.1~kt~CO$_2$e~yr$^{-1}$}, equal to \textbf{14.2\%} of the 346.6~kt all-e-bike baseline
+        \item Absolute gains concentrate in large markets: Beijing, Guangzhou, Shenzhen, Shanghai, and Chengdu
+        \item Relative gains are strongest in southwestern cities with cleaner grids and more indirect road travel
+        \item The observed 115 million-trip system therefore favors \textbf{targeted}, not uniform, drone substitution
       \end{itemize}
 
       \vspace{0.4em}
-      \textbf{Mechanism (Shapley, pct pts):}
+      \textbf{Mechanism (national decomposition):}
       \begin{itemize}
-        \item Production amortization \textbf{+25}, Routing \textbf{+11}
-        \item Bundling \textbf{$-$10}, Grid carbon \textbf{$-$21}
-        \item Drones do \emph{not} win on per-km energy
+        \item Production + end-of-life advantage: \textbf{+9.55} percentage points
+        \item Avoided road detours: \textbf{+33.84} percentage points
+        \item Drone electricity use: \textbf{$-$9.16} percentage points
+        \item E-bike bundling penalty: \textbf{$-$20.02} percentage points
       \end{itemize}
     \end{column}
     \begin{column}{0.48\textwidth}
       \textbf{Policy Implications:}
       \begin{itemize}
-        \item Grid decarbonization \textbf{amplifies} drone benefit (2060: $+89.5$\%)
-        \item Drone-mixing adds only \textbf{$+4$ pct pts} on top of bundled e-bike at today's grid
-        \item Prioritize drone deployment in \textbf{clean-grid, complex-road} cities
-        \item Road network structure is a tractable predictor for planners
+        \item Grid decarbonization expands savings far more than operational bundling
+        \item Halving provincial GEF values lifts annual savings from \textbf{49} to \textbf{185~kt~CO$_2$e}
+        \item Stronger bundling raises savings against today's anchor to \textbf{72~kt~CO$_2$e} but narrows the drone-favorable trip set
+        \item Deployment should prioritize \textbf{clean-grid, high-detour, longer-trip} city contexts
       \end{itemize}
 
       \vspace{0.4em}
       \textbf{Future Work:}
       \begin{itemize}
-        \item Replace 2030/2060 GEF placeholders with \textbf{IEA WEO 2024} / Tsinghua ICCSD figures
+        \item Replace the stylized halved-GEF pathway with externally grounded provincial grid trajectories
         \item Incorporate \textbf{economic} analysis
         \item Account for \textbf{weather impact} on drone operations
       \end{itemize}
