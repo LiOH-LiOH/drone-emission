@@ -44,6 +44,7 @@ from visualization.analysis import (
     _selected_trip_distance_sample,
     _selected_trip_phase_parts,
     _weighted_reduction_column,
+    plot_grouped_scatter_split_panels,
 )
 from visualization.concepts import _draw_detour_ratio_concept
 from visualization.emission import (
@@ -925,6 +926,41 @@ def _render_detour_reduction_regime(
     )
 
 
+def _render_detour_reduction_by_gef(
+    df_enriched: pd.DataFrame | None,
+    save_path: str,
+    for_latex: bool = False,
+    plot_title: bool = False,
+):
+    """Render the slide detour-reduction figure using the paper scatter function."""
+    if df_enriched is None:
+        fig, ax = plt.subplots(figsize=(10.8, 4.6))
+        _placeholder_axis(ax, "Detour-reduction scatter unavailable\nmissing enriched stats")
+        _save_figure(fig, save_path, for_latex, plot_title, "Slide detour reduction by GEF")
+        return
+
+    plot_df = df_enriched.copy()
+    try:
+        reduction_col = _weighted_reduction_column(plot_df)
+    except KeyError as exc:
+        fig, ax = plt.subplots(figsize=(10.8, 4.6))
+        _placeholder_axis(ax, f"Detour-reduction scatter unavailable\n{exc}")
+        _save_figure(fig, save_path, for_latex, plot_title, "Slide detour reduction by GEF")
+        return
+
+    plot_grouped_scatter_split_panels(
+        plot_df,
+        feature_var="detour_ratio",
+        result_var=reduction_col,
+        group_var="grid_emission_factor",
+        threshold=0.3,
+        save_path=save_path,
+        figsize=(10.8, 4.6),
+        for_latex=for_latex,
+        plot_title=plot_title,
+    )
+
+
 def _break_even_delta_style(prepared: dict):
     """Return shared heatmap styling for the break-even slices."""
     finite_blocks = []
@@ -1407,6 +1443,7 @@ def render_all(
         _need(name)
         for name in (
             "slide_gef_component_bins",
+            "slide_detour_reduction_by_gef",
             "slide_detour_reduction_low_gef",
             "slide_detour_reduction_high_gef",
         )
@@ -1512,7 +1549,15 @@ def render_all(
                 **context,
             )
 
-    if _need("slide_detour_reduction_low_gef"):
+    if _need("slide_detour_reduction_by_gef"):
+        _render_detour_reduction_by_gef(
+            df_enriched,
+            save_path=os.path.join(out, "slide_detour_reduction_by_gef.png"),
+            for_latex=for_latex,
+            plot_title=plot_title,
+        )
+
+    if only is not None and _need("slide_detour_reduction_low_gef"):
         _render_detour_reduction_regime(
             df_enriched,
             regime="low",
@@ -1521,7 +1566,7 @@ def render_all(
             plot_title=plot_title,
         )
 
-    if _need("slide_detour_reduction_high_gef"):
+    if only is not None and _need("slide_detour_reduction_high_gef"):
         _render_detour_reduction_regime(
             df_enriched,
             regime="high",
