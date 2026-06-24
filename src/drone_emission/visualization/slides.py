@@ -27,6 +27,7 @@ from visualization.analysis import (
     _annotate_unstudied,
     _build_absolute_reduction_log_cmap,
     _build_blue_reduction_cmap,
+    _build_drone_share_cmap,
     _build_reduction_cmap,
     _draw_discrete_reduction_colorbar,
     _draw_trip_phase_barplot,
@@ -41,6 +42,7 @@ from visualization.analysis import (
     _plot_reduction_absolute_scatter_panel,
     _plot_reduction_detour_panel,
     _prepare_pathway_scenario_data,
+    _scenario_drone_share_column,
     _selected_trip_distance_sample,
     _selected_trip_phase_parts,
     _weighted_reduction_column,
@@ -1358,6 +1360,181 @@ def _render_pathway_curve(
     _save_figure(fig, save_path, for_latex, plot_title, "Slide pathway curve")
 
 
+def _render_pathway_direction_split(
+    scenario_data: dict | None,
+    direction: str,
+    save_path: str,
+    for_latex: bool = False,
+    plot_title: bool = False,
+):
+    """Render one slide-ready pathway direction from the paper scenario-map panels."""
+    fig = plt.figure(figsize=(13.2, 8.0))
+    gs = fig.add_gridspec(
+        3,
+        4,
+        height_ratios=[1.0, 1.0, 0.72],
+        hspace=0.18,
+        wspace=0.16,
+    )
+    if not scenario_data:
+        ax = fig.add_subplot(gs[:, :])
+        _placeholder_axis(ax, "Pathway direction unavailable\nmissing named scenarios")
+        _save_figure(fig, save_path, for_latex, plot_title, "Slide pathway direction")
+        return
+
+    if direction == "clean_grid":
+        map_pairs = (
+            ("a", "b", "Halved GEF"),
+            ("b", "a", "Today"),
+            ("d", "b", "Halved GEF"),
+            ("e", "a", "Today"),
+        )
+        curve_key = "gef"
+        curve_panel_label = "g"
+        curve_axis_label = "Grid emission factor multiplier"
+        curve_mirror_x = True
+        title = "Cleaner-grid direction"
+    elif direction == "bundling":
+        map_pairs = (
+            ("b", "a", "Today"),
+            ("c", "c", "Operator bundling"),
+            ("e", "a", "Today"),
+            ("f", "c", "Operator bundling"),
+        )
+        curve_key = "kappa"
+        curve_panel_label = "h"
+        curve_axis_label = r"E-bike bundling factor $\kappa$"
+        curve_mirror_x = False
+        title = "Stronger-bundling direction"
+    else:
+        raise ValueError(f"Unknown pathway direction: {direction}")
+
+    base = scenario_data["base"]
+    panel_dfs = scenario_data["panel_dfs"]
+    panel_named = scenario_data["panel_named"]
+    all_values = scenario_data["all_values"]
+    curve_data = scenario_data["curve_data"]
+    share_col_out = "pathway_drone_share_pct"
+    share_dfs = {}
+    for _panel_letter, scenario_label, _scenario_title in map_pairs:
+        if scenario_label in share_dfs:
+            continue
+        rows = panel_named.get(scenario_label, pd.DataFrame())
+        if rows.empty:
+            sub = pd.DataFrame(columns=["region_key", share_col_out])
+        else:
+            share_col = _scenario_drone_share_column(rows)
+            sub = rows[["region_key", share_col]].rename(columns={share_col: share_col_out})
+        share_dfs[scenario_label] = base.drop(columns=[share_col_out], errors="ignore").merge(
+            sub,
+            on="region_key",
+            how="left",
+        )
+
+    v_max = max(max(all_values), 0.0) if all_values else 1.0
+    reduction_cmap, reduction_norm, reduction_bins, reduction_edges = _build_reduction_cmap(v_max)
+    share_cmap, share_norm, share_bins, share_edges = _build_drone_share_cmap()
+    map_axes = [
+        fig.add_subplot(gs[0, 0:2]),
+        fig.add_subplot(gs[0, 2:4]),
+        fig.add_subplot(gs[1, 0:2]),
+        fig.add_subplot(gs[1, 2:4]),
+    ]
+
+    for idx, (ax, (panel_letter, scenario_label, scenario_title)) in enumerate(zip(map_axes, map_pairs)):
+        is_reduction = idx < 2
+        map_df = panel_dfs[scenario_label] if is_reduction else share_dfs[scenario_label]
+        color_col = "max_lifecycle_reduction_pct" if is_reduction else share_col_out
+        plot_regions_on_china_map(
+            df=map_df,
+            color_by=color_col,
+            ax=ax,
+            plot_title=False,
+            cmap=reduction_cmap if is_reduction else share_cmap,
+            norm=reduction_norm if is_reduction else share_norm,
+            draw_colorbar=False,
+            draw_legend=False,
+        )
+        ax.set_xlabel("")
+        ax.set_ylabel("")
+        ax.set_xticks([])
+        ax.set_yticks([])
+        ax.grid(False)
+        for spine in ax.spines.values():
+            spine.set_visible(False)
+        ax.text(
+            -0.02,
+            1.02,
+            panel_letter,
+            transform=ax.transAxes,
+            fontsize=14,
+            fontweight="bold",
+            va="bottom",
+            ha="right",
+        )
+        if plot_title:
+            metric = "Emission reduction" if is_reduction else "Drone share"
+            ax.set_title(f"{scenario_title}: {metric}", fontsize=11, fontweight="bold")
+
+    curve_ax = fig.add_subplot(gs[2, 0:4])
+    curve_saved_limits, curve_share_limits = _pathway_curve_metric_limits(curve_data)
+    curve_twin = _plot_pathway_curve_panel(
+        curve_ax,
+        curve_data.get(curve_key),
+        curve_panel_label,
+        curve_axis_label,
+        orientation="horizontal",
+        saved_limits=curve_saved_limits,
+        share_limits=curve_share_limits,
+        saved_as_bar=True,
+        mirror_x=curve_mirror_x,
+    )
+
+    if plot_title:
+        fig.suptitle(title, fontsize=14, fontweight="bold")
+
+    fig.tight_layout(rect=(0, 0.02, 0.90, 0.98))
+    fig.canvas.draw()
+    pos = curve_ax.get_position()
+    curve_ax.set_position([pos.x0 + pos.width * 0.08, pos.y0, pos.width * 0.84, pos.height * 0.88])
+    if curve_twin is not None:
+        curve_twin.set_position(curve_ax.get_position())
+
+    def _row_colorbar_position(row_axes, x0=0.915, width=0.014, height_scale=1.04):
+        positions = [ax.get_position() for ax in row_axes]
+        row_y0 = min(pos.y0 for pos in positions)
+        row_y1 = max(pos.y1 for pos in positions)
+        row_center = (row_y0 + row_y1) / 2
+        height = (row_y1 - row_y0) * height_scale
+        return (x0, row_center - height / 2, width, height)
+
+    cbar_ax_reduction = fig.add_axes(_row_colorbar_position(map_axes[:2]))
+    cbar_reduction, n_reduction_bands = _draw_discrete_reduction_colorbar(
+        fig,
+        cbar_ax_reduction,
+        reduction_cmap,
+        reduction_norm,
+        reduction_bins,
+        reduction_edges,
+        r"Reduction vs today's all-ebike anchor (%)",
+    )
+    _annotate_unstudied(fig, cbar_reduction, cbar_ax_reduction, n_reduction_bands)
+
+    cbar_ax_share = fig.add_axes(_row_colorbar_position(map_axes[2:]))
+    cbar_share, n_share_bands = _draw_discrete_reduction_colorbar(
+        fig,
+        cbar_ax_share,
+        share_cmap,
+        share_norm,
+        share_bins,
+        share_edges,
+        "Drone share (%)",
+    )
+    _annotate_unstudied(fig, cbar_share, cbar_ax_share, n_share_bands)
+
+    _save_figure(fig, save_path, for_latex, plot_title, "Slide pathway direction")
+
+
 def render_all(
     data_dir: str,
     figures_dir: str,
@@ -1646,6 +1823,8 @@ def render_all(
             "slide_pathway_bundling_reduction",
             "slide_pathway_gef_curve",
             "slide_pathway_kappa_curve",
+            "slide_pathway_clean_grid_direction",
+            "slide_pathway_bundling_direction",
         )
     ):
         scenario_data = _prepare_pathway_bundle(
@@ -1696,6 +1875,24 @@ def render_all(
             scenario_data,
             curve_key="kappa",
             save_path=os.path.join(out, "slide_pathway_kappa_curve.png"),
+            for_latex=for_latex,
+            plot_title=plot_title,
+        )
+
+    if _need("slide_pathway_clean_grid_direction"):
+        _render_pathway_direction_split(
+            scenario_data,
+            direction="clean_grid",
+            save_path=os.path.join(out, "slide_pathway_clean_grid_direction.png"),
+            for_latex=for_latex,
+            plot_title=plot_title,
+        )
+
+    if _need("slide_pathway_bundling_direction"):
+        _render_pathway_direction_split(
+            scenario_data,
+            direction="bundling",
+            save_path=os.path.join(out, "slide_pathway_bundling_direction.png"),
             for_latex=for_latex,
             plot_title=plot_title,
         )
