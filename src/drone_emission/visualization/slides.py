@@ -687,8 +687,8 @@ def _render_city_context_pair(
         col = outer[0, i].subgridspec(
             3,
             1,
-            height_ratios=[0.88, 0.88, 0.64],
-            hspace=0.24,
+            height_ratios=[0.84, 0.84, 0.90],
+            hspace=0.20,
         )
         if region_key not in binned_by_city:
             ax = fig.add_subplot(col[:, 0])
@@ -725,8 +725,8 @@ def _render_city_context_pair(
         power_grid = col[2].subgridspec(
             1,
             2,
-            width_ratios=[1.0, 0.72],
-            wspace=0.12,
+            width_ratios=[1.18, 0.72],
+            wspace=0.08,
         )
         ax_power_mix = fig.add_subplot(power_grid[0])
         ax_power_legend = fig.add_subplot(power_grid[1])
@@ -734,8 +734,8 @@ def _render_city_context_pair(
             ax_power_mix,
             power_region_key,
             legend_ax=ax_power_legend,
-            radius=1.06,
-            legend_fontsize=7.4,
+            radius=1.28,
+            legend_fontsize=7.6,
             legend_handlelength=0.98,
             legend_handleheight=0.54,
             legend_labelspacing=0.26,
@@ -743,7 +743,7 @@ def _render_city_context_pair(
         legend = ax_power_legend.get_legend()
         if legend is not None:
             for text in legend.get_texts():
-                text.set_fontsize(7.4)
+                text.set_fontsize(7.6)
 
         for ax in (ax_reduction, ax_scatter):
             ax.xaxis.label.set_size(7.8)
