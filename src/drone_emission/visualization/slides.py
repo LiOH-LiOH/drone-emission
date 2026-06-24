@@ -1373,7 +1373,7 @@ def _render_pathway_direction_split(
         3,
         4,
         height_ratios=[1.16, 1.16, 0.52],
-        hspace=0.10,
+        hspace=0.16,
         wspace=0.0,
     )
     if not scenario_data:
@@ -1495,6 +1495,25 @@ def _render_pathway_direction_split(
 
     fig.tight_layout(rect=(0, 0.02, 0.90, 0.98))
     fig.canvas.draw()
+
+    def _tighten_map_row(row_axes, gap=0.004):
+        positions = [ax.get_position() for ax in row_axes]
+        union_x0 = min(pos.x0 for pos in positions)
+        union_x1 = max(pos.x1 for pos in positions)
+        union_center = (union_x0 + union_x1) / 2
+        total_width = sum(pos.width for pos in positions) + gap
+        x0 = union_center - total_width / 2
+        row_axes[0].set_position([x0, positions[0].y0, positions[0].width, positions[0].height])
+        row_axes[1].set_position([
+            x0 + positions[0].width + gap,
+            positions[1].y0,
+            positions[1].width,
+            positions[1].height,
+        ])
+
+    _tighten_map_row(map_axes[:2])
+    _tighten_map_row(map_axes[2:])
+
     pos = curve_ax.get_position()
     curve_ax.set_position([pos.x0 + pos.width * 0.10, pos.y0, pos.width * 0.80, pos.height * 0.86])
     if curve_twin is not None:
