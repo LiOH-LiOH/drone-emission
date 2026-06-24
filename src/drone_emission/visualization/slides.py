@@ -1368,13 +1368,13 @@ def _render_pathway_direction_split(
     plot_title: bool = False,
 ):
     """Render one slide-ready pathway direction from the paper scenario-map panels."""
-    fig = plt.figure(figsize=(13.2, 8.0))
+    fig = plt.figure(figsize=(13.2, 7.6))
     gs = fig.add_gridspec(
         3,
         4,
-        height_ratios=[1.0, 1.0, 0.72],
-        hspace=0.18,
-        wspace=0.16,
+        height_ratios=[1.16, 1.16, 0.52],
+        hspace=0.06,
+        wspace=0.08,
     )
     if not scenario_data:
         ax = fig.add_subplot(gs[:, :])
@@ -1386,23 +1386,23 @@ def _render_pathway_direction_split(
         map_pairs = (
             ("a", "b", "Halved GEF"),
             ("b", "a", "Today"),
-            ("d", "b", "Halved GEF"),
-            ("e", "a", "Today"),
+            ("c", "b", "Halved GEF"),
+            ("d", "a", "Today"),
         )
         curve_key = "gef"
-        curve_panel_label = "g"
+        curve_panel_label = "e"
         curve_axis_label = "Grid emission factor multiplier"
         curve_mirror_x = True
         title = "Cleaner-grid direction"
     elif direction == "bundling":
         map_pairs = (
-            ("b", "a", "Today"),
-            ("c", "c", "Operator bundling"),
-            ("e", "a", "Today"),
-            ("f", "c", "Operator bundling"),
+            ("a", "a", "Today"),
+            ("b", "c", "Operator bundling"),
+            ("c", "a", "Today"),
+            ("d", "c", "Operator bundling"),
         )
         curve_key = "kappa"
-        curve_panel_label = "h"
+        curve_panel_label = "e"
         curve_axis_label = r"E-bike bundling factor $\kappa$"
         curve_mirror_x = False
         title = "Stronger-bundling direction"
@@ -1496,7 +1496,7 @@ def _render_pathway_direction_split(
     fig.tight_layout(rect=(0, 0.02, 0.90, 0.98))
     fig.canvas.draw()
     pos = curve_ax.get_position()
-    curve_ax.set_position([pos.x0 + pos.width * 0.08, pos.y0, pos.width * 0.84, pos.height * 0.88])
+    curve_ax.set_position([pos.x0 + pos.width * 0.10, pos.y0, pos.width * 0.80, pos.height * 0.86])
     if curve_twin is not None:
         curve_twin.set_position(curve_ax.get_position())
 
