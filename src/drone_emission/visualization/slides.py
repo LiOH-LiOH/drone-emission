@@ -11,6 +11,7 @@ Outputs are written to ``figures/slides/``.
 
 import argparse
 import os
+import shutil
 import sys
 
 import matplotlib.pyplot as plt
@@ -70,6 +71,22 @@ SLIDE_CONTEXTS = {
     "slide_city_context_guangzhou": CITY_CONTEXT_FIGURES["guangzhou_city_context"],
 }
 
+PAPER_FIGURE_REUSE = {
+    "slide_gef_component_bins": "city_gef_scatter_components",
+    "slide_city_context_dali": "dali_city_context",
+    "slide_city_context_chengdu": "chengdu_city_context",
+    "slide_city_context_tianjin": "tianjin_city_context",
+    "slide_city_context_guangzhou": "guangzhou_city_context",
+}
+
+PAPER_CACHE_BACKED_SLIDES = {
+    "slide_break_even_surface",
+    "slide_break_even_low_gef",
+    "slide_break_even_high_gef",
+    "slide_contribution_waterfall",
+    "slide_top_city_contributions",
+}
+
 
 def _bootstrap_paths():
     here = os.path.dirname(os.path.abspath(__file__))
@@ -95,6 +112,34 @@ def _save_figure(fig, save_path: str, for_latex: bool, plot_title: bool, message
     fig.savefig(save_path, dpi=300, bbox_inches="tight")
     plt.close(fig)
     print(f"{message} saved to {save_path}")
+
+
+def _figure_path(directory: str, figure_name: str, for_latex: bool, plot_title: bool) -> str:
+    """Return the resolved figure path using paper/slide naming conventions."""
+    ext = ".pdf" if for_latex else ".png"
+    path = os.path.join(directory, f"{figure_name}{ext}")
+    return _add_title_suffix(path) if plot_title else path
+
+
+def _copy_paper_figure_if_available(
+    figures_dir: str,
+    paper_figure_name: str,
+    slide_figure_name: str,
+    for_latex: bool,
+    plot_title: bool,
+) -> bool:
+    """Copy an already-rendered paper figure when it is slide-equivalent."""
+    paper_dir = os.path.join(figures_dir, "paper")
+    slides_dir = os.path.join(figures_dir, "slides")
+    src = _figure_path(paper_dir, paper_figure_name, for_latex, plot_title)
+    dst = _figure_path(slides_dir, slide_figure_name, for_latex, plot_title)
+    if not os.path.exists(src):
+        return False
+
+    os.makedirs(os.path.dirname(dst), exist_ok=True)
+    shutil.copy2(src, dst)
+    print(f"{slide_figure_name}: reused paper figure {src} -> {dst}")
+    return True
 
 
 def _placeholder_axis(ax, text: str):
@@ -1125,6 +1170,20 @@ def render_all(
     def _want(name: str) -> bool:
         return only is None or name in only
 
+    copied_from_paper = set()
+    for slide_name, paper_name in PAPER_FIGURE_REUSE.items():
+        if _want(slide_name) and _copy_paper_figure_if_available(
+            figures_dir,
+            paper_name,
+            slide_name,
+            for_latex,
+            plot_title,
+        ):
+            copied_from_paper.add(slide_name)
+
+    def _need(name: str) -> bool:
+        return _want(name) and name not in copied_from_paper
+
     stats_path = os.path.join(data_dir, "all_region_stats.csv")
     if not os.path.exists(stats_path):
         print(f"Missing {stats_path}; slide rendering skipped")
@@ -1138,62 +1197,65 @@ def render_all(
     named_path = os.path.join(data_dir, "all_sensitivity_named.csv")
 
     if any(
-        _want(name)
+        _need(name)
         for name in (
             "slide_city_context_dali",
             "slide_city_context_chengdu",
             "slide_city_context_tianjin",
             "slide_city_context_guangzhou",
-            "slide_contribution_waterfall",
-            "slide_top_city_contributions",
-            "slide_break_even_surface",
-            "slide_break_even_low_gef",
-            "slide_break_even_high_gef",
+            *PAPER_CACHE_BACKED_SLIDES,
         )
     ):
         raw_city_df = _city_rows(df_stats)
         gef_path = os.path.join(data_dir, "gef_china.csv")
+        gef_df = None
         if os.path.exists(gef_path):
             gef_df = pd.read_csv(gef_path, encoding="gbk")
             gef_df.columns = ["province", "gef"]
+        else:
+            print(
+                f"Missing {gef_path}; slide figures will use paper caches or "
+                "GEF fallbacks where available"
+            )
+        if gef_df is not None:
             city_df = raw_city_df.merge(gef_df, on="province", how="left")
             city_df = _prepare_reduction_detour_city_stats(city_df)
-            contribution_city_df = _prepare_contribution_decomposition_city_stats(
-                raw_city_df,
-                gef_df,
-                exp_config,
-            )
-            if any(
-                _want(name)
-                for name in (
-                    "slide_contribution_waterfall",
-                    "slide_top_city_contributions",
-                )
-            ):
-                named_df = pd.read_csv(named_path) if os.path.exists(named_path) else None
-                contribution_prepared = _prepare_contribution_decomposition_full(
-                    data_dir=data_dir,
-                    city_df=contribution_city_df,
-                    named_df=named_df,
-                    exp_config=exp_config,
-                )
-            if any(
-                _want(name)
-                for name in (
-                    "slide_break_even_surface",
-                    "slide_break_even_low_gef",
-                    "slide_break_even_high_gef",
-                )
-            ):
-                break_even_prepared = _prepare_break_even_phase_diagram(
-                    data_dir=data_dir,
-                    exp_config=exp_config,
-                )
         else:
-            print(f"Missing {gef_path}; city-context and break-even slide figures may show placeholders")
+            city_df = None
+        contribution_city_df = _prepare_contribution_decomposition_city_stats(
+            raw_city_df,
+            gef_df,
+            exp_config,
+        )
+        if any(
+            _need(name)
+            for name in (
+                "slide_contribution_waterfall",
+                "slide_top_city_contributions",
+            )
+        ):
+            named_df = pd.read_csv(named_path) if os.path.exists(named_path) else None
+            contribution_prepared = _prepare_contribution_decomposition_full(
+                data_dir=data_dir,
+                city_df=contribution_city_df,
+                named_df=named_df,
+                exp_config=exp_config,
+            )
+        if any(
+            _need(name)
+            for name in (
+                "slide_break_even_surface",
+                "slide_break_even_low_gef",
+                "slide_break_even_high_gef",
+            )
+        ):
+            break_even_prepared = _prepare_break_even_phase_diagram(
+                data_dir=data_dir,
+                exp_config=exp_config,
+            )
 
     if any(
-        _want(name)
+        _need(name)
         for name in (
             "slide_gef_component_bins",
             "slide_detour_reduction_low_gef",
@@ -1206,7 +1268,7 @@ def render_all(
         else:
             print(f"Missing {enriched_path}; enriched-stat slide figures may show placeholders")
 
-    if _want("slide_city_reduction_map"):
+    if _need("slide_city_reduction_map"):
         _render_city_reduction_map(
             df_stats,
             save_path=os.path.join(out, "slide_city_reduction_map.png"),
@@ -1214,7 +1276,7 @@ def render_all(
             plot_title=plot_title,
         )
 
-    if _want("slide_reduction_distribution"):
+    if _need("slide_reduction_distribution"):
         _render_reduction_distribution(
             df_stats,
             save_path=os.path.join(out, "slide_reduction_distribution.png"),
@@ -1222,14 +1284,14 @@ def render_all(
             plot_title=plot_title,
         )
 
-    if _want("slide_detour_route_mechanism"):
+    if _need("slide_detour_route_mechanism"):
         _render_detour_route_mechanism(
             save_path=os.path.join(out, "slide_detour_route_mechanism.png"),
             for_latex=for_latex,
             plot_title=plot_title,
         )
 
-    if _want("slide_selected_trip_lifecycle"):
+    if _need("slide_selected_trip_lifecycle"):
         beijing_od_path = os.path.join(data_dir, "city", "beijing", "beijing_od_pairs.csv")
         beijing_od_df = pd.read_csv(beijing_od_path) if os.path.exists(beijing_od_path) else None
         _render_selected_trip_lifecycle(
@@ -1239,7 +1301,7 @@ def render_all(
             plot_title=plot_title,
         )
 
-    if _want("slide_trip_level_mechanism"):
+    if _need("slide_trip_level_mechanism"):
         beijing_od_path = os.path.join(data_dir, "city", "beijing", "beijing_od_pairs.csv")
         beijing_graphml_path = os.path.join(data_dir, "city", "beijing", "beijing_roadnet.graphml")
         beijing_od_df = pd.read_csv(beijing_od_path) if os.path.exists(beijing_od_path) else None
@@ -1265,7 +1327,7 @@ def render_all(
             city="beijing",
         )
 
-    if _want("slide_gef_component_bins"):
+    if _need("slide_gef_component_bins"):
         _render_gef_component_bins(
             df_enriched,
             save_path=os.path.join(out, "slide_gef_component_bins.png"),
@@ -1275,7 +1337,7 @@ def render_all(
 
     if city_df is not None:
         for figure_name, context in SLIDE_CONTEXTS.items():
-            if not _want(figure_name):
+            if not _need(figure_name):
                 continue
             _render_city_context(
                 data_dir=data_dir,
@@ -1288,7 +1350,7 @@ def render_all(
                 **context,
             )
 
-    if _want("slide_detour_reduction_low_gef"):
+    if _need("slide_detour_reduction_low_gef"):
         _render_detour_reduction_regime(
             df_enriched,
             regime="low",
@@ -1297,7 +1359,7 @@ def render_all(
             plot_title=plot_title,
         )
 
-    if _want("slide_detour_reduction_high_gef"):
+    if _need("slide_detour_reduction_high_gef"):
         _render_detour_reduction_regime(
             df_enriched,
             regime="high",
@@ -1306,7 +1368,7 @@ def render_all(
             plot_title=plot_title,
         )
 
-    if _want("slide_break_even_surface"):
+    if _need("slide_break_even_surface"):
         _render_break_even_surface(
             break_even_prepared,
             save_path=os.path.join(out, "slide_break_even_surface.png"),
@@ -1314,7 +1376,7 @@ def render_all(
             plot_title=plot_title,
         )
 
-    if _want("slide_break_even_low_gef"):
+    if _need("slide_break_even_low_gef"):
         _render_break_even_heatmap(
             break_even_prepared,
             panel_idx=0,
@@ -1323,7 +1385,7 @@ def render_all(
             plot_title=plot_title,
         )
 
-    if _want("slide_break_even_high_gef"):
+    if _need("slide_break_even_high_gef"):
         _render_break_even_heatmap(
             break_even_prepared,
             panel_idx=1,
@@ -1332,7 +1394,7 @@ def render_all(
             plot_title=plot_title,
         )
 
-    if _want("slide_contribution_waterfall"):
+    if _need("slide_contribution_waterfall"):
         _render_contribution_waterfall(
             contribution_prepared,
             save_path=os.path.join(out, "slide_contribution_waterfall.png"),
@@ -1340,7 +1402,7 @@ def render_all(
             plot_title=plot_title,
         )
 
-    if _want("slide_top_city_contributions"):
+    if _need("slide_top_city_contributions"):
         _render_top_city_contributions(
             contribution_prepared,
             save_path=os.path.join(out, "slide_top_city_contributions.png"),
@@ -1350,7 +1412,7 @@ def render_all(
 
     scenario_data = None
     if any(
-        _want(name)
+        _need(name)
         for name in (
             "slide_pathway_current_reduction",
             "slide_pathway_clean_grid_reduction",
@@ -1366,7 +1428,7 @@ def render_all(
             exp_config=exp_config,
         )
 
-    if _want("slide_pathway_current_reduction"):
+    if _need("slide_pathway_current_reduction"):
         _render_pathway_reduction_map(
             scenario_data,
             scenario_label="a",
@@ -1375,7 +1437,7 @@ def render_all(
             plot_title=plot_title,
         )
 
-    if _want("slide_pathway_clean_grid_reduction"):
+    if _need("slide_pathway_clean_grid_reduction"):
         _render_pathway_reduction_map(
             scenario_data,
             scenario_label="b",
@@ -1384,7 +1446,7 @@ def render_all(
             plot_title=plot_title,
         )
 
-    if _want("slide_pathway_bundling_reduction"):
+    if _need("slide_pathway_bundling_reduction"):
         _render_pathway_reduction_map(
             scenario_data,
             scenario_label="c",
@@ -1393,7 +1455,7 @@ def render_all(
             plot_title=plot_title,
         )
 
-    if _want("slide_pathway_gef_curve"):
+    if _need("slide_pathway_gef_curve"):
         _render_pathway_curve(
             scenario_data,
             curve_key="gef",
@@ -1402,7 +1464,7 @@ def render_all(
             plot_title=plot_title,
         )
 
-    if _want("slide_pathway_kappa_curve"):
+    if _need("slide_pathway_kappa_curve"):
         _render_pathway_curve(
             scenario_data,
             curve_key="kappa",
