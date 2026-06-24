@@ -677,21 +677,21 @@ def _render_city_context_pair(
         _save_figure(fig, save_path, for_latex, plot_title, "Slide city context pair")
         return
 
-    fig = plt.figure(figsize=(12.8, 6.4))
-    outer = fig.add_gridspec(
-        len(contexts),
-        3,
-        width_ratios=[1.0, 1.0, 0.92],
-        hspace=0.42,
-        wspace=0.30,
-    )
+    fig = plt.figure(figsize=(6.4, 12.8))
+    outer = fig.add_gridspec(1, len(contexts), wspace=0.24)
 
     for i, context in enumerate(contexts):
         region_key = context["region_key"]
         display_name = context["display_name"]
         power_region_key = context.get("power_region_key", region_key)
+        col = outer[0, i].subgridspec(
+            3,
+            1,
+            height_ratios=[0.88, 0.88, 0.64],
+            hspace=0.24,
+        )
         if region_key not in binned_by_city:
-            ax = fig.add_subplot(outer[i, :])
+            ax = fig.add_subplot(col[:, 0])
             _placeholder_axis(
                 ax,
                 f"{display_name} context unavailable\nbinned data missing",
@@ -700,7 +700,7 @@ def _render_city_context_pair(
 
         _, ax_reduction, _ = _plot_reduction_detour_panel(
             fig,
-            outer[i, 0],
+            col[0],
             binned_by_city[region_key],
             labels.get(region_key, display_name),
             bin_width_km=0.1,
@@ -715,14 +715,14 @@ def _render_city_context_pair(
         )
         ax_scatter = _plot_reduction_absolute_scatter_panel(
             fig,
-            outer[i, 1],
+            col[1],
             binned_by_city[region_key],
             labels.get(region_key, display_name),
             min_air_km=0.2,
             absolute_reduction_metric="per_order_g",
             show_city_label=False,
         )
-        power_grid = outer[i, 2].subgridspec(
+        power_grid = col[2].subgridspec(
             1,
             2,
             width_ratios=[1.0, 0.72],
@@ -734,21 +734,21 @@ def _render_city_context_pair(
             ax_power_mix,
             power_region_key,
             legend_ax=ax_power_legend,
-            radius=1.12,
-            legend_fontsize=8.0,
-            legend_handlelength=1.05,
-            legend_handleheight=0.60,
-            legend_labelspacing=0.32,
+            radius=1.06,
+            legend_fontsize=7.4,
+            legend_handlelength=0.98,
+            legend_handleheight=0.54,
+            legend_labelspacing=0.26,
         )
         legend = ax_power_legend.get_legend()
         if legend is not None:
             for text in legend.get_texts():
-                text.set_fontsize(8.0)
+                text.set_fontsize(7.4)
 
         for ax in (ax_reduction, ax_scatter):
-            ax.xaxis.label.set_size(8.5)
-            ax.yaxis.label.set_size(8.5)
-            ax.tick_params(axis="both", labelsize=7.5)
+            ax.xaxis.label.set_size(7.8)
+            ax.yaxis.label.set_size(7.8)
+            ax.tick_params(axis="both", labelsize=6.8)
 
         panel_label_x = ax_reduction.get_position().x0 - 0.045
         city_panel_labels = "abcdef"[3 * i: 3 * i + 3]
