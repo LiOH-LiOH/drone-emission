@@ -1373,8 +1373,8 @@ def _render_pathway_direction_split(
         3,
         4,
         height_ratios=[1.16, 1.16, 0.52],
-        hspace=0.06,
-        wspace=0.01,
+        hspace=0.10,
+        wspace=0.0,
     )
     if not scenario_data:
         ax = fig.add_subplot(gs[:, :])
