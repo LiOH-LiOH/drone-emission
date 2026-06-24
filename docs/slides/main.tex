@@ -1152,44 +1152,129 @@
 
 \section{Discussion}
 
-\begin{frame}{Discussion and Future Work}
-  \begin{columns}
+\begin{frame}{Selective Substitution, Not Blanket Replacement}
+  \begin{columns}[T,totalwidth=\linewidth]
     \begin{column}{0.48\textwidth}
-      \textbf{Key Findings (n=314):}
-      \begin{itemize}
-        \item National optimal allocation saves \textbf{49.1~kt~CO$_2$e~yr$^{-1}$}, equal to \textbf{14.2\%} of the 346.6~kt all-e-bike baseline
-        \item Absolute gains concentrate in large markets: Beijing, Guangzhou, Shenzhen, Shanghai, and Chengdu
-        \item Relative gains are strongest in southwestern cities with cleaner grids and more indirect road travel
-        \item The observed 115 million-trip system therefore favors \textbf{targeted}, not uniform, drone substitution
-      \end{itemize}
+      \begin{block}{Main conclusion}
+        \small
+        Targeted drone assignment reduces lifecycle emissions, but only for
+        orders where route geometry, grid carbon intensity, and trip distance
+        overcome the strength of the incumbent e-bike system.
+      \end{block}
 
       \vspace{0.4em}
-      \textbf{Mechanism (national decomposition):}
+      \small
       \begin{itemize}
-        \item Production + end-of-life advantage: \textbf{+9.55} percentage points
-        \item Avoided road detours: \textbf{+33.84} percentage points
-        \item Drone electricity use: \textbf{$-$9.16} percentage points
-        \item E-bike bundling penalty: \textbf{$-$20.02} percentage points
+        \item Optimal allocation saves \textbf{49.1~kt~CO$_2$e~yr$^{-1}$}.
+        \item This equals \textbf{14.2\%} of the \textbf{346.6~kt~CO$_2$e~yr$^{-1}$} all-e-bike baseline.
+        \item Large markets dominate absolute savings: Beijing, Guangzhou, Shenzhen, Shanghai, and Chengdu.
       \end{itemize}
     \end{column}
     \begin{column}{0.48\textwidth}
-      \textbf{Policy Implications:}
+      \small
+      \textbf{Why the benchmark is stringent}
       \begin{itemize}
-        \item Grid decarbonization expands savings far more than operational bundling
-        \item Halving provincial GEF values lifts annual savings from \textbf{49} to \textbf{185~kt~CO$_2$e}
-        \item Stronger bundling raises savings against today's anchor to \textbf{72~kt~CO$_2$e} but narrows the drone-favorable trip set
-        \item Deployment should prioritize \textbf{clean-grid, high-detour, longer-trip} city contexts
-      \end{itemize}
-
-      \vspace{0.4em}
-      \textbf{Future Work:}
-      \begin{itemize}
-        \item Replace the stylized halved-GEF pathway with externally grounded provincial grid trajectories
-        \item Incorporate \textbf{economic} analysis
-        \item Account for \textbf{weather impact} on drone operations
+        \item The reference case is all-e-bike delivery, not diesel vans, cars, or gasoline motorcycles.
+        \item Platform dispatch already makes e-bike delivery unusually efficient through short radii and bundled trips.
+        \item The result supports drones as a \textbf{targeted complement}, not a general replacement for electric ground delivery.
       \end{itemize}
     \end{column}
   \end{columns}
+\end{frame}
+
+\begin{frame}{Why the Drone Advantage Is Conditional}
+  \small
+  \begin{columns}[T,totalwidth=\linewidth]
+    \begin{column}{0.48\textwidth}
+      \textbf{Positive mechanisms}
+      \begin{itemize}
+        \item \textbf{Production + end-of-life advantage:} +9.55 percentage points
+        \item \textbf{Avoided road detours:} +33.84 percentage points
+        \item Direct flight converts indirect road travel into shorter air routes when the road network imposes meaningful detours.
+      \end{itemize}
+    \end{column}
+    \begin{column}{0.48\textwidth}
+      \textbf{Offsetting mechanisms}
+      \begin{itemize}
+        \item \textbf{Drone electricity use:} $-$9.16 percentage points
+        \item \textbf{E-bike bundling penalty:} $-$20.02 percentage points
+        \item Takeoff, cruise, and landing are energy intensive, while bundled e-bike trips lower the counterfactual emissions per order.
+      \end{itemize}
+    \end{column}
+  \end{columns}
+
+  \vspace{0.8em}
+  \begin{block}{Interpretation}
+    \small
+    The net \textbf{14.20-point} national reduction is a lifecycle trade-off, not a mode-wide ranking between drones and e-bikes.
+  \end{block}
+\end{frame}
+
+\begin{frame}{Deployment Envelope and Policy Implications}
+  \begin{columns}[T,totalwidth=\linewidth]
+    \begin{column}{0.48\textwidth}
+      \small
+      \textbf{Drone-favorable operating envelope}
+      \begin{itemize}
+        \item \textbf{Clean grids:} low GEF weakens the drone use-phase penalty.
+        \item \textbf{Indirect roads:} high detour ratio increases the value of direct flight.
+        \item \textbf{Sufficient distance:} longer trips dilute fixed takeoff and landing energy.
+      \end{itemize}
+    \end{column}
+    \begin{column}{0.48\textwidth}
+      \small
+      \textbf{Pathway contrast}
+      \begin{itemize}
+        \item Halving provincial GEF raises annual savings from \textbf{49} to \textbf{185~kt~CO$_2$e}.
+        \item Median drone share rises from \textbf{47\%} to \textbf{77\%} under the cleaner-grid pathway.
+        \item Stronger e-bike bundling raises savings to \textbf{72~kt~CO$_2$e}, but lowers median drone share to \textbf{20\%}.
+      \end{itemize}
+    \end{column}
+  \end{columns}
+
+  \vspace{0.6em}
+  \begin{block}{Policy implication}
+    \small
+    Grid decarbonization expands both the carbon value and feasible scale of drone substitution, while stronger bundling improves the e-bike baseline and narrows the drone-favorable trip set.
+  \end{block}
+\end{frame}
+
+\begin{frame}{Transferability, Limits, and Future Work}
+  \footnotesize
+  \begin{columns}[T,totalwidth=\linewidth]
+    \begin{column}{0.32\textwidth}
+      \textbf{Transferability}
+      \begin{itemize}
+        \item Larger benefits are plausible where food delivery uses gasoline motorcycles, cars, or vans.
+        \item In e-bike-based systems, the Chinese result is the more relevant benchmark.
+        \item Coal-heavy or island grids need decarbonized charging before large CO$_2$e gains are likely.
+      \end{itemize}
+    \end{column}
+    \begin{column}{0.32\textwidth}
+      \textbf{Current limits}
+      \begin{itemize}
+        \item Single 1~kg payload assumption.
+        \item Simplified weather, hover time, battery temperature, charging schedules, and airspace constraints.
+        \item Beijing-calibrated OD model transferred nationally.
+        \item Annual GEFs rather than marginal or time-of-day emissions.
+      \end{itemize}
+    \end{column}
+    \begin{column}{0.32\textwidth}
+      \textbf{Next steps}
+      \begin{itemize}
+        \item Use externally grounded provincial grid trajectories.
+        \item Add economics and service-quality constraints.
+        \item Model marginal electricity and charging timing.
+        \item Represent richer platform bundling and dispatch behavior.
+      \end{itemize}
+    \end{column}
+  \end{columns}
+
+  \vspace{0.5em}
+  \begin{block}{Boundary condition}
+    \footnotesize
+    The transferable claim is not that drones are cleaner everywhere; it is that their emissions case depends on grid carbon intensity, route geometry, trip distance, and incumbent logistics.
+  \end{block}
 \end{frame}
 
 \section{References}
