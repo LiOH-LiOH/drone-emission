@@ -81,6 +81,10 @@ SLIDE_CITY_CONTEXT_PAIRS = {
         CITY_CONTEXT_FIGURES["dali_city_context"],
         CITY_CONTEXT_FIGURES["chengdu_city_context"],
     ),
+    "slide_high_gef_city_contexts": (
+        CITY_CONTEXT_FIGURES["tianjin_city_context"],
+        CITY_CONTEXT_FIGURES["guangzhou_city_context"],
+    ),
 }
 
 PAPER_FIGURE_REUSE = {
@@ -631,6 +635,7 @@ def _render_city_context_pair(
     save_path: str,
     for_latex: bool = False,
     plot_title: bool = False,
+    title: str | None = None,
 ):
     """Render two city-context blocks as one slide figure."""
     region_keys = [context["region_key"] for context in contexts]
@@ -755,7 +760,7 @@ def _render_city_context_pair(
         )
 
     if plot_title:
-        fig.suptitle("Low-GEF City Contexts", fontsize=14, fontweight="bold")
+        fig.suptitle(title or "City Contexts", fontsize=14, fontweight="bold")
 
     _save_figure(fig, save_path, for_latex, plot_title, "Slide city context pair")
 
@@ -1387,7 +1392,7 @@ def render_all(
             "slide_city_context_chengdu",
             "slide_city_context_tianjin",
             "slide_city_context_guangzhou",
-            "slide_low_gef_city_contexts",
+            *SLIDE_CITY_CONTEXT_PAIRS,
             *PAPER_CACHE_BACKED_SLIDES,
         )
     ):
@@ -1533,6 +1538,7 @@ def render_all(
                 save_path=os.path.join(out, f"{figure_name}.png"),
                 for_latex=for_latex,
                 plot_title=plot_title,
+                title=figure_name.replace("slide_", "").replace("_", " ").title(),
             )
 
         for figure_name, context in SLIDE_CONTEXTS.items():
