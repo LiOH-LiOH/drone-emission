@@ -23,12 +23,10 @@ from scipy import stats
 from analysis.constants import VARIABLE_LABELS
 from visualization._utils import _add_title_suffix
 from visualization.analysis import (
-    _add_map_summary_bars,
     _annotate_unstudied,
     _build_absolute_reduction_log_cmap,
     _build_reduction_cmap,
     _draw_discrete_reduction_colorbar,
-    _format_kappa_value,
     _oracle_reduction_tonnes_column,
     _override_pathway_curve_endpoint,
     _pathway_curve_metric_limits,
@@ -36,7 +34,6 @@ from visualization.analysis import (
     _plot_city_oracle_reduction_rank,
     _plot_pathway_curve_panel,
     _prepare_pathway_scenario_data,
-    _summary_bar_limits,
     _weighted_reduction_column,
 )
 from visualization.concepts import _draw_detour_ratio_concept
@@ -165,30 +162,6 @@ def _render_city_reduction_map(
     inset_ax.set_facecolor("none")
     inset_ax.patch.set_alpha(0.0)
 
-    summary_text = "\n".join(
-        [
-            "314 mapped cities",
-            "115 million empirically grounded trips",
-            "49.1 kt CO2e/yr avoided",
-            "14.2% below the 346.6 kt all-e-bike baseline",
-        ]
-    )
-    ax.text(
-        0.03,
-        0.97,
-        summary_text,
-        transform=ax.transAxes,
-        ha="left",
-        va="top",
-        fontsize=9.5,
-        bbox={
-            "boxstyle": "round,pad=0.28",
-            "facecolor": "white",
-            "edgecolor": "#bbbbbb",
-            "alpha": 0.92,
-        },
-    )
-
     fig.canvas.draw()
     ax_pos = ax.get_position()
     cbar_ax = fig.add_axes((ax_pos.x1 + 0.01, ax_pos.y0, 0.016, ax_pos.height))
@@ -256,46 +229,9 @@ def _render_reduction_distribution(
 
     mean_value = float(values.mean())
     median_value = float(values.median())
-    in_core_band = int(((values >= 5.0) & (values <= 20.0)).sum())
     ax.axvspan(5.0, 20.0, color="#e5f5e0", alpha=0.55, zorder=0)
     ax.axvline(mean_value, color="#1b7837", linewidth=1.4, linestyle="--", zorder=4)
     ax.axvline(median_value, color="#762a83", linewidth=1.4, linestyle="-.", zorder=4)
-
-    top_relative = (
-        city_df.assign(_reduction_value=pd.to_numeric(city_df[reduction_col], errors="coerce"))
-        .dropna(subset=["_reduction_value", "region_name_en"])
-        .sort_values("_reduction_value", ascending=False)
-        .head(5)
-    )
-    top_lines = [
-        f"{row['region_name_en']} {row['_reduction_value']:.1f}%"
-        for _, row in top_relative.iterrows()
-    ]
-    ax.text(
-        0.98,
-        0.97,
-        "\n".join(
-            [
-                f"Median {median_value:.1f}%",
-                f"Mean {mean_value:.1f}%",
-                f"{in_core_band} of {len(values)} cities between 5% and 20%",
-                "",
-                "Top relative reductions:",
-                *top_lines,
-            ]
-        ),
-        transform=ax.transAxes,
-        ha="right",
-        va="top",
-        fontsize=9.2,
-        bbox={
-            "boxstyle": "round,pad=0.30",
-            "facecolor": "white",
-            "edgecolor": "#bbbbbb",
-            "alpha": 0.94,
-        },
-        zorder=5,
-    )
 
     ax.set_xlabel("Lifecycle reduction vs all-e-bike baseline (%)", fontsize=11)
     ax.set_ylabel("Cities", fontsize=11)
@@ -409,10 +345,6 @@ def _render_selected_trip_lifecycle(
             color="#222222",
         )
 
-    air_km = float(sample["distance_km"])
-    road_km = float(sample["road_distance_m"]) / 1000.0
-    reduction_pct = (1.0 - totals[1] / totals[0]) * 100.0 if totals[0] > 0 else np.nan
-
     ax.set_xticks(x)
     ax.set_xticklabels(["E-bike", "Drone"])
     ax.set_ylabel("Lifecycle emission (g CO2e/order)", fontsize=11)
@@ -421,29 +353,6 @@ def _render_selected_trip_lifecycle(
     ax.spines["top"].set_visible(False)
     ax.spines["right"].set_visible(False)
     ax.legend(frameon=False, loc="upper left", fontsize=9, ncol=3, bbox_to_anchor=(0.0, 1.10))
-    ax.text(
-        0.98,
-        0.97,
-        "\n".join(
-            [
-                "Beijing median trip",
-                f"Air route {air_km:.2f} km",
-                f"Road route {road_km:.2f} km",
-                f"Detour ratio {road_km / air_km:.2f}",
-                f"Lifecycle reduction {reduction_pct:.1f}%",
-            ]
-        ),
-        transform=ax.transAxes,
-        ha="right",
-        va="top",
-        fontsize=9.0,
-        bbox={
-            "boxstyle": "round,pad=0.28",
-            "facecolor": "white",
-            "edgecolor": "#bbbbbb",
-            "alpha": 0.92,
-        },
-    )
 
     if plot_title:
         ax.set_title("Selected-trip lifecycle trade-off", fontsize=14, fontweight="bold")
@@ -593,38 +502,6 @@ def _render_detour_reduction_regime(
                 color=line_color,
                 zorder=4,
             )
-        stats_text = "\n".join(
-            [
-                f"{title_text} (GEF {'<=' if regime == 'low' else '>'} 0.3)",
-                f"n = {len(valid)} cities",
-                f"r = {r_value:.2f}",
-                f"p = {p_value:.1e}",
-                f"Reduction range {y.min():.1f}% to {y.max():.1f}%",
-            ]
-        )
-    else:
-        stats_text = "\n".join(
-            [
-                f"{title_text} (GEF {'<=' if regime == 'low' else '>'} 0.3)",
-                f"n = {len(valid)} cities",
-            ]
-        )
-
-    ax.text(
-        0.03,
-        0.97,
-        stats_text,
-        transform=ax.transAxes,
-        ha="left",
-        va="top",
-        fontsize=9.2,
-        bbox={
-            "boxstyle": "round,pad=0.28",
-            "facecolor": "white",
-            "edgecolor": "#bbbbbb",
-            "alpha": 0.92,
-        },
-    )
     ax.set_xlabel(VARIABLE_LABELS.get("detour_ratio", "Detour ratio"), fontsize=11)
     ax.set_ylabel(VARIABLE_LABELS.get(reduction_col, reduction_col), fontsize=11)
     ax.grid(True, alpha=0.28, linestyle="--")
@@ -744,20 +621,6 @@ def _render_break_even_surface(
     ax.xaxis.pane.set_alpha(0.0)
     ax.yaxis.pane.set_alpha(0.0)
     ax.zaxis.pane.set_alpha(0.0)
-    ax.text2D(
-        0.02,
-        0.93,
-        "Delta g = 0 surface\nnegative side favors drones",
-        transform=ax.transAxes,
-        fontsize=9.2,
-        bbox={
-            "boxstyle": "round,pad=0.22",
-            "facecolor": "white",
-            "alpha": 0.84,
-            "edgecolor": "none",
-        },
-    )
-
     surface_colorbar = fig.colorbar(
         ScalarMappable(cmap=line_cmap, norm=line_norm),
         ax=ax,
@@ -825,22 +688,6 @@ def _render_break_even_heatmap(
     ax.set_xlabel("Air distance (km)", fontsize=11)
     ax.set_ylabel("Detour ratio (road / air)", fontsize=11)
     ax.grid(alpha=0.15)
-    ax.text(
-        0.03,
-        0.97,
-        f"{gef_panel['label']}\nGEF = {gef_panel['gef']:.4g}",
-        transform=ax.transAxes,
-        ha="left",
-        va="top",
-        fontsize=9.2,
-        bbox={
-            "boxstyle": "round,pad=0.22",
-            "facecolor": "white",
-            "alpha": 0.82,
-            "edgecolor": "none",
-        },
-        zorder=7,
-    )
     cbar = fig.colorbar(
         im,
         ax=ax,
@@ -988,44 +835,10 @@ def _render_pathway_reduction_map(
         spine.set_visible(False)
 
     scenario_meta = {
-        label: (title, kappa, gef_mult)
+        label: title
         for label, title, kappa, gef_mult, _strategy in scenario_data["panels"]
     }
-    title, kappa, gef_mult = scenario_meta[scenario_label]
-    share_limits, saved_limits = _summary_bar_limits(
-        scenario_data["drone_share_median"],
-        scenario_data["annual_saved_total_kg"],
-    )
-    if scenario_label in scenario_data["drone_share_median"]:
-        _add_map_summary_bars(
-            ax,
-            scenario_data["drone_share_median"].get(scenario_label, np.nan),
-            scenario_data["annual_saved_total_kg"].get(scenario_label, np.nan) / 1e6,
-            share_limits,
-            saved_limits,
-        )
-
-    ax.text(
-        0.03,
-        0.97,
-        "\n".join(
-            [
-                title,
-                f"kappa = {_format_kappa_value(kappa)}",
-                f"GEF multiplier = {gef_mult:.2f}",
-            ]
-        ),
-        transform=ax.transAxes,
-        ha="left",
-        va="top",
-        fontsize=9.2,
-        bbox={
-            "boxstyle": "round,pad=0.26",
-            "facecolor": "white",
-            "edgecolor": "#bbbbbb",
-            "alpha": 0.92,
-        },
-    )
+    title = scenario_meta[scenario_label]
 
     fig.canvas.draw()
     ax_pos = ax.get_position()
