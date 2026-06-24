@@ -32,18 +32,28 @@
 %------------------------------------------------------------
 %This block of code defines the information to appear in the
 %Title page
-\title[Drones for Food Delivery] %optional
-{A Gravity-Based Framework for Scaling Emissions Assessment of Drone and E-Bike Food Delivery Systems}
+\title[Drone vs E-Bike Delivery Emissions] %optional
+{Drone food delivery can reduce emissions in clean-grid cities with indirect road networks}
 
 % \subtitle{A short story}
 
-\author[Jingxian Lin] % (optional)
-{Jingxian Lin}
-
-\institute[HKU] % (optional)
+\author[Lin et al.] % (optional)
 {
-  Department of Civil Engineering\\
-  The University of Hong Kong
+  \small
+  Jingxian Lin\inst{1,*},
+  Weiping Wang\inst{2,*},
+  Xinglu Liu\inst{1},
+  Hongzheng Shi\inst{1},
+  Jintao Ke\inst{1},
+  Klaus Hubacek\inst{3}
+}
+
+\institute[HKU, Tongji, Groningen] % (optional)
+{
+  \inst{1} Department of Civil Engineering, The University of Hong Kong\\
+  \inst{2} Tongji University\\
+  \inst{3} Faculty of Science and Engineering, University of Groningen\\
+  \inst{*} These authors contributed equally to this work.
 }
 
 \date[\today] % (optional)
@@ -463,6 +473,7 @@
   \end{columns}
 \end{frame}
 
+\iffalse
 \begin{frame}{Road Distance Calculation - Scaling Challenge}
   \textbf{Challenge:} Extending from district to city level
 
@@ -554,6 +565,7 @@
     \item Enables scaling to \textbf{city-level analysis}: Shenzhen 4{,}139{,}421 / 4{,}390{,}883 valid paths (94.3\%) in 511\,s
   \end{itemize}
 \end{frame}
+\fi
 
 \begin{frame}{Use-phase Emission Model - E-bike}
 
@@ -596,12 +608,26 @@
 \end{frame}
 
 \begin{frame}{Use-phase Emission Model - Power Breakdown}
-  \begin{figure}
-    \centering
-    \includegraphics[width=0.9\linewidth]{../../figures/sensitivity/sensitivity_velocity_power_stacked.pdf}
-    \caption{\textbf{Power consumption breakdown by component for drone and e-bike at varying velocities.} (a) Drone power components: induced power, profile drag, parasitic drag, climb power, and auxiliary systems. (b) E-bike power components: rolling resistance, aerodynamic drag, grade resistance, and acceleration.}
-    \label{fig:sensitivity_power_breakdown}
-  \end{figure}
+  \small
+  \begin{center}
+    \captionof{table}{Power consumption components represented in the use-phase model}
+    \begin{tabular}{l l l}
+      \toprule
+      Mode & Component & Main driver \\
+      \midrule
+      Drone & Induced power & Lift and total weight \\
+      Drone & Profile power & Rotor speed and blade drag \\
+      Drone & Fuselage drag & Air density, frontal area, velocity \\
+      Drone & Climb power & Payload, gravity, flight angle \\
+      Drone & Auxiliary power & Onboard electronics \\
+      \midrule
+      E-bike & Rolling resistance & Mass, speed, road friction \\
+      E-bike & Aerodynamic drag & Air density, frontal area, velocity \\
+      E-bike & Grade resistance & Mass, speed, road slope \\
+      E-bike & Acceleration power & Stop frequency and speed \\
+      \bottomrule
+    \end{tabular}
+  \end{center}
 \end{frame}
 
 \begin{frame}{Use-phase Emission Model - Emission Equations}
@@ -692,13 +718,14 @@
 
 \section{Results}
 
+\iffalse
 \begin{frame}{Use-phase Emission Model Comparison}
-  \begin{figure}
-    \centering
-    \includegraphics[width=0.7\linewidth]{../../figures/sensitivity/sensitivity_distance_route_factor.pdf}
-    \caption{\textbf{Two-dimensional sensitivity analysis of delivery distance and route factor on relative emissions.} The heatmap shows the percentage difference in drone emissions relative to e-bike emissions. The black contour line indicates the breakeven point where both delivery modes produce equal emissions. Negative values (green) indicate scenarios where drone delivery is more environmentally favorable.}
-    \label{fig:sensitivity_heatmap}
-  \end{figure}
+  \begin{itemize}
+    \item Use-phase emissions depend primarily on delivery distance, route factor, vehicle power, speed, and grid carbon intensity.
+    \item Drones use straight-line air distance, while e-bikes follow road-network distance and therefore absorb detour penalties.
+    \item Drone use-phase advantage expands when road detours are large or when the grid emission factor is low.
+    \item E-bike bundling can reduce per-order road distance and narrow the drone-favorable envelope.
+  \end{itemize}
 \end{frame}
 
 \begin{frame}{Lifecycle Emission Model Comparison}
@@ -765,6 +792,7 @@
     \end{column}
   \end{columns}
 \end{frame}
+\fi
 
 % Equity frames hidden — not contributing to current narrative
 \iffalse
@@ -825,6 +853,7 @@
     \centering
     \includegraphics[width=0.86\linewidth]{../../figures/slides/slide_city_reduction_map.pdf}
     \caption{\textbf{National lifecycle reduction across 314 mapped cities.} The empirically grounded 115 million-trip system saves 49.1~kt~CO$_2$e~yr$^{-1}$, equal to 14.2\% of the 346.6~kt all-e-bike baseline. The largest absolute savings occur in Beijing (3.27~kt), Guangzhou (2.52~kt), Shenzhen (2.22~kt), Shanghai (2.14~kt), and Chengdu (2.01~kt).}
+    \label{fig:slide_city_reduction_map}
   \end{figure}
 \end{frame}
 
@@ -833,23 +862,26 @@
     \centering
     \includegraphics[width=0.82\linewidth]{../../figures/slides/slide_reduction_distribution.pdf}
     \caption{\textbf{Relative savings are positive but uneven.} The city-level distribution has a median reduction of 11.3\%, a mean of 14.4\%, and 250 of 314 cities between 5\% and 20\%. The strongest relative reductions are in Panzhihua (45.0\%), Zhaotong (42.2\%), Kunming (40.7\%), Xishuangbanna (40.4\%), and Qujing (40.1\%).}
+    \label{fig:slide_reduction_distribution}
   \end{figure}
 \end{frame}
 
 \begin{frame}{Trip-Level Mechanism}
-  \begin{columns}[T]
-    \begin{column}{0.46\textwidth}
-      \centering
-      \includegraphics[width=\linewidth]{../../figures/slides/slide_detour_route_mechanism.pdf}
-    \end{column}
-    \begin{column}{0.52\textwidth}
-      \centering
-      \includegraphics[width=\linewidth]{../../figures/slides/slide_selected_trip_lifecycle.pdf}
-    \end{column}
-  \end{columns}
-  \vspace{0.4em}
-  \footnotesize
-  For the selected Beijing median trip, the drone flies 1.82~km while the e-bike travels 2.76~km on roads (detour ratio 1.52). The drone's lower production and end-of-life burdens outweigh its higher use-phase electricity demand, reducing lifecycle emissions from 47.8 to 40.7~g~CO$_2$e per order.
+  \begin{figure}
+    \centering
+    \begin{columns}[T]
+      \begin{column}{0.46\textwidth}
+        \centering
+        \includegraphics[width=\linewidth]{../../figures/slides/slide_detour_route_mechanism.pdf}
+      \end{column}
+      \begin{column}{0.52\textwidth}
+        \centering
+        \includegraphics[width=\linewidth]{../../figures/slides/slide_selected_trip_lifecycle.pdf}
+      \end{column}
+    \end{columns}
+    \caption{\textbf{Trip-level lifecycle mechanism.} For the selected Beijing median trip, the drone flies 1.82~km while the e-bike travels 2.76~km on roads (detour ratio 1.52). The drone's lower production and end-of-life burdens outweigh its higher use-phase electricity demand, reducing lifecycle emissions from 47.8 to 40.7~g~CO$_2$e per order.}
+    \label{fig:slide_trip_level_mechanism}
+  \end{figure}
 \end{frame}
 
 \begin{frame}{Grid Carbon Intensity Changes the Lifecycle Balance}
@@ -857,129 +889,145 @@
     \centering
     \includegraphics[width=0.88\linewidth]{../../figures/slides/slide_gef_component_bins.pdf}
     \caption{\textbf{GEF reshapes the use-phase penalty.} In low-GEF bins, drones retain most of their embodied-emission advantage; in the 0.7--0.8~kg~CO$_2$e~kWh$^{-1}$ bin, the drone and e-bike totals converge to 90.9 and 93.2~g~CO$_2$e per order.}
+    \label{fig:slide_gef_component_bins}
   \end{figure}
 \end{frame}
 
 \begin{frame}{Low-GEF City Contexts}
-  \begin{columns}[T]
-    \begin{column}{0.49\textwidth}
-      \centering
-      \includegraphics[width=\linewidth]{../../figures/slides/slide_city_context_dali.pdf}
-    \end{column}
-    \begin{column}{0.49\textwidth}
-      \centering
-      \includegraphics[width=\linewidth]{../../figures/slides/slide_city_context_chengdu.pdf}
-    \end{column}
-  \end{columns}
-  \vspace{0.4em}
-  \footnotesize
-  In hydropower-rich Dali and Chengdu, drones are already favorable for most short trips: drone shares at 0.3~km reach 98.7\% and 85.2\%, respectively.
+  \begin{figure}
+    \centering
+    \begin{columns}[T]
+      \begin{column}{0.49\textwidth}
+        \centering
+        \includegraphics[width=\linewidth,height=0.58\textheight,keepaspectratio]{../../figures/slides/slide_city_context_dali.pdf}
+      \end{column}
+      \begin{column}{0.49\textwidth}
+        \centering
+        \includegraphics[width=\linewidth,height=0.58\textheight,keepaspectratio]{../../figures/slides/slide_city_context_chengdu.pdf}
+      \end{column}
+    \end{columns}
+    \caption{\textbf{Low-GEF city contexts.} In hydropower-rich Dali and Chengdu, drones are already favorable for most short trips: drone shares at 0.3~km reach 98.7\% and 85.2\%, respectively.}
+    \label{fig:slide_low_gef_city_contexts}
+  \end{figure}
 \end{frame}
 
 \begin{frame}{High-GEF City Contexts}
-  \begin{columns}[T]
-    \begin{column}{0.49\textwidth}
-      \centering
-      \includegraphics[width=\linewidth]{../../figures/slides/slide_city_context_tianjin.pdf}
-    \end{column}
-    \begin{column}{0.49\textwidth}
-      \centering
-      \includegraphics[width=\linewidth]{../../figures/slides/slide_city_context_guangzhou.pdf}
-    \end{column}
-  \end{columns}
-  \vspace{0.4em}
-  \footnotesize
-  Under more carbon-intensive grids, short trips are less favorable: at 0.3~km Tianjin reaches only 19.4\% drone share and $-24.8\%$ reduction, while Guangzhou reaches 33.0\% and $-3.3\%$. By 4.9~km, Guangzhou rises to 96.7\% drone share and 18.5\% reduction.
+  \begin{figure}
+    \centering
+    \begin{columns}[T]
+      \begin{column}{0.49\textwidth}
+        \centering
+        \includegraphics[width=\linewidth,height=0.58\textheight,keepaspectratio]{../../figures/slides/slide_city_context_tianjin.pdf}
+      \end{column}
+      \begin{column}{0.49\textwidth}
+        \centering
+        \includegraphics[width=\linewidth,height=0.58\textheight,keepaspectratio]{../../figures/slides/slide_city_context_guangzhou.pdf}
+      \end{column}
+    \end{columns}
+    \caption{\textbf{High-GEF city contexts.} Under more carbon-intensive grids, short trips are less favorable: at 0.3~km Tianjin reaches only 19.4\% drone share and $-24.8\%$ reduction, while Guangzhou reaches 33.0\% and $-3.3\%$. By 4.9~km, Guangzhou rises to 96.7\% drone share and 18.5\% reduction.}
+    \label{fig:slide_high_gef_city_contexts}
+  \end{figure}
 \end{frame}
 
 \begin{frame}{Detour Ratio Matters Within Each Grid Regime}
-  \begin{columns}[T]
-    \begin{column}{0.49\textwidth}
-      \centering
-      \includegraphics[width=\linewidth]{../../figures/slides/slide_detour_reduction_low_gef.pdf}
-    \end{column}
-    \begin{column}{0.49\textwidth}
-      \centering
-      \includegraphics[width=\linewidth]{../../figures/slides/slide_detour_reduction_high_gef.pdf}
-    \end{column}
-  \end{columns}
-  \vspace{0.4em}
-  \footnotesize
-  Splitting cities at GEF~=~0.3~kg~CO$_2$e~kWh$^{-1}$ shows a positive detour--reduction relationship in both regimes: low-GEF cities ($n=41$) span 17.2--45.0\% reduction with $r=0.73$, while high-GEF cities ($n=235$) span 3.2--26.2\% with $r=0.94$.
+  \begin{figure}
+    \centering
+    \begin{columns}[T]
+      \begin{column}{0.49\textwidth}
+        \centering
+        \includegraphics[width=\linewidth]{../../figures/slides/slide_detour_reduction_low_gef.pdf}
+      \end{column}
+      \begin{column}{0.49\textwidth}
+        \centering
+        \includegraphics[width=\linewidth]{../../figures/slides/slide_detour_reduction_high_gef.pdf}
+      \end{column}
+    \end{columns}
+    \caption{\textbf{Detour ratio matters within each grid regime.} Splitting cities at GEF~=~0.3~kg~CO$_2$e~kWh$^{-1}$ shows a positive detour--reduction relationship in both regimes: low-GEF cities ($n=41$) span 17.2--45.0\% reduction with $r=0.73$, while high-GEF cities ($n=235$) span 3.2--26.2\% with $r=0.94$.}
+    \label{fig:slide_detour_reduction_by_gef}
+  \end{figure}
 \end{frame}
 
 \begin{frame}{Break-Even Operating Envelope}
-  \begin{columns}[T]
-    \begin{column}{0.34\textwidth}
-      \centering
-      \includegraphics[width=\linewidth]{../../figures/slides/slide_break_even_surface.pdf}
-    \end{column}
-    \begin{column}{0.31\textwidth}
-      \centering
-      \includegraphics[width=\linewidth]{../../figures/slides/slide_break_even_low_gef.pdf}
-    \end{column}
-    \begin{column}{0.31\textwidth}
-      \centering
-      \includegraphics[width=\linewidth]{../../figures/slides/slide_break_even_high_gef.pdf}
-    \end{column}
-  \end{columns}
-  \vspace{0.4em}
-  \footnotesize
-  The break-even surface turns the city pattern into a trip-level rule: cleaner grids, longer air distances, and larger road detours expand the drone-favorable region. At GEF~=~0.1404 the median $\Delta g$ is $-22.9$~g~CO$_2$e per order; at GEF~=~0.49 the field widens and short, low-detour trips remain e-bike-favorable.
+  \begin{figure}
+    \centering
+    \begin{columns}[T]
+      \begin{column}{0.34\textwidth}
+        \centering
+        \includegraphics[width=\linewidth]{../../figures/slides/slide_break_even_surface.pdf}
+      \end{column}
+      \begin{column}{0.31\textwidth}
+        \centering
+        \includegraphics[width=\linewidth]{../../figures/slides/slide_break_even_low_gef.pdf}
+      \end{column}
+      \begin{column}{0.31\textwidth}
+        \centering
+        \includegraphics[width=\linewidth]{../../figures/slides/slide_break_even_high_gef.pdf}
+      \end{column}
+    \end{columns}
+    \caption{\textbf{Break-even operating envelope.} The break-even surface turns the city pattern into a trip-level rule: cleaner grids, longer air distances, and larger road detours expand the drone-favorable region. At GEF~=~0.1404 the median $\Delta g$ is $-22.9$~g~CO$_2$e per order; at GEF~=~0.49 the field widens and short, low-detour trips remain e-bike-favorable.}
+    \label{fig:slide_break_even_operating_envelope}
+  \end{figure}
 \end{frame}
 
 \begin{frame}{National Mechanism Decomposition}
-  \begin{columns}[T]
-    \begin{column}{0.43\textwidth}
-      \centering
-      \includegraphics[width=\linewidth]{../../figures/slides/slide_contribution_waterfall.pdf}
-    \end{column}
-    \begin{column}{0.55\textwidth}
-      \centering
-      \includegraphics[width=\linewidth]{../../figures/slides/slide_top_city_contributions.pdf}
-    \end{column}
-  \end{columns}
-  \vspace{0.4em}
-  \footnotesize
-  Relative to the all-e-bike lifecycle baseline, lower production plus end-of-life emissions add 9.55 percentage points and avoided road detours add 33.84 percentage points, partly offset by higher drone electricity use ($-9.16$ points) and e-bike bundling ($-20.02$ points), leaving a net 14.20-point national reduction.
+  \begin{figure}
+    \centering
+    \begin{columns}[T]
+      \begin{column}{0.43\textwidth}
+        \centering
+        \includegraphics[width=\linewidth]{../../figures/slides/slide_contribution_waterfall.pdf}
+      \end{column}
+      \begin{column}{0.55\textwidth}
+        \centering
+        \includegraphics[width=\linewidth]{../../figures/slides/slide_top_city_contributions.pdf}
+      \end{column}
+    \end{columns}
+    \caption{\textbf{National mechanism decomposition.} Relative to the all-e-bike lifecycle baseline, lower production plus end-of-life emissions add 9.55 percentage points and avoided road detours add 33.84 percentage points, partly offset by higher drone electricity use ($-9.16$ points) and e-bike bundling ($-20.02$ points), leaving a net 14.20-point national reduction.}
+    \label{fig:slide_national_mechanism_decomposition}
+  \end{figure}
 \end{frame}
 
 \begin{frame}{Pathway Scenario Maps}
-  \begin{columns}[T]
-    \begin{column}{0.33\textwidth}
-      \centering
-      \includegraphics[width=\linewidth]{../../figures/slides/slide_pathway_current_reduction.pdf}
-    \end{column}
-    \begin{column}{0.33\textwidth}
-      \centering
-      \includegraphics[width=\linewidth]{../../figures/slides/slide_pathway_clean_grid_reduction.pdf}
-    \end{column}
-    \begin{column}{0.33\textwidth}
-      \centering
-      \includegraphics[width=\linewidth]{../../figures/slides/slide_pathway_bundling_reduction.pdf}
-    \end{column}
-  \end{columns}
-  \vspace{0.4em}
-  \footnotesize
-  Under today's grid and today's weighted bundling value ($\kappa=0.769$), the optimal mixed strategy saves 49~kt~CO$_2$e per year and assigns a median 47\% of orders to drones. Halving provincial GEF values lifts savings to 185~kt and the median drone share to 77\%; stronger bundling ($\kappa=0.65$) raises savings to 72~kt but lowers the median drone share to 20\%.
+  \begin{figure}
+    \centering
+    \begin{columns}[T]
+      \begin{column}{0.33\textwidth}
+        \centering
+        \includegraphics[width=\linewidth]{../../figures/slides/slide_pathway_current_reduction.pdf}
+      \end{column}
+      \begin{column}{0.33\textwidth}
+        \centering
+        \includegraphics[width=\linewidth]{../../figures/slides/slide_pathway_clean_grid_reduction.pdf}
+      \end{column}
+      \begin{column}{0.33\textwidth}
+        \centering
+        \includegraphics[width=\linewidth]{../../figures/slides/slide_pathway_bundling_reduction.pdf}
+      \end{column}
+    \end{columns}
+    \caption{\textbf{Pathway scenario maps.} Under today's grid and today's weighted bundling value ($\kappa=0.769$), the optimal mixed strategy saves 49~kt~CO$_2$e per year and assigns a median 47\% of orders to drones. Halving provincial GEF values lifts savings to 185~kt and the median drone share to 77\%; stronger bundling ($\kappa=0.65$) raises savings to 72~kt but lowers the median drone share to 20\%.}
+    \label{fig:slide_pathway_scenario_maps}
+  \end{figure}
 \end{frame}
 
 \begin{frame}{Pathway Response Curves}
-  \begin{columns}[T]
-    \begin{column}{0.49\textwidth}
-      \centering
-      \includegraphics[width=\linewidth]{../../figures/slides/slide_pathway_gef_curve.pdf}
-    \end{column}
-    \begin{column}{0.49\textwidth}
-      \centering
-      \includegraphics[width=\linewidth]{../../figures/slides/slide_pathway_kappa_curve.pdf}
-    \end{column}
-  \end{columns}
-  \vspace{0.4em}
-  \footnotesize
-  Grid decarbonization expands both the carbon value and the feasible scale of drone substitution: as the GEF multiplier falls from 1.0 to 0.5, annual savings rise from 49 to 185~kt~CO$_2$e and median drone share rises from 47\% to 77\%. Lower $\kappa$ improves the e-bike counterfactual instead, so the system saves more CO$_2$e against today's anchor while assigning fewer orders to drones.
+  \begin{figure}
+    \centering
+    \begin{columns}[T]
+      \begin{column}{0.49\textwidth}
+        \centering
+        \includegraphics[width=\linewidth]{../../figures/slides/slide_pathway_gef_curve.pdf}
+      \end{column}
+      \begin{column}{0.49\textwidth}
+        \centering
+        \includegraphics[width=\linewidth]{../../figures/slides/slide_pathway_kappa_curve.pdf}
+      \end{column}
+    \end{columns}
+    \caption{\textbf{Pathway response curves.} Grid decarbonization expands both the carbon value and the feasible scale of drone substitution: as the GEF multiplier falls from 1.0 to 0.5, annual savings rise from 49 to 185~kt~CO$_2$e and median drone share rises from 47\% to 77\%. Lower $\kappa$ improves the e-bike counterfactual instead, so the system saves more CO$_2$e against today's anchor while assigning fewer orders to drones.}
+    \label{fig:slide_pathway_response_curves}
+  \end{figure}
 \end{frame}
 
+\iffalse
 \section{Robustness}
 
 \begin{frame}{Robustness --- One-At-a-Time Sensitivity}
@@ -1096,6 +1144,7 @@
     \end{column}
   \end{columns}
 \end{frame}
+\fi
 
 \section{Discussion}
 
