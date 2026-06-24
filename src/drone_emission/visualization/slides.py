@@ -1368,7 +1368,7 @@ def _render_pathway_direction_split(
     plot_title: bool = False,
 ):
     """Render one slide-ready pathway direction from the paper scenario-map panels."""
-    fig = plt.figure(figsize=(13.2, 7.6))
+    fig = plt.figure(figsize=(6.4, 9.6))
     gs = fig.add_gridspec(
         3,
         4,
