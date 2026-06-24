@@ -25,20 +25,27 @@ from visualization._utils import _add_title_suffix
 from visualization.analysis import (
     _annotate_unstudied,
     _build_absolute_reduction_log_cmap,
+    _build_blue_reduction_cmap,
     _build_reduction_cmap,
     _draw_discrete_reduction_colorbar,
+    _draw_trip_phase_barplot,
+    _finer_percentage_bins,
     _oracle_reduction_tonnes_column,
     _override_pathway_curve_endpoint,
     _pathway_curve_metric_limits,
     _plot_city_gef_scatter_components_axes,
     _plot_city_oracle_reduction_rank,
+    _plot_distribution_inset,
     _plot_pathway_curve_panel,
     _prepare_pathway_scenario_data,
+    _selected_trip_distance_sample,
+    _selected_trip_phase_parts,
     _weighted_reduction_column,
 )
 from visualization.concepts import _draw_detour_ratio_concept
 from visualization.emission import (
     _build_break_even_marching_cubes_surface,
+    _draw_median_trip_emission_process,
     _plot_contribution_waterfall,
     _plot_top_city_contribution_bars,
     _select_median_trip_emission_sample,
@@ -113,11 +120,12 @@ def _render_city_reduction_map(
     for_latex: bool = False,
     plot_title: bool = False,
 ):
-    """Render the city-level annual reduction map with a top-city inset."""
+    """Render absolute and percentage city-level reduction maps."""
     city_df = _city_rows(df_stats)
     plot_df = city_df.copy()
     try:
         reduction_col = _oracle_reduction_tonnes_column(plot_df)
+        reduction_pct_col = _weighted_reduction_column(plot_df)
     except KeyError as exc:
         fig, ax = plt.subplots(figsize=(8.5, 7.0))
         _placeholder_axis(ax, f"City reduction map unavailable\n{exc}")
@@ -125,9 +133,16 @@ def _render_city_reduction_map(
         return
 
     valid = pd.to_numeric(plot_df[reduction_col], errors="coerce").dropna()
-    fig, ax = plt.subplots(figsize=(8.8, 7.2))
-    if valid.empty:
-        _placeholder_axis(ax, "City reduction map unavailable\nno valid reduction values")
+    valid_pct = pd.to_numeric(plot_df[reduction_pct_col], errors="coerce").dropna()
+    fig, (ax_a, ax_b) = plt.subplots(
+        1,
+        2,
+        figsize=(12.2, 6.0),
+        gridspec_kw={"width_ratios": [1.0, 1.0], "wspace": 0.16},
+    )
+    if valid.empty or valid_pct.empty:
+        _placeholder_axis(ax_a, "City reduction map unavailable\nno valid reduction values")
+        ax_b.axis("off")
         _save_figure(fig, save_path, for_latex, plot_title, "Slide city reduction map")
         return
 
@@ -135,22 +150,22 @@ def _render_city_reduction_map(
     plot_regions_on_china_map(
         df=plot_df,
         color_by=reduction_col,
-        ax=ax,
+        ax=ax_a,
         plot_title=False,
         cmap=cmap,
         norm=norm,
         draw_colorbar=False,
         draw_legend=False,
     )
-    ax.set_xlabel("")
-    ax.set_ylabel("")
-    ax.set_xticks([])
-    ax.set_yticks([])
-    ax.grid(False)
-    for spine in ax.spines.values():
+    ax_a.set_xlabel("")
+    ax_a.set_ylabel("")
+    ax_a.set_xticks([])
+    ax_a.set_yticks([])
+    ax_a.grid(False)
+    for spine in ax_a.spines.values():
         spine.set_visible(False)
 
-    inset_ax = ax.inset_axes([0.03, 0.04, 0.36, 0.36], zorder=10)
+    inset_ax = ax_a.inset_axes([0.03, 0.04, 0.34, 0.38], zorder=10)
     _plot_city_oracle_reduction_rank(
         plot_df,
         10,
@@ -162,19 +177,66 @@ def _render_city_reduction_map(
     inset_ax.set_facecolor("none")
     inset_ax.patch.set_alpha(0.0)
 
+    v_max = max(float(valid_pct.max()), 0.0)
+    pct_cmap, pct_norm, pct_bin_edges, pct_reduction_edges = _build_blue_reduction_cmap(v_max)
+    plot_regions_on_china_map(
+        df=plot_df,
+        color_by=reduction_pct_col,
+        ax=ax_b,
+        plot_title=False,
+        cmap=pct_cmap,
+        norm=pct_norm,
+        draw_colorbar=False,
+        draw_legend=False,
+    )
+    ax_b.set_xlabel("")
+    ax_b.set_ylabel("")
+    ax_b.set_xticks([])
+    ax_b.set_yticks([])
+    ax_b.grid(False)
+    for spine in ax_b.spines.values():
+        spine.set_visible(False)
+
+    distribution_ax = ax_b.inset_axes([0.03, 0.04, 0.42, 0.38], zorder=10)
+    _plot_distribution_inset(
+        plot_df,
+        reduction_pct_col,
+        ax=distribution_ax,
+        bins=_finer_percentage_bins(pct_reduction_edges),
+        xlabel="Reduction (%)",
+    )
+
+    ax_a.text(-0.03, 1.02, "a", transform=ax_a.transAxes,
+              fontsize=16, fontweight="bold", va="bottom", ha="right")
+    ax_b.text(-0.03, 1.02, "b", transform=ax_b.transAxes,
+              fontsize=16, fontweight="bold", va="bottom", ha="right")
+
     fig.canvas.draw()
-    ax_pos = ax.get_position()
-    cbar_ax = fig.add_axes((ax_pos.x1 + 0.01, ax_pos.y0, 0.016, ax_pos.height))
+    ax_a_pos = ax_a.get_position()
+    cbar_a_ax = fig.add_axes((ax_a_pos.x1 + 0.006, ax_a_pos.y0, 0.012, ax_a_pos.height))
     cbar, n_bands = _draw_discrete_reduction_colorbar(
         fig,
-        cbar_ax,
+        cbar_a_ax,
         cmap,
         norm,
         bin_edges,
         reduction_edges,
         "Annual reduction vs all-e-bike baseline (t CO2e/yr)",
     )
-    _annotate_unstudied(fig, cbar, cbar_ax, n_bands)
+    _annotate_unstudied(fig, cbar, cbar_a_ax, n_bands)
+
+    ax_b_pos = ax_b.get_position()
+    cbar_b_ax = fig.add_axes((ax_b_pos.x1 + 0.006, ax_b_pos.y0, 0.012, ax_b_pos.height))
+    cbar_b, n_bands_b = _draw_discrete_reduction_colorbar(
+        fig,
+        cbar_b_ax,
+        pct_cmap,
+        pct_norm,
+        pct_bin_edges,
+        pct_reduction_edges,
+        "Lifecycle reduction vs all-e-bike baseline (%)",
+    )
+    _annotate_unstudied(fig, cbar_b, cbar_b_ax, n_bands_b)
 
     if plot_title:
         fig.suptitle(
@@ -358,6 +420,150 @@ def _render_selected_trip_lifecycle(
         ax.set_title("Selected-trip lifecycle trade-off", fontsize=14, fontweight="bold")
 
     _save_figure(fig, save_path, for_latex, plot_title, "Slide selected trip lifecycle")
+
+
+def _draw_missing_trip_panel(ax, text: str):
+    """Render a compact placeholder for one selected-trip subpanel."""
+    _placeholder_axis(ax, text)
+
+
+def _render_trip_level_mechanism(
+    od_df: pd.DataFrame | None,
+    graph,
+    router,
+    save_path: str,
+    for_latex: bool = False,
+    plot_title: bool = False,
+    city: str = "beijing",
+):
+    """Render c--g trip-level mechanism panels for the selected median trip."""
+    city_label = city.replace("_", " ").title()
+    fig = plt.figure(figsize=(13.8, 6.6))
+    gs = fig.add_gridspec(
+        2,
+        3,
+        width_ratios=[1.08, 1.28, 1.08],
+        height_ratios=[1.0, 0.96],
+        hspace=0.42,
+        wspace=0.34,
+    )
+    ax_c = fig.add_subplot(gs[0, 0])
+    ax_d = fig.add_subplot(gs[0, 1:])
+    ax_e = fig.add_subplot(gs[1, 0])
+    ax_f = fig.add_subplot(gs[1, 1])
+    ax_g = fig.add_subplot(gs[1, 2])
+
+    _draw_detour_ratio_concept(ax_c, plot_title=plot_title)
+
+    selected_trip = _select_median_trip_emission_sample(od_df) if od_df is not None else None
+    distance_sample = _selected_trip_distance_sample(selected_trip, router)
+    if distance_sample is not None and graph is not None:
+        from visualization.roadnet import _draw_distance_panel
+
+        _draw_distance_panel(
+            ax_d,
+            distance_sample,
+            graph,
+            show_legend=True,
+            show_stats_box=False,
+            target_aspect=2.0,
+            rotate_air_diagonal=True,
+        )
+    else:
+        _draw_missing_trip_panel(
+            ax_d,
+            f"{city_label} median trip distance comparison\nnot available",
+        )
+
+    production_df = _selected_trip_phase_parts(selected_trip, "production")
+    eol_df = _selected_trip_phase_parts(selected_trip, "eol")
+    if selected_trip is not None:
+        air_km = float(selected_trip["distance_km"])
+        road_km = float(selected_trip["road_distance_m"]) / 1000.0
+        ebike_km = road_km
+        if "ebike_kappa" in selected_trip.index and pd.notna(selected_trip["ebike_kappa"]):
+            ebike_km *= float(selected_trip["ebike_kappa"])
+        distance_label = f"E-bike {ebike_km:.2f} km; drone {air_km:.2f} km"
+    else:
+        distance_label = "Median trip"
+
+    ebike_body_color = "#d95f35"
+    ebike_battery_color = "#f2a07f"
+    drone_body_color = "#1f77b4"
+    drone_battery_color = "#9ecae1"
+    phase_body_color = "#5f6368"
+    phase_battery_color = "#c7c9cc"
+    phase_body_colors = {"E-bike": ebike_body_color, "Drone": drone_body_color}
+    phase_battery_colors = {"E-bike": ebike_battery_color, "Drone": drone_battery_color}
+
+    if production_df is None:
+        _draw_missing_trip_panel(
+            ax_e,
+            f"{city_label} median trip production data\nnot available",
+        )
+    else:
+        _draw_trip_phase_barplot(
+            ax_e,
+            production_df,
+            ylabel="Production\n(g CO$_2$e/order)",
+            body_label="Body",
+            battery_label="Battery",
+            body_color=phase_body_color,
+            battery_color=phase_battery_color,
+            distance_label=distance_label,
+            body_colors_by_vehicle=phase_body_colors,
+            battery_colors_by_vehicle=phase_battery_colors,
+            legend_body_color=phase_body_color,
+            legend_battery_color=phase_battery_color,
+        )
+
+    if od_df is None:
+        _draw_missing_trip_panel(
+            ax_f,
+            f"{city_label} median trip emission data\nnot available",
+        )
+    else:
+        _draw_median_trip_emission_process(ax_f, od_df, plot_title=plot_title)
+        ax_f.set_xlabel("Distance (km)", fontsize=11)
+        ax_f.set_ylabel("Use phase\n(g CO$_2$e/leg)", fontsize=11)
+
+    if eol_df is None:
+        _draw_missing_trip_panel(
+            ax_g,
+            f"{city_label} median trip EOL data\nnot available",
+        )
+    else:
+        _draw_trip_phase_barplot(
+            ax_g,
+            eol_df,
+            ylabel="End of life\n(g CO$_2$e/order)",
+            body_label="Body",
+            battery_label="Battery",
+            body_color=phase_body_color,
+            battery_color=phase_battery_color,
+            distance_label=distance_label,
+            body_colors_by_vehicle=phase_body_colors,
+            battery_colors_by_vehicle=phase_battery_colors,
+            legend_body_color=phase_body_color,
+            legend_battery_color=phase_battery_color,
+        )
+
+    for label, ax in zip(("c", "d", "e", "f", "g"), (ax_c, ax_d, ax_e, ax_f, ax_g)):
+        ax.text(
+            -0.03,
+            1.02,
+            label,
+            transform=ax.transAxes,
+            fontsize=16,
+            fontweight="bold",
+            va="bottom",
+            ha="right",
+        )
+
+    if plot_title:
+        fig.suptitle("Trip-level lifecycle mechanism", fontsize=14, fontweight="bold")
+
+    _save_figure(fig, save_path, for_latex, plot_title, "Slide trip-level mechanism")
 
 
 def _render_gef_component_bins(
@@ -1031,6 +1237,32 @@ def render_all(
             save_path=os.path.join(out, "slide_selected_trip_lifecycle.png"),
             for_latex=for_latex,
             plot_title=plot_title,
+        )
+
+    if _want("slide_trip_level_mechanism"):
+        beijing_od_path = os.path.join(data_dir, "city", "beijing", "beijing_od_pairs.csv")
+        beijing_graphml_path = os.path.join(data_dir, "city", "beijing", "beijing_roadnet.graphml")
+        beijing_od_df = pd.read_csv(beijing_od_path) if os.path.exists(beijing_od_path) else None
+        beijing_graph, beijing_router = None, None
+        if os.path.exists(beijing_graphml_path):
+            from roadnet.sparse_graph import SparseGraph
+            from roadnet.tile_router import TileRouter
+
+            beijing_graph = SparseGraph.from_graphml(beijing_graphml_path)
+            beijing_router = TileRouter(beijing_graph)
+        else:
+            print(
+                "slide_trip_level_mechanism: Beijing roadnet missing, "
+                f"panel d will show placeholder ({beijing_graphml_path})"
+            )
+        _render_trip_level_mechanism(
+            beijing_od_df,
+            beijing_graph,
+            beijing_router,
+            save_path=os.path.join(out, "slide_trip_level_mechanism.png"),
+            for_latex=for_latex,
+            plot_title=plot_title,
+            city="beijing",
         )
 
     if _want("slide_gef_component_bins"):
