@@ -38,6 +38,8 @@ from visualization.analysis import (
     _plot_city_oracle_reduction_rank,
     _plot_distribution_inset,
     _plot_pathway_curve_panel,
+    _plot_reduction_absolute_scatter_panel,
+    _plot_reduction_detour_panel,
     _prepare_pathway_scenario_data,
     _selected_trip_distance_sample,
     _selected_trip_phase_parts,
@@ -55,6 +57,8 @@ from visualization.emission import (
 from visualization.paper import (
     CITY_CONTEXT_FIGURES,
     _attach_enrichment_columns,
+    _build_reduction_detour_binned_by_city,
+    _plot_power_generation_mix_pie,
     _prepare_break_even_phase_diagram,
     _prepare_contribution_decomposition_city_stats,
     _prepare_contribution_decomposition_full,
@@ -69,6 +73,13 @@ SLIDE_CONTEXTS = {
     "slide_city_context_chengdu": CITY_CONTEXT_FIGURES["chengdu_city_context"],
     "slide_city_context_tianjin": CITY_CONTEXT_FIGURES["tianjin_city_context"],
     "slide_city_context_guangzhou": CITY_CONTEXT_FIGURES["guangzhou_city_context"],
+}
+
+SLIDE_CITY_CONTEXT_PAIRS = {
+    "slide_low_gef_city_contexts": (
+        CITY_CONTEXT_FIGURES["dali_city_context"],
+        CITY_CONTEXT_FIGURES["chengdu_city_context"],
+    ),
 }
 
 PAPER_FIGURE_REUSE = {
@@ -183,7 +194,7 @@ def _render_city_reduction_map(
         1,
         2,
         figsize=(12.2, 6.0),
-        gridspec_kw={"width_ratios": [1.0, 1.0], "wspace": 0.16},
+        gridspec_kw={"width_ratios": [1.0, 1.0], "wspace": 0.28},
     )
     if valid.empty or valid_pct.empty:
         _placeholder_axis(ax_a, "City reduction map unavailable\nno valid reduction values")
@@ -593,7 +604,7 @@ def _render_trip_level_mechanism(
             legend_battery_color=phase_battery_color,
         )
 
-    for label, ax in zip(("c", "d", "e", "f", "g"), (ax_c, ax_d, ax_e, ax_f, ax_g)):
+    for label, ax in zip(("a", "b", "c", "d", "e"), (ax_c, ax_d, ax_e, ax_f, ax_g)):
         ax.text(
             -0.03,
             1.02,
@@ -609,6 +620,143 @@ def _render_trip_level_mechanism(
         fig.suptitle("Trip-level lifecycle mechanism", fontsize=14, fontweight="bold")
 
     _save_figure(fig, save_path, for_latex, plot_title, "Slide trip-level mechanism")
+
+
+def _render_city_context_pair(
+    data_dir: str,
+    city_df: pd.DataFrame,
+    exp_config: dict | None,
+    contexts: tuple,
+    save_path: str,
+    for_latex: bool = False,
+    plot_title: bool = False,
+):
+    """Render two city-context blocks as one slide figure."""
+    region_keys = [context["region_key"] for context in contexts]
+    selected = city_df[city_df["region_key"].isin(region_keys)].copy()
+    selected["_context_order"] = selected["region_key"].map(
+        {key: i for i, key in enumerate(region_keys)}
+    )
+    selected = selected.sort_values("_context_order")
+    if selected.empty:
+        fig, ax = plt.subplots(figsize=(11.6, 6.4))
+        _placeholder_axis(ax, "City contexts unavailable\nselected city rows missing")
+        _save_figure(fig, save_path, for_latex, plot_title, "Slide city context pair")
+        return
+
+    built = _build_reduction_detour_binned_by_city(
+        data_dir=data_dir,
+        selected=selected,
+        figure_name=os.path.splitext(os.path.basename(save_path))[0],
+        exp_config=exp_config,
+        absolute_reduction_metric="per_order_g",
+        use_binned_cache=False,
+        bin_width_km=0.1,
+    )
+    if built is None:
+        fig, ax = plt.subplots(figsize=(11.6, 6.4))
+        _placeholder_axis(ax, "City contexts unavailable\nbinned data build failed")
+        _save_figure(fig, save_path, for_latex, plot_title, "Slide city context pair")
+        return
+
+    binned_by_city, labels = built
+    available_contexts = [
+        context for context in contexts if context["region_key"] in binned_by_city
+    ]
+    if not available_contexts:
+        fig, ax = plt.subplots(figsize=(11.6, 6.4))
+        _placeholder_axis(ax, "City contexts unavailable\nbinned city data missing")
+        _save_figure(fig, save_path, for_latex, plot_title, "Slide city context pair")
+        return
+
+    fig = plt.figure(figsize=(13.6, 7.2))
+    outer = fig.add_gridspec(1, len(contexts), wspace=0.24)
+
+    for i, context in enumerate(contexts):
+        region_key = context["region_key"]
+        display_name = context["display_name"]
+        power_region_key = context.get("power_region_key", region_key)
+        col = outer[0, i].subgridspec(
+            3,
+            1,
+            height_ratios=[1.0, 1.0, 0.82],
+            hspace=0.34,
+        )
+        if region_key not in binned_by_city:
+            ax = fig.add_subplot(col[:, 0])
+            _placeholder_axis(
+                ax,
+                f"{display_name} context unavailable\nbinned data missing",
+            )
+            continue
+
+        _, ax_reduction, _ = _plot_reduction_detour_panel(
+            fig,
+            col[0],
+            binned_by_city[region_key],
+            labels.get(region_key, display_name),
+            bin_width_km=0.1,
+            min_air_km=0.2,
+            absolute_reduction_metric="per_order_g",
+            show_detour_boxplot=False,
+            mark_reduction_break_even=False,
+            show_city_label=False,
+            bar_width_fraction=0.78,
+            show_absolute_axis=False,
+            show_saturation_fit=True,
+        )
+        ax_scatter = _plot_reduction_absolute_scatter_panel(
+            fig,
+            col[1],
+            binned_by_city[region_key],
+            labels.get(region_key, display_name),
+            min_air_km=0.2,
+            absolute_reduction_metric="per_order_g",
+            show_city_label=False,
+        )
+        power_grid = col[2].subgridspec(
+            1,
+            2,
+            width_ratios=[1.0, 0.72],
+            wspace=0.12,
+        )
+        ax_power_mix = fig.add_subplot(power_grid[0])
+        ax_power_legend = fig.add_subplot(power_grid[1])
+        _plot_power_generation_mix_pie(
+            ax_power_mix,
+            power_region_key,
+            legend_ax=ax_power_legend,
+        )
+
+        panel_label_x = ax_reduction.get_position().x0 - 0.045
+        city_panel_labels = "abcdef"[3 * i: 3 * i + 3]
+        for label, ax in zip(
+            city_panel_labels,
+            (ax_reduction, ax_scatter, ax_power_mix),
+        ):
+            pos = ax.get_position()
+            fig.text(
+                panel_label_x,
+                pos.y1 + 0.008,
+                label,
+                fontsize=13,
+                fontweight="bold",
+                va="bottom",
+            )
+        city_pos = ax_reduction.get_position()
+        fig.text(
+            city_pos.x0,
+            city_pos.y1 + 0.034,
+            display_name,
+            fontsize=12,
+            fontweight="bold",
+            va="bottom",
+        )
+
+    if plot_title:
+        fig.suptitle("Low-GEF City Contexts", fontsize=14, fontweight="bold")
+
+    _save_figure(fig, save_path, for_latex, plot_title, "Slide city context pair")
 
 
 def _render_gef_component_bins(
@@ -1203,6 +1351,7 @@ def render_all(
             "slide_city_context_chengdu",
             "slide_city_context_tianjin",
             "slide_city_context_guangzhou",
+            "slide_low_gef_city_contexts",
             *PAPER_CACHE_BACKED_SLIDES,
         )
     ):
@@ -1336,6 +1485,19 @@ def render_all(
         )
 
     if city_df is not None:
+        for figure_name, contexts in SLIDE_CITY_CONTEXT_PAIRS.items():
+            if not _need(figure_name):
+                continue
+            _render_city_context_pair(
+                data_dir=data_dir,
+                city_df=city_df,
+                exp_config=exp_config,
+                contexts=contexts,
+                save_path=os.path.join(out, f"{figure_name}.png"),
+                for_latex=for_latex,
+                plot_title=plot_title,
+            )
+
         for figure_name, context in SLIDE_CONTEXTS.items():
             if not _need(figure_name):
                 continue
