@@ -677,7 +677,7 @@ def _render_city_context_pair(
         _save_figure(fig, save_path, for_latex, plot_title, "Slide city context pair")
         return
 
-    fig = plt.figure(figsize=(6.4, 12.8))
+    fig = plt.figure(figsize=(8.0, 8.0))
     outer = fig.add_gridspec(1, len(contexts), wspace=0.24)
 
     for i, context in enumerate(contexts):
@@ -1374,7 +1374,7 @@ def _render_pathway_direction_split(
         4,
         height_ratios=[1.16, 1.16, 0.52],
         hspace=0.06,
-        wspace=0.08,
+        wspace=0.01,
     )
     if not scenario_data:
         ax = fig.add_subplot(gs[:, :])
