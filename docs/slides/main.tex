@@ -29,6 +29,14 @@
 \usepackage{caption}
 \setbeamertemplate{caption}[numbered]
 
+\newcommand{\COtwoe}{CO\textsubscript{2}e}
+\newcommand{\kgCOtwoe}{kg~\COtwoe}
+\newcommand{\gCOtwoe}{g~\COtwoe}
+\newcommand{\ktCOtwoe}{kt~\COtwoe}
+\newcommand{\kgCOtwoePerKWh}{kg~\COtwoe~kWh$^{-1}$}
+\newcommand{\kgCOtwoePerKg}{kg~\COtwoe~kg$^{-1}$}
+\newcommand{\ktCOtwoePerYr}{kt~\COtwoe~yr$^{-1}$}
+
 %------------------------------------------------------------
 %This block of code defines the information to appear in the
 %Title page
@@ -192,7 +200,7 @@
           \end{itemize}
         \item Global drone delivery market growth:
           \begin{itemize}
-            \item \$3.47 billion (2025) $\rightarrow$ \$20.98 billion (2034)
+            \item US\$3.47~billion (2025) $\rightarrow$ US\$20.98~billion (2034)
             \item Compound Annual Growth Rate: \textbf{19.45\%}
           \end{itemize}
       \end{itemize}
@@ -218,7 +226,7 @@
     \item \textbf{Food delivery advantages} over parcel delivery:
       \begin{itemize}
         \item Lighter and smaller packages
-        \item Shorter delivery distances (usually under 3 km)
+        \item Shorter delivery distances (usually under 3~km)
         \item Speed advantage: prevents food from getting cold/spoiled
         \item High time sensitivity matches drone capabilities
       \end{itemize}
@@ -237,7 +245,7 @@
     \end{column}
     \begin{column}{0.43\textwidth}
       \begin{itemize}
-        \item Market expanded from approximately \textbf{300 billion Yuan} in 2017 to over \textbf{1 trillion Yuan} by 2023
+        \item Market expanded from approximately \textbf{300~billion yuan} in 2017 to over \textbf{1~trillion yuan} by 2023
         \item Large order volume creates substantial opportunity for drone adoption
         \item Leading platforms such as \textbf{Meituan} and \textbf{Eleme} have initiated pilot drone delivery programs in multiple cities
       \end{itemize}
@@ -359,7 +367,7 @@
       \begin{figure}
         \centering
         \includegraphics[width=0.8\linewidth]{../../figures/misc/global_building_atlas.png}
-        \caption{\textbf{Global Building Atlas}. The first open dataset providing global coverage of building polygons, heights, and LoD1 3D models, containing 2.75 billion buildings at 3m resolution \parencite{zhu_globalbuildingatlas_2025}.}
+        \caption{\textbf{Global Building Atlas}. The first open dataset providing global coverage of building polygons, heights, and LoD1 3D models, containing 2.75~billion buildings at 3~m resolution \parencite{zhu_globalbuildingatlas_2025}.}
         \label{fig:global_building_atlas}
       \end{figure}
     \end{column}
@@ -433,8 +441,8 @@
 
       \textbf{Two-stage Calibration:}
       \begin{enumerate}
-        \item \textbf{Distance impedance} ($\beta$, $\gamma$): fitted from $\sim$278K Eleme orders (Beijing, 29 days)
-        \item \textbf{Volume exponent} ($\alpha$): calibrated by matching weighted mean OD distance to industry-reported 2.23\,km \parencite{xie_environmental_2021}
+        \item \textbf{Distance impedance} ($\beta$, $\gamma$): fitted from approximately 278{,}000 Eleme orders (Beijing, 29~days)
+        \item \textbf{Volume exponent} ($\alpha$): calibrated by matching weighted mean OD distance to industry-reported 2.23~km \parencite{xie_environmental_2021}
       \end{enumerate}
     \end{column}
   \end{columns}
@@ -445,7 +453,7 @@
   \begin{figure}
     \centering
     \includegraphics[width=0.95\linewidth]{../../figures/calibration/tanner_impedance_fit.png}
-    \caption{\textbf{Tanner impedance function fitted to Eleme delivery distance data.} Left: observed distance histogram with fitted curve $f(d) = C \cdot d^{1.113} \cdot e^{-1.412 \cdot d}$ ($R^2 = 0.985$). Right: CDF comparison. The function captures the hump-shaped decay with peak at $d_{\mathrm{peak}} = \beta/\gamma \approx 0.79$\,km.}
+    \caption{\textbf{Tanner impedance function fitted to Eleme delivery distance data.} Left: observed distance histogram with fitted curve $f(d) = C \cdot d^{1.113} \cdot e^{-1.412 \cdot d}$ ($R^2 = 0.985$). Right: CDF comparison. The function captures the hump-shaped decay with peak at $d_{\mathrm{peak}} = \beta/\gamma \approx 0.79$~km.}
     \label{fig:tanner_fit}
   \end{figure}
 \end{frame}
@@ -454,7 +462,7 @@
   \begin{figure}
     \centering
     \includegraphics[width=0.75\linewidth]{../../figures/calibration/alpha_calibration_5km.png}
-    \caption{\textbf{Calibration of $\alpha$ (building volume exponent).} Sweeping $\alpha$ with fixed $\beta = 1.113$, $\gamma = 1.412$ over Nanshan district (2{,}484 stores, 81{,}850 buildings, 5\,km radius). Best fit $\alpha = 1.7$ yields weighted mean OD distance of 2.21\,km, matching the industry-reported 2.23\,km for first-tier city food delivery \parencite{xie_environmental_2021}.}
+    \caption{\textbf{Calibration of $\alpha$ (building volume exponent).} Sweeping $\alpha$ with fixed $\beta = 1.113$, $\gamma = 1.412$ over Nanshan district (2{,}484 stores, 81{,}850 buildings, 5~km radius). Best fit $\alpha = 1.7$ yields weighted mean OD distance of 2.21~km, matching the industry-reported 2.23~km for first-tier city food delivery \parencite{xie_environmental_2021}.}
     \label{fig:alpha_calibration}
   \end{figure}
 \end{frame}
@@ -498,9 +506,9 @@
       \toprule
       & \textbf{District (Nanshan)} & \textbf{City (Shenzhen)} \\
       \midrule
-      Nodes & 185K & 1.01M \\
-      Edges & 350K & 1.90M \\
-      OD pairs & 817K & 4.16M \\
+      Nodes & 185{,}000 & 1.01~million \\
+      Edges & 350{,}000 & 1.90~million \\
+      OD pairs & 817{,}000 & 4.16~million \\
       \bottomrule
     \end{tabular}
   \end{center}
@@ -542,8 +550,8 @@
           Scope & Full graph & Local tile \\
           \midrule
           Memory & $\sim$3\,GB & $\sim$500\,MB \\
-          817K pairs & hours & \textbf{36\,s} \\
-          4.39M pairs & -- & \textbf{511\,s} \\
+          817{,}000 pairs & hours & \textbf{36~s} \\
+          4.39~million pairs & -- & \textbf{511~s} \\
           \bottomrule
         \end{tabular}
       \end{center}
@@ -585,36 +593,36 @@
 
   The e-bike power model calculates the instantaneous mechanical power required to propel the vehicle at a given velocity \parencite{kirschstein_comparison_2020}.
   \begin{equation}
-    P_{E} =
-    P_{\text{rolling}} + P_{\text{air}} + P_{\text{grade}} + P_{\text{acc}}
+    P_E =
+    P_{\text{roll}} + P_{\text{air}} + P_{\text{grade}} + P_{\text{acc}}
   \end{equation}
 
   \small
   \textbf{Rolling Resistance:}
-  \[ P_{\text{rolling}} = g \cdot C_{\text{roll}} \cdot v \cdot m \]
+  \[ P_{\text{roll}} = m \cdot g \cdot C_{\text{rr}} \cdot v \]
   \textbf{Aerodynamic Drag:}
-  \[ P_{\text{air}} = \frac{\rho \cdot v^3}{2 \cdot 10^3} \cdot A \cdot C_{\text{air}} \]
+  \[ P_{\text{air}} = \frac{1}{2} \rho \cdot C_d \cdot A \cdot v^3 \]
   \textbf{Grade Climbing:}
-  \[ P_{\text{grade}} = g \cdot i \cdot v \cdot m \]
+  \[ P_{\text{grade}} = m \cdot g \cdot i \cdot v \]
   \textbf{Acceleration:}
-  \[ P_{\text{acc}} = \frac{0.504 \cdot n_{\text{acc}}}{2 \cdot 10^3 \cdot 3.6} \cdot m \cdot v_{\mathrm{km/h}}^3 \]
+  \[ P_{\text{acc}} = \frac{0.504 \cdot n_{\text{acc}}}{2 \cdot 3.6} \cdot m \cdot v_{\text{km/h}}^3 \]
 \end{frame}
 
 \begin{frame}{Use-phase Emission Model - Drone}
 
   The drone power model calculates the power required for multi-rotor flight at various flight angles \parencite{kirschstein_comparison_2020}.
   \begin{equation}
-    P_{U}
-    = P_{\text{induced}} + P_{\text{profile}} + P_{\text{drag}} + P_{\text{climb}} + P_{\text{aux}}
+    P_U
+    = P_{\text{ind}} + P_{\text{prof}} + P_{\text{drag}} + P_{\text{climb}} + P_{\text{aux}}
   \end{equation}
 
   \small
   \textbf{Induced:}
-  \[ P_{\text{induced}} = k_{\text{lift}} \cdot w \cdot T \]
+  \[ P_{\text{ind}} = k_{\text{lift}} \cdot W \cdot T \]
   \textbf{Profile:}
-  \[ P_{\text{profile}} = \rho \cdot R \cdot U^3 \cdot \left(1 + 3\left(\frac{v}{U}\right)^2\right) \cdot \frac{\sigma \cdot C_{\text{d,blade}}}{8} \]
+  \[ P_{\text{prof}} = \frac{\rho \cdot R \cdot U_{\text{tip}}^3 \cdot \sigma \cdot C_{d,\text{blade}}}{8} \left(1 + 3\left(\frac{v}{U_{\text{tip}}}\right)^2\right) \]
   \textbf{Fuselage Drag:}
-  \[ P_{\text{drag}} = \frac{1}{2} \rho \cdot C_{\text{air}} \cdot A \cdot v^3 \]
+  \[ P_{\text{drag}} = \frac{1}{2} \rho \cdot C_d \cdot A \cdot v^3 \]
   \textbf{Climb:}
   \[ P_{\text{climb}} = m \cdot g \cdot v \cdot \sin\gamma \]
   \textbf{Auxiliary:}
@@ -648,19 +656,19 @@
 
   \textbf{E-bike Use-phase Emissions:}
   \begin{equation}
-    CO_2e_{E_{use}} = e_{E_c} \times P_{E} \times \sum_{i=1}^{m_E} (d_{E_i} / v_E)_i
+    \text{CO}_2\text{e}_{E,\text{use}} = \text{GEF} \times P_E \times \sum_{i=1}^{m_E} (d_{E_i} / v_E)_i
   \end{equation}
   \small
-  where $e_{E_c}$ is grid emission factor ($\mathrm{kg CO_2e/kWh}$), $P_E$ is e-bike power ($\mathrm{kW}$), $\sum_{i=1}^{m_E} (d_{E_i} / v_E)_i$ is total travel time ($\mathrm{h}$) to complete $m_E$ orders.
+  where GEF is the grid emission factor (\kgCOtwoePerKWh), $P_E$ is e-bike power (kW), and $\sum_{i=1}^{m_E} (d_{E_i} / v_E)_i$ is total travel time (h) to complete $m_E$ orders.
 
   \vspace{0.3cm}
   \normalsize
   \textbf{Drone Use-phase Emissions:}
   \begin{equation}
-    CO_2e_{U_{use}} = e_{U_c} \times \left[ P_{U_L} \times \sum_{i=1}^{m_U} (d_{L_i} / v_{U_L})_i + P_{U_T} \times \sum_{i=1}^{m_U} (h_{T_i} / v_{U_T})_i \right]
+    \text{CO}_2\text{e}_{U,\text{use}} = \text{GEF} \times \left[ P_{U,L} \times \sum_{i=1}^{m_U} (d_{L_i} / v_{U,L})_i + P_{U,T} \times \sum_{i=1}^{m_U} (h_{T_i} / v_{U,T})_i \right]
   \end{equation}
   \small
-  where $P_{U_L}$ is level flight power ($\mathrm{kW}$), $P_{U_T}$ is climb power ($\mathrm{kW}$), $\sum (d_{L_i} / v_{U_L})_i$ is level flight time ($\mathrm{h}$), $\sum (h_{T_i} / v_{U_T})_i$ is climb time ($\mathrm{h}$).
+  where $P_{U,L}$ is level-flight power (kW), $P_{U,T}$ is climb power (kW), $\sum (d_{L_i} / v_{U,L})_i$ is level-flight time (h), and $\sum (h_{T_i} / v_{U,T})_i$ is climb time (h).
 
 \end{frame}
 
@@ -669,7 +677,7 @@
 
   E-bike lifecycle emissions include body production, battery production, and end-of-life disposal:
   \begin{equation}
-    CO_2e_{E_{pro+dis}} = e_{E_m} \times w_{E_m} + e_{E_b} \times V_{E_b} \times n_{E_b} + e_{E_{md}} \times w_{E_m} + e_{E_{bd}} \times V_{E_b} \times n_{E_b}
+    \text{CO}_2\text{e}_{E,\text{prod+disp}} = e_{E,m} \times w_{E,m} + e_{E,b} \times V_{E,b} \times n_{E,b} + e_{E,m,d} \times w_{E,m} + e_{E,b,d} \times V_{E,b} \times n_{E,b}
   \end{equation}
 
   \vspace{0.1cm}
@@ -681,13 +689,13 @@
       \toprule
       Symbol & Description & Unit \\
       \midrule
-      $e_{E_m}$ & GHG emission factor of e-bike components & $\mathrm{kg CO_2e/kg}$ \\
-      $w_{E_m}$ & Weight of e-bike components & $\mathrm{kg}$ \\
-      $e_{E_b}$ & GHG emission factor of batteries & $\mathrm{kg CO_2e/kWh}$ \\
-      $V_{E_b}$ & Battery capacity & $\mathrm{kWh}$ \\
-      $n_{E_b}$ & Number of batteries & $\mathrm{-}$ \\
-      $e_{E_{md}}$ & Disposal emission factor for components & $\mathrm{kg CO_2e/kg}$ \\
-      $e_{E_{bd}}$ & Disposal emission factor for batteries & $\mathrm{kg CO_2e/kWh}$ \\
+      $e_{E,m}$ & GHG emission factor of e-bike components & \kgCOtwoePerKg \\
+      $w_{E,m}$ & Weight of e-bike components & kg \\
+      $e_{E,b}$ & GHG emission factor of batteries & \kgCOtwoePerKWh \\
+      $V_{E,b}$ & Battery capacity & kWh \\
+      $n_{E,b}$ & Number of batteries & -- \\
+      $e_{E,m,d}$ & Disposal emission factor for components & \kgCOtwoePerKg \\
+      $e_{E,b,d}$ & Disposal emission factor for batteries & \kgCOtwoePerKWh \\
       \bottomrule
     \end{tabular}
   \end{center}
@@ -702,7 +710,7 @@
 
   Drone lifecycle emissions include body production, battery production, and end-of-life disposal:
   \begin{equation}
-    CO_2e_{U_{pro+dis}} = e_{U_m} \times w_{U_m} + e_{U_b} \times V_{U_b} \times n_{U_b} + e_{U_{md}} \times w_{U_m} + e_{U_{bd}} \times V_{U_b} \times n_{U_b}
+    \text{CO}_2\text{e}_{U,\text{prod+disp}} = e_{U,m} \times w_{U,m} + e_{U,b} \times V_{U,b} \times n_{U,b} + e_{U,m,d} \times w_{U,m} + e_{U,b,d} \times V_{U,b} \times n_{U,b}
   \end{equation}
 
   \vspace{0.1cm}
@@ -714,13 +722,13 @@
       \toprule
       Symbol & Description & Unit \\
       \midrule
-      $e_{U_m}$ & GHG emission factor of drone components & $\mathrm{kg CO_2e/kg}$ \\
-      $w_{U_m}$ & Weight of drone components & $\mathrm{kg}$ \\
-      $e_{U_b}$ & GHG emission factor of batteries & $\mathrm{kg CO_2e/kWh}$ \\
-      $V_{U_b}$ & Battery capacity & $\mathrm{kWh}$ \\
-      $n_{U_b}$ & Number of batteries & $\mathrm{-}$ \\
-      $e_{U_{md}}$ & Disposal emission factor for components & $\mathrm{kg CO_2e/kg}$ \\
-      $e_{U_{bd}}$ & Disposal emission factor for batteries & $\mathrm{kg CO_2e/kWh}$ \\
+      $e_{U,m}$ & GHG emission factor of drone components & \kgCOtwoePerKg \\
+      $w_{U,m}$ & Weight of drone components & kg \\
+      $e_{U,b}$ & GHG emission factor of batteries & \kgCOtwoePerKWh \\
+      $V_{U,b}$ & Battery capacity & kWh \\
+      $n_{U,b}$ & Number of batteries & -- \\
+      $e_{U,m,d}$ & Disposal emission factor for components & \kgCOtwoePerKg \\
+      $e_{U,b,d}$ & Disposal emission factor for batteries & \kgCOtwoePerKWh \\
       \bottomrule
     \end{tabular}
   \end{center}
@@ -884,7 +892,7 @@
   \begin{figure}
     \centering
     \includegraphics[width=0.98\linewidth,height=0.66\textheight,keepaspectratio]{../../figures/slides/slide_trip_level_mechanism.pdf}
-    \caption{\textbf{Trip-level lifecycle mechanism.} For the selected Beijing median trip, the drone flies 1.82~km while the e-bike travels 2.76~km on roads (detour ratio 1.52). The drone's lower production and end-of-life burdens outweigh its higher use-phase electricity demand, reducing lifecycle emissions from 47.8 to 40.7~g~CO$_2$e per order.}
+    \caption{\textbf{Trip-level lifecycle mechanism.} For the selected Beijing median trip, the drone flies 1.82~km while the e-bike travels 2.76~km on roads (detour ratio 1.52). The drone's lower production and end-of-life burdens outweigh its higher use-phase electricity demand, reducing lifecycle emissions from 47.8 to 40.7~\gCOtwoe{} per order.}
     \label{fig:slide_trip_level_mechanism}
   \end{figure}
 \end{frame}
@@ -893,7 +901,7 @@
   \begin{figure}
     \centering
     \includegraphics[width=0.88\linewidth]{../../figures/slides/slide_gef_component_bins.pdf}
-    \caption{\textbf{GEF reshapes the use-phase penalty.} In low-GEF bins, drones retain most of their embodied-emission advantage; in the 0.7--0.8~kg~CO$_2$e~kWh$^{-1}$ bin, the drone and e-bike totals converge to 90.9 and 93.2~g~CO$_2$e per order.}
+    \caption{\textbf{GEF reshapes the use-phase penalty.} In low-GEF bins, drones retain most of their embodied-emission advantage; in the 0.7--0.8~\kgCOtwoePerKWh{} bin, the drone and e-bike totals converge to 90.9 and 93.2~\gCOtwoe{} per order.}
     \label{fig:slide_gef_component_bins}
   \end{figure}
 \end{frame}
@@ -911,7 +919,7 @@
     \begin{column}{0.32\textwidth}
       \small
       \begin{itemize}
-        \item Hydropower-rich Dali and Chengdu represent the low-GEF peak around 0.1--0.2~kg~CO$_2$e~kWh$^{-1}$.
+        \item Hydropower-rich Dali and Chengdu represent the low-GEF peak around 0.1--0.2~\kgCOtwoePerKWh{}.
         \item Clean electricity compresses the drone use-phase penalty while preserving production and end-of-life advantages.
         \item Drones are assigned to most visible short-distance orders: 98.7\% and 85.2\% drone share at 0.3~km in Dali and Chengdu.
       \end{itemize}
@@ -932,7 +940,7 @@
     \begin{column}{0.32\textwidth}
       \small
       \begin{itemize}
-        \item Tianjin and thermal-heavy Guangdong for Guangzhou represent the higher-GEF peak around 0.4--0.7~kg~CO$_2$e~kWh$^{-1}$.
+        \item Tianjin and thermal-heavy Guangdong for Guangzhou represent the higher-GEF peak around 0.4--0.7~\kgCOtwoePerKWh{}.
         \item Under carbon-intensive grids, short trips are less favorable: at 0.3~km, Tianjin reaches 19.4\% drone share and $-24.8\%$ reduction.
         \item Guangzhou rises from 33.0\% drone share and $-3.3\%$ reduction at 0.3~km to 96.7\% and 18.5\% at 4.9~km.
       \end{itemize}
@@ -944,7 +952,7 @@
   \begin{figure}
     \centering
     \includegraphics[width=0.98\linewidth,height=0.58\textheight,keepaspectratio]{../../figures/slides/slide_detour_reduction_by_gef.pdf}
-    \caption{\textbf{Detour ratio matters within each grid regime.} Splitting cities at GEF~=~0.3~kg~CO$_2$e~kWh$^{-1}$ shows a positive detour--reduction relationship in both regimes: low-GEF cities ($n=41$) span 17.2--45.0\% reduction with $r=0.73$, while high-GEF cities ($n=235$) span 3.2--26.2\% with $r=0.94$.}
+    \caption{\textbf{Detour ratio matters within each grid regime.} Splitting cities at GEF = 0.3~\kgCOtwoePerKWh{} shows a positive detour--reduction relationship in both regimes: low-GEF cities ($n=41$) span 17.2--45.0\% reduction with $r=0.73$, while high-GEF cities ($n=235$) span 3.2--26.2\% with $r=0.94$.}
     \label{fig:slide_detour_reduction_by_gef}
   \end{figure}
 \end{frame}
@@ -966,7 +974,7 @@
         \includegraphics[width=\linewidth]{../../figures/slides/slide_break_even_high_gef.pdf}
       \end{column}
     \end{columns}
-    \caption{\textbf{Break-even operating envelope.} The break-even surface turns the city pattern into a trip-level rule: cleaner grids, longer air distances, and larger road detours expand the drone-favorable region. At GEF~=~0.1404 the median $\Delta g$ is $-22.9$~g~CO$_2$e per order; at GEF~=~0.49 the field widens and short, low-detour trips remain e-bike-favorable.}
+    \caption{\textbf{Break-even operating envelope.} The break-even surface turns the city pattern into a trip-level rule: cleaner grids, longer air distances, and larger road detours expand the drone-favorable region. At GEF = 0.1404~\kgCOtwoePerKWh{} the median $\Delta g$ is $-22.9$~\gCOtwoe{} per order; at GEF = 0.49~\kgCOtwoePerKWh{} the field widens and short, low-detour trips remain e-bike-favorable.}
     \label{fig:slide_break_even_operating_envelope}
   \end{figure}
 \end{frame}
@@ -1002,8 +1010,8 @@
     \begin{column}{0.42\textwidth}
       \small
       \begin{itemize}
-        \item Current grid and bundling anchor: 49~kt~CO$_2$e saved and 47\% median drone share.
-        \item Halving provincial GEF values raises savings to 185~kt~CO$_2$e.
+        \item Current grid and bundling anchor: 49~\ktCOtwoe{} saved and 47\% median drone share.
+        \item Halving provincial GEF values raises savings to 185~\ktCOtwoe{}.
         \item Cleaner electricity also expands the median drone share to 77\%.
       \end{itemize}
     \end{column}
@@ -1023,8 +1031,8 @@
     \begin{column}{0.42\textwidth}
       \small
       \begin{itemize}
-        \item Current grid and bundling anchor: 49~kt~CO$_2$e saved and 47\% median drone share.
-        \item Stronger e-bike bundling raises savings to 72~kt~CO$_2$e.
+        \item Current grid and bundling anchor: 49~\ktCOtwoe{} saved and 47\% median drone share.
+        \item Stronger e-bike bundling raises savings to 72~\ktCOtwoe{}.
         \item The stronger e-bike counterfactual lowers median drone share to 20\%.
       \end{itemize}
     \end{column}
@@ -1044,10 +1052,10 @@
       \footnotesize
       \textbf{6 features perturbed around the $\kappa{=}1$ anchor (n=313 cities):}
       \begin{itemize}
-        \item Drone energy multiplier: median $|\Delta|$ \textbf{17.0} pct pts
-        \item Provincial GEF multiplier: median $|\Delta|$ \textbf{14.4} pct pts
-        \item $\kappa$ (e-bike bundling): \textbf{2.0} pct pts (small near anchor)
-        \item Payload, lifespans: $<\!1$ pct pt each
+        \item Drone energy multiplier: median $|\Delta|$ \textbf{17.0} percentage points
+        \item Provincial GEF multiplier: median $|\Delta|$ \textbf{14.4} percentage points
+        \item $\kappa$ (e-bike bundling): \textbf{2.0} percentage points (small near anchor)
+        \item Payload, lifespans: $<\!1$ percentage point each
       \end{itemize}
       \vspace{0.4em}
       \textbf{Anchor-baseline result:}
@@ -1084,7 +1092,7 @@
       \begin{itemize}
         \item Bundling consumes most of the median advantage by $\kappa{=}0.7$
         \item Even at $\kappa{=}0.6$, $\sim$79\% of cities still benefit
-        \item Drone-mixing adds only \textbf{+4.1 pct pts} on top of bundled e-bike at today's grid
+        \item Drone-mixing adds only \textbf{+4.1 percentage points} on top of bundled e-bike at today's grid
       \end{itemize}
     \end{column}
   \end{columns}
@@ -1101,7 +1109,7 @@
       \textbf{4 binary mechanisms, full-permutation Shapley (n=313):}
       \begin{tabular}{lr}
         \toprule
-        Mechanism & median (pct pts) \\
+        Mechanism & median (percentage points) \\
         \midrule
         M3 Production amortization & \textbf{+25.0} \\
         M1 Routing geometry & \textbf{+11.0} \\
@@ -1137,9 +1145,9 @@
       \vspace{0.4em}
       \textbf{Even on top of bundled e-bike (same $\kappa$):}
       \begin{itemize}
-        \item Today: $+4.1$ pct pts
-        \item 2030: $+33.7$ pct pts
-        \item 2060: \textbf{$+85.3$} pct pts
+        \item Today: $+4.1$ percentage points
+        \item 2030: $+33.7$ percentage points
+        \item 2060: \textbf{$+85.3$} percentage points
       \end{itemize}
       \vspace{0.4em}
       \textbf{Conservative 2-km threshold} captures $\sim$90\% of optimal benefit (24.5\% vs 27.2\% at $\kappa{=}1$).
@@ -1165,8 +1173,8 @@
       \vspace{0.4em}
       \small
       \begin{itemize}
-        \item Optimal allocation saves \textbf{49.1~kt~CO$_2$e~yr$^{-1}$}.
-        \item This equals \textbf{14.2\%} of the \textbf{346.6~kt~CO$_2$e~yr$^{-1}$} all-e-bike baseline.
+        \item Optimal allocation saves \textbf{49.1~\ktCOtwoePerYr{}}.
+        \item This equals \textbf{14.2\%} of the \textbf{346.6~\ktCOtwoePerYr{}} all-e-bike baseline.
         \item Large markets dominate absolute savings: Beijing, Guangzhou, Shenzhen, Shanghai, and Chengdu.
       \end{itemize}
     \end{column}
@@ -1225,9 +1233,9 @@
       \small
       \textbf{Pathway contrast}
       \begin{itemize}
-        \item Halving provincial GEF raises annual savings from \textbf{49} to \textbf{185~kt~CO$_2$e}.
+        \item Halving provincial GEF raises annual savings from \textbf{49} to \textbf{185~\ktCOtwoe{}}.
         \item Median drone share rises from \textbf{47\%} to \textbf{77\%} under the cleaner-grid pathway.
-        \item Stronger e-bike bundling raises savings to \textbf{72~kt~CO$_2$e}, but lowers median drone share to \textbf{20\%}.
+        \item Stronger e-bike bundling raises savings to \textbf{72~\ktCOtwoe{}}, but lowers median drone share to \textbf{20\%}.
       \end{itemize}
     \end{column}
   \end{columns}
@@ -1247,7 +1255,7 @@
       \begin{itemize}
         \item Larger benefits are plausible where food delivery uses gasoline motorcycles, cars, or vans.
         \item In e-bike-based systems, the Chinese result is the more relevant benchmark.
-        \item Coal-heavy or island grids need decarbonized charging before large CO$_2$e gains are likely.
+        \item Coal-heavy or island grids need decarbonized charging before large \COtwoe{} gains are likely.
       \end{itemize}
     \end{column}
     \begin{column}{0.32\textwidth}
@@ -1283,7 +1291,7 @@
       \begin{figure}
         \centering
         \includegraphics[width=\linewidth,height=0.68\textheight,keepaspectratio]{../../figures/slides/Snipaste_2026-06-25_05-26-31.png}
-        \caption{\textbf{Delivery-mode emission comparison.} The figure reports delivery emissions in g~CO$_2$e~km$^{-1}$ for medium-duty diesel truck, medium-duty e-truck, small diesel van, small e-van, e-cargo bicycle, and drone delivery.}
+        \caption{\textbf{Delivery-mode emission comparison.} The figure reports delivery emissions in \gCOtwoe{}~km$^{-1}$ for medium-duty diesel truck, medium-duty e-truck, small diesel van, small e-van, e-cargo bicycle, and drone delivery.}
       \end{figure}
     \end{column}
     \begin{column}{0.34\textwidth}
@@ -1322,16 +1330,16 @@
     \toprule
     \textbf{Symbol} & \textbf{Description} & \textbf{Unit} & \textbf{Value} \\
     \midrule
-    $m$ & Total mass & $\mathrm{t}$ & $0.156$ \\
-    $v$ & Velocity & $\mathrm{m/s}$ & $8.33$ \\
-    $v_{\mathrm{km/h}}$ & Velocity & $\mathrm{km/h}$ & $30$ \\
-    $\rho$ & Air density & $\mathrm{kg/m^3}$ & $1.225$ \\
-    $g$ & Gravitational acceleration & $\mathrm{m/s^2}$ & $9.81$ \\
-    $A$ & Frontal area & $\mathrm{m^2}$ & $1.0$ \\
+    $m$ & Total mass & kg & $156$ \\
+    $v$ & Velocity & m~s$^{-1}$ & $8.33$ \\
+    $v_{\text{km/h}}$ & Velocity & km~h$^{-1}$ & $30$ \\
+    $\rho$ & Air density & kg~m$^{-3}$ & $1.225$ \\
+    $g$ & Gravitational acceleration & m~s$^{-2}$ & $9.81$ \\
+    $A$ & Frontal area & m$^2$ & $1.0$ \\
     $\theta$ & Road grade (slope) & -- & $0.015$ \\
-    $n_{\text{acc}}$ & Acceleration frequency & $\mathrm{km^{-1}}$ & $1$ \\
-    $C_{\text{roll}}$ & Rolling resistance coefficient & -- & $0.008$ \\
-    $C_{\text{air}}$ & Aerodynamic drag coefficient & -- & $0.65$ \\
+    $n_{\text{acc}}$ & Acceleration frequency & km$^{-1}$ & $1$ \\
+    $C_{\text{rr}}$ & Rolling resistance coefficient & -- & $0.008$ \\
+    $C_d$ & Aerodynamic drag coefficient & -- & $0.65$ \\
     \bottomrule
   \end{tabular}
 \end{frame}
@@ -1346,21 +1354,21 @@
       \toprule
       Symbol & Description & Unit & Default Value \\
       \midrule
-      $m$ & Total mass & $\mathrm{kg}$ & $14.1$ \\
-      $v$ & Flight velocity & $\mathrm{m/s}$ & $16.67$ \\
-      $T$ & Thrust force & $\mathrm{N}$ & $-$ \\
-      $w$ & Induced velocity & $\mathrm{m/s}$ & $-$ \\
-      $U$ & Blade tip speed & $\mathrm{m/s}$ & $-$ \\
-      $\rho$ & Air density & $\mathrm{kg/m^3}$ & $1.225$ \\
-      $g$ & Gravitational acceleration & $\mathrm{m/s^2}$ & $9.81$ \\
-      $A$ & Fuselage frontal area & $\mathrm{m^2}$ & $0.15$ \\
-      $\gamma$ & Flight path angle & $\mathrm{rad}$ & $-$ \\
-      $k_{\text{lift}}$ & Lift margin factor & $-$ & $1.15$ \\
-      $C_{\text{air}}$ & Fuselage drag coefficient & $-$ & $0.65$ \\
-      $C_{\text{d,blade}}$ & Blade drag coefficient & $-$ & $0.075$ \\
-      $\sigma$ & Rotor solidity & $-$ & $-$ \\
-      $R$ & Total rotor disc area & $\mathrm{m^2}$ & $-$ \\
-      $P_{\text{aux}}$ & Auxiliary power & $\mathrm{kW}$ & $0.01$ \\
+      $m$ & Total mass & kg & $14.1$ \\
+      $v$ & Flight velocity & m~s$^{-1}$ & $16.67$ \\
+      $W$ & Total weight & N & $m \cdot g$ \\
+      $T$ & Rotor thrust & N & -- \\
+      $U_{\text{tip}}$ & Blade tip speed & m~s$^{-1}$ & -- \\
+      $\rho$ & Air density & kg~m$^{-3}$ & $1.225$ \\
+      $g$ & Gravitational acceleration & m~s$^{-2}$ & $9.81$ \\
+      $A$ & Fuselage frontal area & m$^2$ & $0.15$ \\
+      $\gamma$ & Flight path angle & rad & -- \\
+      $k_{\text{lift}}$ & Lift margin factor & -- & $1.15$ \\
+      $C_d$ & Fuselage drag coefficient & -- & $0.65$ \\
+      $C_{d,\text{blade}}$ & Blade drag coefficient & -- & $0.075$ \\
+      $\sigma$ & Rotor solidity & -- & -- \\
+      $R$ & Total rotor disc area & m$^2$ & $n_{\text{rotors}}\pi r^2$ \\
+      $P_{\text{aux}}$ & Auxiliary power & kW & $0.01$ \\
       \bottomrule
     \end{tabular}
   \end{center}
@@ -1373,17 +1381,15 @@
       \toprule
       Symbol & Description & Unit & Default Value \\
       \midrule
-      $r$ & Rotor radius & $\mathrm{m}$ & $0.35$ \\
-      $\bar{c}$ & Mean blade chord & $\mathrm{m}$ & $0.1$ \\
-      $n_r$ & Number of rotors & - & $8$ \\
-      $n_b$ & Number of blades per rotor & - & $5$ \\
-      $R$ & Total rotor disc area & $\mathrm{m^2}$ & - \\
-      $v_{\text{level}}$ & Horizontal flight velocity & $\mathrm{km/h}$ & $60$ \\
-      $v_{\text{vertical}}$ & Vertical flight velocity & $\mathrm{km/h}$ & $20$ \\
-      $D_{\text{body}}$ & Fuselage drag force & $\mathrm{N}$ & - \\
-      $h_{\text{takeoff}}$ & Takeoff/landing height & $\mathrm{m}$ & $100$ \\
-      $t_{\text{hover}}$ & Hover time per delivery & $\mathrm{s}$ & $15$ \\
-      $C_l$ & Blade lift coefficient & - & $0.4$ \\
+      $r$ & Rotor radius & m & $0.35$ \\
+      $\bar{c}$ & Mean blade chord & m & $0.1$ \\
+      $n_{\text{rotors}}$ & Number of rotors & -- & $8$ \\
+      $n_{\text{blades}}$ & Number of blades per rotor & -- & $5$ \\
+      $\sigma$ & Rotor solidity & -- & $n_{\text{blades}}\bar{c}/(\pi r)$ \\
+      $v_{\text{level}}$ & Horizontal flight velocity & km~h$^{-1}$ & $60$ \\
+      $v_{\text{vertical}}$ & Vertical flight velocity & km~h$^{-1}$ & $20$ \\
+      $h_{\text{takeoff}}$ & Takeoff/landing height & m & $100$ \\
+      $t_{\text{hover}}$ & Hover time per delivery & s & $10$ \\
       \bottomrule
     \end{tabular}
   \end{center}
