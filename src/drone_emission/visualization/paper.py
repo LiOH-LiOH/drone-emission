@@ -647,7 +647,41 @@ def _find_first_existing_path(paths):
     return None
 
 
-def _render_shanghai_building_height_merchant(data_dir, out, for_latex, plot_title):
+def _get_cached_sparse_graph(graphml_path, graph_cache=None):
+    """Load a SparseGraph once per render_all call."""
+    if not os.path.exists(graphml_path):
+        return None
+    graph_cache = graph_cache if graph_cache is not None else {}
+    if graphml_path not in graph_cache:
+        from roadnet.sparse_graph import SparseGraph
+
+        graph_cache[graphml_path] = SparseGraph.from_graphml(graphml_path)
+    else:
+        print(f"Reusing cached SparseGraph: {graphml_path}")
+    return graph_cache[graphml_path]
+
+
+def _get_cached_tile_router(graphml_path, graph, router_cache=None):
+    """Create a TileRouter once per render_all call."""
+    if graph is None:
+        return None
+    router_cache = router_cache if router_cache is not None else {}
+    if graphml_path not in router_cache:
+        from roadnet.tile_router import TileRouter
+
+        router_cache[graphml_path] = TileRouter(graph)
+    else:
+        print(f"Reusing cached TileRouter: {graphml_path}")
+    return router_cache[graphml_path]
+
+
+def _render_shanghai_building_height_merchant(
+    data_dir,
+    out,
+    for_latex,
+    plot_title,
+    graph_cache=None,
+):
     """Load Shanghai buildings and sales to render the merchant-context map."""
     region_key = "shanghai"
     region_level = "city"
@@ -678,7 +712,6 @@ def _render_shanghai_building_height_merchant(data_dir, out, for_latex, plot_tit
         return
 
     import geopandas as gpd
-    from roadnet.sparse_graph import SparseGraph
     from visualization.buildings import plot_building_height_merchant_map
 
     stores_df = pd.read_csv(sales_path)
@@ -692,7 +725,7 @@ def _render_shanghai_building_height_merchant(data_dir, out, for_latex, plot_tit
         )
     road_graph = None
     if os.path.exists(roadnet_path):
-        road_graph = SparseGraph.from_graphml(roadnet_path)
+        road_graph = _get_cached_sparse_graph(roadnet_path, graph_cache=graph_cache)
     else:
         print(
             "Shanghai building height merchant map roadnet background "
@@ -3276,7 +3309,15 @@ def _render_distance_comparison_grid(data_dir, out, for_latex, plot_title, extre
     )
 
 
-def _render_distance_comparison(data_dir, out, for_latex, plot_title, plot_fn):
+def _render_distance_comparison(
+    data_dir,
+    out,
+    for_latex,
+    plot_title,
+    plot_fn,
+    graph_cache=None,
+    router_cache=None,
+):
     """Load Shanghai roadnet data and render the distance comparison figure."""
     region_key = "shanghai"
     region_level = "city"
@@ -3287,12 +3328,13 @@ def _render_distance_comparison(data_dir, out, for_latex, plot_title, plot_fn):
         print(f"Distance comparison skipped — missing data for {region_key}")
         return
 
-    from roadnet.sparse_graph import SparseGraph
-    from roadnet.tile_router import TileRouter
-
     od_df = pd.read_csv(od_path)
-    graph = SparseGraph.from_graphml(graphml_path)
-    router = TileRouter(graph)
+    graph = _get_cached_sparse_graph(graphml_path, graph_cache=graph_cache)
+    router = _get_cached_tile_router(
+        graphml_path,
+        graph,
+        router_cache=router_cache,
+    )
 
     plot_fn(
         od_df=od_df,
@@ -3355,6 +3397,8 @@ def render_all(data_dir: str, figures_dir: str, for_latex: bool = False, plot_ti
         return only is None or name in only
 
     figure1_framework_requested = _want("figure1_framework")
+    graph_cache = {}
+    router_cache = {}
 
     def _figure1_needs_vector_source(name):
         if not figure1_framework_requested:
@@ -3366,7 +3410,6 @@ def render_all(data_dir: str, figures_dir: str, for_latex: bool = False, plot_ti
         viz_dir = os.path.dirname(os.path.abspath(__file__))
         module_names = FIGURE1_FRAMEWORK_SOURCE_MODULES.get(name, ())
         module_paths = [os.path.join(viz_dir, module) for module in module_names]
-        module_paths.append(os.path.abspath(__file__))
         return any(
             os.path.exists(path) and os.path.getmtime(path) > source_mtime
             for path in module_paths
@@ -3512,6 +3555,7 @@ def render_all(data_dir: str, figures_dir: str, for_latex: bool = False, plot_ti
                 for_latex if _want("shanghai_building_height_merchant") else True
             ),
             plot_title=plot_title,
+            graph_cache=graph_cache,
         )
     if (
         _want("shanghai_building_height_merchant")
@@ -3523,6 +3567,7 @@ def render_all(data_dir: str, figures_dir: str, for_latex: bool = False, plot_ti
             out=out,
             for_latex=True,
             plot_title=plot_title,
+            graph_cache=graph_cache,
         )
 
     if _want("shanghai_road_air_distance"):
@@ -3596,6 +3641,8 @@ def render_all(data_dir: str, figures_dir: str, for_latex: bool = False, plot_ti
             for_latex=for_latex if _want("distance_comparison") else True,
             plot_title=plot_title,
             plot_fn=plot_distance_comparison,
+            graph_cache=graph_cache,
+            router_cache=router_cache,
         )
     if (
         _want("distance_comparison")
@@ -3608,6 +3655,8 @@ def render_all(data_dir: str, figures_dir: str, for_latex: bool = False, plot_ti
             for_latex=True,
             plot_title=plot_title,
             plot_fn=plot_distance_comparison,
+            graph_cache=graph_cache,
+            router_cache=router_cache,
         )
 
     if _want("distance_comparison_high_3x3"):
