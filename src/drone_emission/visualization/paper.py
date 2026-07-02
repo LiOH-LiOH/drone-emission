@@ -706,9 +706,9 @@ def _render_shanghai_building_height_merchant(data_dir, out, for_latex, plot_tit
     )
 
 
-def _paper_png_path(out, figure_name, plot_title=False):
-    """Return the expected PNG path for a paper figure."""
-    path = os.path.join(out, f"{figure_name}.png")
+def _paper_pdf_path(out, figure_name, plot_title=False):
+    """Return the expected PDF path for a paper figure."""
+    path = os.path.join(out, f"{figure_name}.pdf")
     if plot_title:
         from visualization._utils import _add_title_suffix
 
@@ -716,37 +716,14 @@ def _paper_png_path(out, figure_name, plot_title=False):
     return path
 
 
-def _draw_image_panel(fig, source_path, rect, label):
-    """Draw one source image in a figure-fraction rectangle."""
-    import matplotlib.image as mpimg
-
-    ax = fig.add_axes(rect)
-    ax.axis("off")
-    if source_path and os.path.exists(source_path):
-        img = mpimg.imread(source_path)
-        ax.imshow(img, aspect="auto")
-    else:
-        ax.text(
-            0.5,
-            0.5,
-            f"{label} source\nnot available",
-            transform=ax.transAxes,
-            ha="center",
-            va="center",
-            fontsize=9,
-            color="#777777",
-        )
-    return ax
-
-
-def _render_figure1_framework(out, for_latex, plot_title):
-    """Compose Figure 1 from the draw.io framework and rendered paper panels."""
+def _draw_figure1_overlay(overlay_path, page_size, canvas_size):
+    """Draw vector labels, process box, and arrows for Figure 1."""
     import matplotlib.pyplot as plt
     from matplotlib.patches import FancyArrowPatch
 
-    from visualization._utils import _add_title_suffix
-
-    canvas_w, canvas_h = 561.0, 481.0
+    page_w, page_h = page_size
+    canvas_w, canvas_h = canvas_size
+    fig = plt.figure(figsize=(page_w / 72.0, page_h / 72.0), facecolor="none")
 
     def rect_from_drawio(x, y, w, h):
         return (
@@ -755,37 +732,6 @@ def _render_figure1_framework(out, for_latex, plot_title):
             w / canvas_w,
             h / canvas_h,
         )
-
-    source_paths = {
-        name: _paper_png_path(out, name, plot_title=plot_title)
-        for name in FIGURE1_FRAMEWORK_DEPENDENCIES
-    }
-
-    fig = plt.figure(figsize=(7.0, 6.0), facecolor="white")
-    _draw_image_panel(
-        fig,
-        source_paths["regions_map_oracle_reduction_rank"],
-        rect_from_drawio(0, 20, 360, 300),
-        "regions_map_oracle_reduction_rank",
-    )
-    _draw_image_panel(
-        fig,
-        source_paths["shanghai_heatmap"],
-        rect_from_drawio(380, 20, 160, 180),
-        "shanghai_heatmap",
-    )
-    _draw_image_panel(
-        fig,
-        source_paths["distance_comparison"],
-        rect_from_drawio(0, 360, 360, 100),
-        "distance_comparison",
-    )
-    _draw_image_panel(
-        fig,
-        source_paths["shanghai_building_height_merchant"],
-        rect_from_drawio(380, 320, 160, 160),
-        "shanghai_building_height_merchant",
-    )
 
     flow_ax = fig.add_axes(rect_from_drawio(400, 230, 120, 60))
     flow_ax.set_xticks([])
@@ -840,14 +786,94 @@ def _render_figure1_framework(out, for_latex, plot_title):
             fontweight="bold",
         )
 
-    save_path = os.path.join(out, "figure1_framework.png")
-    if for_latex and not save_path.endswith(".pdf"):
-        save_path = save_path.rsplit(".", 1)[0] + ".pdf"
+    fig.savefig(overlay_path, transparent=True)
+    plt.close(fig)
+
+
+def _fit_pdf_rect(source_page, target_rect):
+    """Return a transform that fits a PDF page in target_rect without stretching."""
+    from pypdf import Transformation
+
+    target_x, target_y, target_w, target_h = target_rect
+    source_w = float(source_page.mediabox.width)
+    source_h = float(source_page.mediabox.height)
+    scale = min(target_w / source_w, target_h / source_h)
+    fitted_w = source_w * scale
+    fitted_h = source_h * scale
+    tx = target_x + (target_w - fitted_w) / 2.0
+    ty = target_y + (target_h - fitted_h) / 2.0
+    return Transformation().scale(scale).translate(tx, ty)
+
+
+def _render_figure1_framework(out, plot_title):
+    """Compose Figure 1 from vector PDF panels using the draw.io framework."""
+    import tempfile
+
+    from pypdf import PdfReader, PdfWriter
+
+    from visualization._utils import _add_title_suffix
+
+    canvas_w, canvas_h = 561.0, 481.0
+    page_w, page_h = 7.0 * 72.0, 6.0 * 72.0
+
+    def rect_from_drawio_points(x, y, w, h):
+        return (
+            x / canvas_w * page_w,
+            page_h - (y + h) / canvas_h * page_h,
+            w / canvas_w * page_w,
+            h / canvas_h * page_h,
+        )
+
+    panel_specs = (
+        ("regions_map_oracle_reduction_rank", rect_from_drawio_points(0, 20, 360, 300)),
+        ("shanghai_heatmap", rect_from_drawio_points(380, 20, 160, 180)),
+        ("distance_comparison", rect_from_drawio_points(0, 360, 360, 100)),
+        ("shanghai_building_height_merchant", rect_from_drawio_points(380, 320, 160, 160)),
+    )
+    source_paths = {
+        name: _paper_pdf_path(out, name, plot_title=plot_title)
+        for name in FIGURE1_FRAMEWORK_DEPENDENCIES
+    }
+    missing = [name for name, path in source_paths.items() if not os.path.exists(path)]
+    if missing:
+        print(
+            "figure1_framework skipped - missing vector source PDFs: "
+            + ", ".join(missing)
+        )
+        return
+
+    writer = PdfWriter()
+    page = writer.add_blank_page(width=page_w, height=page_h)
+    for name, target_rect in panel_specs:
+        source_page = PdfReader(source_paths[name]).pages[0]
+        page.merge_transformed_page(
+            source_page,
+            _fit_pdf_rect(source_page, target_rect),
+            over=True,
+        )
+
+    with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
+        overlay_path = tmp.name
+    try:
+        _draw_figure1_overlay(
+            overlay_path,
+            page_size=(page_w, page_h),
+            canvas_size=(canvas_w, canvas_h),
+        )
+        overlay_page = PdfReader(overlay_path).pages[0]
+        page.merge_page(overlay_page, over=True)
+    finally:
+        try:
+            os.remove(overlay_path)
+        except OSError:
+            pass
+
+    save_path = os.path.join(out, "figure1_framework.pdf")
     if plot_title:
         save_path = _add_title_suffix(save_path)
     os.makedirs(os.path.dirname(save_path), exist_ok=True)
-    fig.savefig(save_path, dpi=300, bbox_inches="tight", pad_inches=0.02)
-    plt.close(fig)
+    with open(save_path, "wb") as f:
+        writer.write(f)
     print(f"Figure 1 framework saved to {save_path}")
 
 
@@ -3321,6 +3347,12 @@ def render_all(data_dir: str, figures_dir: str, for_latex: bool = False, plot_ti
 
     figure1_framework_requested = _want("figure1_framework")
 
+    def _figure1_needs_vector_source(name):
+        return (
+            figure1_framework_requested
+            and not os.path.exists(_paper_pdf_path(out, name, plot_title=plot_title))
+        )
+
     # --- Concept figures (no data dependency) ---
     if _want("emission_model_flowchart"):
         plot_emission_model_flowchart(
@@ -3431,33 +3463,46 @@ def render_all(data_dir: str, figures_dir: str, for_latex: bool = False, plot_ti
         )
 
     # --- Shanghai figures (independent of all_region_stats) ---
-    if _want("shanghai_heatmap") or figure1_framework_requested:
+    if _want("shanghai_heatmap") or _figure1_needs_vector_source("shanghai_heatmap"):
         _render_shanghai_heatmap(
             data_dir=data_dir,
             out=out,
-            for_latex=for_latex if _want("shanghai_heatmap") else False,
+            for_latex=for_latex if _want("shanghai_heatmap") else True,
             plot_title=plot_title,
         )
-    if figure1_framework_requested and _want("shanghai_heatmap") and for_latex:
+    if (
+        _want("shanghai_heatmap")
+        and not for_latex
+        and _figure1_needs_vector_source("shanghai_heatmap")
+    ):
         _render_shanghai_heatmap(
             data_dir=data_dir,
             out=out,
-            for_latex=False,
+            for_latex=True,
             plot_title=plot_title,
         )
 
-    if _want("shanghai_building_height_merchant") or figure1_framework_requested:
+    if (
+        _want("shanghai_building_height_merchant")
+        or _figure1_needs_vector_source("shanghai_building_height_merchant")
+    ):
         _render_shanghai_building_height_merchant(
             data_dir=data_dir,
             out=out,
-            for_latex=for_latex if _want("shanghai_building_height_merchant") else False,
+            for_latex=(
+                for_latex if _want("shanghai_building_height_merchant") else True
+            ),
             plot_title=plot_title,
         )
-    if figure1_framework_requested and _want("shanghai_building_height_merchant") and for_latex:
+    if (
+        _want("shanghai_building_height_merchant")
+        and not for_latex
+        and _figure1_needs_vector_source("shanghai_building_height_merchant")
+    ):
         _render_shanghai_building_height_merchant(
             data_dir=data_dir,
             out=out,
-            for_latex=False,
+            for_latex=True,
             plot_title=plot_title,
         )
 
@@ -3525,19 +3570,23 @@ def render_all(data_dir: str, figures_dir: str, for_latex: bool = False, plot_ti
             plot_title=plot_title,
         )
 
-    if _want("distance_comparison") or figure1_framework_requested:
+    if _want("distance_comparison") or _figure1_needs_vector_source("distance_comparison"):
         _render_distance_comparison(
             data_dir=data_dir,
             out=out,
-            for_latex=for_latex if _want("distance_comparison") else False,
+            for_latex=for_latex if _want("distance_comparison") else True,
             plot_title=plot_title,
             plot_fn=plot_distance_comparison,
         )
-    if figure1_framework_requested and _want("distance_comparison") and for_latex:
+    if (
+        _want("distance_comparison")
+        and not for_latex
+        and _figure1_needs_vector_source("distance_comparison")
+    ):
         _render_distance_comparison(
             data_dir=data_dir,
             out=out,
-            for_latex=False,
+            for_latex=True,
             plot_title=plot_title,
             plot_fn=plot_distance_comparison,
         )
@@ -3783,7 +3832,10 @@ def render_all(data_dir: str, figures_dir: str, for_latex: bool = False, plot_ti
                     plot_title=plot_title,
                 )
 
-            if _want("regions_map_oracle_reduction_rank") or figure1_framework_requested:
+            if (
+                _want("regions_map_oracle_reduction_rank")
+                or _figure1_needs_vector_source("regions_map_oracle_reduction_rank")
+            ):
                 plot_regions_map_oracle_reduction_rank(
                     df_stats=df,
                     stats_csv_path=stats_path,
@@ -3791,20 +3843,20 @@ def render_all(data_dir: str, figures_dir: str, for_latex: bool = False, plot_ti
                     for_latex=(
                         for_latex
                         if _want("regions_map_oracle_reduction_rank")
-                        else False
+                        else True
                     ),
                     plot_title=plot_title,
                 )
             if (
-                figure1_framework_requested
-                and _want("regions_map_oracle_reduction_rank")
-                and for_latex
+                _want("regions_map_oracle_reduction_rank")
+                and not for_latex
+                and _figure1_needs_vector_source("regions_map_oracle_reduction_rank")
             ):
                 plot_regions_map_oracle_reduction_rank(
                     df_stats=df,
                     stats_csv_path=stats_path,
                     save_path=os.path.join(out, "regions_map_oracle_reduction_rank.png"),
-                    for_latex=False,
+                    for_latex=True,
                     plot_title=plot_title,
                 )
 
@@ -4005,7 +4057,6 @@ def render_all(data_dir: str, figures_dir: str, for_latex: bool = False, plot_ti
     if figure1_framework_requested:
         _render_figure1_framework(
             out=out,
-            for_latex=for_latex,
             plot_title=plot_title,
         )
 
