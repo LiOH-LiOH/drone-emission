@@ -3121,6 +3121,7 @@ def _render_distance_comparison(data_dir, out, for_latex, plot_title, plot_fn):
         n_cols=3,
         show_stats_box=False,
         show_basemap=False,
+        show_gap_dots=True,
     )
 
 

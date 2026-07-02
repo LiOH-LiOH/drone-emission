@@ -519,6 +519,7 @@ def plot_distance_comparison(
     n_cols: int = 1,
     show_stats_box: bool = True,
     show_basemap: bool = True,
+    show_gap_dots: bool = False,
 ) -> None:
     """Visualize sampled delivery paths comparing straight-line vs road network distance.
 
@@ -538,6 +539,7 @@ def plot_distance_comparison(
         n_cols: Number of subplot columns.
         show_stats_box: If True, show per-panel distance summary text boxes.
         show_basemap: If True, add the OpenStreetMap tile background.
+        show_gap_dots: If True, draw a centered ellipsis between panels 2 and 3.
     """
     sample_paths = _compute_distance_samples(od_df, router, n_samples)
     if not sample_paths:
@@ -573,6 +575,19 @@ def plot_distance_comparison(
                      fontsize=14, fontweight="bold", y=1.02)
 
     plt.tight_layout()
+
+    if show_gap_dots and len(sample_paths) >= 3 and len(axes) >= 3:
+        left = axes[1].get_position()
+        right = axes[2].get_position()
+        fig.text(
+            (left.x1 + right.x0) / 2,
+            (left.y0 + left.y1) / 2,
+            r"$\cdots$",
+            ha="center",
+            va="center",
+            fontsize=18,
+            color="#444444",
+        )
 
     if save_path:
         if for_latex and not save_path.endswith(".pdf"):
