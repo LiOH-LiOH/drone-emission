@@ -13,7 +13,8 @@ Available figures:
     production_detour_eol_panels, emission_model_flowchart,
     detour_and_lifecycle, distance_comparison,
     distance_comparison_high_3x3, distance_comparison_low_3x3,
-    shanghai_heatmap, shanghai_road_air_distance, shanghai_road_detour,
+    shanghai_heatmap, shanghai_building_height_merchant,
+    shanghai_road_air_distance, shanghai_road_detour,
     shanghai_air_detour, shanghai_air_road_joint, shanghai_emission_reduction,
     shanghai_emission_by_distance, shanghai_reduction_detour_by_distance,
     beijing_median_trip_emission_process,
@@ -621,6 +622,58 @@ def _render_shanghai_heatmap(data_dir, out, for_latex, plot_title):
         plot_title=plot_title,
         lng_range=(121.0, 121.9),
         lat_range=(30.9, 31.55),
+    )
+
+
+def _find_first_existing_path(paths):
+    """Return the first existing path from a list of candidates."""
+    for path in paths:
+        if os.path.exists(path):
+            return path
+    return None
+
+
+def _render_shanghai_building_height_merchant(data_dir, out, for_latex, plot_title):
+    """Load Shanghai buildings and sales to render the merchant-context map."""
+    region_key = "shanghai"
+    region_level = "city"
+    region_dir = os.path.join(data_dir, region_level, region_key)
+    sales_path = os.path.join(region_dir, f"{region_key}_sales.csv")
+    building_path = _find_first_existing_path(
+        [
+            os.path.join(region_dir, f"{region_key}_buildings_preprocessed.gpkg"),
+            os.path.join(region_dir, f"{region_key}_buildings_preprocessed.geojson"),
+            os.path.join(region_dir, f"{region_key}_buildings.gpkg"),
+            os.path.join(region_dir, f"{region_key}_buildings.geojson"),
+        ]
+    )
+
+    if not os.path.exists(sales_path):
+        print(
+            "Shanghai building height merchant map skipped - missing "
+            f"{sales_path}"
+        )
+        return
+    if building_path is None:
+        print(
+            "Shanghai building height merchant map skipped - missing Shanghai "
+            f"building geometry in {region_dir}"
+        )
+        return
+
+    import geopandas as gpd
+    from visualization.buildings import plot_building_height_merchant_map
+
+    stores_df = pd.read_csv(sales_path)
+    buildings_gdf = gpd.read_file(building_path)
+    plot_building_height_merchant_map(
+        buildings_gdf,
+        stores_df,
+        "Shanghai",
+        "上海市",
+        save_path=os.path.join(out, "shanghai_building_height_merchant.png"),
+        for_latex=for_latex,
+        plot_title=plot_title,
     )
 
 
@@ -3199,6 +3252,14 @@ def render_all(data_dir: str, figures_dir: str, for_latex: bool = False, plot_ti
     # --- Shanghai figures (independent of all_region_stats) ---
     if _want("shanghai_heatmap"):
         _render_shanghai_heatmap(
+            data_dir=data_dir,
+            out=out,
+            for_latex=for_latex,
+            plot_title=plot_title,
+        )
+
+    if _want("shanghai_building_height_merchant"):
+        _render_shanghai_building_height_merchant(
             data_dir=data_dir,
             out=out,
             for_latex=for_latex,
