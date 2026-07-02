@@ -591,7 +591,10 @@ def plot_distance_comparison(
         plt.suptitle("Straight-line vs Road Network Distance Comparison",
                      fontsize=14, fontweight="bold", y=1.02)
 
-    plt.tight_layout()
+    if use_gap_column:
+        fig.subplots_adjust(left=0.02, right=0.98, bottom=0.04, top=0.96, wspace=0.02)
+    else:
+        plt.tight_layout()
 
     if gap_ax is not None:
         gap_ax.axis("off")
