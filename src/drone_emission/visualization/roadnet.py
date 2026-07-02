@@ -228,6 +228,7 @@ def _draw_distance_panel(
     graph,
     show_legend=False,
     show_stats_box=True,
+    show_basemap=True,
     padding=0.003,
     target_aspect=1.0,
     rotate_air_diagonal=False,
@@ -330,55 +331,56 @@ def _draw_distance_panel(
             "max_lng": max(lng for _, lng in corners),
         }
 
-        try:
-            from matplotlib.transforms import Affine2D
+        if show_basemap:
+            try:
+                from matplotlib.transforms import Affine2D
 
-            configure_contextily_cache()
-            img, basemap_extent = ctx.bounds2img(
-                query_bounds["min_lng"],
-                query_bounds["min_lat"],
-                query_bounds["max_lng"],
-                query_bounds["max_lat"],
-                zoom=16,
-                source=ctx.providers.OpenStreetMap.Mapnik,
-                ll=True,
-            )
-
-            def _mercator_to_lng_lat(x, y):
-                radius = 6378137.0
-                lng = np.degrees(x / radius)
-                lat = np.degrees(2 * np.arctan(np.exp(y / radius)) - np.pi / 2)
-                return lng, lat
-
-            west_m, east_m, south_m, north_m = basemap_extent
-            west, south = _mercator_to_lng_lat(west_m, south_m)
-            east, north = _mercator_to_lng_lat(east_m, north_m)
-            sw = _transform(south, west)
-            se = _transform(south, east)
-            nw = _transform(north, west)
-            v_x = se - sw
-            v_y = nw - sw
-            image_transform = (
-                Affine2D.from_values(
-                    v_x[0] / img.shape[1],
-                    v_x[1] / img.shape[1],
-                    v_y[0] / img.shape[0],
-                    v_y[1] / img.shape[0],
-                    sw[0],
-                    sw[1],
+                configure_contextily_cache()
+                img, basemap_extent = ctx.bounds2img(
+                    query_bounds["min_lng"],
+                    query_bounds["min_lat"],
+                    query_bounds["max_lng"],
+                    query_bounds["max_lat"],
+                    zoom=16,
+                    source=ctx.providers.OpenStreetMap.Mapnik,
+                    ll=True,
                 )
-                + ax.transData
-            )
-            ax.imshow(
-                np.flipud(img),
-                extent=(0, img.shape[1], 0, img.shape[0]),
-                origin="lower",
-                transform=image_transform,
-                alpha=0.5,
-                zorder=0,
-            )
-        except Exception as e:
-            print(f"Could not add rotated basemap: {e}")
+
+                def _mercator_to_lng_lat(x, y):
+                    radius = 6378137.0
+                    lng = np.degrees(x / radius)
+                    lat = np.degrees(2 * np.arctan(np.exp(y / radius)) - np.pi / 2)
+                    return lng, lat
+
+                west_m, east_m, south_m, north_m = basemap_extent
+                west, south = _mercator_to_lng_lat(west_m, south_m)
+                east, north = _mercator_to_lng_lat(east_m, north_m)
+                sw = _transform(south, west)
+                se = _transform(south, east)
+                nw = _transform(north, west)
+                v_x = se - sw
+                v_y = nw - sw
+                image_transform = (
+                    Affine2D.from_values(
+                        v_x[0] / img.shape[1],
+                        v_x[1] / img.shape[1],
+                        v_y[0] / img.shape[0],
+                        v_y[1] / img.shape[0],
+                        sw[0],
+                        sw[1],
+                    )
+                    + ax.transData
+                )
+                ax.imshow(
+                    np.flipud(img),
+                    extent=(0, img.shape[1], 0, img.shape[0]),
+                    origin="lower",
+                    transform=image_transform,
+                    alpha=0.5,
+                    zorder=0,
+                )
+            except Exception as e:
+                print(f"Could not add rotated basemap: {e}")
 
         edge_coords = graph.get_local_edges(query_bounds)
         if len(edge_coords) > 0:
@@ -415,7 +417,8 @@ def _draw_distance_panel(
         ax.set_xlim(x_min, x_max)
         ax.set_ylim(y_min, y_max)
         ax.set_aspect("equal", adjustable="box")
-        ax.set_facecolor("#f7f7f7")
+        if show_basemap:
+            ax.set_facecolor("#f7f7f7")
         ax.set_xlabel("")
         ax.set_ylabel("")
         ax.tick_params(left=False, bottom=False, labelleft=False, labelbottom=False)
@@ -476,13 +479,14 @@ def _draw_distance_panel(
     ax.set_ylim(local_bounds["min_lat"], local_bounds["max_lat"])
     ax.set_aspect(1 / cos_lat, adjustable="box")
 
-    try:
-        configure_contextily_cache()
-        ctx.add_basemap(ax, crs="EPSG:4326",
-                        source=ctx.providers.OpenStreetMap.Mapnik,
-                        zoom=16, alpha=0.5, zorder=0)
-    except Exception as e:
-        print(f"Could not add basemap: {e}")
+    if show_basemap:
+        try:
+            configure_contextily_cache()
+            ctx.add_basemap(ax, crs="EPSG:4326",
+                            source=ctx.providers.OpenStreetMap.Mapnik,
+                            zoom=16, alpha=0.5, zorder=0)
+        except Exception as e:
+            print(f"Could not add basemap: {e}")
 
     ax.set_xlim(local_bounds["min_lng"], local_bounds["max_lng"])
     ax.set_ylim(local_bounds["min_lat"], local_bounds["max_lat"])
@@ -512,6 +516,9 @@ def plot_distance_comparison(
     for_latex: bool = False,
     plot_title: bool = False,
     n_samples: int = 2,
+    n_cols: int = 1,
+    show_stats_box: bool = True,
+    show_basemap: bool = True,
 ) -> None:
     """Visualize sampled delivery paths comparing straight-line vs road network distance.
 
@@ -524,24 +531,39 @@ def plot_distance_comparison(
         graph: SparseGraph built from the region's graphml file.
         router: TileRouter wrapping the SparseGraph.
         save_path: Path to save figure (with .png extension). Shows plot if None.
-        figsize: Total figure size tuple. Defaults to (4, 4*n_samples).
+        figsize: Total figure size tuple. Defaults to a 4-inch square per panel.
         for_latex: If True, save as PDF.
         plot_title: If True, show title.
         n_samples: Number of sample panels to show.
+        n_cols: Number of subplot columns.
+        show_stats_box: If True, show per-panel distance summary text boxes.
+        show_basemap: If True, add the OpenStreetMap tile background.
     """
     sample_paths = _compute_distance_samples(od_df, router, n_samples)
     if not sample_paths:
         print("No valid samples for distance comparison visualization")
         return
 
-    n_rows = len(sample_paths)
-    fig, axes = plt.subplots(n_rows, 1, figsize=figsize or (4, 4 * n_rows))
-    if n_rows == 1:
+    n_cols = max(1, min(int(n_cols), len(sample_paths)))
+    n_rows = int(np.ceil(len(sample_paths) / n_cols))
+    fig, axes = plt.subplots(
+        n_rows,
+        n_cols,
+        figsize=figsize or (4 * n_cols, 4 * n_rows),
+    )
+    if n_rows == 1 and n_cols == 1:
         axes = np.array([axes])
     axes = axes.flatten()
 
     for idx, (ax, sample) in enumerate(zip(axes, sample_paths)):
-        _draw_distance_panel(ax, sample, graph, show_legend=(idx == 0))
+        _draw_distance_panel(
+            ax,
+            sample,
+            graph,
+            show_legend=(idx == 0),
+            show_stats_box=show_stats_box,
+            show_basemap=show_basemap,
+        )
 
     for idx in range(len(sample_paths), len(axes)):
         axes[idx].set_visible(False)
