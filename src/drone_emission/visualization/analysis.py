@@ -5439,10 +5439,11 @@ def plot_regions_map_oracle_reduction_rank(
         )
 
     fig.tight_layout()
+    fig.subplots_adjust(left=0.11)
 
     fig.canvas.draw()
     map_pos = ax_map.get_position()
-    cbar_ax = fig.add_axes((map_pos.x1 + 0.005, map_pos.y0, 0.014, map_pos.height))
+    cbar_ax = fig.add_axes((map_pos.x0 - 0.035, map_pos.y0, 0.014, map_pos.height))
     cbar, n_bands = _draw_discrete_reduction_colorbar(
         fig,
         cbar_ax,
@@ -5452,6 +5453,8 @@ def plot_regions_map_oracle_reduction_rank(
         reduction_edges,
         "E-bike - Oracle (t CO₂eq / yr)",
     )
+    cbar.ax.yaxis.set_ticks_position("left")
+    cbar.ax.yaxis.set_label_position("left")
     _annotate_unstudied(fig, cbar, cbar_ax, n_bands)
 
     if save_path:

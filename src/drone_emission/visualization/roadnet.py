@@ -520,6 +520,8 @@ def plot_distance_comparison(
     show_stats_box: bool = True,
     show_basemap: bool = True,
     show_gap_dots: bool = False,
+    gap_width_ratio: float = 0.22,
+    gap_wspace: float = 0.02,
 ) -> None:
     """Visualize sampled delivery paths comparing straight-line vs road network distance.
 
@@ -540,6 +542,8 @@ def plot_distance_comparison(
         show_stats_box: If True, show per-panel distance summary text boxes.
         show_basemap: If True, add the OpenStreetMap tile background.
         show_gap_dots: If True, draw a centered ellipsis between panels 2 and 3.
+        gap_width_ratio: Relative width of the ellipsis column when show_gap_dots is True.
+        gap_wspace: Horizontal GridSpec spacing around distance panels and ellipsis.
     """
     sample_paths = _compute_distance_samples(od_df, router, n_samples)
     if not sample_paths:
@@ -559,7 +563,10 @@ def plot_distance_comparison(
             1,
             4,
             figsize=figsize or (12.9, 4),
-            gridspec_kw={"width_ratios": [1, 1, 0.22, 1], "wspace": 0.02},
+            gridspec_kw={
+                "width_ratios": [1, 1, gap_width_ratio, 1],
+                "wspace": gap_wspace,
+            },
         )
         panel_axes = np.array([grid_axes[0], grid_axes[1], grid_axes[3]])
         gap_ax = grid_axes[2]
@@ -592,7 +599,13 @@ def plot_distance_comparison(
                      fontsize=14, fontweight="bold", y=1.02)
 
     if use_gap_column:
-        fig.subplots_adjust(left=0.02, right=0.98, bottom=0.04, top=0.96, wspace=0.02)
+        fig.subplots_adjust(
+            left=0.02,
+            right=0.98,
+            bottom=0.04,
+            top=0.96,
+            wspace=gap_wspace,
+        )
     else:
         plt.tight_layout()
 

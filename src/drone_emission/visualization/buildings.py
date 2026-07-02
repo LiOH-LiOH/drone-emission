@@ -416,8 +416,11 @@ def plot_building_height_merchant_map(
 
     ax.set_xlim(boundaries_dict["min_lng"], boundaries_dict["max_lng"])
     ax.set_ylim(boundaries_dict["min_lat"], boundaries_dict["max_lat"])
-    ax.set_xlabel("Longitude", fontsize=12)
-    ax.set_ylabel("Latitude", fontsize=12)
+    ax.set_xlabel("")
+    ax.set_ylabel("")
+    ax.set_xticks([])
+    ax.set_yticks([])
+    ax.tick_params(left=False, bottom=False, labelleft=False, labelbottom=False)
     ax.ticklabel_format(useOffset=False, style="plain")
     ax.grid(True, alpha=0.35, linestyle="--", color="white", zorder=20)
 

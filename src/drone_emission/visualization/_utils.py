@@ -188,7 +188,17 @@ def _add_title_suffix(save_path):
     return f"{base}_t.{ext}"
 
 
-def finalize_plot(fig, ax, save_path, title, stats_text, boundaries_dict=None, for_latex=False, plot_title=False):
+def finalize_plot(
+    fig,
+    ax,
+    save_path,
+    title,
+    stats_text,
+    boundaries_dict=None,
+    for_latex=False,
+    plot_title=False,
+    show_geo_axes=True,
+):
     """Finalize plot with title, labels, and axis limits.
 
     Args:
@@ -201,10 +211,23 @@ def finalize_plot(fig, ax, save_path, title, stats_text, boundaries_dict=None, f
                         If provided, uses fixed boundaries for axis limits
         for_latex: If True, save as PDF format
         plot_title: If True, show title and stats text
+        show_geo_axes: If False, hide longitude/latitude labels and ticks.
     """
     # Set labels
-    ax.set_xlabel("Longitude", fontsize=12)
-    ax.set_ylabel("Latitude", fontsize=12)
+    if show_geo_axes:
+        ax.set_xlabel("Longitude", fontsize=12)
+        ax.set_ylabel("Latitude", fontsize=12)
+    else:
+        ax.set_xlabel("")
+        ax.set_ylabel("")
+        ax.set_xticks([])
+        ax.set_yticks([])
+        ax.tick_params(
+            left=False,
+            bottom=False,
+            labelleft=False,
+            labelbottom=False,
+        )
 
     if plot_title:
         ax.set_title(

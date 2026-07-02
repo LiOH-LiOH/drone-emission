@@ -224,7 +224,7 @@ def plot_sales_heatmap(
 
     # Place colorbar above the map to preserve horizontal figure space.
     divider = make_axes_locatable(ax)
-    cax = divider.append_axes("top", size="4%", pad=0.1)
+    cax = divider.append_axes("top", size="4%", pad=0.28)
     cbar = plt.colorbar(
         im,
         cax=cax,
@@ -246,6 +246,7 @@ def plot_sales_heatmap(
         boundaries_dict,
         for_latex,
         plot_title,
+        show_geo_axes=False,
     )
 
 

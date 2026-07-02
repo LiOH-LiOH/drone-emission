@@ -174,6 +174,12 @@ FIGURE1_FRAMEWORK_DEPENDENCIES = (
     "distance_comparison",
     "shanghai_building_height_merchant",
 )
+FIGURE1_FRAMEWORK_SOURCE_MODULES = {
+    "regions_map_oracle_reduction_rank": ("analysis.py", "regions.py"),
+    "shanghai_heatmap": ("sales.py", "_utils.py"),
+    "distance_comparison": ("roadnet.py",),
+    "shanghai_building_height_merchant": ("buildings.py",),
+}
 
 
 def _get_ebike_kappa(exp_config):
@@ -3295,11 +3301,14 @@ def _render_distance_comparison(data_dir, out, for_latex, plot_title, plot_fn):
         save_path=os.path.join(out, "distance_comparison.png"),
         for_latex=for_latex,
         plot_title=plot_title,
+        figsize=(10.4, 3.1),
         n_samples=3,
         n_cols=3,
         show_stats_box=False,
         show_basemap=False,
         show_gap_dots=True,
+        gap_width_ratio=0.55,
+        gap_wspace=0.10,
     )
 
 
@@ -3348,9 +3357,19 @@ def render_all(data_dir: str, figures_dir: str, for_latex: bool = False, plot_ti
     figure1_framework_requested = _want("figure1_framework")
 
     def _figure1_needs_vector_source(name):
-        return (
-            figure1_framework_requested
-            and not os.path.exists(_paper_pdf_path(out, name, plot_title=plot_title))
+        if not figure1_framework_requested:
+            return False
+        source_pdf = _paper_pdf_path(out, name, plot_title=plot_title)
+        if not os.path.exists(source_pdf):
+            return True
+        source_mtime = os.path.getmtime(source_pdf)
+        viz_dir = os.path.dirname(os.path.abspath(__file__))
+        module_names = FIGURE1_FRAMEWORK_SOURCE_MODULES.get(name, ())
+        module_paths = [os.path.join(viz_dir, module) for module in module_names]
+        module_paths.append(os.path.abspath(__file__))
+        return any(
+            os.path.exists(path) and os.path.getmtime(path) > source_mtime
+            for path in module_paths
         )
 
     # --- Concept figures (no data dependency) ---
