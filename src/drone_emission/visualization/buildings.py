@@ -19,7 +19,7 @@ from ._utils import (
 )
 
 
-MERCHANT_MAP_DEGREE_SIZE = 0.02
+MERCHANT_MAP_DEGREE_SIZE = 0.1
 MERCHANT_MAP_RANDOM_SEED = 20260703
 MERCHANT_MAP_TOP_SALES_FRACTION = 0.01
 MERCHANT_MAP_ORIGIN_TOLERANCE_DEG = 1e-6
@@ -275,8 +275,8 @@ def plot_building_height_merchant_map(
             roads = LineCollection(
                 segments,
                 colors="#aeb4b9",
-                linewidths=0.35,
-                alpha=0.65,
+                linewidths=0.75,
+                alpha=0.75,
                 zorder=2,
             )
             ax.add_collection(roads)
