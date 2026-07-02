@@ -222,10 +222,17 @@ def plot_sales_heatmap(
 
     add_basemap_and_boundaries(ax, region_name_cn, boundaries_dict, zoom=zoom)
 
-    # Add colorbar aligned with map height using make_axes_locatable
+    # Place colorbar above the map to preserve horizontal figure space.
     divider = make_axes_locatable(ax)
-    cax = divider.append_axes("right", size="4%", pad=0.1)
-    cbar = plt.colorbar(im, cax=cax, label="Sales Density (Weighted)")
+    cax = divider.append_axes("top", size="4%", pad=0.1)
+    cbar = plt.colorbar(
+        im,
+        cax=cax,
+        orientation="horizontal",
+        label="Sales Density (Weighted)",
+    )
+    cbar.ax.xaxis.set_label_position("top")
+    cbar.ax.xaxis.set_ticks_position("top")
     cbar.ax.tick_params(labelsize=10)
 
     stats_text = f"Total Stores: {len(df)}\nAvg Sales: {sales.mean():.1f}\nMax Sales: {sales.max():.0f}"
