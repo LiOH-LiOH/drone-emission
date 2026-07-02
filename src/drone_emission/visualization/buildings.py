@@ -4,6 +4,7 @@ import geopandas as gpd
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from matplotlib.collections import LineCollection
 from shapely.geometry import Point
 from utils.coordinates import gcj02_to_wgs84
 from utils.tools import get_epsg_code, get_epsg_from_bounds
@@ -22,7 +23,7 @@ MERCHANT_MAP_DEGREE_SIZE = 0.02
 MERCHANT_MAP_RANDOM_SEED = 20260703
 MERCHANT_MAP_TOP_SALES_FRACTION = 0.01
 MERCHANT_MAP_ORIGIN_TOLERANCE_DEG = 1e-6
-MERCHANT_MAP_OD_LINE_COUNT = 5
+MERCHANT_MAP_OD_LINE_COUNT = 15
 
 
 def visualize_buildings(
@@ -140,6 +141,7 @@ def plot_building_height_merchant_map(
     region_name,
     region_name_cn,
     od_df=None,
+    road_graph=None,
     save_path=None,
     figsize=(10, 6),
     for_latex=False,
@@ -152,6 +154,7 @@ def plot_building_height_merchant_map(
         stores_df: DataFrame with lat, lng, and month_sales columns.
         od_df: Optional DataFrame with OD demand columns from_lat, from_lng,
             to_lat, to_lng, and annual_sales.
+        road_graph: Optional SparseGraph used to draw local roadnet background.
         region_name: English region name.
         region_name_cn: Chinese region name for basemap and boundaries.
         save_path: Path to save figure. Shows plot if None.
@@ -254,14 +257,29 @@ def plot_building_height_merchant_map(
     ax.set_aspect(aspect_ratio)
     ax.set_xlim(boundaries_dict["min_lng"], boundaries_dict["max_lng"])
     ax.set_ylim(boundaries_dict["min_lat"], boundaries_dict["max_lat"])
+    ax.set_facecolor("#f7f7f5")
 
-    add_basemap_and_boundaries(
-        ax,
-        region_name_cn,
-        boundaries_dict,
-        zoom=14,
-        alpha=0.45,
-    )
+    road_edge_count = 0
+    if road_graph is None:
+        print("Building height merchant map roadnet background skipped - missing roadnet")
+    else:
+        edge_coords = road_graph.get_local_edges(boundaries_dict, margin_deg=0.0)
+        road_edge_count = len(edge_coords)
+        if road_edge_count == 0:
+            print(
+                "Building height merchant map roadnet background skipped - "
+                "no road edges in frame"
+            )
+        else:
+            segments = [[(ec[1], ec[0]), (ec[3], ec[2])] for ec in edge_coords]
+            roads = LineCollection(
+                segments,
+                colors="#aeb4b9",
+                linewidths=0.35,
+                alpha=0.65,
+                zorder=2,
+            )
+            ax.add_collection(roads)
 
     cmap = get_custom_cmap(0)
     buildings_in_frame.plot(
@@ -404,6 +422,7 @@ def plot_building_height_merchant_map(
                 f"Frame: {MERCHANT_MAP_DEGREE_SIZE:.2f} deg x "
                 f"{MERCHANT_MAP_DEGREE_SIZE:.2f} deg\n"
                 f"Buildings: {len(buildings_in_frame):,}\n"
+                f"Road edges: {road_edge_count:,}\n"
                 f"OD lines: {od_line_count}\n"
                 f"Merchant monthly sales: {merchant['month_sales']:.0f}"
             ),

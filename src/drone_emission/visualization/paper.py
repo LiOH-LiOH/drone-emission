@@ -640,6 +640,7 @@ def _render_shanghai_building_height_merchant(data_dir, out, for_latex, plot_tit
     region_dir = os.path.join(data_dir, region_level, region_key)
     sales_path = os.path.join(region_dir, f"{region_key}_sales.csv")
     od_path = os.path.join(region_dir, f"{region_key}_od_pairs.csv")
+    roadnet_path = os.path.join(region_dir, f"{region_key}_roadnet.graphml")
     building_path = _find_first_existing_path(
         [
             os.path.join(region_dir, f"{region_key}_buildings_preprocessed.gpkg"),
@@ -663,6 +664,7 @@ def _render_shanghai_building_height_merchant(data_dir, out, for_latex, plot_tit
         return
 
     import geopandas as gpd
+    from roadnet.sparse_graph import SparseGraph
     from visualization.buildings import plot_building_height_merchant_map
 
     stores_df = pd.read_csv(sales_path)
@@ -674,6 +676,14 @@ def _render_shanghai_building_height_merchant(data_dir, out, for_latex, plot_tit
             "Shanghai building height merchant map OD overlay skipped - "
             f"missing {od_path}"
         )
+    road_graph = None
+    if os.path.exists(roadnet_path):
+        road_graph = SparseGraph.from_graphml(roadnet_path)
+    else:
+        print(
+            "Shanghai building height merchant map roadnet background "
+            f"skipped - missing {roadnet_path}"
+        )
     buildings_gdf = gpd.read_file(building_path)
     plot_building_height_merchant_map(
         buildings_gdf,
@@ -681,6 +691,7 @@ def _render_shanghai_building_height_merchant(data_dir, out, for_latex, plot_tit
         "Shanghai",
         "上海市",
         od_df=od_df,
+        road_graph=road_graph,
         save_path=os.path.join(out, "shanghai_building_height_merchant.png"),
         for_latex=for_latex,
         plot_title=plot_title,
