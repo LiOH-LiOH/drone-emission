@@ -5,6 +5,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from matplotlib.collections import LineCollection
+from matplotlib.colors import BoundaryNorm, ListedColormap
+from matplotlib.cm import ScalarMappable
 from shapely.geometry import Point
 from utils.coordinates import gcj02_to_wgs84
 from utils.tools import get_epsg_code, get_epsg_from_bounds
@@ -24,6 +26,7 @@ MERCHANT_MAP_RANDOM_SEED = 20260703
 MERCHANT_MAP_TOP_SALES_FRACTION = 0.01
 MERCHANT_MAP_ORIGIN_TOLERANCE_DEG = 1e-6
 MERCHANT_MAP_OD_LINE_COUNT = 15
+MERCHANT_MAP_HEIGHT_BINS = 6
 
 
 def visualize_buildings(
@@ -219,8 +222,8 @@ def plot_building_height_merchant_map(
     ].copy()
     if buildings_in_frame.empty:
         print(
-            "Building height merchant map skipped - no buildings in 0.02 "
-            "degree frame"
+            "Building height merchant map skipped - no buildings in "
+            f"{MERCHANT_MAP_DEGREE_SIZE:.2f} degree frame"
         )
         return
 
@@ -246,10 +249,14 @@ def plot_building_height_merchant_map(
     buildings_in_frame["_height_capped_m"] = buildings_in_frame["height"].clip(
         upper=height_cap
     )
-    height_min = float(buildings_in_frame["_height_capped_m"].min())
     height_max = float(buildings_in_frame["_height_capped_m"].max())
-    if height_min == height_max:
-        height_min = 0.0
+    height_bins = np.linspace(0.0, height_max, MERCHANT_MAP_HEIGHT_BINS + 1)
+    if np.unique(height_bins).size < 2:
+        print(
+            "Building height merchant map skipped - invalid segmented "
+            "height bins"
+        )
+        return
 
     fig, ax = plt.subplots(figsize=figsize)
     avg_lat = (boundaries_dict["min_lat"] + boundaries_dict["max_lat"]) / 2
@@ -281,22 +288,31 @@ def plot_building_height_merchant_map(
             )
             ax.add_collection(roads)
 
-    cmap = get_custom_cmap(0)
+    base_cmap = plt.get_cmap("Spectral_r")
+    cmap = ListedColormap(
+        base_cmap(np.linspace(0.12, 0.92, MERCHANT_MAP_HEIGHT_BINS))
+    )
+    norm = BoundaryNorm(height_bins, cmap.N, clip=True)
     buildings_in_frame.plot(
         ax=ax,
         column="_height_capped_m",
         cmap=cmap,
-        vmin=height_min,
-        vmax=height_max,
+        norm=norm,
         edgecolor="none",
         alpha=0.92,
         zorder=10,
-        legend=True,
-        legend_kwds={
-            "label": "Building height (m, capped at 95th pct)",
-            "shrink": 0.75,
-        },
+        legend=False,
     )
+    cbar = fig.colorbar(
+        ScalarMappable(norm=norm, cmap=cmap),
+        ax=ax,
+        boundaries=height_bins,
+        ticks=height_bins,
+        shrink=0.75,
+        pad=0.02,
+    )
+    cbar.set_label("Building height (m, capped at 95th pct)")
+    cbar.ax.tick_params(labelsize=9)
 
     od_line_count = 0
     if od_df is None:
