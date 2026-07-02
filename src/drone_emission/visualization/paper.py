@@ -755,14 +755,22 @@ def _paper_pdf_path(out, figure_name, plot_title=False):
     return path
 
 
-def _draw_figure1_overlay(overlay_path, page_size, canvas_size):
+def _draw_figure1_overlay(
+    overlay_path,
+    page_size,
+    canvas_size,
+    panel_rects=None,
+    zoom_context=None,
+):
     """Draw vector labels, process box, and arrows for Figure 1."""
     import matplotlib.pyplot as plt
-    from matplotlib.patches import FancyArrowPatch
+    from matplotlib.patches import FancyArrowPatch, Rectangle
 
     page_w, page_h = page_size
     canvas_w, canvas_h = canvas_size
     fig = plt.figure(figsize=(page_w / 72.0, page_h / 72.0), facecolor="none")
+    panel_rects = panel_rects or {}
+    zoom_context = zoom_context or {}
 
     def rect_from_drawio(x, y, w, h):
         return (
@@ -825,11 +833,94 @@ def _draw_figure1_overlay(overlay_path, page_size, canvas_size):
             fontweight="bold",
         )
 
+    def fig_rect_from_page(rect):
+        x, y, w, h = rect
+        return (x / page_w, y / page_h, w / page_w, h / page_h)
+
+    def inset_rect(parent_name, rel_rect, min_size=(0.0, 0.0)):
+        if parent_name not in panel_rects:
+            return None
+        px, py, pw, ph = fig_rect_from_page(panel_rects[parent_name])
+        rx, ry, rw, rh = rel_rect
+        rw = max(rw, min_size[0])
+        rh = max(rh, min_size[1])
+        cx = px + (rx + rel_rect[2] / 2.0) * pw
+        cy = py + (ry + rel_rect[3] / 2.0) * ph
+        x0 = min(max(cx - rw * pw / 2.0, px), px + pw - rw * pw)
+        y0 = min(max(cy - rh * ph / 2.0, py), py + ph - rh * ph)
+        return (x0, y0, rw * pw, rh * ph)
+
+    def add_zoom_box(rect, color="#c43c2f"):
+        if rect is None:
+            return
+        fig.add_artist(
+            Rectangle(
+                (rect[0], rect[1]),
+                rect[2],
+                rect[3],
+                transform=fig.transFigure,
+                fill=False,
+                edgecolor=color,
+                linewidth=1.0,
+                zorder=200,
+            )
+        )
+
+    def add_connector(start, end, color="#c43c2f"):
+        fig.add_artist(
+            FancyArrowPatch(
+                start,
+                end,
+                transform=fig.transFigure,
+                arrowstyle="-",
+                linewidth=0.8,
+                color=color,
+                alpha=0.9,
+                zorder=190,
+                shrinkA=0,
+                shrinkB=0,
+            )
+        )
+
+    china_lng = (73.0, 135.0)
+    china_lat = (18.0, 54.0)
+    b_lng = zoom_context.get("b_lng_range", (121.0, 121.9))
+    b_lat = zoom_context.get("b_lat_range", (30.9, 31.55))
+    a_map_area = (0.12, 0.08, 0.80, 0.84)
+    a_rel = (
+        a_map_area[0] + (b_lng[0] - china_lng[0]) / (china_lng[1] - china_lng[0]) * a_map_area[2],
+        a_map_area[1] + (b_lat[0] - china_lat[0]) / (china_lat[1] - china_lat[0]) * a_map_area[3],
+        (b_lng[1] - b_lng[0]) / (china_lng[1] - china_lng[0]) * a_map_area[2],
+        (b_lat[1] - b_lat[0]) / (china_lat[1] - china_lat[0]) * a_map_area[3],
+    )
+    a_zoom = inset_rect("regions_map_oracle_reduction_rank", a_rel, min_size=(0.055, 0.055))
+    add_zoom_box(a_zoom)
+    if a_zoom and "shanghai_heatmap" in panel_rects:
+        bx, by, bw, bh = fig_rect_from_page(panel_rects["shanghai_heatmap"])
+        add_connector((a_zoom[0] + a_zoom[2], a_zoom[1] + a_zoom[3]), (bx, by + bh))
+        add_connector((a_zoom[0] + a_zoom[2], a_zoom[1]), (bx, by))
+
+    d_bounds = zoom_context.get("d_bounds")
+    if d_bounds is not None:
+        b_map_area = (0.04, 0.06, 0.92, 0.76)
+        d_rel = (
+            b_map_area[0] + (d_bounds["min_lng"] - b_lng[0]) / (b_lng[1] - b_lng[0]) * b_map_area[2],
+            b_map_area[1] + (d_bounds["min_lat"] - b_lat[0]) / (b_lat[1] - b_lat[0]) * b_map_area[3],
+            (d_bounds["max_lng"] - d_bounds["min_lng"]) / (b_lng[1] - b_lng[0]) * b_map_area[2],
+            (d_bounds["max_lat"] - d_bounds["min_lat"]) / (b_lat[1] - b_lat[0]) * b_map_area[3],
+        )
+        b_zoom = inset_rect("shanghai_heatmap", d_rel, min_size=(0.09, 0.09))
+        add_zoom_box(b_zoom)
+        if b_zoom and "shanghai_building_height_merchant" in panel_rects:
+            dx, dy, dw, dh = fig_rect_from_page(panel_rects["shanghai_building_height_merchant"])
+            add_connector((b_zoom[0] + b_zoom[2], b_zoom[1] + b_zoom[3]), (dx, dy + dh))
+            add_connector((b_zoom[0] + b_zoom[2], b_zoom[1]), (dx, dy))
+
     fig.savefig(overlay_path, transparent=True)
     plt.close(fig)
 
 
-def _fit_pdf_rect(source_page, target_rect):
+def _fit_pdf_rect(source_page, target_rect, return_rect=False):
     """Return a transform that fits a PDF page in target_rect without stretching."""
     from pypdf import Transformation
 
@@ -841,10 +932,63 @@ def _fit_pdf_rect(source_page, target_rect):
     fitted_h = source_h * scale
     tx = target_x + (target_w - fitted_w) / 2.0
     ty = target_y + (target_h - fitted_h) / 2.0
-    return Transformation().scale(scale).translate(tx, ty)
+    transform = Transformation().scale(scale).translate(tx, ty)
+    if return_rect:
+        return transform, (tx, ty, fitted_w, fitted_h)
+    return transform
 
 
-def _render_figure1_framework(out, plot_title):
+def _figure1_zoom_context(data_dir):
+    """Return map extents used for figure 1 zoom callouts."""
+    context = {
+        "b_lng_range": (121.0, 121.9),
+        "b_lat_range": (30.9, 31.55),
+    }
+    sales_path = os.path.join(data_dir, "city", "shanghai", "shanghai_sales.csv")
+    if not os.path.exists(sales_path):
+        return context
+    try:
+        from utils.coordinates import gcj02_to_wgs84
+        from visualization.buildings import (
+            MERCHANT_MAP_DEGREE_SIZE,
+            MERCHANT_MAP_RANDOM_SEED,
+            MERCHANT_MAP_TOP_SALES_FRACTION,
+        )
+
+        stores_df = pd.read_csv(sales_path)
+        valid_stores = stores_df.dropna(subset=["lat", "lng", "month_sales"]).copy()
+        valid_stores["month_sales"] = pd.to_numeric(
+            valid_stores["month_sales"],
+            errors="coerce",
+        )
+        valid_stores = valid_stores.dropna(subset=["month_sales"])
+        if valid_stores.empty:
+            return context
+        top_n = max(
+            1,
+            int(np.ceil(len(valid_stores) * MERCHANT_MAP_TOP_SALES_FRACTION)),
+        )
+        merchant = valid_stores.nlargest(top_n, "month_sales").sample(
+            n=1,
+            random_state=MERCHANT_MAP_RANDOM_SEED,
+        ).iloc[0]
+        merchant_lng, merchant_lat = gcj02_to_wgs84(
+            float(merchant["lng"]),
+            float(merchant["lat"]),
+        )
+        half_size = MERCHANT_MAP_DEGREE_SIZE / 2
+        context["d_bounds"] = {
+            "min_lng": merchant_lng - half_size,
+            "max_lng": merchant_lng + half_size,
+            "min_lat": merchant_lat - half_size,
+            "max_lat": merchant_lat + half_size,
+        }
+    except Exception as exc:
+        print(f"figure1_framework: d zoom context unavailable ({exc})")
+    return context
+
+
+def _render_figure1_framework(data_dir, out, plot_title):
     """Compose Figure 1 from vector PDF panels using the draw.io framework."""
     import tempfile
 
@@ -883,11 +1027,18 @@ def _render_figure1_framework(out, plot_title):
 
     writer = PdfWriter()
     page = writer.add_blank_page(width=page_w, height=page_h)
+    placed_rects = {}
     for name, target_rect in panel_specs:
         source_page = PdfReader(source_paths[name]).pages[0]
+        transform, placed_rect = _fit_pdf_rect(
+            source_page,
+            target_rect,
+            return_rect=True,
+        )
+        placed_rects[name] = placed_rect
         page.merge_transformed_page(
             source_page,
-            _fit_pdf_rect(source_page, target_rect),
+            transform,
             over=True,
         )
 
@@ -898,6 +1049,8 @@ def _render_figure1_framework(out, plot_title):
             overlay_path,
             page_size=(page_w, page_h),
             canvas_size=(canvas_w, canvas_h),
+            panel_rects=placed_rects,
+            zoom_context=_figure1_zoom_context(data_dir),
         )
         overlay_page = PdfReader(overlay_path).pages[0]
         page.merge_page(overlay_page, over=True)
@@ -4124,6 +4277,7 @@ def render_all(data_dir: str, figures_dir: str, for_latex: bool = False, plot_ti
 
     if figure1_framework_requested:
         _render_figure1_framework(
+            data_dir=data_dir,
             out=out,
             plot_title=plot_title,
         )
