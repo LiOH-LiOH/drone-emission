@@ -548,16 +548,33 @@ def plot_distance_comparison(
 
     n_cols = max(1, min(int(n_cols), len(sample_paths)))
     n_rows = int(np.ceil(len(sample_paths) / n_cols))
-    fig, axes = plt.subplots(
-        n_rows,
-        n_cols,
-        figsize=figsize or (4 * n_cols, 4 * n_rows),
+    use_gap_column = (
+        show_gap_dots
+        and len(sample_paths) == 3
+        and n_rows == 1
+        and n_cols == 3
     )
-    if n_rows == 1 and n_cols == 1:
-        axes = np.array([axes])
-    axes = axes.flatten()
+    if use_gap_column:
+        fig, grid_axes = plt.subplots(
+            1,
+            4,
+            figsize=figsize or (12.9, 4),
+            gridspec_kw={"width_ratios": [1, 1, 0.22, 1], "wspace": 0.02},
+        )
+        panel_axes = np.array([grid_axes[0], grid_axes[1], grid_axes[3]])
+        gap_ax = grid_axes[2]
+    else:
+        fig, axes = plt.subplots(
+            n_rows,
+            n_cols,
+            figsize=figsize or (4 * n_cols, 4 * n_rows),
+        )
+        if n_rows == 1 and n_cols == 1:
+            axes = np.array([axes])
+        panel_axes = axes.flatten()
+        gap_ax = None
 
-    for idx, (ax, sample) in enumerate(zip(axes, sample_paths)):
+    for idx, (ax, sample) in enumerate(zip(panel_axes, sample_paths)):
         _draw_distance_panel(
             ax,
             sample,
@@ -567,8 +584,8 @@ def plot_distance_comparison(
             show_basemap=show_basemap,
         )
 
-    for idx in range(len(sample_paths), len(axes)):
-        axes[idx].set_visible(False)
+    for idx in range(len(sample_paths), len(panel_axes)):
+        panel_axes[idx].set_visible(False)
 
     if plot_title:
         plt.suptitle("Straight-line vs Road Network Distance Comparison",
@@ -576,16 +593,28 @@ def plot_distance_comparison(
 
     plt.tight_layout()
 
-    if show_gap_dots and len(sample_paths) >= 3 and len(axes) >= 3:
-        left = axes[1].get_position()
-        right = axes[2].get_position()
+    if gap_ax is not None:
+        gap_ax.axis("off")
+        gap_ax.text(
+            0.5,
+            0.5,
+            r"$\cdots$",
+            transform=gap_ax.transAxes,
+            ha="center",
+            va="center",
+            fontsize=36,
+            color="#444444",
+        )
+    elif show_gap_dots and len(sample_paths) >= 3 and len(panel_axes) >= 3:
+        left = panel_axes[1].get_position()
+        right = panel_axes[2].get_position()
         fig.text(
             (left.x1 + right.x0) / 2,
             (left.y0 + left.y1) / 2,
             r"$\cdots$",
             ha="center",
             va="center",
-            fontsize=18,
+            fontsize=36,
             color="#444444",
         )
 
@@ -595,7 +624,7 @@ def plot_distance_comparison(
         if plot_title:
             save_path = _add_title_suffix(save_path)
         if save_path.endswith(".pdf"):
-            for ax in axes[:len(sample_paths)]:
+            for ax in panel_axes[:len(sample_paths)]:
                 ax.set_rasterization_zorder(12)
         os.makedirs(os.path.dirname(save_path), exist_ok=True)
         plt.savefig(save_path, dpi=200, bbox_inches="tight")
