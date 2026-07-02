@@ -387,7 +387,7 @@ def plot_building_height_merchant_map(
         edgecolors="black",
         linewidths=1.2,
         zorder=30,
-        label="Selected top-sales merchant",
+        label="Merchant",
     )
     if od_line_count:
         ax.plot(
@@ -395,7 +395,7 @@ def plot_building_height_merchant_map(
             [],
             color="#005f9e",
             linewidth=3,
-            label=f"Top {od_line_count} OD demand lines",
+            label="OD demands",
         )
 
     ax.set_xlim(boundaries_dict["min_lng"], boundaries_dict["max_lng"])
@@ -405,7 +405,13 @@ def plot_building_height_merchant_map(
     ax.ticklabel_format(useOffset=False, style="plain")
     ax.grid(True, alpha=0.35, linestyle="--", color="white", zorder=20)
 
-    legend = ax.legend(loc="upper right", fontsize=9, framealpha=0.9)
+    legend = ax.legend(
+        loc="upper left",
+        bbox_to_anchor=(1.02, 1.0),
+        borderaxespad=0.0,
+        fontsize=9,
+        framealpha=0.9,
+    )
     legend.set_zorder(100)
 
     if plot_title:
