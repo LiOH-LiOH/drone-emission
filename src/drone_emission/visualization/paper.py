@@ -940,6 +940,8 @@ def _fit_pdf_rect(source_page, target_rect, return_rect=False):
 
 def _figure1_zoom_context(data_dir):
     """Return map extents used for figure 1 zoom callouts."""
+    import numpy as np
+
     context = {
         "b_lng_range": (121.0, 121.9),
         "b_lat_range": (30.9, 31.55),
