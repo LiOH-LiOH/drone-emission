@@ -1,9 +1,8 @@
 """
 Generate a template CSV for city-level socioeconomic data.
 
-Reads regions.json to list all cities with their Chinese names, then outputs
-a CSV template with city_name_cn pre-filled and empty columns for the user
-to fill from the China Statistical Yearbook (National Bureau of Statistics).
+Reads regions.json to list all city regions, then outputs a CSV template with
+project keys and city names pre-filled.
 
 Usage:
     cd src/drone_emission
@@ -29,40 +28,60 @@ def generate_template(data_dir: str):
     with open(REGIONS_JSON_PATH, "r", encoding="utf-8") as f:
         regions = json.load(f)
 
-    # Collect unique city names (Chinese)
-    cities = {}
-    for key, region in sorted(regions.items()):
-        cn = region["region_name_cn"]
-        en = region["region_name_en"]
-        if cn not in cities:
-            cities[cn] = en
-
     out_path = os.path.join(data_dir, "city_socioeconomic.csv")
 
     fieldnames = [
+        "region_key",
         "city_name_cn",
         "city_name_en",
+        "province",
         "population_10k",
         "gdp_100m",
         "gdp_per_capita",
+        "gdp_source_year",
+        "population_source_year",
+        "urban_population_2020_10k",
+        "urban_population_2022_10k",
+        "builtup_area_2022_km2",
+        "urban_density_2022_per_km2",
+        "source_url_gdp",
+        "source_id_gdp",
+        "source_url_population",
+        "source_id_population",
+        "match_status",
+        "notes",
     ]
 
     with open(out_path, "w", encoding="utf-8", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames)
         writer.writeheader()
-        for cn, en in sorted(cities.items()):
+        for key, region in sorted(regions.items()):
             writer.writerow(
                 {
-                    "city_name_cn": cn,
-                    "city_name_en": en,
+                    "region_key": key,
+                    "city_name_cn": region["region_name_cn"],
+                    "city_name_en": region["region_name_en"],
+                    "province": region.get("stats", {}).get("province", ""),
                     "population_10k": "",
                     "gdp_100m": "",
                     "gdp_per_capita": "",
+                    "gdp_source_year": "",
+                    "population_source_year": "",
+                    "urban_population_2020_10k": "",
+                    "urban_population_2022_10k": "",
+                    "builtup_area_2022_km2": "",
+                    "urban_density_2022_per_km2": "",
+                    "source_url_gdp": "",
+                    "source_id_gdp": "",
+                    "source_url_population": "",
+                    "source_id_population": "",
+                    "match_status": "",
+                    "notes": "",
                 }
             )
 
     print(f"Template written to {out_path}")
-    print(f"  {len(cities)} cities listed")
+    print(f"  {len(regions)} cities listed")
     print(f"  Columns: {', '.join(fieldnames)}")
     print()
     print("Fill in data from China Statistical Yearbook (国家统计局):")

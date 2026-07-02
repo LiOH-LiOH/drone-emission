@@ -96,6 +96,7 @@ def enrich(data_dir: str, sales_path: str, gef_path: str):
             ),
             axis=1,
         )
+    valid_area = df["region_area_km2"] > 0
 
     # --- Sales features from combined_data.csv ---
     if os.path.exists(sales_path):
@@ -128,7 +129,6 @@ def enrich(data_dir: str, sales_path: str, gef_path: str):
                 ]
 
         # Derived: store_density and sales_intensity
-        valid_area = df["region_area_km2"] > 0
         valid_stores = df["store_count"].notna() & (df["store_count"] > 0)
 
         df.loc[valid_area & valid_stores, "store_density"] = (
@@ -166,14 +166,44 @@ def enrich(data_dir: str, sales_path: str, gef_path: str):
         print(f"Loading socioeconomic data from {socio_path}...")
         socio = pd.read_csv(socio_path)
 
-        # Join by Chinese city name
         socio_cols = [
             c
-            for c in ["population_10k", "gdp_100m", "gdp_per_capita"]
+            for c in [
+                "population_10k",
+                "gdp_100m",
+                "gdp_per_capita",
+                "gdp_source_year",
+                "population_source_year",
+                "urban_population_2020_10k",
+                "urban_population_2022_10k",
+                "builtup_area_2022_km2",
+                "urban_density_2022_per_km2",
+                "source_url_gdp",
+                "source_id_gdp",
+                "source_url_population",
+                "source_id_population",
+                "match_status",
+                "notes",
+            ]
             if c in socio.columns
         ]
-        if socio_cols and "city_name_cn" in socio.columns:
-            socio_lookup = socio.set_index("city_name_cn")[socio_cols]
+        if socio_cols and "region_key" in socio.columns and "region_key" in df.columns:
+            socio_lookup = socio.drop_duplicates("region_key").set_index("region_key")[
+                socio_cols
+            ]
+
+            for idx, row in df.iterrows():
+                region_key = row.get("region_key", "")
+                if region_key in socio_lookup.index:
+                    for col in socio_cols:
+                        val = socio_lookup.loc[region_key, col]
+                        if pd.notna(val):
+                            df.loc[idx, col] = val
+        elif socio_cols and "city_name_cn" in socio.columns:
+            # Backward-compatible join for hand-filled legacy templates.
+            socio_lookup = socio.drop_duplicates("city_name_cn").set_index("city_name_cn")[
+                socio_cols
+            ]
 
             for idx, row in df.iterrows():
                 city_cn = row.get("region_name_cn", "")
@@ -183,6 +213,7 @@ def enrich(data_dir: str, sales_path: str, gef_path: str):
                         if pd.notna(val):
                             df.loc[idx, col] = val
 
+        if socio_cols and any(col in df.columns for col in socio_cols):
             # Derived features
             if "population_10k" in df.columns:
                 valid_pop = df["population_10k"].notna() & (df["population_10k"] > 0)
@@ -231,6 +262,12 @@ def enrich(data_dir: str, sales_path: str, gef_path: str):
             "population_10k",
             "gdp_100m",
             "gdp_per_capita",
+            "gdp_source_year",
+            "population_source_year",
+            "urban_population_2020_10k",
+            "urban_population_2022_10k",
+            "builtup_area_2022_km2",
+            "urban_density_2022_per_km2",
             "pop_density",
             "sales_per_capita",
         ]

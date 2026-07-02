@@ -4,6 +4,7 @@ tomli
 cpca
 geopandas
 haversine
+lxml
 matplotlib
 networkx
 numpy
