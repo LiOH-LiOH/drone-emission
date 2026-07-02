@@ -42,6 +42,7 @@ Available figures:
     regions_map_and_gef_scatter,
     regions_map_city_province_ranks,
     regions_map_city_rank_inset,
+    figure1_framework,
     regions_map_kappa_panels,
     drone_tech_sensitivity,
     oat_tornado_story, oat_tornado_full
@@ -167,6 +168,12 @@ POWER_MIX_COLORS = {
     "Solar": "#f2cf5b",
     "Other": "#9e9e9e",
 }
+FIGURE1_FRAMEWORK_DEPENDENCIES = (
+    "regions_map_oracle_reduction_rank",
+    "shanghai_heatmap",
+    "distance_comparison",
+    "shanghai_building_height_merchant",
+)
 
 
 def _get_ebike_kappa(exp_config):
@@ -697,6 +704,151 @@ def _render_shanghai_building_height_merchant(data_dir, out, for_latex, plot_tit
         for_latex=for_latex,
         plot_title=plot_title,
     )
+
+
+def _paper_png_path(out, figure_name, plot_title=False):
+    """Return the expected PNG path for a paper figure."""
+    path = os.path.join(out, f"{figure_name}.png")
+    if plot_title:
+        from visualization._utils import _add_title_suffix
+
+        path = _add_title_suffix(path)
+    return path
+
+
+def _draw_image_panel(fig, source_path, rect, label):
+    """Draw one source image in a figure-fraction rectangle."""
+    import matplotlib.image as mpimg
+
+    ax = fig.add_axes(rect)
+    ax.axis("off")
+    if source_path and os.path.exists(source_path):
+        img = mpimg.imread(source_path)
+        ax.imshow(img, aspect="auto")
+    else:
+        ax.text(
+            0.5,
+            0.5,
+            f"{label} source\nnot available",
+            transform=ax.transAxes,
+            ha="center",
+            va="center",
+            fontsize=9,
+            color="#777777",
+        )
+    return ax
+
+
+def _render_figure1_framework(out, for_latex, plot_title):
+    """Compose Figure 1 from the draw.io framework and rendered paper panels."""
+    import matplotlib.pyplot as plt
+    from matplotlib.patches import FancyArrowPatch
+
+    from visualization._utils import _add_title_suffix
+
+    canvas_w, canvas_h = 561.0, 481.0
+
+    def rect_from_drawio(x, y, w, h):
+        return (
+            x / canvas_w,
+            1.0 - (y + h) / canvas_h,
+            w / canvas_w,
+            h / canvas_h,
+        )
+
+    source_paths = {
+        name: _paper_png_path(out, name, plot_title=plot_title)
+        for name in FIGURE1_FRAMEWORK_DEPENDENCIES
+    }
+
+    fig = plt.figure(figsize=(7.0, 6.0), facecolor="white")
+    _draw_image_panel(
+        fig,
+        source_paths["regions_map_oracle_reduction_rank"],
+        rect_from_drawio(0, 20, 360, 300),
+        "regions_map_oracle_reduction_rank",
+    )
+    _draw_image_panel(
+        fig,
+        source_paths["shanghai_heatmap"],
+        rect_from_drawio(380, 20, 160, 180),
+        "shanghai_heatmap",
+    )
+    _draw_image_panel(
+        fig,
+        source_paths["distance_comparison"],
+        rect_from_drawio(0, 360, 360, 100),
+        "distance_comparison",
+    )
+    _draw_image_panel(
+        fig,
+        source_paths["shanghai_building_height_merchant"],
+        rect_from_drawio(380, 320, 160, 160),
+        "shanghai_building_height_merchant",
+    )
+
+    flow_ax = fig.add_axes(rect_from_drawio(400, 230, 120, 60))
+    flow_ax.set_xticks([])
+    flow_ax.set_yticks([])
+    flow_ax.set_facecolor("white")
+    for spine in flow_ax.spines.values():
+        spine.set_linewidth(0.8)
+        spine.set_edgecolor("#333333")
+    flow_ax.text(
+        0.5,
+        0.5,
+        "Gravity\nmodel",
+        ha="center",
+        va="center",
+        fontsize=9,
+        color="#222222",
+    )
+
+    def fig_point(x, y):
+        return (x / canvas_w, 1.0 - y / canvas_h)
+
+    for start, end in (
+        (fig_point(460, 200), fig_point(460, 230)),
+        (fig_point(460, 290), fig_point(460, 320)),
+    ):
+        arrow = FancyArrowPatch(
+            start,
+            end,
+            transform=fig.transFigure,
+            arrowstyle="-|>",
+            mutation_scale=8,
+            linewidth=0.8,
+            color="#333333",
+            shrinkA=0,
+            shrinkB=0,
+        )
+        fig.add_artist(arrow)
+
+    for label, x, y in (
+        ("a", 0, 0),
+        ("b", 380, 0),
+        ("c", 0, 340),
+        ("d", 380, 300),
+    ):
+        fig.text(
+            x / canvas_w,
+            1.0 - y / canvas_h,
+            label,
+            ha="left",
+            va="top",
+            fontsize=13,
+            fontweight="bold",
+        )
+
+    save_path = os.path.join(out, "figure1_framework.png")
+    if for_latex and not save_path.endswith(".pdf"):
+        save_path = save_path.rsplit(".", 1)[0] + ".pdf"
+    if plot_title:
+        save_path = _add_title_suffix(save_path)
+    os.makedirs(os.path.dirname(save_path), exist_ok=True)
+    fig.savefig(save_path, dpi=300, bbox_inches="tight", pad_inches=0.02)
+    plt.close(fig)
+    print(f"Figure 1 framework saved to {save_path}")
 
 
 def _plot_power_generation_mix_pie(
@@ -3167,6 +3319,8 @@ def render_all(data_dir: str, figures_dir: str, for_latex: bool = False, plot_ti
     def _want(name):
         return only is None or name in only
 
+    figure1_framework_requested = _want("figure1_framework")
+
     # --- Concept figures (no data dependency) ---
     if _want("emission_model_flowchart"):
         plot_emission_model_flowchart(
@@ -3277,19 +3431,33 @@ def render_all(data_dir: str, figures_dir: str, for_latex: bool = False, plot_ti
         )
 
     # --- Shanghai figures (independent of all_region_stats) ---
-    if _want("shanghai_heatmap"):
+    if _want("shanghai_heatmap") or figure1_framework_requested:
         _render_shanghai_heatmap(
             data_dir=data_dir,
             out=out,
-            for_latex=for_latex,
+            for_latex=for_latex if _want("shanghai_heatmap") else False,
+            plot_title=plot_title,
+        )
+    if figure1_framework_requested and _want("shanghai_heatmap") and for_latex:
+        _render_shanghai_heatmap(
+            data_dir=data_dir,
+            out=out,
+            for_latex=False,
             plot_title=plot_title,
         )
 
-    if _want("shanghai_building_height_merchant"):
+    if _want("shanghai_building_height_merchant") or figure1_framework_requested:
         _render_shanghai_building_height_merchant(
             data_dir=data_dir,
             out=out,
-            for_latex=for_latex,
+            for_latex=for_latex if _want("shanghai_building_height_merchant") else False,
+            plot_title=plot_title,
+        )
+    if figure1_framework_requested and _want("shanghai_building_height_merchant") and for_latex:
+        _render_shanghai_building_height_merchant(
+            data_dir=data_dir,
+            out=out,
+            for_latex=False,
             plot_title=plot_title,
         )
 
@@ -3357,11 +3525,19 @@ def render_all(data_dir: str, figures_dir: str, for_latex: bool = False, plot_ti
             plot_title=plot_title,
         )
 
-    if _want("distance_comparison"):
+    if _want("distance_comparison") or figure1_framework_requested:
         _render_distance_comparison(
             data_dir=data_dir,
             out=out,
-            for_latex=for_latex,
+            for_latex=for_latex if _want("distance_comparison") else False,
+            plot_title=plot_title,
+            plot_fn=plot_distance_comparison,
+        )
+    if figure1_framework_requested and _want("distance_comparison") and for_latex:
+        _render_distance_comparison(
+            data_dir=data_dir,
+            out=out,
+            for_latex=False,
             plot_title=plot_title,
             plot_fn=plot_distance_comparison,
         )
@@ -3410,6 +3586,7 @@ def render_all(data_dir: str, figures_dir: str, for_latex: bool = False, plot_ti
         "regions_map_city_rank_and_drone_share",
         "regions_map_city_province_ranks",
         "regions_map_city_rank_inset",
+        "figure1_framework",
         "regions_map_kappa_panels",
         "regions_map_pathway_scenario_maps",
         "regions_map_pathway_scenarios",
@@ -3606,12 +3783,28 @@ def render_all(data_dir: str, figures_dir: str, for_latex: bool = False, plot_ti
                     plot_title=plot_title,
                 )
 
-            if _want("regions_map_oracle_reduction_rank"):
+            if _want("regions_map_oracle_reduction_rank") or figure1_framework_requested:
                 plot_regions_map_oracle_reduction_rank(
                     df_stats=df,
                     stats_csv_path=stats_path,
                     save_path=os.path.join(out, "regions_map_oracle_reduction_rank.png"),
-                    for_latex=for_latex,
+                    for_latex=(
+                        for_latex
+                        if _want("regions_map_oracle_reduction_rank")
+                        else False
+                    ),
+                    plot_title=plot_title,
+                )
+            if (
+                figure1_framework_requested
+                and _want("regions_map_oracle_reduction_rank")
+                and for_latex
+            ):
+                plot_regions_map_oracle_reduction_rank(
+                    df_stats=df,
+                    stats_csv_path=stats_path,
+                    save_path=os.path.join(out, "regions_map_oracle_reduction_rank.png"),
+                    for_latex=False,
                     plot_title=plot_title,
                 )
 
@@ -3808,6 +4001,13 @@ def render_all(data_dir: str, figures_dir: str, for_latex: bool = False, plot_ti
                             gef_scenario=year,
                             named_csv_path=named_path,
                         )
+
+    if figure1_framework_requested:
+        _render_figure1_framework(
+            out=out,
+            for_latex=for_latex,
+            plot_title=plot_title,
+        )
 
     # OAT tornado diagnostics (compact + SI full): independent of
     # all_region_stats.csv; only need all_sensitivity_oat.csv. Kept outside
