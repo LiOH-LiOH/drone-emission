@@ -639,6 +639,7 @@ def _render_shanghai_building_height_merchant(data_dir, out, for_latex, plot_tit
     region_level = "city"
     region_dir = os.path.join(data_dir, region_level, region_key)
     sales_path = os.path.join(region_dir, f"{region_key}_sales.csv")
+    od_path = os.path.join(region_dir, f"{region_key}_od_pairs.csv")
     building_path = _find_first_existing_path(
         [
             os.path.join(region_dir, f"{region_key}_buildings_preprocessed.gpkg"),
@@ -665,12 +666,21 @@ def _render_shanghai_building_height_merchant(data_dir, out, for_latex, plot_tit
     from visualization.buildings import plot_building_height_merchant_map
 
     stores_df = pd.read_csv(sales_path)
+    od_df = None
+    if os.path.exists(od_path):
+        od_df = pd.read_csv(od_path)
+    else:
+        print(
+            "Shanghai building height merchant map OD overlay skipped - "
+            f"missing {od_path}"
+        )
     buildings_gdf = gpd.read_file(building_path)
     plot_building_height_merchant_map(
         buildings_gdf,
         stores_df,
         "Shanghai",
         "上海市",
+        od_df=od_df,
         save_path=os.path.join(out, "shanghai_building_height_merchant.png"),
         for_latex=for_latex,
         plot_title=plot_title,
