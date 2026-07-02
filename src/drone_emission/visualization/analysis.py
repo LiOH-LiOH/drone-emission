@@ -5300,6 +5300,189 @@ def plot_regions_map_city_rank_inset(
     plt.close(fig)
 
 
+def _write_regions_map_oracle_reduction_rank_report(
+    save_path,
+    figsize,
+    stats_csv_path,
+    map_df,
+    reduction_col,
+    ax_map,
+    inset_ax,
+    cbar_ax,
+    cmap,
+    norm,
+    bin_edges,
+    reduction_edges,
+):
+    """Write a JSON report for regions_map_oracle_reduction_rank."""
+    report_path = save_path.rsplit(".", 1)[0] + "_report.json"
+    payload = {
+        "figure_name": "regions_map_oracle_reduction_rank",
+        "figure_path": save_path,
+        "source_stats_csv_path": stats_csv_path,
+        "figure_size_inches": {"width": figsize[0], "height": figsize[1]},
+        "coordinate_convention": (
+            "Plotted x/y values are Matplotlib data coordinates for the stated "
+            "axis. Axis bbox values are figure-fraction coordinates."
+        ),
+        "panels": {
+            "oracle_reduction_map": {
+                **_map_panel_report(
+                    map_df, reduction_col, cmap, norm, bin_edges, ax_map, None,
+                ),
+                "inset_city_rank": _city_oracle_rank_report(
+                    map_df,
+                    inset_ax,
+                ),
+                "colorbar": _colorbar_report(
+                    cbar_ax,
+                    bin_edges,
+                    reduction_edges,
+                    "E-bike - Oracle (t CO2eq / yr)",
+                    cmap,
+                ),
+            },
+        },
+    }
+    with open(report_path, "w", encoding="utf-8") as f:
+        json.dump(payload, f, indent=2, ensure_ascii=False, allow_nan=False)
+    print(f"Regions map oracle reduction rank report saved to {report_path}")
+
+
+def plot_regions_map_oracle_reduction_rank(
+    df_stats: "pd.DataFrame",
+    stats_csv_path: str,
+    save_path: str = None,
+    figsize: tuple = (8.5, 7),
+    for_latex: bool = False,
+    plot_title: bool = False,
+):
+    """China choropleth of absolute Oracle reduction with top-city rank inset.
+
+    Args:
+        df_stats: all_region_stats DataFrame.
+        stats_csv_path: Path to all_region_stats.csv (for map function).
+        save_path: Path to save figure. Shows plot if None.
+        figsize: Figure size tuple.
+        for_latex: If True, save as PDF.
+        plot_title: If True, show title.
+    """
+    from visualization.regions import plot_regions_on_china_map
+
+    map_df = pd.read_csv(stats_csv_path)
+    for col in ("oracle_min_lifecycle_kg",):
+        if (
+            col not in map_df.columns
+            and col in df_stats.columns
+            and "region_key" in map_df.columns
+            and "region_key" in df_stats.columns
+        ):
+            map_df = map_df.merge(
+                df_stats[["region_key", col]],
+                on="region_key",
+                how="left",
+            )
+    try:
+        reduction_col = _oracle_reduction_tonnes_column(map_df)
+    except KeyError as exc:
+        print(f"Regions map oracle reduction rank skipped — {exc}")
+        return
+
+    reduction_values = map_df[reduction_col].dropna()
+    if reduction_values.empty:
+        print("Regions map oracle reduction rank skipped — no valid reduction values")
+        return
+
+    cmap, norm, bin_edges, reduction_edges = _build_absolute_reduction_log_cmap(
+        reduction_values
+    )
+
+    fig, ax_map = plt.subplots(figsize=figsize)
+    plot_regions_on_china_map(
+        df=map_df,
+        color_by=reduction_col,
+        ax=ax_map,
+        plot_title=False,
+        cmap=cmap,
+        norm=norm,
+        draw_colorbar=False,
+        draw_legend=False,
+    )
+    ax_map.set_xlabel("")
+    ax_map.set_ylabel("")
+    ax_map.set_xticks([])
+    ax_map.set_yticks([])
+    for spine in ax_map.spines.values():
+        spine.set_visible(False)
+
+    inset_ax = ax_map.inset_axes([0.03, 0.04, 0.34, 0.38], zorder=10)
+    _plot_city_oracle_reduction_rank(
+        map_df,
+        10,
+        plot_title=plot_title,
+        ax=inset_ax,
+        invert_vertical=True,
+        compact=True,
+    )
+    inset_ax.set_facecolor("none")
+    inset_ax.patch.set_alpha(0.0)
+    for name, spine in inset_ax.spines.items():
+        spine.set_visible(name in {"left", "bottom"})
+        spine.set_edgecolor("#666666")
+        spine.set_linewidth(0.6)
+
+    if plot_title:
+        ax_map.set_title(
+            "Regional Oracle Reduction and Top-City Rank",
+            fontsize=13,
+            fontweight="bold",
+        )
+
+    fig.tight_layout()
+
+    fig.canvas.draw()
+    map_pos = ax_map.get_position()
+    cbar_ax = fig.add_axes((map_pos.x1 + 0.005, map_pos.y0, 0.014, map_pos.height))
+    cbar, n_bands = _draw_discrete_reduction_colorbar(
+        fig,
+        cbar_ax,
+        cmap,
+        norm,
+        bin_edges,
+        reduction_edges,
+        "E-bike - Oracle (t CO₂eq / yr)",
+    )
+    _annotate_unstudied(fig, cbar, cbar_ax, n_bands)
+
+    if save_path:
+        if for_latex and not save_path.endswith(".pdf"):
+            save_path = save_path.rsplit(".", 1)[0] + ".pdf"
+        if plot_title:
+            save_path = _add_title_suffix(save_path)
+        os.makedirs(os.path.dirname(save_path), exist_ok=True)
+        fig.canvas.draw()
+        _write_regions_map_oracle_reduction_rank_report(
+            save_path=save_path,
+            figsize=figsize,
+            stats_csv_path=stats_csv_path,
+            map_df=map_df,
+            reduction_col=reduction_col,
+            ax_map=ax_map,
+            inset_ax=inset_ax,
+            cbar_ax=cbar_ax,
+            cmap=cmap,
+            norm=norm,
+            bin_edges=bin_edges,
+            reduction_edges=reduction_edges,
+        )
+        plt.savefig(save_path, dpi=300, bbox_inches="tight")
+        print(f"Regions map oracle reduction rank saved to {save_path}")
+    else:
+        plt.show()
+
+    plt.close(fig)
+
+
 def _json_safe_scalar(value):
     """Return a JSON-safe scalar with missing numeric values represented as None."""
     if value is None:
