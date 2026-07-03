@@ -7266,7 +7266,7 @@ def plot_city_population_detour_oracle_reduction_bubble(
     for_latex: bool = False,
     plot_title: bool = False,
 ):
-    """Bubble chart of city population, detour ratio, and Oracle emission reduction.
+    """Bubble chart of city population and Oracle emission reduction.
 
     Args:
         df: Enriched all_region_stats DataFrame with socioeconomic and Oracle
@@ -7278,7 +7278,6 @@ def plot_city_population_detour_oracle_reduction_bubble(
     """
     required = {
         "population_10k",
-        "detour_ratio",
         "total_ebike_lifecycle",
         "province",
     }
@@ -7286,13 +7285,13 @@ def plot_city_population_detour_oracle_reduction_bubble(
         col in df.columns for col in WEIGHTED_REDUCTION_COLUMNS
     ):
         print(
-            "City population-detour Oracle bubble skipped — missing Oracle reduction columns"
+            "City population Oracle bubble skipped — missing Oracle reduction columns"
         )
         return
     missing = required - set(df.columns)
     if missing:
         print(
-            "City population-detour Oracle bubble skipped — "
+            "City population Oracle bubble skipped — "
             f"missing columns {sorted(missing)}"
         )
         return
@@ -7310,7 +7309,6 @@ def plot_city_population_detour_oracle_reduction_bubble(
     )
     needed = [
         "population_10k",
-        "detour_ratio",
         "province",
         reduction_pct_col,
         reduction_t_col,
@@ -7318,21 +7316,21 @@ def plot_city_population_detour_oracle_reduction_bubble(
     if name_col:
         needed.append(name_col)
     plot_df = plot_df[needed].copy()
-    for col in ("population_10k", "detour_ratio", reduction_pct_col, reduction_t_col):
+    for col in ("population_10k", reduction_pct_col, reduction_t_col):
         plot_df[col] = pd.to_numeric(plot_df[col], errors="coerce")
     plot_df = plot_df.dropna(
-        subset=["population_10k", "detour_ratio", reduction_pct_col, reduction_t_col]
+        subset=["population_10k", reduction_pct_col, reduction_t_col]
     )
     plot_df = plot_df[
         (plot_df["population_10k"] > 0)
-        & (plot_df["detour_ratio"] > 0)
+        & (plot_df[reduction_pct_col] > 0)
         & (plot_df[reduction_t_col] > 0)
     ].copy()
     plot_df["_macro_region"] = plot_df["province"].map(macro_region_for_province)
     plot_df = plot_df[plot_df["_macro_region"].notna()].copy()
     if plot_df.empty:
         print(
-            "City population-detour Oracle bubble skipped — "
+            "City population Oracle bubble skipped — "
             "no eligible city rows with known macro-region"
         )
         return
@@ -7370,7 +7368,7 @@ def plot_city_population_detour_oracle_reduction_bubble(
 
     ax.scatter(
         plot_df["population_million"],
-        plot_df["detour_ratio"],
+        plot_df[reduction_pct_col],
         s=plot_df["_bubble_size"],
         c=plot_df["_macro_region_color"],
         alpha=0.78,
@@ -7381,14 +7379,14 @@ def plot_city_population_detour_oracle_reduction_bubble(
 
     ax.set_xscale("log")
     ax.set_xlabel("Population (million people)", fontsize=12)
-    ax.set_ylabel("Detour ratio", fontsize=12)
-    ax.yaxis.set_major_formatter(FuncFormatter(lambda x, _: f"{x:.2f}"))
+    ax.set_ylabel("Oracle lifecycle emission reduction (%)", fontsize=12)
+    ax.yaxis.set_major_formatter(FuncFormatter(lambda x, _: f"{x:.0f}%"))
     ax.grid(True, which="major", linestyle="--", alpha=0.28, zorder=0)
     ax.grid(True, which="minor", axis="x", linestyle=":", alpha=0.18, zorder=0)
     ax.set_axisbelow(True)
 
     x_values = plot_df["population_million"].to_numpy(dtype=float)
-    y_values = plot_df["detour_ratio"].to_numpy(dtype=float)
+    y_values = plot_df[reduction_pct_col].to_numpy(dtype=float)
     x_log = np.log10(x_values)
     if x_log.size > 1 and np.nanstd(x_log) > 0:
         x_grid_log = np.linspace(x_log.min(), x_log.max(), 240)
@@ -7495,7 +7493,6 @@ def plot_city_population_detour_oracle_reduction_bubble(
     if name_col:
         label_idx = set(plot_df.nlargest(8, reduction_t_col).index)
         label_idx.add(plot_df["population_million"].idxmax())
-        label_idx.add(plot_df["detour_ratio"].idxmax())
         label_idx.add(plot_df[reduction_pct_col].idxmax())
         labeled = plot_df.loc[sorted(label_idx)].sort_values(
             reduction_t_col,
@@ -7506,7 +7503,7 @@ def plot_city_population_detour_oracle_reduction_bubble(
             dx, dy = offsets[i % len(offsets)]
             ax.annotate(
                 str(row[name_col]),
-                xy=(row["population_million"], row["detour_ratio"]),
+                xy=(row["population_million"], row[reduction_pct_col]),
                 xytext=(dx, dy),
                 textcoords="offset points",
                 ha="left" if dx > 0 else "right",
@@ -7524,7 +7521,7 @@ def plot_city_population_detour_oracle_reduction_bubble(
 
     if plot_title:
         fig.suptitle(
-            "Population, Detour Ratio, and Oracle Emission Reduction",
+            "Population and Oracle Emission Reduction",
             fontsize=14,
             fontweight="bold",
         )
@@ -7536,7 +7533,7 @@ def plot_city_population_detour_oracle_reduction_bubble(
             save_path = _add_title_suffix(save_path)
         os.makedirs(os.path.dirname(save_path), exist_ok=True)
         plt.savefig(save_path, dpi=300, bbox_inches="tight")
-        print(f"City population-detour Oracle bubble saved to {save_path}")
+        print(f"City population Oracle bubble saved to {save_path}")
     else:
         plt.show()
 
