@@ -7378,28 +7378,26 @@ def plot_city_population_detour_oracle_reduction_bubble(
         zorder=3,
     )
 
-    ax.set_xscale("log")
     ax.set_xlabel("Annual Oracle emission reduction (t CO2e/yr)", fontsize=12)
     ax.set_ylabel("Oracle lifecycle emission reduction (%)", fontsize=12)
     ax.yaxis.set_major_formatter(FuncFormatter(lambda x, _: f"{x:.0f}%"))
     ax.grid(True, which="major", linestyle="--", alpha=0.28, zorder=0)
-    ax.grid(True, which="minor", axis="x", linestyle=":", alpha=0.18, zorder=0)
     ax.set_axisbelow(True)
 
     x_values = plot_df[reduction_t_col].to_numpy(dtype=float)
     y_values = plot_df[reduction_pct_col].to_numpy(dtype=float)
-    x_log = np.log10(x_values)
-    if x_log.size > 1 and np.nanstd(x_log) > 0:
-        x_grid_log = np.linspace(x_log.min(), x_log.max(), 240)
-        x_density = stats.gaussian_kde(x_log)(x_grid_log)
+    if x_values.size > 1 and np.nanstd(x_values) > 0:
+        x_pad = (x_values.max() - x_values.min()) * 0.05
+        x_grid = np.linspace(x_values.min() - x_pad, x_values.max() + x_pad, 240)
+        x_density = stats.gaussian_kde(x_values)(x_grid)
         ax_top.fill_between(
-            10 ** x_grid_log,
+            x_grid,
             x_density,
             color="#6baed6",
             alpha=0.35,
             linewidth=0,
         )
-        ax_top.plot(10 ** x_grid_log, x_density, color="#2171b5", linewidth=1.0)
+        ax_top.plot(x_grid, x_density, color="#2171b5", linewidth=1.0)
     if y_values.size > 1 and np.nanstd(y_values) > 0:
         y_pad = (y_values.max() - y_values.min()) * 0.05
         y_grid = np.linspace(y_values.min() - y_pad, y_values.max() + y_pad, 240)
@@ -7414,7 +7412,6 @@ def plot_city_population_detour_oracle_reduction_bubble(
         )
         ax_right.plot(y_density, y_grid, color="#2171b5", linewidth=1.0)
 
-    ax_top.set_xscale("log")
     ax_top.set_ylabel("Density", fontsize=9)
     ax_top.tick_params(axis="x", labelbottom=False)
     ax_top.tick_params(axis="y", labelsize=8, length=2)
