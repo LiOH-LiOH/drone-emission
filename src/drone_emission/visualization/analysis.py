@@ -12,6 +12,10 @@ import pandas as pd
 from scipy import stats
 
 from visualization._utils import _add_title_suffix, saved_tight_axis_report
+from visualization.macro_regions import (
+    CHINA_MACRO_REGION_SPECS,
+    macro_region_for_province,
+)
 
 # Import from constants module (no circular dependency)
 from analysis.constants import PROVINCE_NAME_EN, VARIABLE_LABELS
@@ -7276,6 +7280,7 @@ def plot_city_population_detour_oracle_reduction_bubble(
         "population_10k",
         "detour_ratio",
         "total_ebike_lifecycle",
+        "province",
     }
     if "oracle_min_lifecycle_kg" not in df.columns and not any(
         col in df.columns for col in WEIGHTED_REDUCTION_COLUMNS
@@ -7306,6 +7311,7 @@ def plot_city_population_detour_oracle_reduction_bubble(
     needed = [
         "population_10k",
         "detour_ratio",
+        "province",
         reduction_pct_col,
         reduction_t_col,
     ]
@@ -7322,9 +7328,18 @@ def plot_city_population_detour_oracle_reduction_bubble(
         & (plot_df["detour_ratio"] > 0)
         & (plot_df[reduction_t_col] > 0)
     ].copy()
+    plot_df["_macro_region"] = plot_df["province"].map(macro_region_for_province)
+    plot_df = plot_df[plot_df["_macro_region"].notna()].copy()
     if plot_df.empty:
-        print("City population-detour Oracle bubble skipped — no eligible city rows")
+        print(
+            "City population-detour Oracle bubble skipped — "
+            "no eligible city rows with known macro-region"
+        )
         return
+    plot_df["_macro_region_key"] = plot_df["_macro_region"].map(lambda spec: spec["key"])
+    plot_df["_macro_region_color"] = plot_df["_macro_region"].map(
+        lambda spec: spec["color"]
+    )
 
     plot_df["population_million"] = plot_df["population_10k"] / 100.0
     reduction_t = plot_df[reduction_t_col]
@@ -7340,26 +7355,24 @@ def plot_city_population_detour_oracle_reduction_bubble(
     gs = fig.add_gridspec(
         2,
         3,
-        width_ratios=(1.0, 0.18, 0.05),
+        width_ratios=(1.0, 0.18, 0.24),
         height_ratios=(0.18, 1.0),
-        wspace=0.05,
+        wspace=0.08,
         hspace=0.05,
     )
     ax_top = fig.add_subplot(gs[0, 0])
     ax = fig.add_subplot(gs[1, 0], sharex=ax_top)
     ax_right = fig.add_subplot(gs[1, 1], sharey=ax)
-    cbar_ax = fig.add_subplot(gs[1, 2])
+    legend_ax = fig.add_subplot(gs[1, 2])
     fig.add_subplot(gs[0, 1]).axis("off")
     fig.add_subplot(gs[0, 2]).axis("off")
+    legend_ax.axis("off")
 
-    cmap, norm, _, _ = _build_blue_reduction_cmap(plot_df[reduction_pct_col].max())
-    scatter = ax.scatter(
+    ax.scatter(
         plot_df["population_million"],
         plot_df["detour_ratio"],
         s=plot_df["_bubble_size"],
-        c=plot_df[reduction_pct_col],
-        cmap=cmap,
-        norm=norm,
+        c=plot_df["_macro_region_color"],
         alpha=0.78,
         edgecolor="white",
         linewidth=0.55,
@@ -7414,10 +7427,6 @@ def plot_city_population_detour_oracle_reduction_bubble(
     ax_right.spines["top"].set_visible(False)
     ax_right.spines["right"].set_visible(False)
 
-    cbar = fig.colorbar(scatter, cax=cbar_ax)
-    cbar.set_label("Oracle lifecycle emission reduction (%)", fontsize=11)
-    cbar.ax.tick_params(labelsize=9)
-
     legend_values = np.nanquantile(reduction_t, [0.25, 0.5, 0.9])
     legend_values = np.unique(np.round(legend_values, 1))
     handles = []
@@ -7434,15 +7443,15 @@ def plot_city_population_detour_oracle_reduction_bubble(
                 [],
                 [],
                 s=marker_size,
-                facecolor="#9ecae1",
-                edgecolor="white",
+                facecolor="#BDBDBD",
+                edgecolor="#FFFFFF",
                 linewidth=0.55,
                 alpha=0.78,
             )
         )
         labels.append(f"{value:,.0f} t")
     if handles:
-        ax.legend(
+        size_legend = ax.legend(
             handles,
             labels,
             title="Annual Oracle\nreduction",
@@ -7454,6 +7463,33 @@ def plot_city_population_detour_oracle_reduction_bubble(
             title_fontsize=9,
             borderpad=0.7,
             labelspacing=1.0,
+        )
+        ax.add_artist(size_legend)
+
+    region_handles = []
+    plotted_region_keys = set(plot_df["_macro_region_key"])
+    for spec in CHINA_MACRO_REGION_SPECS:
+        if spec["key"] not in plotted_region_keys:
+            continue
+        region_handles.append(
+            Patch(
+                facecolor=spec["color"],
+                edgecolor="none",
+                label=spec["label"],
+            )
+        )
+    if region_handles:
+        legend_ax.legend(
+            handles=region_handles,
+            title="Macro-region",
+            loc="center left",
+            frameon=False,
+            fontsize=8,
+            title_fontsize=9,
+            borderaxespad=0.0,
+            handlelength=1.2,
+            handletextpad=0.45,
+            labelspacing=0.65,
         )
 
     if name_col:
