@@ -246,6 +246,165 @@ def _annotate_unstudied(fig, cbar, cbar_ax, n_bands):
     )
 
 
+def _geometry_outer_rings(geometry):
+    """Yield outer rings from a GeoJSON Polygon or MultiPolygon geometry."""
+    if not geometry:
+        return
+    geom_type = geometry.get("type")
+    coords = geometry.get("coordinates")
+    if not coords:
+        return
+    if geom_type == "Polygon":
+        if coords and coords[0]:
+            yield coords[0]
+    elif geom_type == "MultiPolygon":
+        for polygon in coords:
+            if polygon and polygon[0]:
+                yield polygon[0]
+
+
+def _ring_area_and_centroid(ring):
+    """Return planar lon-lat ring area magnitude and centroid."""
+    pts = np.asarray(ring, dtype=float)
+    if pts.ndim != 2 or pts.shape[0] < 3 or pts.shape[1] < 2:
+        return 0.0, None
+    pts = pts[:, :2]
+    if not np.allclose(pts[0], pts[-1]):
+        pts = np.vstack([pts, pts[0]])
+    x = pts[:, 0]
+    y = pts[:, 1]
+    cross = x[:-1] * y[1:] - x[1:] * y[:-1]
+    signed_area = 0.5 * np.sum(cross)
+    if np.isclose(signed_area, 0.0):
+        return 0.0, (float(np.nanmean(x[:-1])), float(np.nanmean(y[:-1])))
+    cx = np.sum((x[:-1] + x[1:]) * cross) / (6.0 * signed_area)
+    cy = np.sum((y[:-1] + y[1:]) * cross) / (6.0 * signed_area)
+    return abs(float(signed_area)), (float(cx), float(cy))
+
+
+def _geometry_largest_ring_centroid(geometry):
+    """Return centroid of the largest outer ring in a GeoJSON geometry."""
+    best_area = -1.0
+    best_centroid = None
+    for ring in _geometry_outer_rings(geometry):
+        area, centroid = _ring_area_and_centroid(ring)
+        if centroid is not None and area > best_area:
+            best_area = area
+            best_centroid = centroid
+    return best_centroid
+
+
+def _bubble_sizes_from_values(values, size_min=38.0, size_max=860.0):
+    """Map positive values to scatter marker areas with square-root scaling."""
+    values = pd.to_numeric(pd.Series(values), errors="coerce").to_numpy(dtype=float)
+    positive = values[np.isfinite(values) & (values > 0)]
+    sizes = np.full(values.shape, np.nan, dtype=float)
+    if positive.size == 0:
+        return sizes
+    vmax = float(np.nanmax(positive))
+    if np.isclose(vmax, 0.0):
+        sizes[np.isfinite(values)] = (size_min + size_max) / 2.0
+        return sizes
+    scaled = np.sqrt(np.clip(values, 0.0, None) / vmax)
+    sizes = size_min + scaled * (size_max - size_min)
+    sizes[~np.isfinite(values) | (values <= 0)] = np.nan
+    return sizes
+
+
+def _regions_oracle_bubble_df(map_df, reduction_col, reduction_pct_col):
+    """Build bubble positions and encodings for study cities on the China map."""
+    from visualization.regions import _batch_city_to_adcode, _ensure_all_china_city_areas
+
+    required = ["region_name_cn", reduction_col, reduction_pct_col]
+    missing = [col for col in required if col not in map_df.columns]
+    if missing:
+        raise KeyError(f"Missing bubble map columns: {missing}")
+
+    city_names = map_df["region_name_cn"].dropna().unique().tolist()
+    name_to_adcode = _batch_city_to_adcode(city_names)
+    geometry_by_adcode = {
+        str(adcode): geometry
+        for adcode, _name, geometry in _ensure_all_china_city_areas()
+    }
+
+    rows = []
+    for _, row in map_df.iterrows():
+        name_cn = row.get("region_name_cn")
+        adcode = name_to_adcode.get(name_cn)
+        geometry = geometry_by_adcode.get(adcode)
+        centroid = _geometry_largest_ring_centroid(geometry)
+        if centroid is None:
+            continue
+        reduction_t = pd.to_numeric(pd.Series([row.get(reduction_col)]), errors="coerce").iloc[0]
+        reduction_pct = pd.to_numeric(pd.Series([row.get(reduction_pct_col)]), errors="coerce").iloc[0]
+        if not (np.isfinite(reduction_t) and reduction_t > 0 and np.isfinite(reduction_pct)):
+            continue
+        rows.append(
+            {
+                "region_key": row.get("region_key"),
+                "region_name_cn": name_cn,
+                "region_name_en": row.get("region_name_en"),
+                "region_level": row.get("region_level"),
+                "province": row.get("province"),
+                "adcode": adcode,
+                "lng": centroid[0],
+                "lat": centroid[1],
+                reduction_col: float(reduction_t),
+                reduction_pct_col: float(reduction_pct),
+            }
+        )
+
+    bubble_df = pd.DataFrame(rows)
+    if not bubble_df.empty:
+        bubble_df["_bubble_size"] = _bubble_sizes_from_values(bubble_df[reduction_col])
+    return bubble_df
+
+
+def _draw_bubble_size_legend(ax, values, size_min=38.0, size_max=860.0):
+    """Draw an in-map legend for absolute reduction bubble sizes."""
+    values = pd.to_numeric(pd.Series(values), errors="coerce")
+    values = values[np.isfinite(values) & (values > 0)]
+    if values.empty:
+        return None
+    legend_values = np.nanquantile(values, [0.25, 0.5, 0.9])
+    legend_values = np.unique(np.round(legend_values, 1))
+    handles = []
+    labels = []
+    vmax = float(values.max())
+    for value in legend_values:
+        if value <= 0:
+            continue
+        marker_size = size_min + np.sqrt(value / vmax) * (size_max - size_min)
+        handles.append(
+            plt.scatter(
+                [],
+                [],
+                s=marker_size,
+                facecolor="#BDBDBD",
+                edgecolor="#FFFFFF",
+                linewidth=0.65,
+                alpha=0.82,
+            )
+        )
+        labels.append(f"{value:,.0f}" if value >= 100 else f"{value:,.1f}")
+    if not handles:
+        return None
+    return ax.legend(
+        handles,
+        labels,
+        title="E-bike - Oracle\n(t CO2eq / yr)",
+        loc="lower right",
+        bbox_to_anchor=(0.98, 0.31),
+        frameon=True,
+        framealpha=0.92,
+        fontsize=8,
+        title_fontsize=8,
+        borderpad=0.7,
+        labelspacing=1.0,
+        handletextpad=1.2,
+    )
+
+
 def _named_baseline_kappa(named: pd.DataFrame) -> float:
     """Infer the configured baseline kappa from a named-scenario table."""
     kappas = np.array(sorted(named["kappa"].dropna().unique()), dtype=float)
@@ -5311,6 +5470,8 @@ def _write_regions_map_oracle_reduction_rank_report(
     stats_csv_path,
     map_df,
     reduction_col,
+    reduction_pct_col,
+    bubble_df,
     ax_map,
     inset_ax,
     cbar_ax,
@@ -5334,8 +5495,14 @@ def _write_regions_map_oracle_reduction_rank_report(
         ),
         "panels": {
             "oracle_reduction_map": {
-                **_map_panel_report(
-                    map_df, reduction_col, cmap, norm, bin_edges, ax_map, None,
+                **_bubble_map_panel_report(
+                    bubble_df,
+                    reduction_col,
+                    reduction_pct_col,
+                    cmap,
+                    norm,
+                    bin_edges,
+                    ax_map,
                 ),
                 "map_axis_saved_tight": saved_tight_axis_report(
                     ax_map.get_figure(),
@@ -5351,7 +5518,7 @@ def _write_regions_map_oracle_reduction_rank_report(
                     cbar_ax,
                     bin_edges,
                     reduction_edges,
-                    "E-bike - Oracle (t CO2eq / yr)",
+                    "Oracle lifecycle emission reduction (%)",
                     cmap,
                 ),
                 "colorbar_axis_saved_tight": saved_tight_axis_report(
@@ -5376,7 +5543,7 @@ def plot_regions_map_oracle_reduction_rank(
     for_latex: bool = False,
     plot_title: bool = False,
 ):
-    """China choropleth of absolute Oracle reduction with top-city rank inset.
+    """China bubble map of Oracle reduction with top-city rank inset.
 
     Args:
         df_stats: all_region_stats DataFrame.
@@ -5403,6 +5570,7 @@ def plot_regions_map_oracle_reduction_rank(
             )
     try:
         reduction_col = _oracle_reduction_tonnes_column(map_df)
+        reduction_pct_col = _weighted_reduction_column(map_df)
     except KeyError as exc:
         print(f"Regions map oracle reduction rank skipped — {exc}")
         return
@@ -5412,14 +5580,34 @@ def plot_regions_map_oracle_reduction_rank(
         print("Regions map oracle reduction rank skipped — no valid reduction values")
         return
 
-    cmap, norm, bin_edges, reduction_edges = _build_absolute_reduction_log_cmap(
-        reduction_values
+    map_df[reduction_pct_col] = pd.to_numeric(
+        map_df[reduction_pct_col], errors="coerce"
     )
+    reduction_pct_values = map_df[reduction_pct_col].dropna()
+    if reduction_pct_values.empty:
+        print(
+            "Regions map oracle reduction rank skipped — "
+            "no valid reduction-percentage values"
+        )
+        return
+
+    v_max = max(float(reduction_pct_values.max(skipna=True)), 0.0)
+    cmap, norm, bin_edges, reduction_edges = _build_blue_reduction_cmap(v_max)
+    bubble_df = _regions_oracle_bubble_df(
+        map_df,
+        reduction_col=reduction_col,
+        reduction_pct_col=reduction_pct_col,
+    )
+    if bubble_df.empty:
+        print("Regions map oracle reduction rank skipped — no valid bubble positions")
+        return
 
     fig, ax_map = plt.subplots(figsize=figsize)
+    gray_map_df = map_df.copy()
+    gray_map_df["_bubble_gray"] = np.nan
     plot_regions_on_china_map(
-        df=map_df,
-        color_by=reduction_col,
+        df=gray_map_df,
+        color_by="_bubble_gray",
         ax=ax_map,
         plot_title=False,
         cmap=cmap,
@@ -5427,6 +5615,21 @@ def plot_regions_map_oracle_reduction_rank(
         draw_colorbar=False,
         draw_legend=False,
     )
+    ax_map.scatter(
+        bubble_df["lng"],
+        bubble_df["lat"],
+        s=bubble_df["_bubble_size"],
+        c=bubble_df[reduction_pct_col],
+        cmap=cmap,
+        norm=norm,
+        alpha=0.82,
+        edgecolor="#FFFFFF",
+        linewidth=0.65,
+        zorder=8,
+    )
+    size_legend = _draw_bubble_size_legend(ax_map, bubble_df[reduction_col])
+    if size_legend is not None:
+        ax_map.add_artist(size_legend)
     ax_map.set_xlabel("")
     ax_map.set_ylabel("")
     ax_map.set_xticks([])
@@ -5452,7 +5655,7 @@ def plot_regions_map_oracle_reduction_rank(
 
     if plot_title:
         ax_map.set_title(
-            "Regional Oracle Reduction and Top-City Rank",
+            "Regional Oracle Reduction Bubble Map and Top-City Rank",
             fontsize=13,
             fontweight="bold",
         )
@@ -5470,7 +5673,7 @@ def plot_regions_map_oracle_reduction_rank(
         norm,
         bin_edges,
         reduction_edges,
-        "E-bike - Oracle (t CO₂eq / yr)",
+        "Oracle lifecycle emission reduction (%)",
     )
     cbar.ax.yaxis.set_ticks_position("left")
     cbar.ax.yaxis.set_label_position("left")
@@ -5489,6 +5692,8 @@ def plot_regions_map_oracle_reduction_rank(
             stats_csv_path=stats_csv_path,
             map_df=map_df,
             reduction_col=reduction_col,
+            reduction_pct_col=reduction_pct_col,
+            bubble_df=bubble_df,
             ax_map=ax_map,
             inset_ax=inset_ax,
             cbar_ax=cbar_ax,
@@ -5609,6 +5814,47 @@ def _map_panel_report(df, color_col, cmap, norm, bin_edges, ax, panel_letter):
     return {
         "panel_letter": panel_letter,
         "axis": _axis_report(ax),
+        "color_by": color_col,
+        "rows": rows,
+    }
+
+
+def _bubble_map_panel_report(
+    bubble_df,
+    size_col,
+    color_col,
+    cmap,
+    norm,
+    bin_edges,
+    ax,
+):
+    """Return row-level values used by a bubble map panel."""
+    rows = []
+    for _, row in bubble_df.iterrows():
+        color_value = row.get(color_col)
+        rows.append(
+            {
+                "region_key": _json_safe_scalar(row.get("region_key")),
+                "region_name_cn": _json_safe_scalar(row.get("region_name_cn")),
+                "region_name_en": _json_safe_scalar(row.get("region_name_en")),
+                "region_level": _json_safe_scalar(row.get("region_level")),
+                "province": _json_safe_scalar(row.get("province")),
+                "adcode": _json_safe_scalar(row.get("adcode")),
+                "lng": _json_safe_scalar(row.get("lng")),
+                "lat": _json_safe_scalar(row.get("lat")),
+                size_col: _json_safe_scalar(row.get(size_col)),
+                color_col: _json_safe_scalar(color_value),
+                "bubble_size": _json_safe_scalar(row.get("_bubble_size")),
+                "bubble_color": _color_for_value(color_value, cmap, norm),
+                "color_bin": _bin_label_for_value(color_value, bin_edges),
+            }
+        )
+    return {
+        "panel_letter": None,
+        "axis": _axis_report(ax),
+        "mark_type": "bubble",
+        "size_by": size_col,
+        "size_scale": "sqrt",
         "color_by": color_col,
         "rows": rows,
     }
