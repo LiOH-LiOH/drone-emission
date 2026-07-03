@@ -150,6 +150,35 @@ def _build_blue_reduction_cmap(v_max: float):
     return cmap, norm, bin_edges, reduction_edges
 
 
+def _build_bubble_reduction_cmap(v_max: float):
+    """Return a visible blue cmap for percentage-colored bubbles."""
+    from matplotlib.colors import BoundaryNorm, ListedColormap
+
+    step = 5 if v_max <= 25 else (10 if v_max <= 80 else 15)
+    top = max(int(np.ceil(v_max / step) * step), step * 5)
+    reduction_edges = np.arange(0, top + step, step, dtype=float)
+    bin_edges = np.concatenate([[-step], reduction_edges])
+    base_colors = [
+        "#9BD3E6",
+        "#66B7D2",
+        "#2F91B8",
+        "#126782",
+        "#064D6B",
+        "#023047",
+    ]
+    if len(reduction_edges) - 1 <= len(base_colors):
+        value_colors = base_colors[:len(reduction_edges) - 1]
+    else:
+        base = plt.get_cmap("PuBuGn")
+        value_colors = [
+            base(x)
+            for x in np.linspace(0.38, 0.95, len(reduction_edges) - 1)
+        ]
+    cmap = ListedColormap(["#cccccc", *value_colors])
+    norm = BoundaryNorm(bin_edges, ncolors=cmap.N, clip=True)
+    return cmap, norm, bin_edges, reduction_edges
+
+
 def _finer_percentage_bins(reference_edges: np.ndarray, subdivisions: int = 2):
     """Return finer bins spanning the same range as a percentage color scale."""
     reference_edges = np.asarray(reference_edges, dtype=float)
@@ -294,7 +323,7 @@ def _geometry_largest_ring_centroid(geometry):
     return best_centroid
 
 
-def _bubble_sizes_from_values(values, size_min=38.0, size_max=860.0):
+def _bubble_sizes_from_values(values, size_min=24.0, size_max=520.0):
     """Map positive values to scatter marker areas with square-root scaling."""
     values = pd.to_numeric(pd.Series(values), errors="coerce").to_numpy(dtype=float)
     positive = values[np.isfinite(values) & (values > 0)]
@@ -360,7 +389,7 @@ def _regions_oracle_bubble_df(map_df, reduction_col, reduction_pct_col):
     return bubble_df
 
 
-def _draw_bubble_size_legend(ax, values, size_min=38.0, size_max=860.0):
+def _draw_bubble_size_legend(ax, values, size_min=24.0, size_max=520.0):
     """Draw an in-map legend for absolute reduction bubble sizes."""
     values = pd.to_numeric(pd.Series(values), errors="coerce")
     values = values[np.isfinite(values) & (values > 0)]
@@ -5592,7 +5621,7 @@ def plot_regions_map_oracle_reduction_rank(
         return
 
     v_max = max(float(reduction_pct_values.max(skipna=True)), 0.0)
-    cmap, norm, bin_edges, reduction_edges = _build_blue_reduction_cmap(v_max)
+    cmap, norm, bin_edges, reduction_edges = _build_bubble_reduction_cmap(v_max)
     bubble_df = _regions_oracle_bubble_df(
         map_df,
         reduction_col=reduction_col,
