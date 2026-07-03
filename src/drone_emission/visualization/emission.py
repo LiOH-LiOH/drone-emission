@@ -1165,7 +1165,11 @@ def _break_even_panel_report(prepared: Dict, axes: tuple, panel_a_mode: str = "l
     }
 
 
-def _contribution_panel_report(prepared: Dict, axes: tuple):
+def _contribution_panel_report(
+    prepared: Dict,
+    axes: tuple,
+    panel_letters: tuple[str, str] = ("d", "e"),
+):
     """Return compact report data for contribution-decomposition panels."""
     ax_d, ax_e = axes
     national = prepared["national"]
@@ -1220,8 +1224,10 @@ def _contribution_panel_report(prepared: Dict, axes: tuple):
             }
         )
 
+    waterfall_key = f"{panel_letters[0]}_national_contribution_waterfall"
+    city_bars_key = f"{panel_letters[1]}_top_city_contribution_bars"
     return {
-        "d_national_contribution_waterfall": {
+        waterfall_key: {
             "axis": _report_axis(ax_d),
             "baseline_ebike_lifecycle_kg": _report_number(
                 national["baseline_ebike_lifecycle_kg"]
@@ -1232,7 +1238,7 @@ def _contribution_panel_report(prepared: Dict, axes: tuple):
             "sum_check": _json_safe(national.get("sum_check", {})),
             "bars": national_components,
         },
-        "e_top_city_contribution_bars": {
+        city_bars_key: {
             "axis": _report_axis(ax_e),
             "city_count_plotted": len(top_city_rows),
             "bars": top_city_rows,
@@ -1295,7 +1301,10 @@ def _write_break_even_contribution_decomposition_report(
         "- Layout: panels a-c are the break-even phase diagram; panels d-e are the contribution decomposition.",
         f"- National net reduction: {national['total_net_pp']:.3f} pp "
         f"({national['total_net_kg'] / 1e6:.3f} kt CO2e/yr).",
-        f"- National all-e-bike baseline: {national['baseline_ebike_lifecycle_kg'] / 1e6:.3f} kt CO2e/yr.",
+        (
+            "- National all-e-bike baseline: "
+            f"{national['baseline_ebike_lifecycle_kg'] / 1e6:.3f} kt CO2e/yr."
+        ),
         f"- Top-city bars plotted: {len(contribution_prepared.get('top_cities', [])[:15])}.",
         "",
         "## Panel Reading Guide",
@@ -1326,6 +1335,89 @@ def _write_break_even_contribution_decomposition_report(
 
     print(f"Break-even contribution decomposition report saved to {md_path}")
     print(f"Break-even contribution decomposition report data saved to {json_path}")
+
+
+def _write_contribution_decomposition_panel_report(
+    prepared: Dict,
+    save_path: str,
+    figsize: tuple,
+    axes: tuple,
+    figure_name: str,
+    panel_letters: tuple[str, str] = ("a", "b"),
+):
+    """Write compact JSON and Markdown reports for contribution-only panels."""
+    report_base = save_path.rsplit(".", 1)[0] + "_report"
+    json_path = report_base + ".json"
+    md_path = report_base + ".md"
+    contribution_report = _contribution_panel_report(
+        prepared,
+        axes=axes,
+        panel_letters=panel_letters,
+    )
+    payload = {
+        "figure_name": figure_name,
+        "figure_path": save_path,
+        "figure_size_inches": {"width": figsize[0], "height": figsize[1]},
+        "coordinate_convention": (
+            "Plotted x/y values are Matplotlib data coordinates for the stated "
+            "axis. Axis bbox values are figure-fraction coordinates."
+        ),
+        "report_scope": (
+            "Compact LLM-readable report: all waterfall bars and top-city "
+            "stacked bars are listed."
+        ),
+        "panels": contribution_report,
+    }
+    with open(json_path, "w", encoding="utf-8") as f:
+        json.dump(_json_safe(payload), f, indent=2, ensure_ascii=False, allow_nan=False)
+
+    national = prepared["national"]
+    lines = [
+        f"# {figure_name}",
+        "",
+        f"- Figure path: `{save_path}`",
+        f"- Figure size: {figsize[0]} x {figsize[1]} inches",
+        (
+            "- Layout: panel a is the national contribution waterfall; panel b "
+            "is the top-city contribution decomposition."
+        ),
+        f"- National net reduction: {national['total_net_pp']:.3f} pp "
+        f"({national['total_net_kg'] / 1e6:.3f} kt CO2e/yr).",
+        (
+            "- National all-e-bike baseline: "
+            f"{national['baseline_ebike_lifecycle_kg'] / 1e6:.3f} kt CO2e/yr."
+        ),
+        f"- Top-city bars plotted: {len(prepared.get('top_cities', [])[:15])}.",
+        "",
+        "## Panel Reading Guide",
+        "",
+        (
+            "- a: national waterfall of mechanism contributions relative to the "
+            "all-e-bike baseline."
+        ),
+        "- b: stacked contribution bars for the top 15 cities by net reduction.",
+        "",
+        "## National Components",
+    ]
+    for spec in CONTRIBUTION_COMPONENT_SPECS:
+        key = spec["key"]
+        pp_key = f"{key}_pp"
+        kg_key = f"{key}_kg"
+        lines.append(
+            f"- {spec['label']}: {national[pp_key]:.3f} pp, "
+            f"{national[kg_key] / 1e6:.3f} kt CO2e/yr"
+        )
+    lines.extend(["", "## Top Cities"])
+    for row in prepared.get("top_cities", [])[:15]:
+        lines.append(
+            f"- {row.get('label')}: {row.get('total_net_pp', 0.0):.3f} pp, "
+            f"{row.get('total_net_kg', 0.0) / 1e6:.3f} kt CO2e/yr"
+        )
+    with open(md_path, "w", encoding="utf-8") as f:
+        f.write("\n".join(lines) + "\n")
+
+    print(f"{figure_name} report saved to {md_path}")
+    print(f"{figure_name} report data saved to {json_path}")
 
 
 def plot_contribution_decomposition(
@@ -1376,6 +1468,79 @@ def plot_contribution_decomposition(
         _write_contribution_decomposition_report(prepared, save_path)
         plt.close(fig)
         print(f"Contribution decomposition saved to {save_path}")
+    else:
+        plt.show()
+        plt.close(fig)
+
+
+def plot_break_even_contribution_decomposition_marching_cubes_de(
+    prepared: Dict,
+    save_path: str = None,
+    figsize: tuple = (15.0, 4.8),
+    for_latex: bool = False,
+    plot_title: bool = False,
+):
+    """Contribution panels extracted from the marching-cubes combined figure.
+
+    Args:
+        prepared: Output of ``prepare_contribution_decomposition_data``.
+        save_path: Path to save figure (with extension). Shows plot if None.
+        figsize: Figure size tuple.
+        for_latex: If True, save as PDF.
+        plot_title: If True, show title.
+    """
+    if not prepared:
+        print(
+            "Break-even contribution decomposition extracted panels skipped — "
+            "prepared data missing"
+        )
+        return
+
+    figure_name = "break_even_contribution_decomposition_marching_cubes_de"
+    fig = plt.figure(figsize=figsize)
+    gs = fig.add_gridspec(
+        1,
+        2,
+        width_ratios=[0.85, 1.35],
+        wspace=0.22,
+    )
+    ax_a = fig.add_subplot(gs[0, 0])
+    ax_b = fig.add_subplot(gs[0, 1])
+
+    _plot_contribution_decomposition_panels(
+        fig,
+        ax_a,
+        ax_b,
+        prepared,
+        plot_title=plot_title,
+        panel_letters=("a", "b"),
+        panel_letter_fontsize=12,
+        rotate_waterfall_xticks=True,
+        panel_letter_position=(-0.10, 1.12),
+        legend_inside_second_axis=True,
+        waterfall_ylim_expand=0.12,
+    )
+
+    if save_path:
+        if for_latex and not save_path.endswith(".pdf"):
+            save_path = save_path.rsplit(".", 1)[0] + ".pdf"
+        if plot_title:
+            save_path = _add_title_suffix(save_path)
+        os.makedirs(os.path.dirname(save_path), exist_ok=True)
+        fig.savefig(save_path, dpi=300, bbox_inches="tight")
+        _write_contribution_decomposition_panel_report(
+            prepared,
+            save_path,
+            figsize,
+            axes=(ax_a, ax_b),
+            figure_name=figure_name,
+            panel_letters=("a", "b"),
+        )
+        plt.close(fig)
+        print(
+            "Break-even contribution decomposition extracted panels saved to "
+            f"{save_path}"
+        )
     else:
         plt.show()
         plt.close(fig)
