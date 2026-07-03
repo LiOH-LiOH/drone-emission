@@ -545,9 +545,18 @@ def _macro_region_component_rows(
     rows = []
     for spec in CHINA_MACRO_REGION_SPECS:
         row = rows_by_key[spec["key"]]
+        regional_baseline_kg = float(row["baseline_ebike_lifecycle_kg"])
         for key in CONTRIBUTION_COMPONENT_KEYS:
-            row[f"{key}_pp"] = row[f"{key}_kg"] / national_baseline_kg * 100.0
-        row["total_net_pp"] = row["total_net_kg"] / national_baseline_kg * 100.0
+            row[f"{key}_pp"] = (
+                row[f"{key}_kg"] / regional_baseline_kg * 100.0
+                if regional_baseline_kg > 0
+                else 0.0
+            )
+        row["total_net_pp"] = (
+            row["total_net_kg"] / regional_baseline_kg * 100.0
+            if regional_baseline_kg > 0
+            else 0.0
+        )
         rows.append(row)
     return rows
 
@@ -1039,7 +1048,12 @@ def _plot_contribution_waterfall(
         ax.set_ylim(y_min - pad, y_max + pad)
 
 
-def _plot_top_city_contribution_bars(ax, rows: list[dict], xlabel: str = "City"):
+def _plot_top_city_contribution_bars(
+    ax,
+    rows: list[dict],
+    xlabel: str = "City",
+    ylabel: str = "Contribution to national all-e-bike baseline (pp)",
+):
     """Draw stacked contribution bars for city-like contribution groups."""
     if not rows:
         ax.text(
@@ -1105,7 +1119,7 @@ def _plot_top_city_contribution_bars(ax, rows: list[dict], xlabel: str = "City")
 
     ax.axhline(0, color="#555555", linewidth=0.8)
     ax.set_xticks(x, [row["label"] for row in rows], rotation=45, ha="right")
-    ax.set_ylabel("Contribution to national all-e-bike baseline (pp)", fontsize=12)
+    ax.set_ylabel(ylabel, fontsize=12)
     ax.set_xlabel(xlabel, fontsize=11)
     ax.grid(axis="y", alpha=0.25)
     ax.set_xlim(-0.6, len(rows) - 0.4)
@@ -1139,6 +1153,7 @@ def _plot_contribution_decomposition_panels(
         ax_b,
         prepared.get("macro_regions", []),
         xlabel="China macro-region",
+        ylabel="Contribution to regional all-e-bike baseline (pp)",
     )
 
     if plot_title:
@@ -1348,8 +1363,10 @@ def _contribution_panel_report(
                     row.get("baseline_ebike_lifecycle_kg")
                 ),
                 "total_net_kg": _report_number(row.get("total_net_kg")),
-                "total_net_pp": _report_number(row.get("total_net_pp")),
-                "component_pct_points": {
+                "total_net_pp_of_regional_ebike_baseline": _report_number(
+                    row.get("total_net_pp")
+                ),
+                "component_pct_points_of_regional_ebike_baseline": {
                     spec["key"]: _report_number(row.get(f"{spec['key']}_pp"))
                     for spec in CONTRIBUTION_COMPONENT_SPECS
                 },
@@ -1448,7 +1465,11 @@ def _write_break_even_contribution_decomposition_report(
         "- a: 3D break-even surface where drone and e-bike lifecycle emissions are equal across air distance, road detour ratio, and grid carbon intensity.",
         "- b-c: heatmaps at representative GEF levels; negative Delta g means drone has lower per-order emissions.",
         "- d: national waterfall of mechanism contributions relative to the all-e-bike baseline.",
-        "- e: stacked contribution bars for seven China macro-regions.",
+        (
+            "- e: stacked contribution bars for seven China macro-regions; "
+            "bar heights are percentage points of each macro-region's "
+            "all-e-bike baseline, while bar-top labels remain kt CO2e/yr."
+        ),
         "",
         "## National Components",
     ]
@@ -1532,7 +1553,11 @@ def _write_contribution_decomposition_panel_report(
             "- a: national waterfall of mechanism contributions relative to the "
             "all-e-bike baseline."
         ),
-        "- b: stacked contribution bars for seven China macro-regions.",
+        (
+            "- b: stacked contribution bars for seven China macro-regions; "
+            "bar heights are percentage points of each macro-region's "
+            "all-e-bike baseline, while bar-top labels remain kt CO2e/yr."
+        ),
         "",
         "## National Components",
     ]
