@@ -7588,7 +7588,7 @@ def plot_city_population_detour_oracle_reduction_bubble(
     plot_df["population_million"] = plot_df["population_10k"] / 100.0
     reduction_t = plot_df[reduction_t_col]
     population_million = plot_df["population_million"]
-    size_min, size_max = 13.0, 380.0
+    size_min, size_max = 6.5, 190.0
     if np.isclose(population_million.max(), population_million.min()):
         sizes = np.full(len(plot_df), (size_min + size_max) / 2)
     else:
