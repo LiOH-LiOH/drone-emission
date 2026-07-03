@@ -990,7 +990,7 @@ def _plot_top_city_contribution_bars(
     xlabel: str = "City",
     ylabel: str = "Contribution to national all-e-bike baseline (pp)",
 ):
-    """Draw stacked contribution bars for city-like contribution groups."""
+    """Draw grouped benefit, penalty, and net bars for city-like groups."""
     if not rows:
         ax.text(
             0.5,
@@ -1006,46 +1006,60 @@ def _plot_top_city_contribution_bars(
         return
 
     x = np.arange(len(rows), dtype=float)
-    pos_acc = np.zeros(len(rows), dtype=float)
-    neg_acc = np.zeros(len(rows), dtype=float)
+    bar_width = 0.22
+    benefit_x = x - 0.27
+    penalty_x = x
+    net_x = x + 0.27
+    benefit_acc = np.zeros(len(rows), dtype=float)
+    penalty_acc = np.zeros(len(rows), dtype=float)
 
     for spec in CONTRIBUTION_COMPONENT_SPECS:
         values = np.array([float(row[f"{spec['key']}_pp"]) for row in rows], dtype=float)
-        positive = np.clip(values, 0.0, None)
-        negative = np.clip(values, None, 0.0)
-        ax.bar(
-            x,
-            positive,
-            bottom=pos_acc,
-            width=0.72,
-            color=spec["color"],
-            edgecolor="white",
-            linewidth=0.8,
-        )
-        ax.bar(
-            x,
-            -negative,
-            bottom=neg_acc + negative,
-            width=0.72,
-            color=spec["color"],
-            edgecolor="white",
-            linewidth=0.8,
-        )
-        pos_acc += positive
-        neg_acc += negative
+        benefit = np.clip(values, 0.0, None)
+        penalty = np.clip(values, None, 0.0)
+        if np.any(benefit):
+            ax.bar(
+                benefit_x,
+                benefit,
+                bottom=benefit_acc,
+                width=bar_width,
+                color=spec["color"],
+                edgecolor="white",
+                linewidth=0.8,
+            )
+        if np.any(penalty):
+            ax.bar(
+                penalty_x,
+                penalty,
+                bottom=penalty_acc,
+                width=bar_width,
+                color=spec["color"],
+                edgecolor="white",
+                linewidth=0.8,
+            )
+        benefit_acc += benefit
+        penalty_acc += penalty
 
     total_pp = np.array([float(row["total_net_pp"]) for row in rows], dtype=float)
     total_kg = np.array([float(row["total_net_kg"]) for row in rows], dtype=float)
+    ax.bar(
+        net_x,
+        total_pp,
+        width=bar_width,
+        color="#2F4B7C",
+        edgecolor="white",
+        linewidth=0.8,
+    )
     max_abs = max(
         0.2,
         float(np.max(np.abs(total_pp))) if len(total_pp) else 0.0,
-        float(np.max(pos_acc)) if len(pos_acc) else 0.0,
-        float(np.max(np.abs(neg_acc))) if len(neg_acc) else 0.0,
+        float(np.max(benefit_acc)) if len(benefit_acc) else 0.0,
+        float(np.max(np.abs(penalty_acc))) if len(penalty_acc) else 0.0,
     )
     label_offset = max_abs * 0.025
     for idx, (pp_value, kg_value) in enumerate(zip(total_pp, total_kg)):
         ax.text(
-            x[idx],
+            net_x[idx],
             pp_value + (label_offset if pp_value >= 0 else -label_offset),
             f"{kg_value / 1e6:.2f} kt",
             ha="center",
@@ -1059,8 +1073,8 @@ def _plot_top_city_contribution_bars(
     ax.set_xlabel(xlabel, fontsize=11)
     ax.grid(axis="y", alpha=0.25)
     ax.set_xlim(-0.6, len(rows) - 0.4)
-    ymin = min(neg_acc.min(), total_pp.min(), 0.0) * 1.15
-    ymax = max(pos_acc.max(), total_pp.max(), 0.0) * 1.15
+    ymin = min(penalty_acc.min(), total_pp.min(), 0.0) * 1.15
+    ymax = max(benefit_acc.max(), total_pp.max(), 0.0) * 1.15
     ax.set_ylim(ymin, ymax)
 
 
@@ -1088,7 +1102,7 @@ def _plot_contribution_decomposition_panels(
     _plot_top_city_contribution_bars(
         ax_b,
         prepared.get("macro_regions", []),
-        xlabel="China macro-region",
+        xlabel="China macro-region (Benefits, Penalties, Net)",
         ylabel="Contribution to regional all-e-bike baseline (pp)",
     )
 
@@ -1122,6 +1136,16 @@ def _plot_contribution_decomposition_panels(
         )
         for spec in CONTRIBUTION_COMPONENT_SPECS
     ]
+    legend_handles.append(
+        plt.Rectangle(
+            (0, 0),
+            1,
+            1,
+            facecolor="#2F4B7C",
+            edgecolor="white",
+            label="Net reduction",
+        )
+    )
     if legend_inside_second_axis:
         ax_b.legend(
             handles=legend_handles,
@@ -1142,7 +1166,7 @@ def _plot_contribution_decomposition_panels(
         fig.legend(
             handles=legend_handles,
             loc="upper center",
-            ncol=4,
+            ncol=5,
             frameon=False,
             bbox_to_anchor=legend_anchor,
         )
@@ -1286,6 +1310,12 @@ def _contribution_panel_report(
 
     macro_region_rows = []
     for idx, row in enumerate(prepared.get("macro_regions", [])):
+        component_pp = {
+            spec["key"]: float(row.get(f"{spec['key']}_pp", 0.0))
+            for spec in CONTRIBUTION_COMPONENT_SPECS
+        }
+        benefit_pp = sum(max(value, 0.0) for value in component_pp.values())
+        penalty_pp = sum(min(value, 0.0) for value in component_pp.values())
         macro_region_rows.append(
             {
                 "x_index": idx,
@@ -1302,9 +1332,10 @@ def _contribution_panel_report(
                 "total_net_pp_of_regional_ebike_baseline": _report_number(
                     row.get("total_net_pp")
                 ),
+                "benefit_pp_of_regional_ebike_baseline": _report_number(benefit_pp),
+                "penalty_pp_of_regional_ebike_baseline": _report_number(penalty_pp),
                 "component_pct_points_of_regional_ebike_baseline": {
-                    spec["key"]: _report_number(row.get(f"{spec['key']}_pp"))
-                    for spec in CONTRIBUTION_COMPONENT_SPECS
+                    key: _report_number(value) for key, value in component_pp.items()
                 },
                 "component_kg": {
                     spec["key"]: _report_number(row.get(f"{spec['key']}_kg"))
@@ -1330,8 +1361,23 @@ def _contribution_panel_report(
         city_bars_key: {
             "axis": _report_axis(ax_e),
             "macro_region_count_plotted": len(macro_region_rows),
+            "bar_design": (
+                "Each macro-region has three bars: Benefits stacks positive "
+                "components, Penalties stacks negative components, and Net "
+                "reduction is a separate total bar."
+            ),
             "bars": macro_region_rows,
-            "legend_components": _json_safe(list(CONTRIBUTION_COMPONENT_SPECS)),
+            "legend_components": _json_safe(
+                [
+                    *list(CONTRIBUTION_COMPONENT_SPECS),
+                    {
+                        "key": "total_net",
+                        "label": "Net reduction",
+                        "short_label": "Net",
+                        "color": "#2F4B7C",
+                    },
+                ]
+            ),
         },
         "sampling": _json_safe(prepared.get("sampling", {})),
         "runtime": _json_safe(prepared.get("runtime", {})),
@@ -1371,7 +1417,7 @@ def _write_break_even_contribution_decomposition_report(
         ),
         "report_scope": (
             "Compact LLM-readable report: full plotted grids are summarized, "
-            "while all waterfall bars and macro-region stacked bars are listed."
+            "while all waterfall bars and macro-region grouped bars are listed."
         ),
         "panels": {
             **break_even_report,
@@ -1402,9 +1448,11 @@ def _write_break_even_contribution_decomposition_report(
         "- b-c: heatmaps at representative GEF levels; negative Delta g means drone has lower per-order emissions.",
         "- d: national waterfall of mechanism contributions relative to the all-e-bike baseline.",
         (
-            "- e: stacked contribution bars for seven China macro-regions; "
-            "bar heights are percentage points of each macro-region's "
-            "all-e-bike baseline, while bar-top labels remain kt CO2e/yr."
+            "- e: grouped contribution bars for seven China macro-regions. "
+            "Each group contains Benefits, Penalties, and Net bars; Benefits "
+            "and Penalties retain component colors. Bar heights are percentage "
+            "points of each macro-region's all-e-bike baseline, while Net "
+            "bar-top labels remain kt CO2e/yr."
         ),
         "",
         "## National Components",
@@ -1458,7 +1506,7 @@ def _write_contribution_decomposition_panel_report(
         ),
         "report_scope": (
             "Compact LLM-readable report: all waterfall bars and macro-region "
-            "stacked bars are listed."
+            "grouped bars are listed."
         ),
         "panels": contribution_report,
     }
@@ -1490,9 +1538,11 @@ def _write_contribution_decomposition_panel_report(
             "all-e-bike baseline."
         ),
         (
-            "- b: stacked contribution bars for seven China macro-regions; "
-            "bar heights are percentage points of each macro-region's "
-            "all-e-bike baseline, while bar-top labels remain kt CO2e/yr."
+            "- b: grouped contribution bars for seven China macro-regions. "
+            "Each group contains Benefits, Penalties, and Net bars; Benefits "
+            "and Penalties retain component colors. Bar heights are percentage "
+            "points of each macro-region's all-e-bike baseline, while Net "
+            "bar-top labels remain kt CO2e/yr."
         ),
         "",
         "## National Components",
