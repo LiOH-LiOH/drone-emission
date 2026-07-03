@@ -1031,7 +1031,7 @@ def _plot_top_city_contribution_bars(
             ax.bar(
                 penalty_x,
                 penalty,
-                bottom=penalty_acc,
+                bottom=benefit_acc + penalty_acc,
                 width=bar_width,
                 color=spec["color"],
                 edgecolor="white",
@@ -1054,7 +1054,9 @@ def _plot_top_city_contribution_bars(
         0.2,
         float(np.max(np.abs(total_pp))) if len(total_pp) else 0.0,
         float(np.max(benefit_acc)) if len(benefit_acc) else 0.0,
-        float(np.max(np.abs(penalty_acc))) if len(penalty_acc) else 0.0,
+        float(np.max(np.abs(benefit_acc + penalty_acc)))
+        if len(penalty_acc)
+        else 0.0,
     )
     label_offset = max_abs * 0.025
     for idx, (pp_value, kg_value) in enumerate(zip(total_pp, total_kg)):
@@ -1073,9 +1075,40 @@ def _plot_top_city_contribution_bars(
     ax.set_xlabel(xlabel, fontsize=11)
     ax.grid(axis="y", alpha=0.25)
     ax.set_xlim(-0.6, len(rows) - 0.4)
-    ymin = min(penalty_acc.min(), total_pp.min(), 0.0) * 1.15
+    ymin = min((benefit_acc + penalty_acc).min(), total_pp.min(), 0.0) * 1.15
     ymax = max(benefit_acc.max(), total_pp.max(), 0.0) * 1.15
     ax.set_ylim(ymin, ymax)
+
+
+def _plot_macro_region_absolute_reduction(ax, rows: list[dict]):
+    """Draw absolute macro-region net reductions under the regional pp panel."""
+    if not rows:
+        ax.tick_params(left=False, bottom=False, labelleft=False, labelbottom=False)
+        return
+
+    x = np.arange(len(rows), dtype=float)
+    reductions_kt = np.array(
+        [float(row.get("total_net_kg", 0.0)) / 1e6 for row in rows],
+        dtype=float,
+    )
+    ax.bar(
+        x,
+        reductions_kt,
+        width=0.52,
+        color="#2E7D32",
+        edgecolor="white",
+        linewidth=0.8,
+    )
+    ax.axhline(0, color="#555555", linewidth=0.8)
+    ax.set_xticks(x, [row["label"] for row in rows], rotation=45, ha="right")
+    ax.set_ylabel("Absolute net reduction\n(kt CO2e yr$^{-1}$)", fontsize=10)
+    ax.grid(axis="y", alpha=0.25)
+    ax.set_xlim(-0.6, len(rows) - 0.4)
+    ymin = min(float(np.min(reductions_kt)), 0.0)
+    ymax = max(float(np.max(reductions_kt)), 0.0)
+    span = max(ymax - ymin, 0.1)
+    ax.set_ylim(ymin - span * 0.12, ymax + span * 0.15)
+    ax.tick_params(axis="both", labelsize=9)
 
 
 def _plot_contribution_decomposition_panels(
@@ -1093,25 +1126,35 @@ def _plot_contribution_decomposition_panels(
     waterfall_ylim_expand: float | None = None,
 ):
     """Draw contribution-decomposition panels on caller-provided axes."""
+    if isinstance(ax_b, tuple):
+        ax_b_main, ax_b_absolute = ax_b
+    else:
+        ax_b_main = ax_b
+        ax_b_absolute = None
+
     _plot_contribution_waterfall(
         ax_a,
         prepared["national"],
         rotate_xticks=rotate_waterfall_xticks,
         ylim_expand=waterfall_ylim_expand,
     )
+    macro_region_rows = prepared.get("macro_regions", [])
     _plot_top_city_contribution_bars(
-        ax_b,
-        prepared.get("macro_regions", []),
-        xlabel="China macro-region (Benefits, Penalties, Net)",
+        ax_b_main,
+        macro_region_rows,
+        xlabel="" if ax_b_absolute is not None else "China macro-region (Benefits, Penalties, Net)",
         ylabel="Contribution to regional all-e-bike baseline (pp)",
     )
+    if ax_b_absolute is not None:
+        ax_b_main.tick_params(labelbottom=False)
+        _plot_macro_region_absolute_reduction(ax_b_absolute, macro_region_rows)
 
     if plot_title:
         ax_a.set_title(
             "Sampled Current-Mechanism Contribution Decomposition",
             fontsize=14,
         )
-        ax_b.set_title("Contribution by China macro-region", fontsize=12)
+        ax_b_main.set_title("Contribution by China macro-region", fontsize=12)
     _add_panel_letter(
         ax_a,
         panel_letters[0],
@@ -1119,7 +1162,7 @@ def _plot_contribution_decomposition_panels(
         position=panel_letter_position,
     )
     _add_panel_letter(
-        ax_b,
+        ax_b_main,
         panel_letters[1],
         fontsize=panel_letter_fontsize,
         position=panel_letter_position,
@@ -1147,7 +1190,7 @@ def _plot_contribution_decomposition_panels(
         )
     )
     if legend_inside_second_axis:
-        ax_b.legend(
+        ax_b_main.legend(
             handles=legend_handles,
             loc="upper right",
             ncol=2,
@@ -1279,6 +1322,11 @@ def _contribution_panel_report(
 ):
     """Return compact report data for contribution-decomposition panels."""
     ax_d, ax_e = axes
+    if isinstance(ax_e, tuple):
+        ax_e_main, ax_e_absolute = ax_e
+    else:
+        ax_e_main = ax_e
+        ax_e_absolute = None
     national = prepared["national"]
     national_components = []
     for idx, spec in enumerate(CONTRIBUTION_COMPONENT_SPECS):
@@ -1359,12 +1407,17 @@ def _contribution_panel_report(
             "bars": national_components,
         },
         city_bars_key: {
-            "axis": _report_axis(ax_e),
+            "axis": _report_axis(ax_e_main),
+            "absolute_reduction_axis": _report_axis(ax_e_absolute)
+            if ax_e_absolute is not None
+            else None,
             "macro_region_count_plotted": len(macro_region_rows),
             "bar_design": (
                 "Each macro-region has three bars: Benefits stacks positive "
-                "components, Penalties stacks negative components, and Net "
-                "reduction is a separate total bar."
+                "components from zero, Penalties stacks negative components "
+                "downward from the Benefits total, and Net reduction is a "
+                "separate total bar. A lower inset axis shows absolute net "
+                "reduction in kt CO2e/yr with green bars."
             ),
             "bars": macro_region_rows,
             "legend_components": _json_safe(
@@ -1417,7 +1470,8 @@ def _write_break_even_contribution_decomposition_report(
         ),
         "report_scope": (
             "Compact LLM-readable report: full plotted grids are summarized, "
-            "while all waterfall bars and macro-region grouped bars are listed."
+            "while all waterfall bars, macro-region grouped bars, and absolute "
+            "reduction bars are listed."
         ),
         "panels": {
             **break_even_report,
@@ -1450,9 +1504,11 @@ def _write_break_even_contribution_decomposition_report(
         (
             "- e: grouped contribution bars for seven China macro-regions. "
             "Each group contains Benefits, Penalties, and Net bars; Benefits "
-            "and Penalties retain component colors. Bar heights are percentage "
-            "points of each macro-region's all-e-bike baseline, while Net "
-            "bar-top labels remain kt CO2e/yr."
+            "and Penalties retain component colors, with Penalties descending "
+            "from the Benefits total. Bar heights are percentage points of "
+            "each macro-region's all-e-bike baseline, while Net bar-top "
+            "labels remain kt CO2e/yr. The lower green bar chart shows each "
+            "macro-region's absolute net reduction in kt CO2e/yr."
         ),
         "",
         "## National Components",
@@ -1506,7 +1562,7 @@ def _write_contribution_decomposition_panel_report(
         ),
         "report_scope": (
             "Compact LLM-readable report: all waterfall bars and macro-region "
-            "grouped bars are listed."
+            "grouped bars plus absolute reduction bars are listed."
         ),
         "panels": contribution_report,
     }
@@ -1540,9 +1596,11 @@ def _write_contribution_decomposition_panel_report(
         (
             "- b: grouped contribution bars for seven China macro-regions. "
             "Each group contains Benefits, Penalties, and Net bars; Benefits "
-            "and Penalties retain component colors. Bar heights are percentage "
-            "points of each macro-region's all-e-bike baseline, while Net "
-            "bar-top labels remain kt CO2e/yr."
+            "and Penalties retain component colors, with Penalties descending "
+            "from the Benefits total. Bar heights are percentage points of "
+            "each macro-region's all-e-bike baseline, while Net bar-top "
+            "labels remain kt CO2e/yr. The lower green bar chart shows each "
+            "macro-region's absolute net reduction in kt CO2e/yr."
         ),
         "",
         "## National Components",
@@ -1597,12 +1655,19 @@ def plot_contribution_decomposition(
         wspace=0.22,
     )
     ax_a = fig.add_subplot(gs[0, 0])
-    ax_b = fig.add_subplot(gs[0, 1])
+    gs_b = gs[0, 1].subgridspec(
+        2,
+        1,
+        height_ratios=[3.2, 1.0],
+        hspace=0.08,
+    )
+    ax_b = fig.add_subplot(gs_b[0, 0])
+    ax_b_absolute = fig.add_subplot(gs_b[1, 0], sharex=ax_b)
 
     _plot_contribution_decomposition_panels(
         fig,
         ax_a,
-        ax_b,
+        (ax_b, ax_b_absolute),
         prepared,
         plot_title=plot_title,
     )
@@ -1654,12 +1719,19 @@ def plot_break_even_contribution_decomposition_marching_cubes_de(
         wspace=0.22,
     )
     ax_a = fig.add_subplot(gs[0, 0])
-    ax_b = fig.add_subplot(gs[0, 1])
+    gs_b = gs[0, 1].subgridspec(
+        2,
+        1,
+        height_ratios=[3.2, 1.0],
+        hspace=0.08,
+    )
+    ax_b = fig.add_subplot(gs_b[0, 0])
+    ax_b_absolute = fig.add_subplot(gs_b[1, 0], sharex=ax_b)
 
     _plot_contribution_decomposition_panels(
         fig,
         ax_a,
-        ax_b,
+        (ax_b, ax_b_absolute),
         prepared,
         plot_title=plot_title,
         panel_letters=("a", "b"),
@@ -1681,7 +1753,7 @@ def plot_break_even_contribution_decomposition_marching_cubes_de(
             prepared,
             save_path,
             figsize,
-            axes=(ax_a, ax_b),
+            axes=(ax_a, (ax_b, ax_b_absolute)),
             figure_name=figure_name,
             panel_letters=("a", "b"),
         )
@@ -2881,7 +2953,14 @@ def plot_break_even_contribution_decomposition(
     ax_b = fig.add_subplot(top[0, 2])
     ax_c = fig.add_subplot(top[0, 3])
     ax_d = fig.add_subplot(bottom[0, 0])
-    ax_e = fig.add_subplot(bottom[0, 1])
+    bottom_e = bottom[0, 1].subgridspec(
+        2,
+        1,
+        height_ratios=[3.2, 1.0],
+        hspace=0.08,
+    )
+    ax_e = fig.add_subplot(bottom_e[0, 0])
+    ax_e_absolute = fig.add_subplot(bottom_e[1, 0], sharex=ax_e)
 
     _plot_break_even_phase_diagram_panels(
         fig,
@@ -2900,7 +2979,7 @@ def plot_break_even_contribution_decomposition(
     _plot_contribution_decomposition_panels(
         fig,
         ax_d,
-        ax_e,
+        (ax_e, ax_e_absolute),
         contribution_prepared,
         plot_title=plot_title,
         panel_letters=("d", "e"),
@@ -2924,7 +3003,7 @@ def plot_break_even_contribution_decomposition(
             contribution_prepared,
             save_path,
             figsize,
-            axes=(ax_a, ax_b, ax_c, ax_d, ax_e),
+            axes=(ax_a, ax_b, ax_c, ax_d, (ax_e, ax_e_absolute)),
             figure_name=figure_name,
             panel_a_mode=panel_a_mode,
         )
