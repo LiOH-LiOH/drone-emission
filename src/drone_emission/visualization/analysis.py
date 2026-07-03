@@ -7447,20 +7447,19 @@ def plot_city_population_detour_oracle_reduction_bubble(
         )
         labels.append(f"{value:,.1f}M")
     if handles:
-        size_legend = ax.legend(
+        size_legend = legend_ax.legend(
             handles,
             labels,
             title="Population",
             loc="upper left",
-            bbox_to_anchor=(0.01, 0.99),
-            frameon=True,
-            framealpha=0.9,
+            bbox_to_anchor=(0.0, 0.98),
+            frameon=False,
             fontsize=8,
             title_fontsize=9,
-            borderpad=0.7,
-            labelspacing=1.0,
+            borderaxespad=0.0,
+            labelspacing=0.95,
         )
-        ax.add_artist(size_legend)
+        legend_ax.add_artist(size_legend)
 
     region_handles = []
     plotted_region_keys = set(plot_df["_macro_region_key"])
@@ -7478,7 +7477,8 @@ def plot_city_population_detour_oracle_reduction_bubble(
         legend_ax.legend(
             handles=region_handles,
             title="Macro-region",
-            loc="center left",
+            loc="lower left",
+            bbox_to_anchor=(0.0, 0.02),
             frameon=False,
             fontsize=8,
             title_fontsize=9,
