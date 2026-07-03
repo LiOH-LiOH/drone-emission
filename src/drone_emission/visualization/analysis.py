@@ -6,6 +6,7 @@ import pickle
 
 import matplotlib.pyplot as plt
 from matplotlib.patches import Patch
+from matplotlib.ticker import FuncFormatter
 import numpy as np
 import pandas as pd
 from scipy import stats
@@ -7248,6 +7249,205 @@ def plot_city_reduction_rank_top10(
         os.makedirs(os.path.dirname(out), exist_ok=True)
         plt.savefig(out, dpi=300, bbox_inches="tight")
         print(f"City reduction rank (top 10) saved to {out}")
+    else:
+        plt.show()
+
+    plt.close(fig)
+
+
+def plot_city_population_gdp_oracle_reduction_bubble(
+    df: pd.DataFrame,
+    save_path: str = None,
+    figsize: tuple = (9.5, 6.2),
+    for_latex: bool = False,
+    plot_title: bool = False,
+):
+    """Bubble chart of city population, GDP per capita, and Oracle emission reduction.
+
+    Args:
+        df: Enriched all_region_stats DataFrame with socioeconomic and Oracle
+            emission columns.
+        save_path: Path to save figure. Shows plot if None.
+        figsize: Figure size tuple.
+        for_latex: If True, save as PDF.
+        plot_title: If True, show title.
+    """
+    required = {
+        "population_10k",
+        "gdp_per_capita",
+        "total_ebike_lifecycle",
+    }
+    if "oracle_min_lifecycle_kg" not in df.columns and not any(
+        col in df.columns for col in WEIGHTED_REDUCTION_COLUMNS
+    ):
+        print(
+            "City population-GDP Oracle bubble skipped — missing Oracle reduction columns"
+        )
+        return
+    missing = required - set(df.columns)
+    if missing:
+        print(
+            "City population-GDP Oracle bubble skipped — "
+            f"missing columns {sorted(missing)}"
+        )
+        return
+
+    plot_df = df.copy()
+    if "region_level" in plot_df.columns:
+        plot_df = plot_df[plot_df["region_level"] == "city"].copy()
+    reduction_pct_col = _weighted_reduction_column(plot_df)
+    reduction_t_col = _oracle_reduction_tonnes_column(plot_df)
+
+    name_col = (
+        "region_name_en"
+        if "region_name_en" in plot_df.columns
+        else ("region_key" if "region_key" in plot_df.columns else None)
+    )
+    needed = [
+        "population_10k",
+        "gdp_per_capita",
+        reduction_pct_col,
+        reduction_t_col,
+    ]
+    if name_col:
+        needed.append(name_col)
+    plot_df = plot_df[needed].copy()
+    for col in ("population_10k", "gdp_per_capita", reduction_pct_col, reduction_t_col):
+        plot_df[col] = pd.to_numeric(plot_df[col], errors="coerce")
+    plot_df = plot_df.dropna(
+        subset=["population_10k", "gdp_per_capita", reduction_pct_col, reduction_t_col]
+    )
+    plot_df = plot_df[
+        (plot_df["population_10k"] > 0)
+        & (plot_df["gdp_per_capita"] > 0)
+        & (plot_df[reduction_t_col] > 0)
+    ].copy()
+    if plot_df.empty:
+        print("City population-GDP Oracle bubble skipped — no eligible city rows")
+        return
+
+    plot_df["population_million"] = plot_df["population_10k"] / 100.0
+    reduction_t = plot_df[reduction_t_col]
+    size_min, size_max = 26.0, 760.0
+    if np.isclose(reduction_t.max(), reduction_t.min()):
+        sizes = np.full(len(plot_df), (size_min + size_max) / 2)
+    else:
+        scaled = np.sqrt(reduction_t / reduction_t.max())
+        sizes = size_min + scaled * (size_max - size_min)
+    plot_df["_bubble_size"] = sizes
+
+    fig, ax = plt.subplots(figsize=figsize)
+    cmap, norm, _, _ = _build_blue_reduction_cmap(plot_df[reduction_pct_col].max())
+    scatter = ax.scatter(
+        plot_df["population_million"],
+        plot_df["gdp_per_capita"],
+        s=plot_df["_bubble_size"],
+        c=plot_df[reduction_pct_col],
+        cmap=cmap,
+        norm=norm,
+        alpha=0.78,
+        edgecolor="white",
+        linewidth=0.55,
+        zorder=3,
+    )
+
+    ax.set_xscale("log")
+    ax.set_xlabel("Population (million people)", fontsize=12)
+    ax.set_ylabel("GDP per capita (CNY/person)", fontsize=12)
+    ax.yaxis.set_major_formatter(FuncFormatter(lambda x, _: f"{x:,.0f}"))
+    ax.grid(True, which="major", linestyle="--", alpha=0.28, zorder=0)
+    ax.grid(True, which="minor", axis="x", linestyle=":", alpha=0.18, zorder=0)
+    ax.set_axisbelow(True)
+
+    cbar = fig.colorbar(scatter, ax=ax, pad=0.018)
+    cbar.set_label("Oracle lifecycle emission reduction (%)", fontsize=11)
+    cbar.ax.tick_params(labelsize=9)
+
+    legend_values = np.nanquantile(reduction_t, [0.25, 0.5, 0.9])
+    legend_values = np.unique(np.round(legend_values, 1))
+    handles = []
+    labels = []
+    for value in legend_values:
+        if value <= 0:
+            continue
+        marker_size = (
+            size_min
+            + np.sqrt(value / reduction_t.max()) * (size_max - size_min)
+        )
+        handles.append(
+            plt.scatter(
+                [],
+                [],
+                s=marker_size,
+                facecolor="#9ecae1",
+                edgecolor="white",
+                linewidth=0.55,
+                alpha=0.78,
+            )
+        )
+        labels.append(f"{value:,.0f} t")
+    if handles:
+        ax.legend(
+            handles,
+            labels,
+            title="Annual Oracle\nreduction",
+            loc="upper left",
+            bbox_to_anchor=(0.01, 0.99),
+            frameon=True,
+            framealpha=0.9,
+            fontsize=8,
+            title_fontsize=9,
+            borderpad=0.7,
+            labelspacing=1.0,
+        )
+
+    if name_col:
+        label_idx = set(plot_df.nlargest(8, reduction_t_col).index)
+        label_idx.add(plot_df["population_million"].idxmax())
+        label_idx.add(plot_df["gdp_per_capita"].idxmax())
+        label_idx.add(plot_df[reduction_pct_col].idxmax())
+        labeled = plot_df.loc[sorted(label_idx)].sort_values(
+            reduction_t_col,
+            ascending=False,
+        )
+        offsets = ((5, 4), (5, -8), (-5, 4), (-5, -8))
+        for i, (_, row) in enumerate(labeled.iterrows()):
+            dx, dy = offsets[i % len(offsets)]
+            ax.annotate(
+                str(row[name_col]),
+                xy=(row["population_million"], row["gdp_per_capita"]),
+                xytext=(dx, dy),
+                textcoords="offset points",
+                ha="left" if dx > 0 else "right",
+                va="bottom" if dy > 0 else "top",
+                fontsize=8,
+                color="#303030",
+                zorder=5,
+                bbox={
+                    "boxstyle": "round,pad=0.15",
+                    "facecolor": "white",
+                    "edgecolor": "none",
+                    "alpha": 0.68,
+                },
+            )
+
+    if plot_title:
+        fig.suptitle(
+            "Population, GDP per Capita, and Oracle Emission Reduction",
+            fontsize=14,
+            fontweight="bold",
+        )
+
+    fig.tight_layout()
+
+    if save_path:
+        if for_latex and not save_path.endswith(".pdf"):
+            save_path = save_path.rsplit(".", 1)[0] + ".pdf"
+        if plot_title:
+            save_path = _add_title_suffix(save_path)
+        os.makedirs(os.path.dirname(save_path), exist_ok=True)
+        plt.savefig(save_path, dpi=300, bbox_inches="tight")
+        print(f"City population-GDP Oracle bubble saved to {save_path}")
     else:
         plt.show()
 

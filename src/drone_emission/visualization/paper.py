@@ -27,6 +27,7 @@ Available figures:
     province_total_ebike_lifecycle,
     city_ebike_rank_top10, city_ebike_rank_bottom10,
     city_reduction_rank_top10,
+    city_population_gdp_oracle_reduction_bubble,
     city_gef_distribution,
     city_gef_scatter_components,
     city_gef_context_detour_summary,
@@ -3531,6 +3532,7 @@ def render_all(data_dir: str, figures_dir: str, for_latex: bool = False, plot_ti
         plot_city_ebike_rank_top10,
         plot_city_gef_distribution,
         plot_city_gef_scatter_components,
+        plot_city_population_gdp_oracle_reduction_bubble,
         plot_city_reduction_rank_top10,
         plot_grouped_scatter_split_panels,
         plot_province_orders_both_emissions,
@@ -3858,6 +3860,7 @@ def render_all(data_dir: str, figures_dir: str, for_latex: bool = False, plot_ti
     gef_figures = {
         "city_gef_distribution",
         "city_gef_scatter_components",
+        "city_population_gdp_oracle_reduction_bubble",
         "city_gef_context_detour_summary",
         "break_even_contribution_decomposition",
         "break_even_contribution_decomposition_marching_cubes",
@@ -4244,6 +4247,16 @@ def render_all(data_dir: str, figures_dir: str, for_latex: bool = False, plot_ti
                         plot_city_gef_scatter_components(
                             df_enriched,
                             save_path=os.path.join(out, "city_gef_scatter_components.png"),
+                            for_latex=for_latex,
+                            plot_title=plot_title,
+                        )
+                    if _want("city_population_gdp_oracle_reduction_bubble"):
+                        plot_city_population_gdp_oracle_reduction_bubble(
+                            df_enriched,
+                            save_path=os.path.join(
+                                out,
+                                "city_population_gdp_oracle_reduction_bubble.png",
+                            ),
                             for_latex=for_latex,
                             plot_title=plot_title,
                         )
