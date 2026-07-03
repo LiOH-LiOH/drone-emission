@@ -26,7 +26,7 @@ Available figures:
     province_orders_emission, province_orders_both_emissions,
     province_total_ebike_lifecycle,
     city_ebike_rank_top10, city_ebike_rank_bottom10,
-    city_reduction_rank_top10,
+    city_reduction_rank_top10, city_reduction_rank_all_macro_region,
     city_population_detour_oracle_reduction_bubble,
     city_gef_distribution,
     city_gef_scatter_components,
@@ -3577,6 +3577,7 @@ def render_all(data_dir: str, figures_dir: str, for_latex: bool = False, plot_ti
         plot_city_gef_distribution,
         plot_city_gef_scatter_components,
         plot_city_population_detour_oracle_reduction_bubble,
+        plot_city_reduction_rank_all_macro_region,
         plot_city_reduction_rank_top10,
         plot_grouped_scatter_split_panels,
         plot_province_orders_both_emissions,
@@ -3921,6 +3922,7 @@ def render_all(data_dir: str, figures_dir: str, for_latex: bool = False, plot_ti
         "city_ebike_rank_top10",
         "city_ebike_rank_bottom10",
         "city_reduction_rank_top10",
+        "city_reduction_rank_all_macro_region",
         "regions_map",
         "regions_map_oracle_reduction_rank",
         "regions_map_optimal_drone_share",
@@ -3985,6 +3987,14 @@ def render_all(data_dir: str, figures_dir: str, for_latex: bool = False, plot_ti
                 plot_city_reduction_rank_top10(
                     df,
                     save_path=os.path.join(out, "city_reduction_rank_top10"),
+                    for_latex=for_latex,
+                    plot_title=plot_title,
+                )
+
+            if _want("city_reduction_rank_all_macro_region"):
+                plot_city_reduction_rank_all_macro_region(
+                    df,
+                    save_path=os.path.join(out, "city_reduction_rank_all_macro_region"),
                     for_latex=for_latex,
                     plot_title=plot_title,
                 )

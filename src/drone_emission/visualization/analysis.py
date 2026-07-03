@@ -7505,6 +7505,125 @@ def plot_city_reduction_rank_top10(
     plt.close(fig)
 
 
+def plot_city_reduction_rank_all_macro_region(
+    df: pd.DataFrame,
+    save_path: str = None,
+    figsize: tuple = (11.5, 4.8),
+    for_latex: bool = False,
+    plot_title: bool = False,
+):
+    """Rank all cities by Oracle reduction percentage, colored by macro-region.
+
+    Args:
+        df: all_region_stats DataFrame with city rows, province, and Oracle reduction metrics.
+        save_path: Path without extension. Saves PNG or PDF; shows interactively if None.
+        figsize: Figure size tuple.
+        for_latex: Save as PDF when True.
+        plot_title: Add title when True.
+    """
+    needed = {"region_name_en", "province"}
+    missing = sorted(needed - set(df.columns))
+    if missing:
+        print(f"All-city reduction rank skipped — missing columns {missing}")
+        return
+
+    plot_df = df.copy()
+    if "region_level" in plot_df.columns:
+        plot_df = plot_df[plot_df["region_level"] == "city"].copy()
+
+    try:
+        reduction_col = _weighted_reduction_column(plot_df)
+    except KeyError as exc:
+        print(f"All-city reduction rank skipped — {exc}")
+        return
+
+    plot_df[reduction_col] = pd.to_numeric(plot_df[reduction_col], errors="coerce")
+    plot_df["macro_region"] = plot_df["province"].map(macro_region_for_province)
+    plot_df = plot_df.dropna(subset=["region_name_en", "province", reduction_col])
+    plot_df = plot_df[plot_df["macro_region"].notna()].copy()
+    if plot_df.empty:
+        print("All-city reduction rank skipped — no city rows with reduction and macro-region")
+        return
+
+    plot_df = plot_df.sort_values(
+        [reduction_col, "region_name_en"],
+        ascending=[False, True],
+    ).reset_index(drop=True)
+    plot_df["rank"] = np.arange(1, len(plot_df) + 1)
+    plot_df["macro_region_key"] = plot_df["macro_region"].map(lambda spec: spec["key"])
+
+    color_by_key = {spec["key"]: spec["color"] for spec in CHINA_MACRO_REGION_SPECS}
+    label_by_key = {spec["key"]: spec["label"] for spec in CHINA_MACRO_REGION_SPECS}
+    colors = plot_df["macro_region_key"].map(color_by_key).tolist()
+
+    fig, ax = plt.subplots(figsize=figsize)
+    ax.bar(
+        plot_df["rank"].to_numpy(dtype=float),
+        plot_df[reduction_col].to_numpy(dtype=float),
+        width=0.9,
+        color=colors,
+        alpha=0.9,
+        linewidth=0,
+        zorder=2,
+    )
+
+    ax.set_xlabel("City rank", fontsize=11)
+    ax.set_ylabel("Oracle reduction vs e-bike baseline (pp)", fontsize=11)
+    ax.yaxis.grid(True, linestyle="--", alpha=0.35)
+    ax.set_axisbelow(True)
+    ax.set_xlim(0.5, len(plot_df) + 0.5)
+    ymin = min(0.0, float(plot_df[reduction_col].min()))
+    ymax = max(0.0, float(plot_df[reduction_col].max()))
+    if np.isclose(ymin, ymax):
+        ymax = ymin + 1.0
+    ax.set_ylim(ymin - (ymax - ymin) * 0.04, ymax + (ymax - ymin) * 0.08)
+    ax.tick_params(axis="x", labelsize=9)
+    ax.tick_params(axis="y", labelsize=9)
+
+    handles = []
+    for spec in CHINA_MACRO_REGION_SPECS:
+        count = int((plot_df["macro_region_key"] == spec["key"]).sum())
+        if count:
+            handles.append(
+                Patch(
+                    facecolor=color_by_key[spec["key"]],
+                    edgecolor="none",
+                    label=f"{label_by_key[spec['key']]} ({count})",
+                )
+            )
+    ax.legend(
+        handles=handles,
+        loc="upper right",
+        ncol=2,
+        frameon=True,
+        fontsize=8,
+        title="Macro-region",
+        title_fontsize=9,
+    )
+
+    if plot_title:
+        fig.suptitle(
+            "All Cities Ranked by Oracle Reduction Percentage",
+            fontsize=14,
+            fontweight="bold",
+        )
+
+    plt.tight_layout()
+
+    if save_path:
+        ext = ".pdf" if for_latex else ".png"
+        out = save_path + ext
+        if plot_title:
+            out = _add_title_suffix(out)
+        os.makedirs(os.path.dirname(out), exist_ok=True)
+        plt.savefig(out, dpi=300, bbox_inches="tight")
+        print(f"All-city reduction rank by macro-region saved to {out}")
+    else:
+        plt.show()
+
+    plt.close(fig)
+
+
 def plot_city_population_detour_oracle_reduction_bubble(
     df: pd.DataFrame,
     save_path: str = None,
