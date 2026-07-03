@@ -48,6 +48,74 @@ CONTRIBUTION_COMPONENT_SPECS = (
 CONTRIBUTION_COMPONENT_KEYS = tuple(
     spec["key"] for spec in CONTRIBUTION_COMPONENT_SPECS
 )
+CHINA_MACRO_REGION_SPECS = (
+    {
+        "key": "north_china",
+        "label": "North China",
+        "full_label": "North China",
+        "cn_label": "华北",
+        "provinces": ("北京", "天津", "河北", "山西", "内蒙古"),
+    },
+    {
+        "key": "northeast_china",
+        "label": "Northeast",
+        "full_label": "Northeast China",
+        "cn_label": "东北",
+        "provinces": ("辽宁", "吉林", "黑龙江"),
+    },
+    {
+        "key": "east_china",
+        "label": "East China",
+        "full_label": "East China",
+        "cn_label": "华东",
+        "provinces": ("上海", "江苏", "浙江", "安徽", "福建", "江西", "山东", "台湾"),
+    },
+    {
+        "key": "central_china",
+        "label": "Central China",
+        "full_label": "Central China",
+        "cn_label": "华中",
+        "provinces": ("河南", "湖北", "湖南"),
+    },
+    {
+        "key": "south_china",
+        "label": "South China",
+        "full_label": "South China",
+        "cn_label": "华南",
+        "provinces": ("广东", "广西", "海南", "香港", "澳门"),
+    },
+    {
+        "key": "southwest_china",
+        "label": "Southwest",
+        "full_label": "Southwest China",
+        "cn_label": "西南",
+        "provinces": ("重庆", "四川", "贵州", "云南", "西藏"),
+    },
+    {
+        "key": "northwest_china",
+        "label": "Northwest",
+        "full_label": "Northwest China",
+        "cn_label": "西北",
+        "provinces": ("陕西", "甘肃", "青海", "宁夏", "新疆"),
+    },
+)
+PROVINCE_NAME_ALIASES = {
+    "广西壮族": "广西",
+    "广西壮族自治区": "广西",
+    "宁夏回族": "宁夏",
+    "宁夏回族自治区": "宁夏",
+    "新疆维吾尔": "新疆",
+    "新疆维吾尔自治区": "新疆",
+    "内蒙古自治区": "内蒙古",
+    "西藏自治区": "西藏",
+    "香港特别行政区": "香港",
+    "澳门特别行政区": "澳门",
+}
+PROVINCE_TO_MACRO_REGION = {
+    province: spec
+    for spec in CHINA_MACRO_REGION_SPECS
+    for province in spec["provinces"]
+}
 BREAK_EVEN_REPRESENTATIVE_AIR_DISTANCE_KM = 2.0
 BREAK_EVEN_CURVE_AIR_DISTANCES_KM = (0.5, 1.0, 2.0, 3.0, 5.0)
 BREAK_EVEN_DETOUR_LIMITS = (1.0, 2.4)
@@ -400,6 +468,12 @@ def _contribution_row_template(label: str) -> dict:
     return row
 
 
+def _normalize_province_name(province: str) -> str:
+    """Normalize province-level names before assigning macro-regions."""
+    name = str(province).strip()
+    return PROVINCE_NAME_ALIASES.get(name, name)
+
+
 def _top_city_component_rows(
     city_reports: list[dict],
     national_baseline_kg: float,
@@ -426,6 +500,56 @@ def _top_city_component_rows(
 
     rows.sort(key=lambda row: (row["total_net_kg"], row["label"]), reverse=True)
     return rows[:top_n]
+
+
+def _macro_region_component_rows(
+    city_reports: list[dict],
+    national_baseline_kg: float,
+) -> list[dict]:
+    """Return contribution rows with each China macro-region treated as one city."""
+    if national_baseline_kg <= 0:
+        return []
+
+    rows_by_key = {}
+    for spec in CHINA_MACRO_REGION_SPECS:
+        row = _contribution_row_template(spec["label"])
+        row.update(
+            {
+                "region_key": spec["key"],
+                "macro_region_key": spec["key"],
+                "macro_region_label": spec["full_label"],
+                "macro_region_label_cn": spec["cn_label"],
+                "provinces": list(spec["provinces"]),
+                "city_count": 0,
+                "baseline_ebike_lifecycle_kg": 0.0,
+            }
+        )
+        rows_by_key[spec["key"]] = row
+
+    for city in city_reports:
+        province = _normalize_province_name(city.get("province", ""))
+        spec = PROVINCE_TO_MACRO_REGION.get(province)
+        if spec is None:
+            continue
+        row = rows_by_key[spec["key"]]
+        row["city_count"] += 1
+        row["sampled_drone_rows"] += int(city.get("drone_assigned_sampled_rows", 0))
+        row["baseline_ebike_lifecycle_kg"] += float(
+            city.get("baseline_ebike_lifecycle_kg", 0.0)
+        )
+        component_kg = city.get("component_kg", {}) or {}
+        for key in CONTRIBUTION_COMPONENT_KEYS:
+            row[f"{key}_kg"] += float(component_kg.get(key, 0.0))
+        row["total_net_kg"] += float(city.get("net_saving_kg", 0.0))
+
+    rows = []
+    for spec in CHINA_MACRO_REGION_SPECS:
+        row = rows_by_key[spec["key"]]
+        for key in CONTRIBUTION_COMPONENT_KEYS:
+            row[f"{key}_pp"] = row[f"{key}_kg"] / national_baseline_kg * 100.0
+        row["total_net_pp"] = row["total_net_kg"] / national_baseline_kg * 100.0
+        rows.append(row)
+    return rows
 
 
 def prepare_contribution_decomposition_data(
@@ -790,6 +914,10 @@ def prepare_contribution_decomposition_data(
             national_baseline_kg=national_baseline_kg,
             top_n=15,
         ),
+        "macro_regions": _macro_region_component_rows(
+            city_reports=city_reports,
+            national_baseline_kg=national_baseline_kg,
+        ),
         "cities": city_reports,
         "skipped_cities": skipped_cities,
     }
@@ -911,13 +1039,13 @@ def _plot_contribution_waterfall(
         ax.set_ylim(y_min - pad, y_max + pad)
 
 
-def _plot_top_city_contribution_bars(ax, rows: list[dict]):
-    """Draw top-city stacked contribution bars ranked by total net reduction."""
+def _plot_top_city_contribution_bars(ax, rows: list[dict], xlabel: str = "City"):
+    """Draw stacked contribution bars for city-like contribution groups."""
     if not rows:
         ax.text(
             0.5,
             0.5,
-            "no sampled city contributions",
+            "no sampled contributions",
             transform=ax.transAxes,
             ha="center",
             va="center",
@@ -978,7 +1106,7 @@ def _plot_top_city_contribution_bars(ax, rows: list[dict]):
     ax.axhline(0, color="#555555", linewidth=0.8)
     ax.set_xticks(x, [row["label"] for row in rows], rotation=45, ha="right")
     ax.set_ylabel("Contribution to national all-e-bike baseline (pp)", fontsize=12)
-    ax.set_xlabel("City", fontsize=11)
+    ax.set_xlabel(xlabel, fontsize=11)
     ax.grid(axis="y", alpha=0.25)
     ax.set_xlim(-0.6, len(rows) - 0.4)
     ymin = min(neg_acc.min(), total_pp.min(), 0.0) * 1.15
@@ -1007,14 +1135,18 @@ def _plot_contribution_decomposition_panels(
         rotate_xticks=rotate_waterfall_xticks,
         ylim_expand=waterfall_ylim_expand,
     )
-    _plot_top_city_contribution_bars(ax_b, prepared.get("top_cities", [])[:15])
+    _plot_top_city_contribution_bars(
+        ax_b,
+        prepared.get("macro_regions", []),
+        xlabel="China macro-region",
+    )
 
     if plot_title:
         ax_a.set_title(
             "Sampled Current-Mechanism Contribution Decomposition",
             fontsize=14,
         )
-        ax_b.set_title("Top 15 cities by total emission reduction", fontsize=12)
+        ax_b.set_title("Contribution by China macro-region", fontsize=12)
     _add_panel_letter(
         ax_a,
         panel_letters[0],
@@ -1201,13 +1333,17 @@ def _contribution_panel_report(
         }
     )
 
-    top_city_rows = []
-    for idx, row in enumerate(prepared.get("top_cities", [])[:15]):
-        top_city_rows.append(
+    macro_region_rows = []
+    for idx, row in enumerate(prepared.get("macro_regions", [])):
+        macro_region_rows.append(
             {
                 "x_index": idx,
                 "region_key": row.get("region_key"),
                 "label": row.get("label"),
+                "macro_region_label": row.get("macro_region_label"),
+                "macro_region_label_cn": row.get("macro_region_label_cn"),
+                "city_count": row.get("city_count"),
+                "provinces": row.get("provinces"),
                 "baseline_ebike_lifecycle_kg": _report_number(
                     row.get("baseline_ebike_lifecycle_kg")
                 ),
@@ -1225,7 +1361,7 @@ def _contribution_panel_report(
         )
 
     waterfall_key = f"{panel_letters[0]}_national_contribution_waterfall"
-    city_bars_key = f"{panel_letters[1]}_top_city_contribution_bars"
+    city_bars_key = f"{panel_letters[1]}_macro_region_contribution_bars"
     return {
         waterfall_key: {
             "axis": _report_axis(ax_d),
@@ -1240,8 +1376,8 @@ def _contribution_panel_report(
         },
         city_bars_key: {
             "axis": _report_axis(ax_e),
-            "city_count_plotted": len(top_city_rows),
-            "bars": top_city_rows,
+            "macro_region_count_plotted": len(macro_region_rows),
+            "bars": macro_region_rows,
             "legend_components": _json_safe(list(CONTRIBUTION_COMPONENT_SPECS)),
         },
         "sampling": _json_safe(prepared.get("sampling", {})),
@@ -1282,7 +1418,7 @@ def _write_break_even_contribution_decomposition_report(
         ),
         "report_scope": (
             "Compact LLM-readable report: full plotted grids are summarized, "
-            "while all waterfall bars and top-city stacked bars are listed."
+            "while all waterfall bars and macro-region stacked bars are listed."
         ),
         "panels": {
             **break_even_report,
@@ -1305,14 +1441,14 @@ def _write_break_even_contribution_decomposition_report(
             "- National all-e-bike baseline: "
             f"{national['baseline_ebike_lifecycle_kg'] / 1e6:.3f} kt CO2e/yr."
         ),
-        f"- Top-city bars plotted: {len(contribution_prepared.get('top_cities', [])[:15])}.",
+        f"- Macro-region bars plotted: {len(contribution_prepared.get('macro_regions', []))}.",
         "",
         "## Panel Reading Guide",
         "",
         "- a: 3D break-even surface where drone and e-bike lifecycle emissions are equal across air distance, road detour ratio, and grid carbon intensity.",
         "- b-c: heatmaps at representative GEF levels; negative Delta g means drone has lower per-order emissions.",
         "- d: national waterfall of mechanism contributions relative to the all-e-bike baseline.",
-        "- e: stacked contribution bars for the top 15 cities by net reduction.",
+        "- e: stacked contribution bars for seven China macro-regions.",
         "",
         "## National Components",
     ]
@@ -1324,10 +1460,11 @@ def _write_break_even_contribution_decomposition_report(
             f"- {spec['label']}: {national[pp_key]:.3f} pp, "
             f"{national[kg_key] / 1e6:.3f} kt CO2e/yr"
         )
-    lines.extend(["", "## Top Cities"])
-    for row in contribution_prepared.get("top_cities", [])[:15]:
+    lines.extend(["", "## Macro Regions"])
+    for row in contribution_prepared.get("macro_regions", []):
         lines.append(
-            f"- {row.get('label')}: {row.get('total_net_pp', 0.0):.3f} pp, "
+            f"- {row.get('label')} ({row.get('city_count', 0)} cities): "
+            f"{row.get('total_net_pp', 0.0):.3f} pp, "
             f"{row.get('total_net_kg', 0.0) / 1e6:.3f} kt CO2e/yr"
         )
     with open(md_path, "w", encoding="utf-8") as f:
@@ -1363,7 +1500,7 @@ def _write_contribution_decomposition_panel_report(
             "axis. Axis bbox values are figure-fraction coordinates."
         ),
         "report_scope": (
-            "Compact LLM-readable report: all waterfall bars and top-city "
+            "Compact LLM-readable report: all waterfall bars and macro-region "
             "stacked bars are listed."
         ),
         "panels": contribution_report,
@@ -1379,7 +1516,7 @@ def _write_contribution_decomposition_panel_report(
         f"- Figure size: {figsize[0]} x {figsize[1]} inches",
         (
             "- Layout: panel a is the national contribution waterfall; panel b "
-            "is the top-city contribution decomposition."
+            "is the macro-region contribution decomposition."
         ),
         f"- National net reduction: {national['total_net_pp']:.3f} pp "
         f"({national['total_net_kg'] / 1e6:.3f} kt CO2e/yr).",
@@ -1387,7 +1524,7 @@ def _write_contribution_decomposition_panel_report(
             "- National all-e-bike baseline: "
             f"{national['baseline_ebike_lifecycle_kg'] / 1e6:.3f} kt CO2e/yr."
         ),
-        f"- Top-city bars plotted: {len(prepared.get('top_cities', [])[:15])}.",
+        f"- Macro-region bars plotted: {len(prepared.get('macro_regions', []))}.",
         "",
         "## Panel Reading Guide",
         "",
@@ -1395,7 +1532,7 @@ def _write_contribution_decomposition_panel_report(
             "- a: national waterfall of mechanism contributions relative to the "
             "all-e-bike baseline."
         ),
-        "- b: stacked contribution bars for the top 15 cities by net reduction.",
+        "- b: stacked contribution bars for seven China macro-regions.",
         "",
         "## National Components",
     ]
@@ -1407,10 +1544,11 @@ def _write_contribution_decomposition_panel_report(
             f"- {spec['label']}: {national[pp_key]:.3f} pp, "
             f"{national[kg_key] / 1e6:.3f} kt CO2e/yr"
         )
-    lines.extend(["", "## Top Cities"])
-    for row in prepared.get("top_cities", [])[:15]:
+    lines.extend(["", "## Macro Regions"])
+    for row in prepared.get("macro_regions", []):
         lines.append(
-            f"- {row.get('label')}: {row.get('total_net_pp', 0.0):.3f} pp, "
+            f"- {row.get('label')} ({row.get('city_count', 0)} cities): "
+            f"{row.get('total_net_pp', 0.0):.3f} pp, "
             f"{row.get('total_net_kg', 0.0) / 1e6:.3f} kt CO2e/yr"
         )
     with open(md_path, "w", encoding="utf-8") as f:
