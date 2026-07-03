@@ -804,21 +804,20 @@ def _draw_figure1_overlay(
             h / canvas_h,
         )
 
-    flow_ax = fig.add_axes(rect_from_drawio(400, 230, 120, 60))
-    flow_ax.set_xticks([])
-    flow_ax.set_yticks([])
-    flow_ax.set_facecolor("white")
-    for spine in flow_ax.spines.values():
-        spine.set_linewidth(0.8)
-        spine.set_edgecolor("#333333")
-    flow_ax.text(
-        0.5,
-        0.5,
+    fig.text(
+        460 / canvas_w,
+        1.0 - 260 / canvas_h,
         "Gravity\nmodel",
         ha="center",
         va="center",
         fontsize=9,
         color="#222222",
+        bbox=dict(
+            boxstyle="square,pad=0.22",
+            facecolor="white",
+            edgecolor="#333333",
+            linewidth=0.8,
+        ),
     )
 
     def fig_point(x, y):

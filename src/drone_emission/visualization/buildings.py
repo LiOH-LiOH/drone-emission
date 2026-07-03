@@ -313,8 +313,8 @@ def plot_building_height_merchant_map(
         shrink=0.75,
         pad=0.02,
     )
-    cbar.set_label("Building height (m, capped at 95th pct)")
-    cbar.ax.tick_params(labelsize=9)
+    cbar.set_label("Building height (m, capped at 95th pct)", fontsize=13)
+    cbar.ax.tick_params(labelsize=12)
 
     od_line_count = 0
     if od_df is None:
@@ -380,10 +380,10 @@ def plot_building_height_merchant_map(
                     if sales_max == sales_min:
                         line_width = 2.5
                     else:
-                        line_width = 1.0 + (
+                        line_width = 4.0 + (
                             (float(row["annual_sales"]) - sales_min)
                             / (sales_max - sales_min)
-                            * 3.0
+                            * 6.0
                         )
                     ax.plot(
                         [row["from_lng"], row["to_lng"]],
@@ -412,7 +412,7 @@ def plot_building_height_merchant_map(
             [],
             [],
             color="#005f9e",
-            linewidth=3,
+            linewidth=5,
             label="OD demands",
         )
 
@@ -430,8 +430,11 @@ def plot_building_height_merchant_map(
         loc="upper left",
         bbox_to_anchor=(1.02, 1.0),
         borderaxespad=0.0,
-        fontsize=9,
+        fontsize=12,
         framealpha=0.9,
+        markerscale=1.4,
+        handlelength=2.4,
+        handletextpad=0.7,
     )
     legend.set_zorder(100)
 

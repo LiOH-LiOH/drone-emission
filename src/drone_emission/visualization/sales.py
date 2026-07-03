@@ -233,9 +233,10 @@ def plot_sales_heatmap(
         orientation="horizontal",
         label="Sales Density (Weighted)",
     )
+    cbar.set_label("Sales Density (Weighted)", fontsize=13)
     cbar.ax.xaxis.set_label_position("top")
     cbar.ax.xaxis.set_ticks_position("top")
-    cbar.ax.tick_params(labelsize=10)
+    cbar.ax.tick_params(labelsize=12)
 
     stats_text = f"Total Stores: {len(df)}\nAvg Sales: {sales.mean():.1f}\nMax Sales: {sales.max():.0f}"
 
