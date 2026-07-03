@@ -7255,14 +7255,14 @@ def plot_city_reduction_rank_top10(
     plt.close(fig)
 
 
-def plot_city_population_gef_oracle_reduction_bubble(
+def plot_city_population_detour_oracle_reduction_bubble(
     df: pd.DataFrame,
     save_path: str = None,
     figsize: tuple = (10.5, 6.8),
     for_latex: bool = False,
     plot_title: bool = False,
 ):
-    """Bubble chart of city population, GEF, and Oracle emission reduction.
+    """Bubble chart of city population, detour ratio, and Oracle emission reduction.
 
     Args:
         df: Enriched all_region_stats DataFrame with socioeconomic and Oracle
@@ -7274,19 +7274,20 @@ def plot_city_population_gef_oracle_reduction_bubble(
     """
     required = {
         "population_10k",
+        "detour_ratio",
         "total_ebike_lifecycle",
     }
     if "oracle_min_lifecycle_kg" not in df.columns and not any(
         col in df.columns for col in WEIGHTED_REDUCTION_COLUMNS
     ):
         print(
-            "City population-GEF Oracle bubble skipped — missing Oracle reduction columns"
+            "City population-detour Oracle bubble skipped — missing Oracle reduction columns"
         )
         return
     missing = required - set(df.columns)
     if missing:
         print(
-            "City population-GEF Oracle bubble skipped — "
+            "City population-detour Oracle bubble skipped — "
             f"missing columns {sorted(missing)}"
         )
         return
@@ -7296,14 +7297,6 @@ def plot_city_population_gef_oracle_reduction_bubble(
         plot_df = plot_df[plot_df["region_level"] == "city"].copy()
     reduction_pct_col = _weighted_reduction_column(plot_df)
     reduction_t_col = _oracle_reduction_tonnes_column(plot_df)
-    gef_col = None
-    for candidate in ("grid_emission_factor", "gef"):
-        if candidate in plot_df.columns:
-            gef_col = candidate
-            break
-    if gef_col is None:
-        print("City population-GEF Oracle bubble skipped — missing GEF column")
-        return
 
     name_col = (
         "region_name_en"
@@ -7312,29 +7305,25 @@ def plot_city_population_gef_oracle_reduction_bubble(
     )
     needed = [
         "population_10k",
-        gef_col,
+        "detour_ratio",
         reduction_pct_col,
         reduction_t_col,
     ]
     if name_col:
         needed.append(name_col)
     plot_df = plot_df[needed].copy()
-    for col in ("population_10k", gef_col, reduction_pct_col, reduction_t_col):
+    for col in ("population_10k", "detour_ratio", reduction_pct_col, reduction_t_col):
         plot_df[col] = pd.to_numeric(plot_df[col], errors="coerce")
-    fallback_gef = 0.5600
-    missing_gef = int(plot_df[gef_col].isna().sum())
-    if missing_gef:
-        plot_df[gef_col] = plot_df[gef_col].fillna(fallback_gef)
     plot_df = plot_df.dropna(
-        subset=["population_10k", gef_col, reduction_pct_col, reduction_t_col]
+        subset=["population_10k", "detour_ratio", reduction_pct_col, reduction_t_col]
     )
     plot_df = plot_df[
         (plot_df["population_10k"] > 0)
-        & (plot_df[gef_col] > 0)
+        & (plot_df["detour_ratio"] > 0)
         & (plot_df[reduction_t_col] > 0)
     ].copy()
     if plot_df.empty:
-        print("City population-GEF Oracle bubble skipped — no eligible city rows")
+        print("City population-detour Oracle bubble skipped — no eligible city rows")
         return
 
     plot_df["population_million"] = plot_df["population_10k"] / 100.0
@@ -7366,7 +7355,7 @@ def plot_city_population_gef_oracle_reduction_bubble(
     cmap, norm, _, _ = _build_blue_reduction_cmap(plot_df[reduction_pct_col].max())
     scatter = ax.scatter(
         plot_df["population_million"],
-        plot_df[gef_col],
+        plot_df["detour_ratio"],
         s=plot_df["_bubble_size"],
         c=plot_df[reduction_pct_col],
         cmap=cmap,
@@ -7379,14 +7368,14 @@ def plot_city_population_gef_oracle_reduction_bubble(
 
     ax.set_xscale("log")
     ax.set_xlabel("Population (million people)", fontsize=12)
-    ax.set_ylabel("Grid emission factor (kg CO₂e/kWh)", fontsize=12)
+    ax.set_ylabel("Detour ratio", fontsize=12)
     ax.yaxis.set_major_formatter(FuncFormatter(lambda x, _: f"{x:.2f}"))
     ax.grid(True, which="major", linestyle="--", alpha=0.28, zorder=0)
     ax.grid(True, which="minor", axis="x", linestyle=":", alpha=0.18, zorder=0)
     ax.set_axisbelow(True)
 
     x_values = plot_df["population_million"].to_numpy(dtype=float)
-    y_values = plot_df[gef_col].to_numpy(dtype=float)
+    y_values = plot_df["detour_ratio"].to_numpy(dtype=float)
     x_log = np.log10(x_values)
     if x_log.size > 1 and np.nanstd(x_log) > 0:
         x_grid_log = np.linspace(x_log.min(), x_log.max(), 240)
@@ -7470,7 +7459,7 @@ def plot_city_population_gef_oracle_reduction_bubble(
     if name_col:
         label_idx = set(plot_df.nlargest(8, reduction_t_col).index)
         label_idx.add(plot_df["population_million"].idxmax())
-        label_idx.add(plot_df[gef_col].idxmax())
+        label_idx.add(plot_df["detour_ratio"].idxmax())
         label_idx.add(plot_df[reduction_pct_col].idxmax())
         labeled = plot_df.loc[sorted(label_idx)].sort_values(
             reduction_t_col,
@@ -7481,7 +7470,7 @@ def plot_city_population_gef_oracle_reduction_bubble(
             dx, dy = offsets[i % len(offsets)]
             ax.annotate(
                 str(row[name_col]),
-                xy=(row["population_million"], row[gef_col]),
+                xy=(row["population_million"], row["detour_ratio"]),
                 xytext=(dx, dy),
                 textcoords="offset points",
                 ha="left" if dx > 0 else "right",
@@ -7499,20 +7488,9 @@ def plot_city_population_gef_oracle_reduction_bubble(
 
     if plot_title:
         fig.suptitle(
-            "Population, Grid Emission Factor, and Oracle Emission Reduction",
+            "Population, Detour Ratio, and Oracle Emission Reduction",
             fontsize=14,
             fontweight="bold",
-        )
-    if missing_gef:
-        ax.text(
-            0.995,
-            0.015,
-            f"{missing_gef} cities use fallback GEF={fallback_gef:.4f}",
-            transform=ax.transAxes,
-            ha="right",
-            va="bottom",
-            fontsize=8,
-            color="#555555",
         )
 
     if save_path:
@@ -7522,7 +7500,7 @@ def plot_city_population_gef_oracle_reduction_bubble(
             save_path = _add_title_suffix(save_path)
         os.makedirs(os.path.dirname(save_path), exist_ok=True)
         plt.savefig(save_path, dpi=300, bbox_inches="tight")
-        print(f"City population-GEF Oracle bubble saved to {save_path}")
+        print(f"City population-detour Oracle bubble saved to {save_path}")
     else:
         plt.show()
 
