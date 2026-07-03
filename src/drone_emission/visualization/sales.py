@@ -10,7 +10,9 @@ from ._utils import (
     add_basemap_and_boundaries,
     finalize_plot,
     get_custom_cmap,
+    saved_tight_axis_report,
     setup_figure,
+    write_figure_report,
     _add_title_suffix,
 )
 
@@ -237,6 +239,37 @@ def plot_sales_heatmap(
 
     stats_text = f"Total Stores: {len(df)}\nAvg Sales: {sales.mean():.1f}\nMax Sales: {sales.max():.0f}"
 
+    def _write_report(final_save_path):
+        report_path = final_save_path.rsplit(".", 1)[0] + "_report.json"
+        renderer = fig.canvas.get_renderer()
+        tight_bbox = fig.get_tightbbox(renderer)
+        write_figure_report(
+            report_path,
+            {
+                "figure_name": "shanghai_heatmap",
+                "figure_path": final_save_path,
+                "coordinate_convention": (
+                    "bbox_saved_tight_fraction values are fractions of the "
+                    "saved page after bbox_inches='tight'."
+                ),
+                "map": {
+                    "axis": saved_tight_axis_report(
+                        fig, ax, renderer=renderer, tight_bbox=tight_bbox
+                    ),
+                    "lng_range": [float(heatmap_range[0][0]), float(heatmap_range[0][1])],
+                    "lat_range": [float(heatmap_range[1][0]), float(heatmap_range[1][1])],
+                },
+                "colorbar": {
+                    "axis": saved_tight_axis_report(
+                        fig, cax, renderer=renderer, tight_bbox=tight_bbox
+                    ),
+                    "label": "Sales Density (Weighted)",
+                    "orientation": "horizontal",
+                },
+            },
+        )
+        print(f"Sales heatmap report saved to {report_path}")
+
     finalize_plot(
         fig,
         ax,
@@ -247,6 +280,7 @@ def plot_sales_heatmap(
         for_latex,
         plot_title,
         show_geo_axes=False,
+        before_save=_write_report if save_path else None,
     )
 
 

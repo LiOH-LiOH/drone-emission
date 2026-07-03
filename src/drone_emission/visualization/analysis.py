@@ -10,7 +10,7 @@ import numpy as np
 import pandas as pd
 from scipy import stats
 
-from visualization._utils import _add_title_suffix
+from visualization._utils import _add_title_suffix, saved_tight_axis_report
 
 # Import from constants module (no circular dependency)
 from analysis.constants import PROVINCE_NAME_EN, VARIABLE_LABELS
@@ -5315,6 +5315,8 @@ def _write_regions_map_oracle_reduction_rank_report(
     reduction_edges,
 ):
     """Write a JSON report for regions_map_oracle_reduction_rank."""
+    renderer = ax_map.get_figure().canvas.get_renderer()
+    tight_bbox = ax_map.get_figure().get_tightbbox(renderer)
     report_path = save_path.rsplit(".", 1)[0] + "_report.json"
     payload = {
         "figure_name": "regions_map_oracle_reduction_rank",
@@ -5330,6 +5332,12 @@ def _write_regions_map_oracle_reduction_rank_report(
                 **_map_panel_report(
                     map_df, reduction_col, cmap, norm, bin_edges, ax_map, None,
                 ),
+                "map_axis_saved_tight": saved_tight_axis_report(
+                    ax_map.get_figure(),
+                    ax_map,
+                    renderer=renderer,
+                    tight_bbox=tight_bbox,
+                ),
                 "inset_city_rank": _city_oracle_rank_report(
                     map_df,
                     inset_ax,
@@ -5340,6 +5348,12 @@ def _write_regions_map_oracle_reduction_rank_report(
                     reduction_edges,
                     "E-bike - Oracle (t CO2eq / yr)",
                     cmap,
+                ),
+                "colorbar_axis_saved_tight": saved_tight_axis_report(
+                    ax_map.get_figure(),
+                    cbar_ax,
+                    renderer=renderer,
+                    tight_bbox=tight_bbox,
                 ),
             },
         },

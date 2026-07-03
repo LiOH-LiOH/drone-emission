@@ -17,7 +17,9 @@ from ._utils import (
     finalize_plot,
     get_custom_cmap,
     plot_boundary_box,
+    saved_tight_axis_report,
     setup_figure,
+    write_figure_report,
 )
 
 
@@ -466,6 +468,66 @@ def plot_building_height_merchant_map(
         os.makedirs(os.path.dirname(save_path), exist_ok=True)
         if save_path.endswith(".pdf"):
             ax.set_rasterization_zorder(12)
+        fig.canvas.draw()
+        report_path = save_path.rsplit(".", 1)[0] + "_report.json"
+        renderer = fig.canvas.get_renderer()
+        tight_bbox = fig.get_tightbbox(renderer)
+        report = {
+            "figure_name": "shanghai_building_height_merchant",
+            "figure_path": save_path,
+            "coordinate_convention": (
+                "bbox_saved_tight_fraction values are fractions of the saved "
+                "page after bbox_inches='tight'."
+            ),
+            "map": {
+                "axis": saved_tight_axis_report(
+                    fig, ax, renderer=renderer, tight_bbox=tight_bbox
+                ),
+                "lng_range": [
+                    float(boundaries_dict["min_lng"]),
+                    float(boundaries_dict["max_lng"]),
+                ],
+                "lat_range": [
+                    float(boundaries_dict["min_lat"]),
+                    float(boundaries_dict["max_lat"]),
+                ],
+                "merchant": {
+                    "lng": float(merchant_lng),
+                    "lat": float(merchant_lat),
+                    "month_sales": float(merchant["month_sales"]),
+                },
+            },
+            "colorbar": {
+                "axis": saved_tight_axis_report(
+                    fig, cbar.ax, renderer=renderer, tight_bbox=tight_bbox
+                ),
+                "label": "Building height (m, capped at 95th pct)",
+                "orientation": "vertical",
+            },
+        }
+        if legend is not None:
+            legend_bbox = legend.get_window_extent(renderer).transformed(
+                fig.dpi_scale_trans.inverted()
+            )
+            pad_inches = plt.rcParams.get("savefig.pad_inches", 0.1)
+            tight_x0 = tight_bbox.x0 - pad_inches
+            tight_y0 = tight_bbox.y0 - pad_inches
+            tight_width = tight_bbox.width + 2 * pad_inches
+            tight_height = tight_bbox.height + 2 * pad_inches
+            saved_fraction = {
+                "x0": float((legend_bbox.x0 - tight_x0) / tight_width),
+                "y0": float((legend_bbox.y0 - tight_y0) / tight_height),
+                "x1": float((legend_bbox.x1 - tight_x0) / tight_width),
+                "y1": float((legend_bbox.y1 - tight_y0) / tight_height),
+            }
+            saved_fraction["width"] = saved_fraction["x1"] - saved_fraction["x0"]
+            saved_fraction["height"] = saved_fraction["y1"] - saved_fraction["y0"]
+            report["legend"] = {
+                "bbox_saved_tight_fraction": saved_fraction,
+                "labels": [text.get_text() for text in legend.get_texts()],
+            }
+        write_figure_report(report_path, report)
+        print(f"Building height merchant map report saved to {report_path}")
         plt.savefig(save_path, dpi=300, bbox_inches="tight")
         print(f"Building height merchant map saved to {save_path}")
     else:

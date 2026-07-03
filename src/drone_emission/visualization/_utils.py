@@ -188,6 +188,83 @@ def _add_title_suffix(save_path):
     return f"{base}_t.{ext}"
 
 
+def _json_safe_scalar(value):
+    """Return a scalar that can be written with strict JSON settings."""
+    if value is None:
+        return None
+    if isinstance(value, (np.integer,)):
+        return int(value)
+    if isinstance(value, (np.floating, float)):
+        value = float(value)
+        return value if np.isfinite(value) else None
+    if isinstance(value, (np.bool_, bool)):
+        return bool(value)
+    return value
+
+
+def _json_safe_array(values):
+    """Return a JSON-safe list from a numeric sequence."""
+    return [_json_safe_scalar(value) for value in values]
+
+
+def _bbox_report(bbox):
+    """Return JSON-safe bbox coordinates."""
+    return {
+        "x0": _json_safe_scalar(bbox.x0),
+        "y0": _json_safe_scalar(bbox.y0),
+        "x1": _json_safe_scalar(bbox.x1),
+        "y1": _json_safe_scalar(bbox.y1),
+        "width": _json_safe_scalar(bbox.width),
+        "height": _json_safe_scalar(bbox.height),
+    }
+
+
+def saved_tight_axis_report(fig, ax, renderer=None, tight_bbox=None, pad_inches=None):
+    """Return axis position in both figure and saved tight-page coordinates."""
+    if renderer is None:
+        renderer = fig.canvas.get_renderer()
+    if tight_bbox is None:
+        tight_bbox = fig.get_tightbbox(renderer)
+    if pad_inches is None:
+        pad_inches = plt.rcParams.get("savefig.pad_inches", 0.1)
+    tight_x0 = tight_bbox.x0 - pad_inches
+    tight_y0 = tight_bbox.y0 - pad_inches
+    tight_width = tight_bbox.width + 2 * pad_inches
+    tight_height = tight_bbox.height + 2 * pad_inches
+    axis_inches = ax.get_window_extent(renderer).transformed(
+        fig.dpi_scale_trans.inverted()
+    )
+    saved_fraction = {
+        "x0": (axis_inches.x0 - tight_x0) / tight_width,
+        "y0": (axis_inches.y0 - tight_y0) / tight_height,
+        "x1": (axis_inches.x1 - tight_x0) / tight_width,
+        "y1": (axis_inches.y1 - tight_y0) / tight_height,
+    }
+    saved_fraction["width"] = saved_fraction["x1"] - saved_fraction["x0"]
+    saved_fraction["height"] = saved_fraction["y1"] - saved_fraction["y0"]
+    return {
+        "bbox_figure_fraction": _bbox_report(ax.get_position()),
+        "saved_tight_pad_inches": _json_safe_scalar(pad_inches),
+        "bbox_saved_tight_fraction": {
+            key: _json_safe_scalar(value)
+            for key, value in saved_fraction.items()
+        },
+        "xlim_data": _json_safe_array(ax.get_xlim()),
+        "ylim_data": _json_safe_array(ax.get_ylim()),
+        "xlabel": ax.get_xlabel(),
+        "ylabel": ax.get_ylabel(),
+        "xticks_data": _json_safe_array(ax.get_xticks()),
+        "yticks_data": _json_safe_array(ax.get_yticks()),
+    }
+
+
+def write_figure_report(report_path, payload):
+    """Write a JSON report for figure composition metadata."""
+    os.makedirs(os.path.dirname(report_path), exist_ok=True)
+    with open(report_path, "w", encoding="utf-8") as f:
+        json.dump(payload, f, indent=2, ensure_ascii=False, allow_nan=False)
+
+
 def finalize_plot(
     fig,
     ax,
@@ -198,6 +275,7 @@ def finalize_plot(
     for_latex=False,
     plot_title=False,
     show_geo_axes=True,
+    before_save=None,
 ):
     """Finalize plot with title, labels, and axis limits.
 
@@ -212,6 +290,7 @@ def finalize_plot(
         for_latex: If True, save as PDF format
         plot_title: If True, show title and stats text
         show_geo_axes: If False, hide longitude/latitude labels and ticks.
+        before_save: Optional callback receiving the final save path before savefig.
     """
     # Set labels
     if show_geo_axes:
@@ -282,6 +361,9 @@ def finalize_plot(
         # Elements with zorder < 12 are rasterized, others remain vector
         if save_path.endswith('.pdf'):
             ax.set_rasterization_zorder(12)
+        if before_save is not None:
+            fig.canvas.draw()
+            before_save(save_path)
         plt.savefig(save_path, dpi=300, bbox_inches="tight")
         print(f"\nPlot saved as {save_path}")
     else:

@@ -174,11 +174,16 @@ FIGURE1_FRAMEWORK_DEPENDENCIES = (
     "distance_comparison",
     "shanghai_building_height_merchant",
 )
+FIGURE1_FRAMEWORK_REPORT_DEPENDENCIES = (
+    "regions_map_oracle_reduction_rank",
+    "shanghai_heatmap",
+    "shanghai_building_height_merchant",
+)
 FIGURE1_FRAMEWORK_SOURCE_MODULES = {
-    "regions_map_oracle_reduction_rank": ("analysis.py", "regions.py"),
+    "regions_map_oracle_reduction_rank": ("analysis.py", "regions.py", "_utils.py"),
     "shanghai_heatmap": ("sales.py", "_utils.py"),
     "distance_comparison": ("roadnet.py",),
-    "shanghai_building_height_merchant": ("buildings.py",),
+    "shanghai_building_height_merchant": ("buildings.py", "_utils.py"),
 }
 
 
@@ -755,12 +760,31 @@ def _paper_pdf_path(out, figure_name, plot_title=False):
     return path
 
 
+def _paper_report_path(out, figure_name, plot_title=False):
+    """Return the expected JSON report path for a paper figure."""
+    pdf_path = _paper_pdf_path(out, figure_name, plot_title=plot_title)
+    return pdf_path.rsplit(".", 1)[0] + "_report.json"
+
+
+def _load_figure1_panel_reports(out, plot_title=False):
+    """Load source-figure metadata needed for Figure 1 zoom callouts."""
+    reports = {}
+    for name in FIGURE1_FRAMEWORK_REPORT_DEPENDENCIES:
+        report_path = _paper_report_path(out, name, plot_title=plot_title)
+        if not os.path.exists(report_path):
+            print(f"figure1_framework: missing source report {report_path}")
+            continue
+        with open(report_path, "r", encoding="utf-8") as f:
+            reports[name] = json.load(f)
+    return reports
+
+
 def _draw_figure1_overlay(
     overlay_path,
     page_size,
     canvas_size,
     panel_rects=None,
-    zoom_context=None,
+    panel_reports=None,
 ):
     """Draw vector labels, process box, and arrows for Figure 1."""
     import matplotlib.pyplot as plt
@@ -770,7 +794,7 @@ def _draw_figure1_overlay(
     canvas_w, canvas_h = canvas_size
     fig = plt.figure(figsize=(page_w / 72.0, page_h / 72.0), facecolor="none")
     panel_rects = panel_rects or {}
-    zoom_context = zoom_context or {}
+    panel_reports = panel_reports or {}
 
     def rect_from_drawio(x, y, w, h):
         return (
@@ -837,18 +861,60 @@ def _draw_figure1_overlay(
         x, y, w, h = rect
         return (x / page_w, y / page_h, w / page_w, h / page_h)
 
-    def inset_rect(parent_name, rel_rect, min_size=(0.0, 0.0)):
+    def page_rect_from_saved_fraction(parent_name, saved_rect):
         if parent_name not in panel_rects:
             return None
-        px, py, pw, ph = fig_rect_from_page(panel_rects[parent_name])
-        rx, ry, rw, rh = rel_rect
-        rw = max(rw, min_size[0])
-        rh = max(rh, min_size[1])
-        cx = px + (rx + rel_rect[2] / 2.0) * pw
-        cy = py + (ry + rel_rect[3] / 2.0) * ph
-        x0 = min(max(cx - rw * pw / 2.0, px), px + pw - rw * pw)
-        y0 = min(max(cy - rh * ph / 2.0, py), py + ph - rh * ph)
-        return (x0, y0, rw * pw, rh * ph)
+        px, py, pw, ph = panel_rects[parent_name]
+        return (
+            px + saved_rect["x0"] * pw,
+            py + saved_rect["y0"] * ph,
+            (saved_rect["x1"] - saved_rect["x0"]) * pw,
+            (saved_rect["y1"] - saved_rect["y0"]) * ph,
+        )
+
+    def fig_rect_from_saved_fraction(parent_name, saved_rect):
+        rect = page_rect_from_saved_fraction(parent_name, saved_rect)
+        return fig_rect_from_page(rect) if rect is not None else None
+
+    def map_axis_report(parent_name):
+        report = panel_reports.get(parent_name) or {}
+        if parent_name == "regions_map_oracle_reduction_rank":
+            panel = report.get("panels", {}).get("oracle_reduction_map", {})
+            return panel.get("map_axis_saved_tight") or panel.get("axis")
+        return report.get("map", {}).get("axis")
+
+    def map_axis_rect(parent_name):
+        axis = map_axis_report(parent_name)
+        if not axis:
+            return None
+        saved_rect = axis.get("bbox_saved_tight_fraction")
+        if not saved_rect:
+            return None
+        return fig_rect_from_saved_fraction(parent_name, saved_rect)
+
+    def data_rect_in_map(parent_name, lng_range, lat_range):
+        axis = map_axis_report(parent_name)
+        map_rect = map_axis_rect(parent_name)
+        if not axis or not map_rect:
+            return None
+        xlim = axis.get("xlim_data")
+        ylim = axis.get("ylim_data")
+        if not xlim or not ylim:
+            return None
+        x0, x1 = float(xlim[0]), float(xlim[1])
+        y0, y1 = float(ylim[0]), float(ylim[1])
+        if x1 == x0 or y1 == y0:
+            return None
+        rx0 = (float(lng_range[0]) - x0) / (x1 - x0)
+        rx1 = (float(lng_range[1]) - x0) / (x1 - x0)
+        ry0 = (float(lat_range[0]) - y0) / (y1 - y0)
+        ry1 = (float(lat_range[1]) - y0) / (y1 - y0)
+        mx, my, mw, mh = map_rect
+        left = mx + min(rx0, rx1) * mw
+        right = mx + max(rx0, rx1) * mw
+        bottom = my + min(ry0, ry1) * mh
+        top = my + max(ry0, ry1) * mh
+        return (left, bottom, right - left, top - bottom)
 
     def add_zoom_box(rect, color="#c43c2f"):
         if rect is None:
@@ -882,39 +948,41 @@ def _draw_figure1_overlay(
             )
         )
 
-    china_lng = (73.0, 135.0)
-    china_lat = (18.0, 54.0)
-    b_lng = zoom_context.get("b_lng_range", (121.0, 121.9))
-    b_lat = zoom_context.get("b_lat_range", (30.9, 31.55))
-    a_map_area = (0.12, 0.08, 0.80, 0.84)
-    a_rel = (
-        a_map_area[0] + (b_lng[0] - china_lng[0]) / (china_lng[1] - china_lng[0]) * a_map_area[2],
-        a_map_area[1] + (b_lat[0] - china_lat[0]) / (china_lat[1] - china_lat[0]) * a_map_area[3],
-        (b_lng[1] - b_lng[0]) / (china_lng[1] - china_lng[0]) * a_map_area[2],
-        (b_lat[1] - b_lat[0]) / (china_lat[1] - china_lat[0]) * a_map_area[3],
-    )
-    a_zoom = inset_rect("regions_map_oracle_reduction_rank", a_rel, min_size=(0.055, 0.055))
+    b_map = panel_reports.get("shanghai_heatmap", {}).get("map", {})
+    b_lng = b_map.get("lng_range")
+    b_lat = b_map.get("lat_range")
+    a_zoom = None
+    if b_lng and b_lat:
+        a_zoom = data_rect_in_map(
+            "regions_map_oracle_reduction_rank",
+            b_lng,
+            b_lat,
+        )
     add_zoom_box(a_zoom)
-    if a_zoom and "shanghai_heatmap" in panel_rects:
-        bx, by, bw, bh = fig_rect_from_page(panel_rects["shanghai_heatmap"])
-        add_connector((a_zoom[0] + a_zoom[2], a_zoom[1] + a_zoom[3]), (bx, by + bh))
+    b_map_rect = map_axis_rect("shanghai_heatmap")
+    if a_zoom and b_map_rect:
+        bx, by, bw, bh = b_map_rect
+        add_connector(
+            (a_zoom[0] + a_zoom[2], a_zoom[1] + a_zoom[3]),
+            (bx, by + bh),
+        )
         add_connector((a_zoom[0] + a_zoom[2], a_zoom[1]), (bx, by))
 
-    d_bounds = zoom_context.get("d_bounds")
-    if d_bounds is not None:
-        b_map_area = (0.04, 0.06, 0.92, 0.76)
-        d_rel = (
-            b_map_area[0] + (d_bounds["min_lng"] - b_lng[0]) / (b_lng[1] - b_lng[0]) * b_map_area[2],
-            b_map_area[1] + (d_bounds["min_lat"] - b_lat[0]) / (b_lat[1] - b_lat[0]) * b_map_area[3],
-            (d_bounds["max_lng"] - d_bounds["min_lng"]) / (b_lng[1] - b_lng[0]) * b_map_area[2],
-            (d_bounds["max_lat"] - d_bounds["min_lat"]) / (b_lat[1] - b_lat[0]) * b_map_area[3],
+    d_map = panel_reports.get("shanghai_building_height_merchant", {}).get("map", {})
+    d_lng = d_map.get("lng_range")
+    d_lat = d_map.get("lat_range")
+    if d_lng and d_lat:
+        b_zoom = data_rect_in_map(
+            "shanghai_heatmap",
+            d_lng,
+            d_lat,
         )
-        b_zoom = inset_rect("shanghai_heatmap", d_rel, min_size=(0.09, 0.09))
         add_zoom_box(b_zoom)
-        if b_zoom and "shanghai_building_height_merchant" in panel_rects:
-            dx, dy, dw, dh = fig_rect_from_page(panel_rects["shanghai_building_height_merchant"])
-            add_connector((b_zoom[0] + b_zoom[2], b_zoom[1] + b_zoom[3]), (dx, dy + dh))
-            add_connector((b_zoom[0] + b_zoom[2], b_zoom[1]), (dx, dy))
+        d_map_rect = map_axis_rect("shanghai_building_height_merchant")
+        if b_zoom and d_map_rect:
+            dx, dy, dw, dh = d_map_rect
+            add_connector((b_zoom[0], b_zoom[1]), (dx, dy + dh))
+            add_connector((b_zoom[0] + b_zoom[2], b_zoom[1]), (dx + dw, dy + dh))
 
     fig.savefig(overlay_path, transparent=True)
     plt.close(fig)
@@ -938,59 +1006,7 @@ def _fit_pdf_rect(source_page, target_rect, return_rect=False):
     return transform
 
 
-def _figure1_zoom_context(data_dir):
-    """Return map extents used for figure 1 zoom callouts."""
-    import numpy as np
-
-    context = {
-        "b_lng_range": (121.0, 121.9),
-        "b_lat_range": (30.9, 31.55),
-    }
-    sales_path = os.path.join(data_dir, "city", "shanghai", "shanghai_sales.csv")
-    if not os.path.exists(sales_path):
-        return context
-    try:
-        from utils.coordinates import gcj02_to_wgs84
-        from visualization.buildings import (
-            MERCHANT_MAP_DEGREE_SIZE,
-            MERCHANT_MAP_RANDOM_SEED,
-            MERCHANT_MAP_TOP_SALES_FRACTION,
-        )
-
-        stores_df = pd.read_csv(sales_path)
-        valid_stores = stores_df.dropna(subset=["lat", "lng", "month_sales"]).copy()
-        valid_stores["month_sales"] = pd.to_numeric(
-            valid_stores["month_sales"],
-            errors="coerce",
-        )
-        valid_stores = valid_stores.dropna(subset=["month_sales"])
-        if valid_stores.empty:
-            return context
-        top_n = max(
-            1,
-            int(np.ceil(len(valid_stores) * MERCHANT_MAP_TOP_SALES_FRACTION)),
-        )
-        merchant = valid_stores.nlargest(top_n, "month_sales").sample(
-            n=1,
-            random_state=MERCHANT_MAP_RANDOM_SEED,
-        ).iloc[0]
-        merchant_lng, merchant_lat = gcj02_to_wgs84(
-            float(merchant["lng"]),
-            float(merchant["lat"]),
-        )
-        half_size = MERCHANT_MAP_DEGREE_SIZE / 2
-        context["d_bounds"] = {
-            "min_lng": merchant_lng - half_size,
-            "max_lng": merchant_lng + half_size,
-            "min_lat": merchant_lat - half_size,
-            "max_lat": merchant_lat + half_size,
-        }
-    except Exception as exc:
-        print(f"figure1_framework: d zoom context unavailable ({exc})")
-    return context
-
-
-def _render_figure1_framework(data_dir, out, plot_title):
+def _render_figure1_framework(out, plot_title):
     """Compose Figure 1 from vector PDF panels using the draw.io framework."""
     import tempfile
 
@@ -1052,7 +1068,7 @@ def _render_figure1_framework(data_dir, out, plot_title):
             page_size=(page_w, page_h),
             canvas_size=(canvas_w, canvas_h),
             panel_rects=placed_rects,
-            zoom_context=_figure1_zoom_context(data_dir),
+            panel_reports=_load_figure1_panel_reports(out, plot_title=plot_title),
         )
         overlay_page = PdfReader(overlay_path).pages[0]
         page.merge_page(overlay_page, over=True)
@@ -3561,12 +3577,18 @@ def render_all(data_dir: str, figures_dir: str, for_latex: bool = False, plot_ti
         source_pdf = _paper_pdf_path(out, name, plot_title=plot_title)
         if not os.path.exists(source_pdf):
             return True
-        source_mtime = os.path.getmtime(source_pdf)
+        cache_paths = [source_pdf]
+        if name in FIGURE1_FRAMEWORK_REPORT_DEPENDENCIES:
+            source_report = _paper_report_path(out, name, plot_title=plot_title)
+            if not os.path.exists(source_report):
+                return True
+            cache_paths.append(source_report)
+        cache_mtime = min(os.path.getmtime(path) for path in cache_paths)
         viz_dir = os.path.dirname(os.path.abspath(__file__))
         module_names = FIGURE1_FRAMEWORK_SOURCE_MODULES.get(name, ())
         module_paths = [os.path.join(viz_dir, module) for module in module_names]
         return any(
-            os.path.exists(path) and os.path.getmtime(path) > source_mtime
+            os.path.exists(path) and os.path.getmtime(path) > cache_mtime
             for path in module_paths
         )
 
@@ -4279,7 +4301,6 @@ def render_all(data_dir: str, figures_dir: str, for_latex: bool = False, plot_ti
 
     if figure1_framework_requested:
         _render_figure1_framework(
-            data_dir=data_dir,
             out=out,
             plot_title=plot_title,
         )
