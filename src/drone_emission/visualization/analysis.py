@@ -7266,7 +7266,7 @@ def plot_city_population_detour_oracle_reduction_bubble(
     for_latex: bool = False,
     plot_title: bool = False,
 ):
-    """Bubble chart of city population and Oracle emission reduction.
+    """Bubble chart of Oracle emission reduction and city population.
 
     Args:
         df: Enriched all_region_stats DataFrame with socioeconomic and Oracle
@@ -7341,11 +7341,12 @@ def plot_city_population_detour_oracle_reduction_bubble(
 
     plot_df["population_million"] = plot_df["population_10k"] / 100.0
     reduction_t = plot_df[reduction_t_col]
+    population_million = plot_df["population_million"]
     size_min, size_max = 26.0, 760.0
-    if np.isclose(reduction_t.max(), reduction_t.min()):
+    if np.isclose(population_million.max(), population_million.min()):
         sizes = np.full(len(plot_df), (size_min + size_max) / 2)
     else:
-        scaled = np.sqrt(reduction_t / reduction_t.max())
+        scaled = np.sqrt(population_million / population_million.max())
         sizes = size_min + scaled * (size_max - size_min)
     plot_df["_bubble_size"] = sizes
 
@@ -7367,7 +7368,7 @@ def plot_city_population_detour_oracle_reduction_bubble(
     legend_ax.axis("off")
 
     ax.scatter(
-        plot_df["population_million"],
+        plot_df[reduction_t_col],
         plot_df[reduction_pct_col],
         s=plot_df["_bubble_size"],
         c=plot_df["_macro_region_color"],
@@ -7378,14 +7379,14 @@ def plot_city_population_detour_oracle_reduction_bubble(
     )
 
     ax.set_xscale("log")
-    ax.set_xlabel("Population (million people)", fontsize=12)
+    ax.set_xlabel("Annual Oracle emission reduction (t CO2e/yr)", fontsize=12)
     ax.set_ylabel("Oracle lifecycle emission reduction (%)", fontsize=12)
     ax.yaxis.set_major_formatter(FuncFormatter(lambda x, _: f"{x:.0f}%"))
     ax.grid(True, which="major", linestyle="--", alpha=0.28, zorder=0)
     ax.grid(True, which="minor", axis="x", linestyle=":", alpha=0.18, zorder=0)
     ax.set_axisbelow(True)
 
-    x_values = plot_df["population_million"].to_numpy(dtype=float)
+    x_values = plot_df[reduction_t_col].to_numpy(dtype=float)
     y_values = plot_df[reduction_pct_col].to_numpy(dtype=float)
     x_log = np.log10(x_values)
     if x_log.size > 1 and np.nanstd(x_log) > 0:
@@ -7425,7 +7426,7 @@ def plot_city_population_detour_oracle_reduction_bubble(
     ax_right.spines["top"].set_visible(False)
     ax_right.spines["right"].set_visible(False)
 
-    legend_values = np.nanquantile(reduction_t, [0.25, 0.5, 0.9])
+    legend_values = np.nanquantile(population_million, [0.25, 0.5, 0.9])
     legend_values = np.unique(np.round(legend_values, 1))
     handles = []
     labels = []
@@ -7434,7 +7435,7 @@ def plot_city_population_detour_oracle_reduction_bubble(
             continue
         marker_size = (
             size_min
-            + np.sqrt(value / reduction_t.max()) * (size_max - size_min)
+            + np.sqrt(value / population_million.max()) * (size_max - size_min)
         )
         handles.append(
             plt.scatter(
@@ -7447,12 +7448,12 @@ def plot_city_population_detour_oracle_reduction_bubble(
                 alpha=0.78,
             )
         )
-        labels.append(f"{value:,.0f} t")
+        labels.append(f"{value:,.1f}M")
     if handles:
         size_legend = ax.legend(
             handles,
             labels,
-            title="Annual Oracle\nreduction",
+            title="Population",
             loc="upper left",
             bbox_to_anchor=(0.01, 0.99),
             frameon=True,
@@ -7503,7 +7504,7 @@ def plot_city_population_detour_oracle_reduction_bubble(
             dx, dy = offsets[i % len(offsets)]
             ax.annotate(
                 str(row[name_col]),
-                xy=(row["population_million"], row[reduction_pct_col]),
+                xy=(row[reduction_t_col], row[reduction_pct_col]),
                 xytext=(dx, dy),
                 textcoords="offset points",
                 ha="left" if dx > 0 else "right",
@@ -7521,7 +7522,7 @@ def plot_city_population_detour_oracle_reduction_bubble(
 
     if plot_title:
         fig.suptitle(
-            "Population and Oracle Emission Reduction",
+            "Oracle Emission Reduction and Population",
             fontsize=14,
             fontweight="bold",
         )
