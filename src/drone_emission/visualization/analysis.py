@@ -7816,6 +7816,34 @@ def _plot_city_oracle_reduction_rank(
     plt.close(fig)
 
 
+def plot_city_oracle_reduction_rank_top10(
+    df: pd.DataFrame,
+    save_path: str = None,
+    figsize: tuple = (3.0, 5.0),
+    for_latex: bool = False,
+    plot_title: bool = False,
+):
+    """Compact horizontal bars for the top cities by Oracle reduction.
+
+    Args:
+        df: all_region_stats DataFrame.
+        save_path: Path without extension. Saves PNG or PDF; shows interactively if None.
+        figsize: Figure size tuple.
+        for_latex: Save as PDF when True.
+        plot_title: Add title when True.
+    """
+    _plot_city_oracle_reduction_rank(
+        df,
+        10,
+        save_path=save_path,
+        figsize=figsize,
+        for_latex=for_latex,
+        plot_title=plot_title,
+        invert_vertical=True,
+        compact=True,
+    )
+
+
 def _plot_city_ebike_rank(
     df: pd.DataFrame,
     mode: str,
