@@ -5547,6 +5547,7 @@ def _write_regions_map_oracle_reduction_rank_report(
     reduction_edges,
     highlighted_city_labels,
     inset_bubble_records,
+    inset_bubble_area_scale,
     color_scale_style,
 ):
     """Write a JSON report for regions_map_oracle_reduction_rank."""
@@ -5607,7 +5608,7 @@ def _write_regions_map_oracle_reduction_rank_report(
                 "south_china_sea_inset": (
                     {
                         "axis": _axis_report(south_china_inset_ax),
-                        "bubble_area_scale": 0.08,
+                        "bubble_area_scale": _json_safe_scalar(inset_bubble_area_scale),
                         "bubbles": inset_bubble_records,
                     }
                     if south_china_inset_ax is not None
@@ -5732,14 +5733,7 @@ def plot_regions_map_oracle_reduction_rank(
         zorder=8,
     )
     inset_bubble_records = []
-    if draw_south_china_inset_bubbles and south_china_inset_ax is not None:
-        inset_bubble_records = _add_regions_oracle_inset_bubbles(
-            south_china_inset_ax,
-            bubble_draw_df,
-            reduction_pct_col,
-            cmap,
-            norm,
-        )
+    inset_bubble_area_scale = None
     highlighted_city_labels = _add_regions_oracle_city_highlights(
         ax_map,
         bubble_df,
@@ -5795,6 +5789,16 @@ def plot_regions_map_oracle_reduction_rank(
     fig.tight_layout()
     fig.subplots_adjust(left=0.11)
 
+    if draw_south_china_inset_bubbles and south_china_inset_ax is not None:
+        inset_bubble_records, inset_bubble_area_scale = _add_regions_oracle_inset_bubbles(
+            ax_map,
+            south_china_inset_ax,
+            bubble_draw_df,
+            reduction_pct_col,
+            cmap,
+            norm,
+        )
+
     fig.canvas.draw()
     cbar_ax = None
     if color_scale_style != "legend":
@@ -5839,6 +5843,7 @@ def plot_regions_map_oracle_reduction_rank(
             reduction_edges=reduction_edges,
             highlighted_city_labels=highlighted_city_labels,
             inset_bubble_records=inset_bubble_records,
+            inset_bubble_area_scale=inset_bubble_area_scale,
             color_scale_style=color_scale_style,
         )
         plt.savefig(save_path, dpi=300, bbox_inches="tight")
@@ -6083,24 +6088,37 @@ def _add_regions_oracle_city_highlights(ax, bubble_df, line_from_bubble_edge=Fal
         )
         offset = label_offsets.get(city, (8, 8))
         xy = (x, y)
+        label_offset = offset
+        leader_shrink_points = 0.0
+        arrowprops = dict(arrowstyle="-", color="0.25", lw=0.75)
         if line_from_bubble_edge:
             offset_vec = np.array(offset, dtype=float)
             offset_norm = np.linalg.norm(offset_vec)
             if offset_norm > 0:
-                radius_points = np.sqrt(highlight_size / np.pi)
-                radius_pixels = radius_points * ax.get_figure().dpi / 72.0
-                center_pixels = ax.transData.transform((x, y))
-                edge_pixels = center_pixels + offset_vec / offset_norm * radius_pixels
-                xy = tuple(ax.transData.inverted().transform(edge_pixels))
+                radius_points = np.sqrt(highlight_size) / 2.0
+                text_gap_points = 6.0
+                label_offset_vec = (
+                    offset_vec
+                    + offset_vec / offset_norm * (radius_points + text_gap_points)
+                )
+                label_offset = tuple(label_offset_vec)
+                leader_shrink_points = radius_points + 1.0
+                arrowprops = dict(
+                    arrowstyle="-",
+                    color="0.25",
+                    lw=0.75,
+                    shrinkA=1.5,
+                    shrinkB=leader_shrink_points,
+                )
         ax.annotate(
             city,
             xy,
-            xytext=offset,
+            xytext=label_offset,
             textcoords="offset points",
             fontsize=7.5,
             fontweight="bold",
             color="#111111",
-            arrowprops=dict(arrowstyle="-", color="0.25", lw=0.75),
+            arrowprops=arrowprops,
             bbox=dict(
                 boxstyle="round,pad=0.18",
                 facecolor="white",
@@ -6123,6 +6141,11 @@ def _add_regions_oracle_city_highlights(ax, bubble_df, line_from_bubble_edge=Fal
                     "x": _json_safe_scalar(offset[0]),
                     "y": _json_safe_scalar(offset[1]),
                 },
+                "effective_label_offset_points": {
+                    "x": _json_safe_scalar(label_offset[0]),
+                    "y": _json_safe_scalar(label_offset[1]),
+                },
+                "leader_shrink_points": _json_safe_scalar(leader_shrink_points),
             }
         )
 
@@ -6130,29 +6153,54 @@ def _add_regions_oracle_city_highlights(ax, bubble_df, line_from_bubble_edge=Fal
 
 
 def _add_regions_oracle_inset_bubbles(
-    ax,
+    main_ax,
+    inset_ax,
     bubble_df,
     reduction_pct_col,
     cmap,
     norm,
-    area_scale=0.08,
 ):
     """Draw scaled Oracle bubbles on the South China Sea inset."""
-    if ax is None or bubble_df.empty:
-        return []
+    if main_ax is None or inset_ax is None or bubble_df.empty:
+        return [], None
 
-    x_min, x_max = ax.get_xlim()
-    y_min, y_max = ax.get_ylim()
+    x_min, x_max = inset_ax.get_xlim()
+    y_min, y_max = inset_ax.get_ylim()
     inset_df = bubble_df[
         bubble_df["lng"].between(x_min, x_max)
         & bubble_df["lat"].between(y_min, y_max)
     ].copy()
     if inset_df.empty:
-        return []
+        return [], None
+
+    fig = main_ax.get_figure()
+    fig.canvas.draw()
+
+    def _pixels_per_degree(ax):
+        x0, x1 = ax.get_xlim()
+        y0, y1 = ax.get_ylim()
+        center = ((x0 + x1) / 2.0, (y0 + y1) / 2.0)
+        center_px = ax.transData.transform(center)
+        x_px = ax.transData.transform((center[0] + 1.0, center[1]))
+        y_px = ax.transData.transform((center[0], center[1] + 1.0))
+        px_per_lng = abs(x_px[0] - center_px[0])
+        px_per_lat = abs(y_px[1] - center_px[1])
+        return np.sqrt(px_per_lng * px_per_lat)
+
+    main_px_per_degree = _pixels_per_degree(main_ax)
+    inset_px_per_degree = _pixels_per_degree(inset_ax)
+    if not (
+        np.isfinite(main_px_per_degree)
+        and np.isfinite(inset_px_per_degree)
+        and main_px_per_degree > 0
+    ):
+        area_scale = 1.0
+    else:
+        area_scale = (inset_px_per_degree / main_px_per_degree) ** 2
 
     inset_df = inset_df.sort_values("_bubble_size", ascending=True)
     inset_sizes = np.maximum(inset_df["_bubble_size"] * area_scale, 6.0)
-    ax.scatter(
+    inset_ax.scatter(
         inset_df["lng"],
         inset_df["lat"],
         s=inset_sizes,
@@ -6178,7 +6226,7 @@ def _add_regions_oracle_inset_bubbles(
                 "inset_bubble_size": _json_safe_scalar(marker_size),
             }
         )
-    return records
+    return records, float(area_scale)
 
 
 def _city_oracle_rank_report(
