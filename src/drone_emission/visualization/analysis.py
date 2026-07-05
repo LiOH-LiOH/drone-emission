@@ -5508,6 +5508,7 @@ def _write_regions_map_oracle_reduction_rank_report(
     norm,
     bin_edges,
     reduction_edges,
+    highlighted_city_labels,
 ):
     """Write a JSON report for regions_map_oracle_reduction_rank."""
     renderer = ax_map.get_figure().canvas.get_renderer()
@@ -5556,6 +5557,7 @@ def _write_regions_map_oracle_reduction_rank_report(
                     renderer=renderer,
                     tight_bbox=tight_bbox,
                 ),
+                "highlighted_city_labels": highlighted_city_labels,
             },
         },
     }
@@ -5630,6 +5632,7 @@ def plot_regions_map_oracle_reduction_rank(
     if bubble_df.empty:
         print("Regions map oracle reduction rank skipped — no valid bubble positions")
         return
+    bubble_draw_df = bubble_df.sort_values("_bubble_size", ascending=True)
 
     fig, ax_map = plt.subplots(figsize=figsize)
     gray_map_df = map_df.copy()
@@ -5645,10 +5648,10 @@ def plot_regions_map_oracle_reduction_rank(
         draw_legend=False,
     )
     ax_map.scatter(
-        bubble_df["lng"],
-        bubble_df["lat"],
-        s=bubble_df["_bubble_size"],
-        c=bubble_df[reduction_pct_col],
+        bubble_draw_df["lng"],
+        bubble_draw_df["lat"],
+        s=bubble_draw_df["_bubble_size"],
+        c=bubble_draw_df[reduction_pct_col],
         cmap=cmap,
         norm=norm,
         alpha=0.82,
@@ -5656,6 +5659,7 @@ def plot_regions_map_oracle_reduction_rank(
         linewidth=0.65,
         zorder=8,
     )
+    highlighted_city_labels = _add_regions_oracle_city_highlights(ax_map, bubble_df)
     size_legend = _draw_bubble_size_legend(ax_map, bubble_df[reduction_col])
     if size_legend is not None:
         ax_map.add_artist(size_legend)
@@ -5730,6 +5734,7 @@ def plot_regions_map_oracle_reduction_rank(
             norm=norm,
             bin_edges=bin_edges,
             reduction_edges=reduction_edges,
+            highlighted_city_labels=highlighted_city_labels,
         )
         plt.savefig(save_path, dpi=300, bbox_inches="tight")
         print(f"Regions map oracle reduction rank saved to {save_path}")
@@ -5887,6 +5892,93 @@ def _bubble_map_panel_report(
         "color_by": color_col,
         "rows": rows,
     }
+
+
+def _add_regions_oracle_city_highlights(ax, bubble_df):
+    """Highlight and label selected major cities on the Oracle bubble map."""
+    if "region_name_en" not in bubble_df.columns:
+        return []
+
+    highlight_cities = (
+        "Beijing",
+        "Shanghai",
+        "Guangzhou",
+        "Hangzhou",
+        "Shenzhen",
+        "Wuhan",
+        "Chongqing",
+        "Chengdu",
+    )
+    label_offsets = {
+        "Beijing": (8, 8),
+        "Shanghai": (10, -14),
+        "Guangzhou": (-46, -16),
+        "Hangzhou": (12, 10),
+        "Shenzhen": (12, 8),
+        "Wuhan": (10, -14),
+        "Chongqing": (-54, -6),
+        "Chengdu": (-46, 14),
+    }
+    records = []
+    name_key = bubble_df["region_name_en"].astype(str).str.casefold()
+
+    for city in highlight_cities:
+        rows = bubble_df[name_key == city.casefold()]
+        if rows.empty:
+            continue
+
+        row = rows.iloc[0]
+        x = float(row["lng"])
+        y = float(row["lat"])
+        bubble_size = float(row["_bubble_size"])
+        highlight_size = max(bubble_size * 1.08, bubble_size + 24.0)
+        ax.scatter(
+            [x],
+            [y],
+            s=highlight_size,
+            marker="o",
+            facecolors="none",
+            edgecolors="#111111",
+            linewidths=1.45,
+            zorder=18,
+            clip_on=False,
+        )
+        offset = label_offsets.get(city, (8, 8))
+        ax.annotate(
+            city,
+            (x, y),
+            xytext=offset,
+            textcoords="offset points",
+            fontsize=7.5,
+            fontweight="bold",
+            color="#111111",
+            arrowprops=dict(arrowstyle="-", color="0.25", lw=0.75),
+            bbox=dict(
+                boxstyle="round,pad=0.18",
+                facecolor="white",
+                edgecolor="0.55",
+                alpha=0.9,
+            ),
+            zorder=20,
+            clip_on=False,
+        )
+
+        records.append(
+            {
+                "city": city,
+                "region_key": _json_safe_scalar(row.get("region_key")),
+                "lng": _json_safe_scalar(x),
+                "lat": _json_safe_scalar(y),
+                "bubble_size": _json_safe_scalar(bubble_size),
+                "highlight_size": _json_safe_scalar(highlight_size),
+                "label_offset_points": {
+                    "x": _json_safe_scalar(offset[0]),
+                    "y": _json_safe_scalar(offset[1]),
+                },
+            }
+        )
+
+    return records
 
 
 def _city_oracle_rank_report(
