@@ -233,11 +233,11 @@ def plot_tanner_fit(distances, a, b, save_path=None, for_latex=False, plot_title
 def plot_tanner_distance_histogram(
     distances,
     save_path=None,
-    figsize=(6, 5),
+    figsize=(2.4, 1.68),
     for_latex=False,
     plot_title=False,
 ):
-    """Plot the observed Eleme delivery distance histogram.
+    """Plot the observed Eleme delivery distance distribution curve.
 
     Args:
         distances: Array of delivery distances in km.
@@ -246,26 +246,46 @@ def plot_tanner_distance_histogram(
         for_latex: If True, save as PDF.
         plot_title: If True, show title.
     """
-    bin_width = 0.1
-    max_distance = 10.0
-    bins = np.arange(0, max_distance + bin_width, bin_width)
-    counts, bin_edges = np.histogram(distances, bins=bins)
-    bin_centers = (bin_edges[:-1] + bin_edges[1:]) / 2
+    max_distance = 5.0
+    plot_distances = np.asarray(distances)
+    plot_distances = plot_distances[
+        (plot_distances >= 0) & (plot_distances <= max_distance)
+    ]
 
     fig, ax = plt.subplots(figsize=figsize)
-    ax.bar(
-        bin_centers,
-        counts,
-        width=bin_width * 0.9,
-        color="#4C72B0",
-        edgecolor="white",
-        alpha=0.85,
-    )
+    if len(plot_distances) > 1:
+        x_smooth = np.linspace(0, max_distance, 400)
+        kde = stats.gaussian_kde(plot_distances)
+        y_smooth = kde(x_smooth)
+        ax.plot(
+            x_smooth,
+            y_smooth,
+            color="#C44E52",
+            lw=1.15,
+        )
+        peak_idx = int(np.argmax(y_smooth))
+        label_x = min(x_smooth[peak_idx] + 0.45, max_distance - 0.25)
+        label_y = y_smooth[peak_idx] * 0.95
+        ax.text(
+            label_x,
+            label_y,
+            "Distribution",
+            color="#9E2F33",
+            fontsize=5.6,
+            va="center",
+        )
 
-    ax.set_xlabel("Delivery Distance (km)")
-    ax.set_ylabel("Order Count")
+    ax.set_xlim(0, max_distance)
+    ax.set_xlabel("Delivery distance (km)", fontsize=6.4, labelpad=1.5)
+    ax.set_ylabel("Density", fontsize=6.4, labelpad=1.5)
+    ax.set_xticks(np.arange(0, max_distance + 1, 1))
+    ax.tick_params(axis="both", labelsize=5.8, length=2, pad=1)
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+    for spine in ax.spines.values():
+        spine.set_linewidth(0.55)
     if plot_title:
-        ax.set_title("Observed Distance Distribution")
+        ax.set_title("Observed Distance Distribution", fontsize=7)
 
     plt.tight_layout()
 
