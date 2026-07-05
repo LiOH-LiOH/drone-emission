@@ -434,6 +434,41 @@ def _draw_bubble_size_legend(ax, values, size_min=24.0, size_max=520.0):
     )
 
 
+def _draw_bubble_color_legend(ax, cmap, _bin_edges, reduction_edges):
+    """Draw an in-map legend for bubble color bins."""
+    handles = [Patch(facecolor="#cccccc", edgecolor="none", label="Unstudied")]
+    labels = ["Unstudied"]
+    value_edges = list(reduction_edges)
+    for i in range(len(value_edges) - 1):
+        lo = value_edges[i]
+        hi = value_edges[i + 1]
+        handles.append(
+            Patch(
+                facecolor=cmap(i + 1),
+                edgecolor="0.65",
+                linewidth=0.4,
+            )
+        )
+        labels.append(f"{lo:.0f}-{hi:.0f}%")
+
+    return ax.legend(
+        handles,
+        labels,
+        title="Oracle reduction",
+        loc="lower left",
+        bbox_to_anchor=(0.02, 0.02),
+        frameon=True,
+        framealpha=0.92,
+        fontsize=7.2,
+        title_fontsize=7.5,
+        borderpad=0.55,
+        labelspacing=0.35,
+        handlelength=1.1,
+        handleheight=0.8,
+        handletextpad=0.55,
+    )
+
+
 def _named_baseline_kappa(named: pd.DataFrame) -> float:
     """Infer the configured baseline kappa from a named-scenario table."""
     kappas = np.array(sorted(named["kappa"].dropna().unique()), dtype=float)
@@ -5495,6 +5530,7 @@ def plot_regions_map_city_rank_inset(
 
 def _write_regions_map_oracle_reduction_rank_report(
     save_path,
+    figure_name,
     figsize,
     stats_csv_path,
     map_df,
@@ -5503,19 +5539,22 @@ def _write_regions_map_oracle_reduction_rank_report(
     bubble_df,
     ax_map,
     inset_ax,
+    south_china_inset_ax,
     cbar_ax,
     cmap,
     norm,
     bin_edges,
     reduction_edges,
     highlighted_city_labels,
+    inset_bubble_records,
+    color_scale_style,
 ):
     """Write a JSON report for regions_map_oracle_reduction_rank."""
     renderer = ax_map.get_figure().canvas.get_renderer()
     tight_bbox = ax_map.get_figure().get_tightbbox(renderer)
     report_path = save_path.rsplit(".", 1)[0] + "_report.json"
     payload = {
-        "figure_name": "regions_map_oracle_reduction_rank",
+        "figure_name": figure_name,
         "figure_path": save_path,
         "source_stats_csv_path": stats_csv_path,
         "figure_size_inches": {"width": figsize[0], "height": figsize[1]},
@@ -5540,9 +5579,10 @@ def _write_regions_map_oracle_reduction_rank_report(
                     renderer=renderer,
                     tight_bbox=tight_bbox,
                 ),
-                "inset_city_rank": _city_oracle_rank_report(
-                    map_df,
-                    inset_ax,
+                "inset_city_rank": (
+                    _city_oracle_rank_report(map_df, inset_ax)
+                    if inset_ax is not None
+                    else None
                 ),
                 "colorbar": _colorbar_report(
                     cbar_ax,
@@ -5550,12 +5590,28 @@ def _write_regions_map_oracle_reduction_rank_report(
                     reduction_edges,
                     "Oracle lifecycle emission reduction (%)",
                     cmap,
+                )
+                if cbar_ax is not None
+                else None,
+                "color_scale_style": color_scale_style,
+                "colorbar_axis_saved_tight": (
+                    saved_tight_axis_report(
+                        ax_map.get_figure(),
+                        cbar_ax,
+                        renderer=renderer,
+                        tight_bbox=tight_bbox,
+                    )
+                    if cbar_ax is not None
+                    else None
                 ),
-                "colorbar_axis_saved_tight": saved_tight_axis_report(
-                    ax_map.get_figure(),
-                    cbar_ax,
-                    renderer=renderer,
-                    tight_bbox=tight_bbox,
+                "south_china_sea_inset": (
+                    {
+                        "axis": _axis_report(south_china_inset_ax),
+                        "bubble_area_scale": 0.08,
+                        "bubbles": inset_bubble_records,
+                    }
+                    if south_china_inset_ax is not None
+                    else None
                 ),
                 "highlighted_city_labels": highlighted_city_labels,
             },
@@ -5573,6 +5629,11 @@ def plot_regions_map_oracle_reduction_rank(
     figsize: tuple = (8.5, 7),
     for_latex: bool = False,
     plot_title: bool = False,
+    show_rank_inset: bool = True,
+    figure_name: str = "regions_map_oracle_reduction_rank",
+    label_leaders_from_bubble_edge: bool = False,
+    draw_south_china_inset_bubbles: bool = False,
+    color_scale_style: str = "colorbar",
 ):
     """China bubble map of Oracle reduction with top-city rank inset.
 
@@ -5583,6 +5644,11 @@ def plot_regions_map_oracle_reduction_rank(
         figsize: Figure size tuple.
         for_latex: If True, save as PDF.
         plot_title: If True, show title.
+        show_rank_inset: If True, show the top-city rank inset.
+        figure_name: Figure name used in the JSON report.
+        label_leaders_from_bubble_edge: If True, label leader lines start at bubble edge.
+        draw_south_china_inset_bubbles: If True, draw scaled bubbles on the South China Sea inset.
+        color_scale_style: "colorbar" for a side colorbar, or "legend" for an in-map legend.
     """
     from visualization.regions import plot_regions_on_china_map
 
@@ -5637,6 +5703,7 @@ def plot_regions_map_oracle_reduction_rank(
     fig, ax_map = plt.subplots(figsize=figsize)
     gray_map_df = map_df.copy()
     gray_map_df["_bubble_gray"] = np.nan
+    child_axes_before_map = len(ax_map.child_axes)
     plot_regions_on_china_map(
         df=gray_map_df,
         color_by="_bubble_gray",
@@ -5646,6 +5713,11 @@ def plot_regions_map_oracle_reduction_rank(
         norm=norm,
         draw_colorbar=False,
         draw_legend=False,
+    )
+    south_china_inset_ax = (
+        ax_map.child_axes[-1]
+        if len(ax_map.child_axes) > child_axes_before_map
+        else None
     )
     ax_map.scatter(
         bubble_draw_df["lng"],
@@ -5659,10 +5731,31 @@ def plot_regions_map_oracle_reduction_rank(
         linewidth=0.65,
         zorder=8,
     )
-    highlighted_city_labels = _add_regions_oracle_city_highlights(ax_map, bubble_df)
+    inset_bubble_records = []
+    if draw_south_china_inset_bubbles and south_china_inset_ax is not None:
+        inset_bubble_records = _add_regions_oracle_inset_bubbles(
+            south_china_inset_ax,
+            bubble_draw_df,
+            reduction_pct_col,
+            cmap,
+            norm,
+        )
+    highlighted_city_labels = _add_regions_oracle_city_highlights(
+        ax_map,
+        bubble_df,
+        line_from_bubble_edge=label_leaders_from_bubble_edge,
+    )
     size_legend = _draw_bubble_size_legend(ax_map, bubble_df[reduction_col])
     if size_legend is not None:
         ax_map.add_artist(size_legend)
+    if color_scale_style == "legend":
+        color_legend = _draw_bubble_color_legend(
+            ax_map,
+            cmap,
+            bin_edges,
+            reduction_edges,
+        )
+        ax_map.add_artist(color_legend)
     ax_map.set_xlabel("")
     ax_map.set_ylabel("")
     ax_map.set_xticks([])
@@ -5670,25 +5763,31 @@ def plot_regions_map_oracle_reduction_rank(
     for spine in ax_map.spines.values():
         spine.set_visible(False)
 
-    inset_ax = ax_map.inset_axes([0.03, 0.04, 0.34, 0.38], zorder=10)
-    _plot_city_oracle_reduction_rank(
-        map_df,
-        10,
-        plot_title=plot_title,
-        ax=inset_ax,
-        invert_vertical=True,
-        compact=True,
-    )
-    inset_ax.set_facecolor("none")
-    inset_ax.patch.set_alpha(0.0)
-    for name, spine in inset_ax.spines.items():
-        spine.set_visible(name in {"left", "bottom"})
-        spine.set_edgecolor("#666666")
-        spine.set_linewidth(0.6)
+    inset_ax = None
+    if show_rank_inset:
+        inset_ax = ax_map.inset_axes([0.03, 0.04, 0.34, 0.38], zorder=10)
+        _plot_city_oracle_reduction_rank(
+            map_df,
+            10,
+            plot_title=plot_title,
+            ax=inset_ax,
+            invert_vertical=True,
+            compact=True,
+        )
+        inset_ax.set_facecolor("none")
+        inset_ax.patch.set_alpha(0.0)
+        for name, spine in inset_ax.spines.items():
+            spine.set_visible(name in {"left", "bottom"})
+            spine.set_edgecolor("#666666")
+            spine.set_linewidth(0.6)
 
     if plot_title:
         ax_map.set_title(
-            "Regional Oracle Reduction Bubble Map and Top-City Rank",
+            (
+                "Regional Oracle Reduction Bubble Map and Top-City Rank"
+                if show_rank_inset
+                else "Regional Oracle Reduction Bubble Map"
+            ),
             fontsize=13,
             fontweight="bold",
         )
@@ -5697,20 +5796,22 @@ def plot_regions_map_oracle_reduction_rank(
     fig.subplots_adjust(left=0.11)
 
     fig.canvas.draw()
-    map_pos = ax_map.get_position()
-    cbar_ax = fig.add_axes((map_pos.x0 - 0.035, map_pos.y0, 0.014, map_pos.height))
-    cbar, n_bands = _draw_discrete_reduction_colorbar(
-        fig,
-        cbar_ax,
-        cmap,
-        norm,
-        bin_edges,
-        reduction_edges,
-        "Oracle lifecycle emission reduction (%)",
-    )
-    cbar.ax.yaxis.set_ticks_position("left")
-    cbar.ax.yaxis.set_label_position("left")
-    _annotate_unstudied(fig, cbar, cbar_ax, n_bands)
+    cbar_ax = None
+    if color_scale_style != "legend":
+        map_pos = ax_map.get_position()
+        cbar_ax = fig.add_axes((map_pos.x0 - 0.035, map_pos.y0, 0.014, map_pos.height))
+        cbar, n_bands = _draw_discrete_reduction_colorbar(
+            fig,
+            cbar_ax,
+            cmap,
+            norm,
+            bin_edges,
+            reduction_edges,
+            "Oracle lifecycle emission reduction (%)",
+        )
+        cbar.ax.yaxis.set_ticks_position("left")
+        cbar.ax.yaxis.set_label_position("left")
+        _annotate_unstudied(fig, cbar, cbar_ax, n_bands)
 
     if save_path:
         if for_latex and not save_path.endswith(".pdf"):
@@ -5721,6 +5822,7 @@ def plot_regions_map_oracle_reduction_rank(
         fig.canvas.draw()
         _write_regions_map_oracle_reduction_rank_report(
             save_path=save_path,
+            figure_name=figure_name,
             figsize=figsize,
             stats_csv_path=stats_csv_path,
             map_df=map_df,
@@ -5729,12 +5831,15 @@ def plot_regions_map_oracle_reduction_rank(
             bubble_df=bubble_df,
             ax_map=ax_map,
             inset_ax=inset_ax,
+            south_china_inset_ax=south_china_inset_ax,
             cbar_ax=cbar_ax,
             cmap=cmap,
             norm=norm,
             bin_edges=bin_edges,
             reduction_edges=reduction_edges,
             highlighted_city_labels=highlighted_city_labels,
+            inset_bubble_records=inset_bubble_records,
+            color_scale_style=color_scale_style,
         )
         plt.savefig(save_path, dpi=300, bbox_inches="tight")
         print(f"Regions map oracle reduction rank saved to {save_path}")
@@ -5742,6 +5847,39 @@ def plot_regions_map_oracle_reduction_rank(
         plt.show()
 
     plt.close(fig)
+
+
+def plot_regions_map_oracle_reduction_rank_map_only(
+    df_stats: "pd.DataFrame",
+    stats_csv_path: str,
+    save_path: str = None,
+    figsize: tuple = (8.5, 7),
+    for_latex: bool = False,
+    plot_title: bool = False,
+):
+    """China bubble map of Oracle reduction without the top-city rank inset.
+
+    Args:
+        df_stats: all_region_stats DataFrame.
+        stats_csv_path: Path to all_region_stats.csv (for map function).
+        save_path: Path to save figure. Shows plot if None.
+        figsize: Figure size tuple.
+        for_latex: If True, save as PDF.
+        plot_title: If True, show title.
+    """
+    plot_regions_map_oracle_reduction_rank(
+        df_stats=df_stats,
+        stats_csv_path=stats_csv_path,
+        save_path=save_path,
+        figsize=figsize,
+        for_latex=for_latex,
+        plot_title=plot_title,
+        show_rank_inset=False,
+        figure_name="regions_map_oracle_reduction_rank_map_only",
+        label_leaders_from_bubble_edge=True,
+        draw_south_china_inset_bubbles=True,
+        color_scale_style="legend",
+    )
 
 
 def _json_safe_scalar(value):
@@ -5894,7 +6032,7 @@ def _bubble_map_panel_report(
     }
 
 
-def _add_regions_oracle_city_highlights(ax, bubble_df):
+def _add_regions_oracle_city_highlights(ax, bubble_df, line_from_bubble_edge=False):
     """Highlight and label selected major cities on the Oracle bubble map."""
     if "region_name_en" not in bubble_df.columns:
         return []
@@ -5944,9 +6082,19 @@ def _add_regions_oracle_city_highlights(ax, bubble_df):
             clip_on=False,
         )
         offset = label_offsets.get(city, (8, 8))
+        xy = (x, y)
+        if line_from_bubble_edge:
+            offset_vec = np.array(offset, dtype=float)
+            offset_norm = np.linalg.norm(offset_vec)
+            if offset_norm > 0:
+                radius_points = np.sqrt(highlight_size / np.pi)
+                radius_pixels = radius_points * ax.get_figure().dpi / 72.0
+                center_pixels = ax.transData.transform((x, y))
+                edge_pixels = center_pixels + offset_vec / offset_norm * radius_pixels
+                xy = tuple(ax.transData.inverted().transform(edge_pixels))
         ax.annotate(
             city,
-            (x, y),
+            xy,
             xytext=offset,
             textcoords="offset points",
             fontsize=7.5,
@@ -5978,6 +6126,58 @@ def _add_regions_oracle_city_highlights(ax, bubble_df):
             }
         )
 
+    return records
+
+
+def _add_regions_oracle_inset_bubbles(
+    ax,
+    bubble_df,
+    reduction_pct_col,
+    cmap,
+    norm,
+    area_scale=0.08,
+):
+    """Draw scaled Oracle bubbles on the South China Sea inset."""
+    if ax is None or bubble_df.empty:
+        return []
+
+    x_min, x_max = ax.get_xlim()
+    y_min, y_max = ax.get_ylim()
+    inset_df = bubble_df[
+        bubble_df["lng"].between(x_min, x_max)
+        & bubble_df["lat"].between(y_min, y_max)
+    ].copy()
+    if inset_df.empty:
+        return []
+
+    inset_df = inset_df.sort_values("_bubble_size", ascending=True)
+    inset_sizes = np.maximum(inset_df["_bubble_size"] * area_scale, 6.0)
+    ax.scatter(
+        inset_df["lng"],
+        inset_df["lat"],
+        s=inset_sizes,
+        c=inset_df[reduction_pct_col],
+        cmap=cmap,
+        norm=norm,
+        alpha=0.82,
+        edgecolor="#FFFFFF",
+        linewidth=0.35,
+        zorder=8,
+        clip_on=True,
+    )
+
+    records = []
+    for (_, row), marker_size in zip(inset_df.iterrows(), inset_sizes):
+        records.append(
+            {
+                "region_key": _json_safe_scalar(row.get("region_key")),
+                "region_name_en": _json_safe_scalar(row.get("region_name_en")),
+                "lng": _json_safe_scalar(row.get("lng")),
+                "lat": _json_safe_scalar(row.get("lat")),
+                "bubble_size": _json_safe_scalar(row.get("_bubble_size")),
+                "inset_bubble_size": _json_safe_scalar(marker_size),
+            }
+        )
     return records
 
 
