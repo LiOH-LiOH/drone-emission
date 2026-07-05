@@ -33,6 +33,32 @@ WEIGHTED_DRONE_SHARE_COLUMNS = (
 ORACLE_REDUCTION_KG_COL = "oracle_min_reduction_vs_ebike_kg"
 ORACLE_REDUCTION_T_COL = "oracle_min_reduction_vs_ebike_t"
 PATHWAY_SCENARIOS_CACHE_VERSION = 1
+ORACLE_REDUCTION_MAP_ONLY_FIGURE = "regions_map_oracle_reduction_rank_map_only"
+ORACLE_REDUCTION_LABEL_CITIES = (
+    "Beijing",
+    "Shanghai",
+    "Guangzhou",
+    "Hangzhou",
+    "Shenzhen",
+    "Wuhan",
+    "Chongqing",
+    "Chengdu",
+)
+ORACLE_REDUCTION_LABEL_OFFSETS = {
+    "Beijing": (8.0, 8.0),
+    "Shanghai": (10.0, -14.0),
+    "Guangzhou": (-46.0, -16.0),
+    "Hangzhou": (12.0, 10.0),
+    "Shenzhen": (12.0, 8.0),
+    "Wuhan": (10.0, -14.0),
+    "Chongqing": (-54.0, -6.0),
+    "Chengdu": (-46.0, 14.0),
+}
+ORACLE_REDUCTION_LABEL_LAYOUT_PATH = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)),
+    "layouts",
+    "regions_map_oracle_reduction_rank_map_only_labels.json",
+)
 
 
 def _first_available_column(df: pd.DataFrame, candidates: tuple[str, ...], purpose: str) -> str:
@@ -41,6 +67,60 @@ def _first_available_column(df: pd.DataFrame, candidates: tuple[str, ...], purpo
         if col in df.columns and df[col].notna().any():
             return col
     raise KeyError(f"No {purpose} column found; tried {', '.join(candidates)}")
+
+
+def load_oracle_reduction_label_layout(
+    layout_path: str = None,
+) -> dict[str, tuple[float, float]]:
+    """Load manual label offsets, falling back to built-in defaults."""
+    offsets = {
+        city: tuple(value)
+        for city, value in ORACLE_REDUCTION_LABEL_OFFSETS.items()
+    }
+    path = layout_path or ORACLE_REDUCTION_LABEL_LAYOUT_PATH
+    if not path or not os.path.exists(path):
+        return offsets
+
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            payload = json.load(f)
+    except (OSError, json.JSONDecodeError) as exc:
+        print(f"Could not load Oracle map label layout {path}: {exc}")
+        return offsets
+
+    raw_offsets = payload.get("offsets_points", payload)
+    if not isinstance(raw_offsets, dict):
+        return offsets
+
+    for city, value in raw_offsets.items():
+        if city not in offsets or not isinstance(value, (list, tuple)) or len(value) != 2:
+            continue
+        try:
+            offsets[city] = (float(value[0]), float(value[1]))
+        except (TypeError, ValueError):
+            continue
+    return offsets
+
+
+def save_oracle_reduction_label_layout(offsets: dict, layout_path: str = None):
+    """Save manual label offsets for the map-only Oracle reduction figure."""
+    path = layout_path or ORACLE_REDUCTION_LABEL_LAYOUT_PATH
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    payload = {
+        "figure": ORACLE_REDUCTION_MAP_ONLY_FIGURE,
+        "units": "offset points from each city bubble center",
+        "offsets_points": {
+            city: [
+                float(offsets.get(city, ORACLE_REDUCTION_LABEL_OFFSETS[city])[0]),
+                float(offsets.get(city, ORACLE_REDUCTION_LABEL_OFFSETS[city])[1]),
+            ]
+            for city in ORACLE_REDUCTION_LABEL_CITIES
+        },
+    }
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(payload, f, indent=2, ensure_ascii=False)
+        f.write("\n")
+    return path
 
 
 def _weighted_reduction_column(df: pd.DataFrame) -> str:
@@ -5635,6 +5715,9 @@ def plot_regions_map_oracle_reduction_rank(
     label_leaders_from_bubble_edge: bool = False,
     draw_south_china_inset_bubbles: bool = False,
     color_scale_style: str = "colorbar",
+    label_layout_path: str = None,
+    label_offsets: dict = None,
+    return_label_artists: bool = False,
 ):
     """China bubble map of Oracle reduction with top-city rank inset.
 
@@ -5650,6 +5733,9 @@ def plot_regions_map_oracle_reduction_rank(
         label_leaders_from_bubble_edge: If True, label leader lines start at bubble edge.
         draw_south_china_inset_bubbles: If True, draw scaled bubbles on the South China Sea inset.
         color_scale_style: "colorbar" for a side colorbar, or "legend" for an in-map legend.
+        label_layout_path: Optional JSON file with manual city label offsets.
+        label_offsets: Optional in-memory city label offsets, overriding the layout file.
+        return_label_artists: If True, return figure and annotation artists without saving.
     """
     from visualization.regions import plot_regions_on_china_map
 
@@ -5734,10 +5820,23 @@ def plot_regions_map_oracle_reduction_rank(
     )
     inset_bubble_records = []
     inset_bubble_area_scale = None
-    highlighted_city_labels = _add_regions_oracle_city_highlights(
+    if label_offsets is None:
+        if (
+            label_layout_path is not None
+            or figure_name == ORACLE_REDUCTION_MAP_ONLY_FIGURE
+        ):
+            label_offsets = load_oracle_reduction_label_layout(label_layout_path)
+        else:
+            label_offsets = {
+                city: tuple(offset)
+                for city, offset in ORACLE_REDUCTION_LABEL_OFFSETS.items()
+            }
+    highlighted_city_labels, highlighted_city_artists = _add_regions_oracle_city_highlights(
         ax_map,
         bubble_df,
         line_from_bubble_edge=label_leaders_from_bubble_edge,
+        label_offsets=label_offsets,
+        return_artists=return_label_artists,
     )
     size_legend = _draw_bubble_size_legend(ax_map, bubble_df[reduction_col])
     if size_legend is not None:
@@ -5817,6 +5916,16 @@ def plot_regions_map_oracle_reduction_rank(
         cbar.ax.yaxis.set_label_position("left")
         _annotate_unstudied(fig, cbar, cbar_ax, n_bands)
 
+    if return_label_artists:
+        fig.canvas.draw()
+        return {
+            "fig": fig,
+            "ax_map": ax_map,
+            "label_artists": highlighted_city_artists,
+            "label_records": highlighted_city_labels,
+            "label_offsets": label_offsets,
+        }
+
     if save_path:
         if for_latex and not save_path.endswith(".pdf"):
             save_path = save_path.rsplit(".", 1)[0] + ".pdf"
@@ -5852,6 +5961,7 @@ def plot_regions_map_oracle_reduction_rank(
         plt.show()
 
     plt.close(fig)
+    return None
 
 
 def plot_regions_map_oracle_reduction_rank_map_only(
@@ -6037,35 +6147,24 @@ def _bubble_map_panel_report(
     }
 
 
-def _add_regions_oracle_city_highlights(ax, bubble_df, line_from_bubble_edge=False):
+def _add_regions_oracle_city_highlights(
+    ax,
+    bubble_df,
+    line_from_bubble_edge=False,
+    label_offsets=None,
+    return_artists=False,
+):
     """Highlight and label selected major cities on the Oracle bubble map."""
     if "region_name_en" not in bubble_df.columns:
-        return []
+        return [], {}
 
-    highlight_cities = (
-        "Beijing",
-        "Shanghai",
-        "Guangzhou",
-        "Hangzhou",
-        "Shenzhen",
-        "Wuhan",
-        "Chongqing",
-        "Chengdu",
-    )
-    label_offsets = {
-        "Beijing": (8, 8),
-        "Shanghai": (10, -14),
-        "Guangzhou": (-46, -16),
-        "Hangzhou": (12, 10),
-        "Shenzhen": (12, 8),
-        "Wuhan": (10, -14),
-        "Chongqing": (-54, -6),
-        "Chengdu": (-46, 14),
-    }
+    if label_offsets is None:
+        label_offsets = ORACLE_REDUCTION_LABEL_OFFSETS
     records = []
+    artists = {}
     name_key = bubble_df["region_name_en"].astype(str).str.casefold()
 
-    for city in highlight_cities:
+    for city in ORACLE_REDUCTION_LABEL_CITIES:
         rows = bubble_df[name_key == city.casefold()]
         if rows.empty:
             continue
@@ -6110,7 +6209,7 @@ def _add_regions_oracle_city_highlights(ax, bubble_df, line_from_bubble_edge=Fal
                     shrinkA=1.5,
                     shrinkB=leader_shrink_points,
                 )
-        ax.annotate(
+        annotation = ax.annotate(
             city,
             xy,
             xytext=label_offset,
@@ -6148,8 +6247,13 @@ def _add_regions_oracle_city_highlights(ax, bubble_df, line_from_bubble_edge=Fal
                 "leader_shrink_points": _json_safe_scalar(leader_shrink_points),
             }
         )
+        if return_artists:
+            artists[city] = {
+                "annotation": annotation,
+                "highlight_size": highlight_size,
+            }
 
-    return records
+    return records, artists
 
 
 def _add_regions_oracle_inset_bubbles(
