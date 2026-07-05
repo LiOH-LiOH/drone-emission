@@ -14,6 +14,7 @@ from utils.coordinates import gcj02_to_wgs84
 from visualization.calibration import (
     plot_alpha_calibration,
     plot_delivery_coverage,
+    plot_tanner_distance_histogram,
     plot_tanner_fit,
 )
 
@@ -325,6 +326,12 @@ if __name__ == "__main__":
     plot_tanner_fit(
         distances, a, b,
         save_path=os.path.join(FIGURES_DIR, "calibration", "tanner_impedance_fit.png"),
+    )
+    plot_tanner_distance_histogram(
+        distances,
+        save_path=os.path.join(
+            FIGURES_DIR, "calibration", "tanner_impedance_fit_panel_a.png"
+        ),
     )
 
     # Alpha calibration

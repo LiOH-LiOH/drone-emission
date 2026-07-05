@@ -230,6 +230,58 @@ def plot_tanner_fit(distances, a, b, save_path=None, for_latex=False, plot_title
     plt.show()
 
 
+def plot_tanner_distance_histogram(
+    distances,
+    save_path=None,
+    figsize=(6, 5),
+    for_latex=False,
+    plot_title=False,
+):
+    """Plot the observed Eleme delivery distance histogram.
+
+    Args:
+        distances: Array of delivery distances in km.
+        save_path: Path to save the figure. Shows plot if None.
+        figsize: Figure size tuple.
+        for_latex: If True, save as PDF.
+        plot_title: If True, show title.
+    """
+    bin_width = 0.1
+    max_distance = 10.0
+    bins = np.arange(0, max_distance + bin_width, bin_width)
+    counts, bin_edges = np.histogram(distances, bins=bins)
+    bin_centers = (bin_edges[:-1] + bin_edges[1:]) / 2
+
+    fig, ax = plt.subplots(figsize=figsize)
+    ax.bar(
+        bin_centers,
+        counts,
+        width=bin_width * 0.9,
+        color="#4C72B0",
+        edgecolor="white",
+        alpha=0.85,
+    )
+
+    ax.set_xlabel("Delivery Distance (km)")
+    ax.set_ylabel("Order Count")
+    if plot_title:
+        ax.set_title("Observed Distance Distribution")
+
+    plt.tight_layout()
+
+    if save_path:
+        os.makedirs(os.path.dirname(save_path), exist_ok=True)
+        if for_latex and not save_path.endswith(".pdf"):
+            save_path = save_path.rsplit(".", 1)[0] + ".pdf"
+        if plot_title:
+            save_path = _add_title_suffix(save_path)
+        fig.savefig(save_path, dpi=300, bbox_inches="tight")
+        print(f"Tanner distance histogram saved to {save_path}")
+    else:
+        plt.show()
+    plt.close(fig)
+
+
 def plot_milkrun_distance_analysis(df, save_path=None, for_latex=False, plot_title=False):
     """Create a 1×3 figure: histogram, CDF, distance-vs-time scatter."""
     dist_km = df["dist_km"]
