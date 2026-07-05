@@ -330,7 +330,7 @@ if __name__ == "__main__":
     plot_tanner_distance_histogram(
         distances,
         save_path=os.path.join(
-            FIGURES_DIR, "calibration", "tanner_impedance_fit_panel_a.png"
+            FIGURES_DIR, "paper", "tanner_impedance_fit_panel_a.pdf"
         ),
     )
 
