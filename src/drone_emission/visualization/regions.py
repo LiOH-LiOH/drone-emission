@@ -240,6 +240,7 @@ def plot_regions_on_china_map(
     cmap: "LinearSegmentedColormap" = None,
     draw_colorbar: bool = True,
     draw_legend: bool = True,
+    south_china_inset_bounds: tuple = (0.86, 0.0, 0.14, 0.28),
 ):
     """Plot a full city-boundary choropleth map of China.
 
@@ -265,6 +266,7 @@ def plot_regions_on_china_map(
             If provided, skips per-axes auto-normalization.
         draw_colorbar: If False, skip drawing the per-axes colorbar (caller draws a shared one).
         draw_legend: If False, skip the "Unstudied regions" legend patch.
+        south_china_inset_bounds: Axes-fraction bounds for the South China Sea inset.
     """
     # --- Load study-city data ---------------------------------------------------
     if df is not None:
@@ -408,7 +410,7 @@ def plot_regions_on_china_map(
         ax.set_title("Study Regions in China", fontsize=14, fontweight="bold")
 
     # 4. South China Sea inset (standard Chinese map convention: ~107–121°E, 3–24°N)
-    inset_ax = ax.inset_axes([0.86, 0.0, 0.14, 0.28])  # [x, y, w, h] in axes fraction
+    inset_ax = ax.inset_axes(south_china_inset_bounds)
     _draw_map(inset_ax, all_areas, study_adcode_to_val, cmap, norm)
     inset_ax.set_xlim(107, 121)
     inset_ax.set_ylim(3, 24)
