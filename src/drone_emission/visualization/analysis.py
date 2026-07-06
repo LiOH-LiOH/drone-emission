@@ -516,7 +516,7 @@ def _draw_bubble_size_legend(
     return ax.legend(
         handles,
         labels,
-        title="E-bike - Oracle\n(t CO2eq / yr)",
+        title="E-bike - Oracle (t CO2eq / yr)",
         loc=loc,
         bbox_to_anchor=bbox_to_anchor,
         frameon=True,
@@ -5938,7 +5938,10 @@ def plot_regions_map_oracle_reduction_rank(
     ax_map.set_xticks([])
     ax_map.set_yticks([])
     for spine in ax_map.spines.values():
-        spine.set_visible(False)
+        spine.set_visible(is_map_only_figure)
+        if is_map_only_figure:
+            spine.set_edgecolor("black")
+            spine.set_linewidth(0.8)
 
     inset_ax = None
     if show_rank_inset:
