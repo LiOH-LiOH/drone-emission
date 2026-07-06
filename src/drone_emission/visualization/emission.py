@@ -1977,7 +1977,7 @@ def plot_contribution_decomposition_city_b(
             save_path,
             figsize,
             axes=(ax_a, ax_b),
-            rows,
+            rows=rows,
         )
         plt.close(fig)
         print(f"Contribution decomposition city-b saved to {save_path}")
