@@ -5894,8 +5894,8 @@ def plot_regions_map_oracle_reduction_rank(
     size_legend_kwargs = (
         {
             **unified_legend_style,
-            "loc": "upper center",
-            "bbox_to_anchor": (0.5, -0.045),
+            "loc": "upper left",
+            "bbox_to_anchor": (0.02, -0.045),
             "labelspacing": 0.3,
             "handletextpad": 0.8,
             "ncol": 3,
@@ -5915,8 +5915,8 @@ def plot_regions_map_oracle_reduction_rank(
         color_legend_kwargs = (
             {
                 **unified_legend_style,
-                "loc": "upper center",
-                "bbox_to_anchor": (0.5, -0.165),
+                "loc": "upper right",
+                "bbox_to_anchor": (0.98, -0.045),
                 "include_unstudied": False,
                 "labelspacing": 0.3,
                 "ncol": len(reduction_edges) - 1,
