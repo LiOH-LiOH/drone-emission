@@ -53,6 +53,15 @@ CONTRIBUTION_COMPONENT_SPECS = (
 CONTRIBUTION_COMPONENT_KEYS = tuple(
     spec["key"] for spec in CONTRIBUTION_COMPONENT_SPECS
 )
+CONTRIBUTION_CITY_B_REGION_KEYS = (
+    "beijing",
+    "shanghai",
+    "hangzhou",
+    "guangzhou",
+    "shenzhen",
+    "chengdu",
+    "chongqing",
+)
 BREAK_EVEN_REPRESENTATIVE_AIR_DISTANCE_KM = 2.0
 BREAK_EVEN_CURVE_AIR_DISTANCES_KM = (0.5, 1.0, 2.0, 3.0, 5.0)
 BREAK_EVEN_DETOUR_LIMITS = (1.0, 2.4)
@@ -494,6 +503,50 @@ def _macro_region_component_rows(
             else 0.0
         )
         rows.append(row)
+    return rows
+
+
+def _selected_city_component_rows(
+    city_reports: list[dict],
+    selected_region_keys: tuple[str, ...] = CONTRIBUTION_CITY_B_REGION_KEYS,
+) -> list[dict]:
+    """Return selected city contribution rows ranked by absolute net reduction."""
+    selected = set(selected_region_keys)
+    rows = []
+    for city in city_reports:
+        region_key = str(city.get("region_key", ""))
+        if region_key not in selected:
+            continue
+
+        label = str(city.get("region_name_en", region_key))
+        row = _contribution_row_template(label)
+        city_baseline_kg = float(city.get("baseline_ebike_lifecycle_kg", 0.0))
+        row.update(
+            {
+                "region_key": region_key,
+                "province": str(city.get("province", "")),
+                "baseline_ebike_lifecycle_kg": city_baseline_kg,
+                "sampled_drone_rows": int(city.get("drone_assigned_sampled_rows", 0)),
+            }
+        )
+        component_kg = city.get("component_kg", {}) or {}
+        for key in CONTRIBUTION_COMPONENT_KEYS:
+            kg_value = float(component_kg.get(key, 0.0))
+            row[f"{key}_kg"] = kg_value
+            row[f"{key}_pp"] = (
+                kg_value / city_baseline_kg * 100.0
+                if city_baseline_kg > 0
+                else 0.0
+            )
+        row["total_net_kg"] = float(city.get("net_saving_kg", 0.0))
+        row["total_net_pp"] = (
+            row["total_net_kg"] / city_baseline_kg * 100.0
+            if city_baseline_kg > 0
+            else 0.0
+        )
+        rows.append(row)
+
+    rows.sort(key=lambda row: (row["total_net_kg"], row["label"]), reverse=True)
     return rows
 
 
@@ -1111,6 +1164,82 @@ def _plot_macro_region_absolute_reduction(ax, rows: list[dict]):
     ax.tick_params(axis="both", labelsize=9)
 
 
+def _plot_selected_city_contribution_bars(ax, rows: list[dict]):
+    """Draw one-row-per-city horizontal component bars with net points."""
+    if not rows:
+        ax.text(
+            0.5,
+            0.5,
+            "no sampled contributions",
+            transform=ax.transAxes,
+            ha="center",
+            va="center",
+            fontsize=10,
+            color="#777777",
+        )
+        ax.tick_params(left=False, bottom=False, labelleft=False, labelbottom=False)
+        return
+
+    y = np.arange(len(rows), dtype=float)
+    positive_acc = np.zeros(len(rows), dtype=float)
+    negative_acc = np.zeros(len(rows), dtype=float)
+    extrema = [0.0]
+
+    for spec in CONTRIBUTION_COMPONENT_SPECS:
+        values = np.array([float(row[f"{spec['key']}_pp"]) for row in rows], dtype=float)
+        benefits = np.clip(values, 0.0, None)
+        penalties = np.clip(values, None, 0.0)
+        if np.any(benefits):
+            ax.barh(
+                y,
+                benefits,
+                left=positive_acc,
+                height=0.62,
+                color=spec["color"],
+                edgecolor="white",
+                linewidth=0.8,
+            )
+        if np.any(penalties):
+            ax.barh(
+                y,
+                np.abs(penalties),
+                left=negative_acc + penalties,
+                height=0.62,
+                color=spec["color"],
+                edgecolor="white",
+                linewidth=0.8,
+            )
+        positive_acc += benefits
+        negative_acc += penalties
+        extrema.extend(positive_acc.tolist())
+        extrema.extend(negative_acc.tolist())
+
+    total_pp = np.array([float(row["total_net_pp"]) for row in rows], dtype=float)
+    extrema.extend(total_pp.tolist())
+    ax.scatter(
+        total_pp,
+        y,
+        s=26,
+        color="#111111",
+        edgecolor="white",
+        linewidth=0.5,
+        zorder=5,
+        label="Net reduction",
+    )
+
+    ax.axvline(0, color="#555555", linewidth=0.8)
+    ax.set_yticks(y, [row["label"] for row in rows])
+    ax.invert_yaxis()
+    ax.set_xlabel("Contribution to city all-e-bike baseline (pp)", fontsize=12)
+    ax.grid(axis="x", alpha=0.25)
+    ax.tick_params(axis="both", labelsize=10)
+
+    xmin = min(extrema)
+    xmax = max(extrema)
+    span = max(xmax - xmin, 1.0)
+    ax.set_xlim(xmin - span * 0.10, xmax + span * 0.10)
+
+
 def _plot_contribution_decomposition_panels(
     fig,
     ax_a,
@@ -1682,6 +1811,120 @@ def plot_contribution_decomposition(
         _write_contribution_decomposition_report(prepared, save_path)
         plt.close(fig)
         print(f"Contribution decomposition saved to {save_path}")
+    else:
+        plt.show()
+        plt.close(fig)
+
+
+def _write_contribution_decomposition_city_b_report(
+    prepared: Dict,
+    save_path: str,
+    figsize: tuple,
+    ax,
+    rows: list[dict],
+):
+    """Write compact JSON report for the selected-city contribution figure."""
+    report_path = save_path.rsplit(".", 1)[0] + "_report.json"
+    payload = {
+        "figure": "contribution_decomposition_city_b",
+        "figure_path": save_path,
+        "figure_size_inches": {"width": figsize[0], "height": figsize[1]},
+        "axis": _report_axis(ax),
+        "selected_region_keys": list(CONTRIBUTION_CITY_B_REGION_KEYS),
+        "sort_order": "descending total_net_kg after filtering",
+        "bar_design": (
+            "Horizontal one-row-per-city bars. Positive components stack from "
+            "zero to the right, negative components stack from zero to the "
+            "left, and a black point marks total net reduction on the same "
+            "percentage-point axis."
+        ),
+        "component_specs": _json_safe(CONTRIBUTION_COMPONENT_SPECS),
+        "net_marker": {"label": "Net reduction", "color": "#111111"},
+        "cities": _json_safe(rows),
+        "sampling": _json_safe(prepared.get("sampling", {})),
+        "runtime": _json_safe(prepared.get("runtime", {})),
+    }
+    with open(report_path, "w", encoding="utf-8") as f:
+        json.dump(payload, f, indent=2, ensure_ascii=False, allow_nan=False)
+    print(f"Contribution decomposition city-b report saved to {report_path}")
+
+
+def plot_contribution_decomposition_city_b(
+    prepared: Dict,
+    save_path: str = None,
+    figsize: tuple = (7.2, 8.4),
+    for_latex: bool = False,
+    plot_title: bool = False,
+):
+    """Selected-city contribution decomposition extracted from panel b.
+
+    Args:
+        prepared: Output of ``prepare_contribution_decomposition_data``.
+        save_path: Path to save figure (with extension). Shows plot if None.
+        figsize: Figure size tuple.
+        for_latex: If True, save as PDF.
+        plot_title: If True, show title.
+    """
+    if not prepared:
+        print("Contribution decomposition city-b skipped — prepared data missing")
+        return
+
+    rows = _selected_city_component_rows(prepared.get("cities", []))
+    fig, ax = plt.subplots(figsize=figsize)
+    _plot_selected_city_contribution_bars(ax, rows)
+
+    legend_handles = [
+        plt.Rectangle(
+            (0, 0),
+            1,
+            1,
+            facecolor=spec["color"],
+            edgecolor="white",
+            label=spec["label"],
+        )
+        for spec in CONTRIBUTION_COMPONENT_SPECS
+    ]
+    legend_handles.append(
+        plt.Line2D(
+            [0],
+            [0],
+            marker="o",
+            color="none",
+            markerfacecolor="#111111",
+            markeredgecolor="#111111",
+            markersize=5,
+            label="Net reduction",
+        )
+    )
+    ax.legend(
+        handles=legend_handles,
+        loc="lower center",
+        bbox_to_anchor=(0.5, 1.02),
+        ncol=2,
+        frameon=False,
+        fontsize=9,
+        handlelength=1.3,
+        columnspacing=1.0,
+    )
+    if plot_title:
+        ax.set_title("Contribution decomposition by selected city", fontsize=13)
+
+    if save_path:
+        if for_latex and not save_path.endswith(".pdf"):
+            save_path = save_path.rsplit(".", 1)[0] + ".pdf"
+        if plot_title:
+            save_path = _add_title_suffix(save_path)
+        os.makedirs(os.path.dirname(save_path), exist_ok=True)
+        fig.savefig(save_path, dpi=300, bbox_inches="tight")
+        _write_contribution_decomposition_city_b_report(
+            prepared,
+            save_path,
+            figsize,
+            ax,
+            rows,
+        )
+        plt.close(fig)
+        print(f"Contribution decomposition city-b saved to {save_path}")
     else:
         plt.show()
         plt.close(fig)

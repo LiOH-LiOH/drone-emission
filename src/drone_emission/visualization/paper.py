@@ -37,6 +37,7 @@ Available figures:
     break_even_contribution_decomposition_marching_cubes,
     break_even_contribution_decomposition_marching_cubes_de,
     contribution_decomposition,
+    contribution_decomposition_city_b,
     break_even_phase_diagram,
     regions_map,
     regions_map_oracle_reduction_rank,
@@ -3307,6 +3308,47 @@ def _render_contribution_decomposition(
     )
 
 
+def _render_contribution_decomposition_city_b(
+    data_dir,
+    out,
+    for_latex,
+    plot_title,
+    city_df,
+    exp_config,
+):
+    """Render the selected-city horizontal contribution-decomposition figure."""
+    from visualization.emission import (
+        plot_contribution_decomposition_city_b,
+        prepare_contribution_decomposition_data,
+    )
+
+    named_path = os.path.join(data_dir, "all_sensitivity_named.csv")
+    named_df = None
+    if os.path.exists(named_path):
+        named_df = pd.read_csv(named_path)
+    else:
+        print(
+            "contribution_decomposition_city_b: missing "
+            f"{named_path}; thresholds will fall back to sampled sweeps"
+        )
+
+    prepared = prepare_contribution_decomposition_data(
+        city_df=city_df,
+        data_dir=data_dir,
+        named_df=named_df,
+        exp_config=exp_config,
+    )
+    if prepared is None:
+        return
+
+    plot_contribution_decomposition_city_b(
+        prepared,
+        save_path=os.path.join(out, "contribution_decomposition_city_b.png"),
+        for_latex=for_latex,
+        plot_title=plot_title,
+    )
+
+
 def _render_break_even_contribution_decomposition_marching_cubes_de(
     data_dir,
     out,
@@ -4083,6 +4125,7 @@ def render_all(data_dir: str, figures_dir: str, for_latex: bool = False, plot_ti
         "break_even_contribution_decomposition_marching_cubes",
         "break_even_contribution_decomposition_marching_cubes_de",
         "contribution_decomposition",
+        "contribution_decomposition_city_b",
         "scatter_detour_ratio_vs_reduction_by_gef",
         "regions_map_and_gef_scatter",
         *future_gef_figures,
@@ -4192,6 +4235,7 @@ def render_all(data_dir: str, figures_dir: str, for_latex: bool = False, plot_ti
                 or _want("break_even_contribution_decomposition_marching_cubes")
                 or _want("break_even_contribution_decomposition_marching_cubes_de")
                 or (only is not None and _want("contribution_decomposition"))
+                or (only is not None and _want("contribution_decomposition_city_b"))
                 or _want("top6_reduction_detour_grid")
                 or _want("top6_reduction_detour_grid_low_gef")
                 or _want("top6_reduction_detour_grid_random")
@@ -4238,6 +4282,16 @@ def render_all(data_dir: str, figures_dir: str, for_latex: bool = False, plot_ti
 
                 if only is not None and _want("contribution_decomposition"):
                     _render_contribution_decomposition(
+                        data_dir=data_dir,
+                        out=out,
+                        for_latex=for_latex,
+                        plot_title=plot_title,
+                        city_df=city_df,
+                        exp_config=exp_config,
+                    )
+
+                if only is not None and _want("contribution_decomposition_city_b"):
+                    _render_contribution_decomposition_city_b(
                         data_dir=data_dir,
                         out=out,
                         for_latex=for_latex,
