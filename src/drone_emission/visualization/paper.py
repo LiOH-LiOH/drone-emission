@@ -47,7 +47,7 @@ Available figures:
     regions_map_and_gef_scatter,
     regions_map_city_province_ranks,
     regions_map_city_rank_inset,
-    figure1_framework,
+    figure1_framework, figure2_framework,
     regions_map_kappa_panels,
     drone_tech_sensitivity,
     oat_tornado_story, oat_tornado_full
@@ -189,6 +189,16 @@ FIGURE1_FRAMEWORK_SOURCE_MODULES = {
     "shanghai_heatmap": ("sales.py", "_utils.py"),
     "distance_comparison": ("roadnet.py",),
     "shanghai_building_height_merchant": ("buildings.py", "_utils.py"),
+}
+FIGURE2_FRAMEWORK_DEPENDENCIES = (
+    "tanner_impedance_fit_panel_a",
+    "city_oracle_reduction_rank_top10",
+    "regions_map_oracle_reduction_rank_map_only",
+)
+FIGURE2_FRAMEWORK_SOURCE_MODULES = {
+    "tanner_impedance_fit_panel_a": ("calibration.py", "_utils.py"),
+    "city_oracle_reduction_rank_top10": ("analysis.py", "_utils.py"),
+    "regions_map_oracle_reduction_rank_map_only": ("analysis.py", "regions.py", "_utils.py"),
 }
 
 
@@ -1089,6 +1099,109 @@ def _render_figure1_framework(out, plot_title):
     with open(save_path, "wb") as f:
         writer.write(f)
     print(f"Figure 1 framework saved to {save_path}")
+
+
+def _draw_figure2_overlay(overlay_path, page_size, canvas_size):
+    """Draw vector panel labels for Figure 2."""
+    import matplotlib.pyplot as plt
+
+    page_w, page_h = page_size
+    canvas_w, canvas_h = canvas_size
+    fig = plt.figure(figsize=(page_w / 72.0, page_h / 72.0), facecolor="none")
+
+    for label, x, y in (
+        ("a", 43, 0),
+        ("b", 43, 90),
+        ("c", 163, 0),
+    ):
+        fig.text(
+            x / canvas_w,
+            1.0 - y / canvas_h,
+            label,
+            ha="left",
+            va="top",
+            fontsize=13,
+            fontweight="bold",
+        )
+
+    fig.savefig(overlay_path, transparent=True)
+    plt.close(fig)
+
+
+def _render_figure2_framework(out, plot_title):
+    """Compose Figure 2 from vector PDF panels using the draw.io frame."""
+    import tempfile
+
+    from pypdf import PdfReader, PdfWriter
+
+    from visualization._utils import _add_title_suffix
+
+    canvas_w, canvas_h = 525.0, 281.0
+    page_w = 7.0 * 72.0
+    page_h = page_w * canvas_h / canvas_w
+
+    def rect_from_drawio_points(x, y, w, h):
+        return (
+            x / canvas_w * page_w,
+            page_h - (y + h) / canvas_h * page_h,
+            w / canvas_w * page_w,
+            h / canvas_h * page_h,
+        )
+
+    panel_specs = (
+        ("tanner_impedance_fit_panel_a", rect_from_drawio_points(43, 20, 100, 70)),
+        ("city_oracle_reduction_rank_top10", rect_from_drawio_points(43, 110, 100, 170)),
+        (
+            "regions_map_oracle_reduction_rank_map_only",
+            rect_from_drawio_points(163, 20, 360, 260),
+        ),
+    )
+    source_paths = {
+        name: _paper_pdf_path(out, name, plot_title=plot_title)
+        for name in FIGURE2_FRAMEWORK_DEPENDENCIES
+    }
+    missing = [name for name, path in source_paths.items() if not os.path.exists(path)]
+    if missing:
+        print(
+            "figure2_framework skipped - missing vector source PDFs: "
+            + ", ".join(missing)
+        )
+        return
+
+    writer = PdfWriter()
+    page = writer.add_blank_page(width=page_w, height=page_h)
+    for name, target_rect in panel_specs:
+        source_page = PdfReader(source_paths[name]).pages[0]
+        transform = _fit_pdf_rect(source_page, target_rect)
+        page.merge_transformed_page(
+            source_page,
+            transform,
+            over=True,
+        )
+
+    with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
+        overlay_path = tmp.name
+    try:
+        _draw_figure2_overlay(
+            overlay_path,
+            page_size=(page_w, page_h),
+            canvas_size=(canvas_w, canvas_h),
+        )
+        overlay_page = PdfReader(overlay_path).pages[0]
+        page.merge_page(overlay_page, over=True)
+    finally:
+        try:
+            os.remove(overlay_path)
+        except OSError:
+            pass
+
+    save_path = os.path.join(out, "figure2_framework.pdf")
+    if plot_title:
+        save_path = _add_title_suffix(save_path)
+    os.makedirs(os.path.dirname(save_path), exist_ok=True)
+    with open(save_path, "wb") as f:
+        writer.write(f)
+    print(f"Figure 2 framework saved to {save_path}")
 
 
 def _plot_power_generation_mix_pie(
@@ -3646,6 +3759,7 @@ def render_all(data_dir: str, figures_dir: str, for_latex: bool = False, plot_ti
         return only is None or name in only
 
     figure1_framework_requested = _want("figure1_framework")
+    figure2_framework_requested = _want("figure2_framework")
     graph_cache = {}
     router_cache = {}
 
@@ -3670,8 +3784,25 @@ def render_all(data_dir: str, figures_dir: str, for_latex: bool = False, plot_ti
             for path in module_paths
         )
 
+    def _figure2_needs_vector_source(name):
+        if not figure2_framework_requested:
+            return False
+        source_pdf = _paper_pdf_path(out, name, plot_title=plot_title)
+        if not os.path.exists(source_pdf):
+            return True
+        cache_mtime = os.path.getmtime(source_pdf)
+        viz_dir = os.path.dirname(os.path.abspath(__file__))
+        module_names = FIGURE2_FRAMEWORK_SOURCE_MODULES.get(name, ())
+        module_paths = [os.path.join(viz_dir, module) for module in module_names]
+        return any(
+            os.path.exists(path) and os.path.getmtime(path) > cache_mtime
+            for path in module_paths
+        )
+
     # --- Calibration figures ---
-    if _want("tanner_impedance_fit_panel_a"):
+    if _want("tanner_impedance_fit_panel_a") or _figure2_needs_vector_source(
+        "tanner_impedance_fit_panel_a"
+    ):
         _render_tanner_impedance_fit_panel_a(
             data_dir=data_dir,
             out=out,
@@ -3973,6 +4104,7 @@ def render_all(data_dir: str, figures_dir: str, for_latex: bool = False, plot_ti
         "regions_map_city_province_ranks",
         "regions_map_city_rank_inset",
         "figure1_framework",
+        "figure2_framework",
         "regions_map_kappa_panels",
         "regions_map_pathway_scenario_maps",
         "regions_map_pathway_scenarios",
@@ -4026,7 +4158,9 @@ def render_all(data_dir: str, figures_dir: str, for_latex: bool = False, plot_ti
                     plot_title=plot_title,
                 )
 
-            if _want("city_oracle_reduction_rank_top10"):
+            if _want("city_oracle_reduction_rank_top10") or _figure2_needs_vector_source(
+                "city_oracle_reduction_rank_top10"
+            ):
                 plot_city_oracle_reduction_rank_top10(
                     df,
                     save_path=os.path.join(out, "city_oracle_reduction_rank_top10"),
@@ -4224,7 +4358,11 @@ def render_all(data_dir: str, figures_dir: str, for_latex: bool = False, plot_ti
                     plot_title=plot_title,
                 )
 
-            if _want("regions_map_oracle_reduction_rank_map_only"):
+            if _want(
+                "regions_map_oracle_reduction_rank_map_only"
+            ) or _figure2_needs_vector_source(
+                "regions_map_oracle_reduction_rank_map_only"
+            ):
                 plot_regions_map_oracle_reduction_rank_map_only(
                     df_stats=df,
                     stats_csv_path=stats_path,
@@ -4442,6 +4580,12 @@ def render_all(data_dir: str, figures_dir: str, for_latex: bool = False, plot_ti
 
     if figure1_framework_requested:
         _render_figure1_framework(
+            out=out,
+            plot_title=plot_title,
+        )
+
+    if figure2_framework_requested:
+        _render_figure2_framework(
             out=out,
             plot_title=plot_title,
         )
