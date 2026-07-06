@@ -482,6 +482,8 @@ def _draw_bubble_size_legend(
     borderpad=0.7,
     labelspacing=1.0,
     handletextpad=1.2,
+    ncol=1,
+    columnspacing=1.0,
 ):
     """Draw an in-map legend for absolute reduction bubble sizes."""
     values = pd.to_numeric(pd.Series(values), errors="coerce")
@@ -524,6 +526,8 @@ def _draw_bubble_size_legend(
         borderpad=borderpad,
         labelspacing=labelspacing,
         handletextpad=handletextpad,
+        ncol=ncol,
+        columnspacing=columnspacing,
     )
 
 
@@ -541,6 +545,8 @@ def _draw_bubble_color_legend(
     labelspacing=0.35,
     handletextpad=0.55,
     include_unstudied=True,
+    ncol=1,
+    columnspacing=1.0,
 ):
     """Draw an in-map legend for bubble color bins."""
     handles = []
@@ -576,6 +582,8 @@ def _draw_bubble_color_legend(
         handlelength=1.1,
         handleheight=0.8,
         handletextpad=handletextpad,
+        ncol=ncol,
+        columnspacing=columnspacing,
     )
 
 
@@ -5832,7 +5840,7 @@ def plot_regions_map_oracle_reduction_rank(
         draw_colorbar=False,
         draw_legend=False,
         south_china_inset_bounds=(
-            (0.02, 0.02, 0.14, 0.28)
+            (0.84, 0.02, 0.14, 0.28)
             if is_map_only_figure
             else (0.86, 0.0, 0.14, 0.28)
         ),
@@ -5884,7 +5892,15 @@ def plot_regions_map_oracle_reduction_rank(
         "handletextpad": 0.65,
     }
     size_legend_kwargs = (
-        {**unified_legend_style, "bbox_to_anchor": (0.985, 0.02)}
+        {
+            **unified_legend_style,
+            "loc": "upper center",
+            "bbox_to_anchor": (0.5, -0.045),
+            "labelspacing": 0.3,
+            "handletextpad": 0.8,
+            "ncol": 3,
+            "columnspacing": 1.4,
+        }
         if is_map_only_figure
         else {}
     )
@@ -5899,8 +5915,12 @@ def plot_regions_map_oracle_reduction_rank(
         color_legend_kwargs = (
             {
                 **unified_legend_style,
-                "bbox_to_anchor": (0.985, 0.31),
+                "loc": "upper center",
+                "bbox_to_anchor": (0.5, -0.165),
                 "include_unstudied": False,
+                "labelspacing": 0.3,
+                "ncol": len(reduction_edges) - 1,
+                "columnspacing": 1.1,
             }
             if is_map_only_figure
             else {}
@@ -5950,7 +5970,7 @@ def plot_regions_map_oracle_reduction_rank(
         )
 
     fig.tight_layout()
-    fig.subplots_adjust(left=0.11)
+    fig.subplots_adjust(left=0.11, bottom=0.24 if is_map_only_figure else None)
 
     if draw_south_china_inset_bubbles and south_china_inset_ax is not None:
         inset_bubble_records, inset_bubble_area_scale = _add_regions_oracle_inset_bubbles(
