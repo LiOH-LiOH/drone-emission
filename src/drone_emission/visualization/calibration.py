@@ -302,6 +302,127 @@ def plot_tanner_distance_histogram(
     plt.close(fig)
 
 
+def plot_tanner_impedance_fit(
+    distances,
+    save_path=None,
+    figsize=(3.2, 2.2),
+    for_latex=False,
+    plot_title=False,
+):
+    """Plot observed Eleme delivery counts with fitted Tanner impedance curve.
+
+    Args:
+        distances: Array of delivery distances in km.
+        save_path: Path to save the figure. Shows plot if None.
+        figsize: Figure size tuple.
+        for_latex: If True, save as PDF.
+        plot_title: If True, show title.
+    """
+    beta = 1.113
+    gamma = 1.412
+    r_squared = 0.985
+    bin_width = 0.1
+    max_distance = 5.0
+    plot_distances = np.asarray(distances)
+    plot_distances = plot_distances[
+        (plot_distances >= 0) & (plot_distances <= max_distance)
+    ]
+
+    bins = np.arange(0, max_distance + bin_width, bin_width)
+    counts, bin_edges = np.histogram(plot_distances, bins=bins)
+    bin_centers = (bin_edges[:-1] + bin_edges[1:]) / 2
+
+    def tanner_fixed(d, c_scale):
+        return c_scale * (d ** beta) * np.exp(-gamma * d)
+
+    mask = counts > 0
+    c_fit = 1.0
+    if np.count_nonzero(mask) > 1:
+        x_fit = bin_centers[mask]
+        y_fit = counts[mask].astype(float)
+        popt, _ = curve_fit(tanner_fixed, x_fit, y_fit, p0=[y_fit.max()])
+        c_fit = popt[0]
+
+    fig, ax = plt.subplots(figsize=figsize)
+    ax.bar(
+        bin_centers,
+        counts,
+        width=bin_width * 0.9,
+        color="#4C72B0",
+        edgecolor="white",
+        linewidth=0.25,
+        alpha=0.86,
+        label="Observed",
+    )
+
+    d_smooth = np.linspace(0.01, max_distance, 500)
+    y_smooth = tanner_fixed(d_smooth, c_fit)
+    ax.plot(
+        d_smooth,
+        y_smooth,
+        color="#C44E52",
+        lw=1.35,
+        label="Tanner fit",
+    )
+
+    d_peak = beta / gamma
+    ax.axvline(
+        d_peak,
+        color="#D98C00",
+        ls="--",
+        lw=0.8,
+        label=f"Peak = {d_peak:.2f} km",
+    )
+    ax.text(
+        0.98,
+        0.95,
+        (
+            r"$f(d)=C d^{1.113}e^{-1.412d}$" + "\n"
+            + r"$R^2=0.985$"
+        ),
+        transform=ax.transAxes,
+        fontsize=6.0,
+        ha="right",
+        va="top",
+        linespacing=1.2,
+    )
+
+    ax.set_xlim(0, max_distance)
+    ax.set_ylim(bottom=0)
+    ax.set_xlabel("Delivery distance (km)", fontsize=7.2, labelpad=2)
+    ax.set_ylabel("Order count", fontsize=7.2, labelpad=2)
+    ax.set_xticks(np.arange(0, max_distance + 1, 1))
+    ax.tick_params(axis="both", labelsize=6.4, length=2.5, pad=1)
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+    for spine in ax.spines.values():
+        spine.set_linewidth(0.6)
+    ax.legend(
+        loc="upper right",
+        bbox_to_anchor=(0.98, 0.72),
+        fontsize=5.8,
+        frameon=False,
+        handlelength=1.6,
+        borderaxespad=0,
+    )
+    if plot_title:
+        ax.set_title("Tanner Impedance Fit", fontsize=8)
+
+    plt.tight_layout()
+
+    if save_path:
+        os.makedirs(os.path.dirname(save_path), exist_ok=True)
+        if for_latex and not save_path.endswith(".pdf"):
+            save_path = save_path.rsplit(".", 1)[0] + ".pdf"
+        if plot_title:
+            save_path = _add_title_suffix(save_path)
+        fig.savefig(save_path, dpi=300, bbox_inches="tight")
+        print(f"Tanner impedance fit saved to {save_path}")
+    else:
+        plt.show()
+    plt.close(fig)
+
+
 def plot_milkrun_distance_analysis(df, save_path=None, for_latex=False, plot_title=False):
     """Create a 1×3 figure: histogram, CDF, distance-vs-time scatter."""
     dist_km = df["dist_km"]

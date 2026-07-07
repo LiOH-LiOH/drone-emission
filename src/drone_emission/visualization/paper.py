@@ -8,7 +8,7 @@ Run:
     ../../.venv/bin/python -m visualization.paper --only shanghai_heatmap,distance_comparison
 
 Available figures:
-    tanner_impedance_fit_panel_a,
+    tanner_impedance_fit, tanner_impedance_fit_panel_a,
     detour_lifecycle_distance, lifecycle_distance_detour_boxplot,
     lifecycle_distance_route_factor, production_phase_per_km, end_of_life_phase_per_km,
     production_detour_eol_panels, emission_model_flowchart,
@@ -3754,6 +3754,33 @@ def _render_tanner_impedance_fit_panel_a(data_dir, out, for_latex, plot_title):
     )
 
 
+def _render_tanner_impedance_fit(data_dir, out, for_latex, plot_title):
+    """Render the Eleme distance histogram with fitted Tanner impedance."""
+    order_dir = os.path.join(
+        data_dir,
+        "raw",
+        "即时配送数据",
+        "疫情期间北京饿了么",
+        "eleme_round1_train_20200313",
+        "order",
+    )
+    if not os.path.isdir(order_dir):
+        print(f"tanner_impedance_fit skipped — missing {order_dir}")
+        return
+
+    from calibration import cali_elm
+    from visualization.calibration import plot_tanner_impedance_fit
+
+    cali_elm.elm_data_dir = order_dir + os.sep
+    distances = cali_elm.load_all_eleme_distances(min_orders_per_shop=50)
+    plot_tanner_impedance_fit(
+        distances,
+        save_path=os.path.join(out, "tanner_impedance_fit.png"),
+        for_latex=for_latex,
+        plot_title=plot_title,
+    )
+
+
 def render_all(data_dir: str, figures_dir: str, for_latex: bool = False, plot_title: bool = False, only: set = None, exp_config: dict = None):
     from visualization.analysis import (
         _weighted_reduction_column,
@@ -3842,6 +3869,14 @@ def render_all(data_dir: str, figures_dir: str, for_latex: bool = False, plot_ti
         )
 
     # --- Calibration figures ---
+    if _want("tanner_impedance_fit"):
+        _render_tanner_impedance_fit(
+            data_dir=data_dir,
+            out=out,
+            for_latex=for_latex,
+            plot_title=plot_title,
+        )
+
     if _want("tanner_impedance_fit_panel_a") or _figure2_needs_vector_source(
         "tanner_impedance_fit_panel_a"
     ):
