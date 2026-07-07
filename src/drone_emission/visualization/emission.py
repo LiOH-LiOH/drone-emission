@@ -1178,7 +1178,7 @@ def _plot_selected_city_contribution_bars(ax, rows: list[dict]):
             color="#777777",
         )
         ax.tick_params(left=False, bottom=False, labelleft=False, labelbottom=False)
-        return
+        return np.array([], dtype=float)
 
     y = np.arange(len(rows), dtype=float)
     positive_acc = np.zeros(len(rows), dtype=float)
@@ -1238,43 +1238,48 @@ def _plot_selected_city_contribution_bars(ax, rows: list[dict]):
     xmax = max(extrema)
     span = max(xmax - xmin, 1.0)
     ax.set_xlim(xmin - span * 0.10, xmax + span * 0.10)
+    return y
 
 
-def _plot_selected_city_absolute_reduction(
-    ax,
-    rows: list[dict],
-    invert_yaxis: bool = True,
-):
-    """Draw same-order selected-city absolute net reductions."""
+def _plot_selected_city_absolute_reduction_points(ax, rows: list[dict], y: np.ndarray):
+    """Draw selected-city absolute net reductions on a top x-axis."""
     if not rows:
-        ax.tick_params(left=False, bottom=False, labelleft=False, labelbottom=False)
+        ax.tick_params(top=False, labeltop=False, bottom=False, labelbottom=False)
         return
 
-    y = np.arange(len(rows), dtype=float)
     reductions_kt = np.array(
         [float(row.get("total_net_kg", 0.0)) / 1e6 for row in rows],
         dtype=float,
     )
-    ax.barh(
-        y,
+    ax.scatter(
         reductions_kt,
-        height=0.62,
-        color="#2E7D32",
-        edgecolor="white",
-        linewidth=0.8,
+        y,
+        s=42,
+        facecolor="white",
+        edgecolor="#1B5E20",
+        linewidth=1.1,
+        zorder=6,
+        label="Absolute net reduction",
     )
-    ax.axvline(0, color="#555555", linewidth=0.8)
-    ax.set_yticks(y, [row["label"] for row in rows])
-    if invert_yaxis:
-        ax.invert_yaxis()
-    ax.set_xlabel("Absolute net reduction\n(kt CO2e yr$^{-1}$)", fontsize=12)
-    ax.grid(axis="x", alpha=0.25)
-    ax.tick_params(axis="both", labelsize=10)
+    ax.set_xlabel("Absolute net reduction (kt CO2e yr$^{-1}$)", fontsize=12)
+    ax.tick_params(
+        axis="x",
+        top=True,
+        labeltop=True,
+        bottom=False,
+        labelbottom=False,
+        labelsize=10,
+        colors="#1B5E20",
+    )
+    ax.xaxis.label.set_color("#1B5E20")
+    ax.spines["top"].set_color("#1B5E20")
+    ax.spines["bottom"].set_visible(False)
+    ax.tick_params(axis="y", left=False, labelleft=False)
 
-    xmin = min(float(np.min(reductions_kt)), 0.0)
+    xmin = 0.0
     xmax = max(float(np.max(reductions_kt)), 0.0)
     span = max(xmax - xmin, 0.1)
-    ax.set_xlim(xmin - span * 0.08, xmax + span * 0.12)
+    ax.set_xlim(xmin, xmax + span * 0.12)
 
 
 def _plot_contribution_decomposition_panels(
@@ -1861,28 +1866,33 @@ def _write_contribution_decomposition_city_b_report(
     rows: list[dict],
 ):
     """Write compact JSON report for the selected-city contribution figure."""
-    ax_a, ax_b = axes
+    ax_main, ax_top = axes
     report_path = save_path.rsplit(".", 1)[0] + "_report.json"
     payload = {
         "figure": "contribution_decomposition_city_b",
         "figure_path": save_path,
         "figure_size_inches": {"width": figsize[0], "height": figsize[1]},
         "axes": {
-            "a_relative_contribution_decomposition": _report_axis(ax_a),
-            "b_absolute_net_reduction": _report_axis(ax_b),
+            "bottom_relative_contribution_decomposition": _report_axis(ax_main),
+            "top_absolute_net_reduction": _report_axis(ax_top),
         },
         "selected_region_keys": list(CONTRIBUTION_CITY_B_REGION_KEYS),
         "sort_order": "descending total_net_kg after filtering",
         "bar_design": (
-            "Panel a uses horizontal one-row-per-city bars. Positive "
-            "components stack from zero to the right, negative components "
-            "stack from zero to the left, and a black point marks total net "
-            "reduction on the same percentage-point axis. Panel b uses the "
-            "same city order for horizontal absolute net-reduction bars in "
-            "kt CO2e/yr."
+            "Single horizontal one-row-per-city panel. Positive components "
+            "stack from zero to the right, negative components stack from "
+            "zero to the left, and a black point marks total net reduction "
+            "on the bottom percentage-point axis. White circles with dark "
+            "green outlines mark absolute net reduction on the top kt "
+            "CO2e/yr axis."
         ),
         "component_specs": _json_safe(CONTRIBUTION_COMPONENT_SPECS),
         "net_marker": {"label": "Net reduction", "color": "#111111"},
+        "absolute_marker": {
+            "label": "Absolute net reduction",
+            "facecolor": "white",
+            "edgecolor": "#1B5E20",
+        },
         "cities": _json_safe(rows),
         "sampling": _json_safe(prepared.get("sampling", {})),
         "runtime": _json_safe(prepared.get("runtime", {})),
@@ -1895,7 +1905,7 @@ def _write_contribution_decomposition_city_b_report(
 def plot_contribution_decomposition_city_b(
     prepared: Dict,
     save_path: str = None,
-    figsize: tuple = (11.0, 7.8),
+    figsize: tuple = (7.8, 8.4),
     for_latex: bool = False,
     plot_title: bool = False,
 ):
@@ -1913,20 +1923,11 @@ def plot_contribution_decomposition_city_b(
         return
 
     rows = _selected_city_component_rows(prepared.get("cities", []))
-    fig = plt.figure(figsize=figsize)
-    gs = fig.add_gridspec(
-        1,
-        2,
-        width_ratios=[1.55, 0.85],
-        wspace=0.12,
-    )
-    ax_a = fig.add_subplot(gs[0, 0])
-    ax_b = fig.add_subplot(gs[0, 1], sharey=ax_a)
-    _plot_selected_city_contribution_bars(ax_a, rows)
-    _plot_selected_city_absolute_reduction(ax_b, rows, invert_yaxis=False)
-    ax_b.tick_params(labelleft=False)
-    _add_panel_letter(ax_a, "a", fontsize=13, position=(-0.08, 1.02))
-    _add_panel_letter(ax_b, "b", fontsize=13, position=(-0.10, 1.02))
+    fig, ax = plt.subplots(figsize=figsize)
+    y = _plot_selected_city_contribution_bars(ax, rows)
+    ax_top = ax.twiny()
+    _plot_selected_city_absolute_reduction_points(ax_top, rows, y)
+    ax_top.set_ylim(ax.get_ylim())
 
     legend_handles = [
         plt.Rectangle(
@@ -1951,10 +1952,23 @@ def plot_contribution_decomposition_city_b(
             label="Net reduction",
         )
     )
-    ax_a.legend(
+    legend_handles.append(
+        plt.Line2D(
+            [0],
+            [0],
+            marker="o",
+            color="none",
+            markerfacecolor="white",
+            markeredgecolor="#1B5E20",
+            markeredgewidth=1.1,
+            markersize=6,
+            label="Absolute net reduction",
+        )
+    )
+    ax.legend(
         handles=legend_handles,
         loc="lower center",
-        bbox_to_anchor=(0.5, 1.02),
+        bbox_to_anchor=(0.5, 1.08),
         ncol=2,
         frameon=False,
         fontsize=9,
@@ -1962,8 +1976,7 @@ def plot_contribution_decomposition_city_b(
         columnspacing=1.0,
     )
     if plot_title:
-        ax_a.set_title("Contribution decomposition by selected city", fontsize=13)
-        ax_b.set_title("Absolute net reduction", fontsize=13)
+        ax.set_title("Contribution decomposition by selected city", fontsize=13)
 
     if save_path:
         if for_latex and not save_path.endswith(".pdf"):
@@ -1976,7 +1989,7 @@ def plot_contribution_decomposition_city_b(
             prepared,
             save_path,
             figsize,
-            axes=(ax_a, ax_b),
+            axes=(ax, ax_top),
             rows=rows,
         )
         plt.close(fig)
