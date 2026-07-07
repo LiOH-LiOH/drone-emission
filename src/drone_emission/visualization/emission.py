@@ -1241,7 +1241,12 @@ def _plot_selected_city_contribution_bars(ax, rows: list[dict]):
     return y
 
 
-def _plot_selected_city_absolute_reduction_points(ax, rows: list[dict], y: np.ndarray):
+def _plot_selected_city_absolute_reduction_points(
+    ax,
+    rows: list[dict],
+    y: np.ndarray,
+    zero_fraction: float,
+):
     """Draw selected-city absolute net reductions on a top x-axis."""
     if not rows:
         ax.tick_params(top=False, labeltop=False, bottom=False, labelbottom=False)
@@ -1276,10 +1281,11 @@ def _plot_selected_city_absolute_reduction_points(ax, rows: list[dict], y: np.nd
     ax.spines["bottom"].set_visible(False)
     ax.tick_params(axis="y", left=False, labelleft=False)
 
-    xmin = 0.0
     xmax = max(float(np.max(reductions_kt)), 0.0)
-    span = max(xmax - xmin, 0.1)
-    ax.set_xlim(xmin, xmax + span * 0.12)
+    positive_limit = max(xmax * 1.12, 0.1)
+    zero_fraction = float(np.clip(zero_fraction, 0.05, 0.95))
+    negative_limit = positive_limit * zero_fraction / (1.0 - zero_fraction)
+    ax.set_xlim(-negative_limit, positive_limit)
 
 
 def _plot_contribution_decomposition_panels(
@@ -1926,7 +1932,9 @@ def plot_contribution_decomposition_city_b(
     fig, ax = plt.subplots(figsize=figsize)
     y = _plot_selected_city_contribution_bars(ax, rows)
     ax_top = ax.twiny()
-    _plot_selected_city_absolute_reduction_points(ax_top, rows, y)
+    bottom_xlim = ax.get_xlim()
+    zero_fraction = (0.0 - bottom_xlim[0]) / (bottom_xlim[1] - bottom_xlim[0])
+    _plot_selected_city_absolute_reduction_points(ax_top, rows, y, zero_fraction)
     ax_top.set_ylim(ax.get_ylim())
 
     legend_handles = [
