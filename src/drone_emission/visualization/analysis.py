@@ -5844,6 +5844,11 @@ def plot_regions_map_oracle_reduction_rank(
             if is_map_only_figure
             else (0.86, 0.0, 0.14, 0.28)
         ),
+        south_china_inset_extent=(
+            (106, 123, 3, 26)
+            if is_map_only_figure
+            else (107, 121, 3, 24)
+        ),
     )
     south_china_inset_ax = (
         ax_map.child_axes[-1]
