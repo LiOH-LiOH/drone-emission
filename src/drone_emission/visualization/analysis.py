@@ -8144,13 +8144,30 @@ def plot_city_reduction_rank_all_macro_region(
     ).reset_index(drop=True)
     plot_df["rank"] = np.arange(1, len(plot_df) + 1)
     plot_df["macro_region_key"] = plot_df["macro_region"].map(lambda spec: spec["key"])
+    label_city_by_key = {
+        city.casefold(): city
+        for city in ORACLE_REDUCTION_LABEL_CITIES
+    }
+    selected_city_mask = (
+        plot_df["region_name_en"]
+        .astype(str)
+        .str.casefold()
+        .isin(label_city_by_key.keys())
+    )
+    selected_cities = plot_df[selected_city_mask].copy()
+    selected_cities["_label_city"] = (
+        selected_cities["region_name_en"]
+        .astype(str)
+        .str.casefold()
+        .map(label_city_by_key)
+    )
 
     color_by_key = {spec["key"]: spec["color"] for spec in CHINA_MACRO_REGION_SPECS}
     label_by_key = {spec["key"]: spec["label"] for spec in CHINA_MACRO_REGION_SPECS}
     colors = plot_df["macro_region_key"].map(color_by_key).tolist()
 
     fig, ax = plt.subplots(figsize=figsize)
-    ax.bar(
+    bars = ax.bar(
         plot_df["rank"].to_numpy(dtype=float),
         plot_df[reduction_col].to_numpy(dtype=float),
         width=0.9,
@@ -8169,9 +8186,56 @@ def plot_city_reduction_rank_all_macro_region(
     ymax = max(0.0, float(plot_df[reduction_col].max()))
     if np.isclose(ymin, ymax):
         ymax = ymin + 1.0
-    ax.set_ylim(ymin - (ymax - ymin) * 0.04, ymax + (ymax - ymin) * 0.08)
+    y_span = ymax - ymin
+    top_pad = 0.20 if not selected_cities.empty else 0.08
+    ax.set_ylim(ymin - y_span * 0.04, ymax + y_span * top_pad)
     ax.tick_params(axis="x", labelsize=9)
     ax.tick_params(axis="y", labelsize=9)
+
+    if not selected_cities.empty:
+        selected_indices = set(selected_cities.index)
+        for idx, bar in enumerate(bars):
+            if idx not in selected_indices:
+                continue
+            bar.set_edgecolor("#111111")
+            bar.set_linewidth(1.0)
+            bar.set_zorder(3)
+
+        label_offsets = (
+            (0, 18),
+            (14, 31),
+            (-14, 44),
+            (0, 57),
+        )
+        selected_cities = selected_cities.sort_values("rank")
+        for i, (_, row) in enumerate(selected_cities.iterrows()):
+            dx, dy = label_offsets[i % len(label_offsets)]
+            ax.annotate(
+                row["_label_city"],
+                xy=(row["rank"], row[reduction_col]),
+                xytext=(dx, dy),
+                textcoords="offset points",
+                ha="center",
+                va="bottom",
+                fontsize=8,
+                fontweight="bold",
+                color="#111111",
+                arrowprops={
+                    "arrowstyle": "-",
+                    "color": "0.25",
+                    "lw": 0.75,
+                    "shrinkA": 1.5,
+                    "shrinkB": 1.5,
+                },
+                bbox={
+                    "boxstyle": "round,pad=0.18",
+                    "facecolor": "white",
+                    "edgecolor": "0.55",
+                    "alpha": 0.9,
+                },
+                zorder=5,
+                clip_on=False,
+            )
 
     handles = []
     for spec in CHINA_MACRO_REGION_SPECS:
