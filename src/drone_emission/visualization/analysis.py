@@ -8459,6 +8459,15 @@ def plot_city_population_detour_oracle_reduction_bubble(
             ordered=True,
         )
         labeled = labeled.sort_values("_label_order")
+        ax.scatter(
+            labeled[reduction_t_col],
+            labeled[reduction_pct_col],
+            s=labeled["_bubble_size"] * 1.35 + 18,
+            facecolors="none",
+            edgecolors="#202020",
+            linewidth=0.9,
+            zorder=4,
+        )
         offsets = ((5, 4), (5, -8), (-5, 4), (-5, -8))
         for i, (_, row) in enumerate(labeled.iterrows()):
             dx, dy = offsets[i % len(offsets)]
