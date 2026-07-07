@@ -7,6 +7,7 @@ import pickle
 import matplotlib.pyplot as plt
 from matplotlib.patches import Patch
 from matplotlib.ticker import FuncFormatter
+from matplotlib.transforms import Bbox
 import numpy as np
 import pandas as pd
 from scipy import stats
@@ -8187,7 +8188,7 @@ def plot_city_reduction_rank_all_macro_region(
     if np.isclose(ymin, ymax):
         ymax = ymin + 1.0
     y_span = ymax - ymin
-    top_pad = 0.26 if not selected_cities.empty else 0.08
+    top_pad = 0.38 if not selected_cities.empty else 0.08
     ax.set_ylim(ymin - y_span * 0.04, ymax + y_span * top_pad)
     ax.tick_params(axis="x", labelsize=9)
     ax.tick_params(axis="y", labelsize=9)
@@ -8202,25 +8203,130 @@ def plot_city_reduction_rank_all_macro_region(
             bar.set_zorder(3)
 
         selected_cities = selected_cities.sort_values("rank")
-        label_ranks = selected_cities["rank"].to_numpy(dtype=float)
-        label_gap = max(4.0, len(plot_df) * 0.035)
-        label_margin = max(2.0, label_gap * 0.5)
-        label_x = label_ranks.copy()
-        for i in range(1, len(label_x)):
-            label_x[i] = max(label_x[i], label_x[i - 1] + label_gap)
-        overflow = label_x[-1] - (len(plot_df) + 0.5 - label_margin)
-        if overflow > 0:
-            label_x -= overflow
-            for i in range(len(label_x) - 2, -1, -1):
-                label_x[i] = min(label_x[i], label_x[i + 1] - label_gap)
-        label_x = np.clip(label_x, 0.5 + label_margin, len(plot_df) + 0.5 - label_margin)
+        x_min, x_max = ax.get_xlim()
+        x_span = x_max - x_min
+        max_label_dx = x_span * 0.10
+        x_step = max(0.75, x_span * 0.0125)
+        offset_steps = np.arange(0.0, max_label_dx + x_step * 0.5, x_step)
+        x_offsets = [0.0]
+        for offset in offset_steps[1:]:
+            x_offsets.extend([-float(offset), float(offset)])
+        label_y_values = [
+            ymax + y_span * frac
+            for frac in (0.035, 0.145, 0.255)
+        ]
+        label_box_style = {
+            "boxstyle": "round,pad=0.18",
+            "facecolor": "white",
+            "edgecolor": "0.55",
+            "alpha": 0.9,
+        }
 
-        label_y = ymax + (ax.get_ylim()[1] - ax.get_ylim()[0]) * 0.035
-        for (_, row), text_x in zip(selected_cities.iterrows(), label_x):
+        temp_texts = []
+        for _, row in selected_cities.iterrows():
+            temp_texts.append(
+                ax.text(
+                    0,
+                    0,
+                    row["_label_city"],
+                    fontsize=8,
+                    fontweight="bold",
+                    bbox=label_box_style,
+                    alpha=0,
+                )
+            )
+        fig.canvas.draw()
+        renderer = fig.canvas.get_renderer()
+        label_extents = [
+            text.get_window_extent(renderer=renderer).padded(4.0)
+            for text in temp_texts
+        ]
+        for text in temp_texts:
+            text.remove()
+
+        label_candidate_sets = []
+        for (_, row), extent in zip(selected_cities.iterrows(), label_extents):
+            rank = float(row["rank"])
+            candidates = []
+            for row_idx, label_y in enumerate(label_y_values):
+                for dx in x_offsets:
+                    label_x_candidate = float(np.clip(rank + dx, x_min, x_max))
+                    display_x, display_y = ax.transData.transform(
+                        (label_x_candidate, label_y)
+                    )
+                    box = Bbox.from_bounds(
+                        display_x - extent.width / 2.0,
+                        display_y,
+                        extent.width,
+                        extent.height,
+                    )
+                    candidates.append(
+                        (
+                            abs(dx),
+                            row_idx,
+                            label_x_candidate,
+                            label_y,
+                            box,
+                        )
+                    )
+            candidates.sort()
+            label_candidate_sets.append(candidates)
+
+        def _boxes_overlap(box, other):
+            return (
+                min(box.x1, other.x1) > max(box.x0, other.x0)
+                and min(box.y1, other.y1) > max(box.y0, other.y0)
+            )
+
+        def _find_non_overlapping_labels(require_order=True):
+            def search(index, placed_boxes, placed_x, positions):
+                if index == len(label_candidate_sets):
+                    return positions
+                for _, _, label_x, label_y, box in label_candidate_sets[index]:
+                    if require_order and placed_x and label_x < placed_x[-1]:
+                        continue
+                    if any(_boxes_overlap(box, other) for other in placed_boxes):
+                        continue
+                    found = search(
+                        index + 1,
+                        [*placed_boxes, box],
+                        [*placed_x, label_x],
+                        [*positions, (label_x, label_y)],
+                    )
+                    if found is not None:
+                        return found
+                return None
+
+            return search(0, [], [], [])
+
+        label_positions = (
+            _find_non_overlapping_labels(require_order=True)
+            or _find_non_overlapping_labels(require_order=False)
+        )
+        if label_positions is None:
+            placed_label_boxes = []
+            label_positions = []
+            for candidates in label_candidate_sets:
+                scored = []
+                for abs_dx, row_idx, label_x, label_y, box in candidates:
+                    overlap_area = sum(
+                        max(0.0, min(box.x1, other.x1) - max(box.x0, other.x0))
+                        * max(0.0, min(box.y1, other.y1) - max(box.y0, other.y0))
+                        for other in placed_label_boxes
+                    )
+                    scored.append(
+                        (overlap_area > 0.0, overlap_area, abs_dx, row_idx, label_x, label_y, box)
+                    )
+                scored.sort()
+                _, _, _, _, label_x, label_y, box = scored[0]
+                placed_label_boxes.append(box)
+                label_positions.append((label_x, label_y))
+
+        for (_, row), (text_x, text_y) in zip(selected_cities.iterrows(), label_positions):
             ax.annotate(
                 row["_label_city"],
                 xy=(row["rank"], row[reduction_col]),
-                xytext=(text_x, label_y),
+                xytext=(text_x, text_y),
                 textcoords="data",
                 ha="center",
                 va="bottom",
@@ -8235,10 +8341,7 @@ def plot_city_reduction_rank_all_macro_region(
                     "shrinkB": 1.5,
                 },
                 bbox={
-                    "boxstyle": "round,pad=0.18",
-                    "facecolor": "white",
-                    "edgecolor": "0.55",
-                    "alpha": 0.9,
+                    **label_box_style,
                 },
                 zorder=5,
                 clip_on=False,
