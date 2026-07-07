@@ -8187,7 +8187,7 @@ def plot_city_reduction_rank_all_macro_region(
     if np.isclose(ymin, ymax):
         ymax = ymin + 1.0
     y_span = ymax - ymin
-    top_pad = 0.20 if not selected_cities.empty else 0.08
+    top_pad = 0.26 if not selected_cities.empty else 0.08
     ax.set_ylim(ymin - y_span * 0.04, ymax + y_span * top_pad)
     ax.tick_params(axis="x", labelsize=9)
     ax.tick_params(axis="y", labelsize=9)
@@ -8201,20 +8201,27 @@ def plot_city_reduction_rank_all_macro_region(
             bar.set_linewidth(1.0)
             bar.set_zorder(3)
 
-        label_offsets = (
-            (0, 18),
-            (14, 31),
-            (-14, 44),
-            (0, 57),
-        )
         selected_cities = selected_cities.sort_values("rank")
-        for i, (_, row) in enumerate(selected_cities.iterrows()):
-            dx, dy = label_offsets[i % len(label_offsets)]
+        label_ranks = selected_cities["rank"].to_numpy(dtype=float)
+        label_gap = max(4.0, len(plot_df) * 0.035)
+        label_margin = max(2.0, label_gap * 0.5)
+        label_x = label_ranks.copy()
+        for i in range(1, len(label_x)):
+            label_x[i] = max(label_x[i], label_x[i - 1] + label_gap)
+        overflow = label_x[-1] - (len(plot_df) + 0.5 - label_margin)
+        if overflow > 0:
+            label_x -= overflow
+            for i in range(len(label_x) - 2, -1, -1):
+                label_x[i] = min(label_x[i], label_x[i + 1] - label_gap)
+        label_x = np.clip(label_x, 0.5 + label_margin, len(plot_df) + 0.5 - label_margin)
+
+        label_y = ymax + (ax.get_ylim()[1] - ax.get_ylim()[0]) * 0.035
+        for (_, row), text_x in zip(selected_cities.iterrows(), label_x):
             ax.annotate(
                 row["_label_city"],
                 xy=(row["rank"], row[reduction_col]),
-                xytext=(dx, dy),
-                textcoords="offset points",
+                xytext=(text_x, label_y),
+                textcoords="data",
                 ha="center",
                 va="bottom",
                 fontsize=8,
