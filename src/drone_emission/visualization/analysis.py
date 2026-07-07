@@ -8450,13 +8450,15 @@ def plot_city_population_detour_oracle_reduction_bubble(
         )
 
     if name_col:
-        label_idx = set(plot_df.nlargest(8, reduction_t_col).index)
-        label_idx.add(plot_df["population_million"].idxmax())
-        label_idx.add(plot_df[reduction_pct_col].idxmax())
-        labeled = plot_df.loc[sorted(label_idx)].sort_values(
-            reduction_t_col,
-            ascending=False,
+        labeled = plot_df[
+            plot_df[name_col].isin(ORACLE_REDUCTION_LABEL_CITIES)
+        ].copy()
+        labeled["_label_order"] = pd.Categorical(
+            labeled[name_col],
+            categories=ORACLE_REDUCTION_LABEL_CITIES,
+            ordered=True,
         )
+        labeled = labeled.sort_values("_label_order")
         offsets = ((5, 4), (5, -8), (-5, 4), (-5, -8))
         for i, (_, row) in enumerate(labeled.iterrows()):
             dx, dy = offsets[i % len(offsets)]
