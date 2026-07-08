@@ -8485,8 +8485,8 @@ def plot_city_population_detour_oracle_reduction_bubble(
     fig = plt.figure(figsize=figsize)
     gs = fig.add_gridspec(
         2,
-        3,
-        width_ratios=(1.0, 0.18, 0.24),
+        2,
+        width_ratios=(1.0, 0.18),
         height_ratios=(0.18, 1.0),
         wspace=0.08,
         hspace=0.05,
@@ -8494,10 +8494,7 @@ def plot_city_population_detour_oracle_reduction_bubble(
     ax_top = fig.add_subplot(gs[0, 0])
     ax = fig.add_subplot(gs[1, 0], sharex=ax_top)
     ax_right = fig.add_subplot(gs[1, 1], sharey=ax)
-    legend_ax = fig.add_subplot(gs[1, 2])
     fig.add_subplot(gs[0, 1]).axis("off")
-    fig.add_subplot(gs[0, 2]).axis("off")
-    legend_ax.axis("off")
 
     ax.scatter(
         plot_df[reduction_t_col],
@@ -8582,19 +8579,24 @@ def plot_city_population_detour_oracle_reduction_bubble(
         )
         labels.append(f"{value:,.1f}M")
     if handles:
-        size_legend = legend_ax.legend(
+        size_legend = ax.legend(
             handles,
             labels,
             title="Population",
             loc="upper left",
-            bbox_to_anchor=(0.0, 0.98),
-            frameon=False,
+            bbox_to_anchor=(0.0, -0.22),
+            frameon=True,
+            framealpha=0.92,
             fontsize=8,
-            title_fontsize=9,
+            title_fontsize=8,
             borderaxespad=0.0,
-            labelspacing=0.95,
+            borderpad=0.6,
+            labelspacing=0.3,
+            handletextpad=0.8,
+            ncol=len(handles),
+            columnspacing=1.4,
         )
-        legend_ax.add_artist(size_legend)
+        ax.add_artist(size_legend)
 
     region_handles = []
     plotted_region_keys = set(plot_df["_macro_region_key"])
@@ -8609,18 +8611,22 @@ def plot_city_population_detour_oracle_reduction_bubble(
             )
         )
     if region_handles:
-        legend_ax.legend(
+        ax.legend(
             handles=region_handles,
             title="Macro-region",
-            loc="lower left",
-            bbox_to_anchor=(0.0, 0.02),
-            frameon=False,
+            loc="upper right",
+            bbox_to_anchor=(1.0, -0.22),
+            frameon=True,
+            framealpha=0.92,
             fontsize=8,
-            title_fontsize=9,
+            title_fontsize=8,
             borderaxespad=0.0,
+            borderpad=0.6,
             handlelength=1.2,
             handletextpad=0.45,
-            labelspacing=0.65,
+            labelspacing=0.3,
+            ncol=len(region_handles),
+            columnspacing=1.1,
         )
 
     if name_col:
