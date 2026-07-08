@@ -8618,15 +8618,15 @@ def plot_city_population_detour_oracle_reduction_bubble(
             bbox_to_anchor=(1.0, -0.22),
             frameon=True,
             framealpha=0.92,
-            fontsize=8,
-            title_fontsize=8,
+            fontsize=7.6,
+            title_fontsize=7.6,
             borderaxespad=0.0,
             borderpad=0.6,
-            handlelength=1.2,
-            handletextpad=0.45,
-            labelspacing=0.3,
-            ncol=len(region_handles),
-            columnspacing=1.1,
+            handlelength=1.0,
+            handletextpad=0.35,
+            labelspacing=0.25,
+            ncol=min(4, len(region_handles)),
+            columnspacing=0.75,
         )
 
     if name_col:
