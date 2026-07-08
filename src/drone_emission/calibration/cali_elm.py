@@ -164,12 +164,15 @@ def fit_tanner_impedance(distances, bin_width=0.1, max_distance=10.0):
 
 
 def _sweep_alpha(alpha_values, indices_list, stores_df, buildings_gdf,
-                  store_coords, tanner_a, tanner_b, min_sales):
+                  store_coords, tanner_a, tanner_b, min_sales,
+                  store_weights=None):
     """Run one sweep of α values and return (alpha_values, mean_distances)."""
     from demand.api import generate_one_store_od_pairs_vectorized
 
     mean_distances = []
     n_alphas = len(alpha_values)
+    if store_weights is None:
+        store_weights = np.ones(len(indices_list), dtype=float)
     for ai, alpha in enumerate(alpha_values):
         od_params = {
             "impedance_type": "tanner",
@@ -187,13 +190,14 @@ def _sweep_alpha(alpha_values, indices_list, stores_df, buildings_gdf,
             nearby_buildings = buildings_gdf.iloc[building_indices]
             store_coord_wgs84 = store_coords[store_idx]
             month_sales = stores_df.iloc[store_idx]["month_sales"]
+            store_weight = float(store_weights[store_idx])
 
             od_pairs = generate_one_store_od_pairs_vectorized(
                 nearby_buildings, month_sales, store_coord_wgs84, od_params
             )
             for pair in od_pairs:
                 all_distances.append(pair["distance_km"])
-                all_sales.append(pair["annual_sales"])
+                all_sales.append(pair["annual_sales"] * store_weight)
 
         if len(all_distances) > 0:
             weighted_mean = np.average(all_distances, weights=all_sales)
@@ -205,44 +209,236 @@ def _sweep_alpha(alpha_values, indices_list, stores_df, buildings_gdf,
     return np.array(mean_distances)
 
 
-def calibrate_alpha(target_mean_distance=2.23, delivery_radius_km=None,
-                    save_path=None, for_latex=False, plot_title=False):
-    """Calibrate building volume exponent α by matching target mean delivery distance.
+def _sample_alpha_calibration_inputs(
+    indices_list,
+    stores_df,
+    store_coords,
+    sample_stores=None,
+    sample_buildings_per_store=None,
+    random_state=0,
+    sample_strategy="stratified_sales_spatial",
+):
+    """Subsample stores with expansion weights for calibration checks."""
+    if sample_stores is not None and sample_stores <= 0:
+        raise ValueError("sample_stores must be a positive integer")
+    if sample_buildings_per_store is not None:
+        raise ValueError(
+            "sample_buildings_per_store is disabled for alpha calibration; "
+            "building truncation changes per-store demand normalization"
+        )
+
+    rng = np.random.default_rng(random_state)
+    n_stores = len(indices_list)
+    if sample_stores is None or sample_stores >= n_stores:
+        return (
+            list(indices_list),
+            stores_df,
+            store_coords,
+            np.ones(n_stores, dtype=float),
+            "full",
+            0,
+            0,
+        )
+    if sample_strategy != "stratified_sales_spatial":
+        raise ValueError(
+            "sample_strategy must be 'stratified_sales_spatial' for sampled "
+            "alpha calibration"
+        )
+
+    sample_df = stores_df[["month_sales", "lat", "lng"]].copy()
+    sample_df["_store_idx"] = np.arange(n_stores)
+    sample_df["_sales_rank"] = sample_df["month_sales"].rank(
+        method="first", ascending=False
+    )
+    certainty_count = min(
+        int(np.ceil(n_stores * 0.05)),
+        max(1, sample_stores // 5),
+    )
+    certainty_idx = set(
+        sample_df.nsmallest(certainty_count, "_sales_rank")["_store_idx"]
+    )
+
+    remaining = sample_df[~sample_df["_store_idx"].isin(certainty_idx)].copy()
+    remaining_slots = sample_stores - len(certainty_idx)
+    if remaining_slots <= 0:
+        selected_idx = sorted(certainty_idx)
+        sampled_indices = [indices_list[i] for i in selected_idx]
+        sampled_stores = stores_df.iloc[selected_idx].reset_index(drop=True)
+        sampled_store_coords = store_coords[selected_idx]
+        return (
+            sampled_indices,
+            sampled_stores,
+            sampled_store_coords,
+            np.ones(len(selected_idx), dtype=float),
+            sample_strategy,
+            len(certainty_idx),
+            0,
+        )
+
+    sales_bins = pd.qcut(
+        remaining["month_sales"].rank(method="first"),
+        q=min(4, len(remaining)),
+        labels=False,
+        duplicates="drop",
+    )
+    lat_bins = pd.qcut(
+        remaining["lat"].rank(method="first"),
+        q=min(3, len(remaining)),
+        labels=False,
+        duplicates="drop",
+    )
+    lng_bins = pd.qcut(
+        remaining["lng"].rank(method="first"),
+        q=min(3, len(remaining)),
+        labels=False,
+        duplicates="drop",
+    )
+    remaining["_stratum"] = (
+        sales_bins.astype(str) + "_" + lat_bins.astype(str) + "_" + lng_bins.astype(str)
+    )
+    strata = list(remaining.groupby("_stratum", sort=False))
+    strata_sizes = np.array([len(group) for _, group in strata], dtype=float)
+    raw_alloc = remaining_slots * strata_sizes / strata_sizes.sum()
+    alloc = np.floor(raw_alloc).astype(int)
+    non_empty = strata_sizes > 0
+    alloc[(alloc == 0) & non_empty & (remaining_slots >= non_empty.sum())] = 1
+
+    while alloc.sum() > remaining_slots:
+        candidates = np.where(alloc > 1)[0]
+        if len(candidates) == 0:
+            candidates = np.where(alloc > 0)[0]
+        drop_idx = candidates[np.argmin(raw_alloc[candidates] - alloc[candidates])]
+        alloc[drop_idx] -= 1
+    while alloc.sum() < remaining_slots:
+        candidates = np.where(alloc < strata_sizes)[0]
+        add_idx = candidates[np.argmax(raw_alloc[candidates] - alloc[candidates])]
+        alloc[add_idx] += 1
+
+    selected_idx = list(certainty_idx)
+    weight_by_idx = {idx: 1.0 for idx in certainty_idx}
+    for (_, group), n_sample in zip(strata, alloc):
+        if n_sample <= 0:
+            continue
+        group_indices = group["_store_idx"].to_numpy()
+        sampled = rng.choice(group_indices, size=n_sample, replace=False)
+        selected_idx.extend(sampled.tolist())
+        expansion_weight = len(group_indices) / n_sample
+        for idx in sampled:
+            weight_by_idx[int(idx)] = float(expansion_weight)
+
+    selected_idx = sorted(selected_idx)
+    sampled_indices = [indices_list[i] for i in selected_idx]
+    sampled_stores = stores_df.iloc[selected_idx].reset_index(drop=True)
+    sampled_store_coords = store_coords[selected_idx]
+    store_weights = np.array([weight_by_idx[i] for i in selected_idx], dtype=float)
+
+    return (
+        sampled_indices,
+        sampled_stores,
+        sampled_store_coords,
+        store_weights,
+        sample_strategy,
+        len(certainty_idx),
+        len(strata),
+    )
+
+
+def build_alpha_calibration_sweep(
+    target_mean_distance=2.23,
+    delivery_radius_km=None,
+    sample_stores=None,
+    sample_buildings_per_store=None,
+    sample_strategy="stratified_sales_spatial",
+    random_state=0,
+    coarse_only=False,
+):
+    """Build α calibration sweep data by matching target mean delivery distance.
 
     Two-stage sweep: coarse (step 0.5) then fine (step 0.1) around the best.
 
     Args:
         target_mean_distance: Target weighted mean distance in km (default 2.23).
         delivery_radius_km: Override delivery radius (default: use experiment.toml).
-        save_path: Path to save the calibration plot.
+        sample_stores: Optional number of stores to sample for fast checks.
+        sample_buildings_per_store: Deprecated; building caps are disabled here.
+        sample_strategy: Store sampling strategy for sampled checks.
+        random_state: Random seed for reproducible sampling.
+        coarse_only: If True, skip the fine sweep around the coarse best.
 
     Returns:
-        The calibrated α value.
+        Tuple of (sweep_df, best_alpha, best_mean).
     """
     from pathlib import Path
 
     from demand.api import prepare_store_building_matching
     from utils import load_config
-    from utils.region_config import get_registry, init_registry
+    from utils.region_config import init_registry
 
     PROJECT_ROOT = Path(__file__).parent.parent.parent.parent
-    REGIONS_CONFIG_PATH = PROJECT_ROOT / "regions.json"
     EXP_CONFIG_PATH = PROJECT_ROOT / "experiment.toml"
 
-    registry = init_registry(str(REGIONS_CONFIG_PATH))
+    region_key = "nanshan"
+    region_config_candidates = (
+        PROJECT_ROOT / "regions.json",
+        PROJECT_ROOT / "backup_regions.json",
+        PROJECT_ROOT / "regions.template.json",
+    )
+    registry = None
+    for config_path in region_config_candidates:
+        candidate_registry = init_registry(str(config_path))
+        if region_key in candidate_registry:
+            registry = candidate_registry
+            break
+    if registry is None:
+        raise KeyError(
+            f"Region '{region_key}' not found in active or fallback region configs"
+        )
     config = load_config(str(EXP_CONFIG_PATH))
 
     if delivery_radius_km is not None:
         config["delivery_radius_km"] = delivery_radius_km
         print(f"Using delivery_radius_km = {delivery_radius_km}")
 
-    region = registry["nanshan"]
+    region = registry[region_key]
 
     # Prepare store-building matching (expensive, do once)
     print("\n=== Preparing store-building matching ===")
     indices_list, stores_df, buildings_gdf, store_coords = (
         prepare_store_building_matching(region, config)
     )
+    full_store_count = len(stores_df)
+    full_building_count = len(buildings_gdf)
+    store_weights = np.ones(full_store_count, dtype=float)
+    resolved_sample_strategy = "full"
+    certainty_store_count = 0
+    stratum_count = 0
+    if sample_stores is not None or sample_buildings_per_store is not None:
+        (
+            indices_list,
+            stores_df,
+            store_coords,
+            store_weights,
+            resolved_sample_strategy,
+            certainty_store_count,
+            stratum_count,
+        ) = _sample_alpha_calibration_inputs(
+            indices_list,
+            stores_df,
+            store_coords,
+            sample_stores=sample_stores,
+            sample_buildings_per_store=sample_buildings_per_store,
+            random_state=random_state,
+            sample_strategy=sample_strategy,
+        )
+        total_pairs = sum(len(idx) for idx in indices_list)
+        print(
+            "\n=== Alpha calibration sampled input ===\n"
+            f"Stores: {len(stores_df)} of {full_store_count}\n"
+            f"Store-building pairs after sampling: {total_pairs}\n"
+            f"Strategy: {resolved_sample_strategy}\n"
+            f"Store expansion weight range: "
+            f"{store_weights.min():.2f}-{store_weights.max():.2f}"
+        )
 
     # Fixed Tanner distance impedance parameters
     tanner_a = 1.1131
@@ -255,6 +451,7 @@ def calibrate_alpha(target_mean_distance=2.23, delivery_radius_km=None,
     coarse_means = _sweep_alpha(
         coarse_alphas, indices_list, stores_df, buildings_gdf,
         store_coords, tanner_a, tanner_b, min_sales,
+        store_weights=store_weights,
     )
 
     # Find coarse best
@@ -272,11 +469,16 @@ def calibrate_alpha(target_mean_distance=2.23, delivery_radius_km=None,
     # Remove duplicates already computed in coarse sweep
     fine_alphas = np.array([a for a in fine_alphas if not np.any(np.isclose(coarse_alphas, a))])
 
-    if len(fine_alphas) > 0:
+    if coarse_only:
+        print("\n=== Stage 2: Fine sweep skipped (coarse_only=True) ===")
+        fine_alphas = np.array([])
+        fine_means = np.array([])
+    elif len(fine_alphas) > 0:
         print(f"\n=== Stage 2: Fine sweep ({len(fine_alphas)} values, step=0.1, range [{fine_lo:.1f}, {fine_hi:.1f}]) ===")
         fine_means = _sweep_alpha(
             fine_alphas, indices_list, stores_df, buildings_gdf,
             store_coords, tanner_a, tanner_b, min_sales,
+            store_weights=store_weights,
         )
     else:
         fine_alphas = np.array([])
@@ -301,10 +503,120 @@ def calibrate_alpha(target_mean_distance=2.23, delivery_radius_km=None,
     print(f"Achieved mean distance: {best_mean:.4f} km")
     print(f"Error: {abs(best_mean - target_mean_distance):.4f} km")
 
-    # Plot
+    sweep_df = pd.DataFrame(
+        {
+            "alpha": all_alphas,
+            "weighted_mean_od_distance_km": all_means,
+        }
+    )
+    sweep_df["target_mean_distance_km"] = target_mean_distance
+    sweep_df["is_best"] = np.isclose(sweep_df["alpha"], best_alpha)
+    sweep_df["delivery_radius_km"] = config["delivery_radius_km"]
+    sweep_df["region_key"] = region_key
+    sweep_df["store_count"] = len(stores_df)
+    sweep_df["building_count"] = len(buildings_gdf)
+    sweep_df["full_store_count"] = full_store_count
+    sweep_df["full_building_count"] = full_building_count
+    sweep_df["sample_stores"] = sample_stores
+    sweep_df["sample_buildings_per_store"] = sample_buildings_per_store
+    sweep_df["sample_strategy"] = resolved_sample_strategy
+    sweep_df["certainty_store_count"] = certainty_store_count
+    sweep_df["stratum_count"] = stratum_count
+    sweep_df["uses_expansion_weights"] = not np.allclose(store_weights, 1.0)
+    sweep_df["min_store_expansion_weight"] = float(store_weights.min())
+    sweep_df["max_store_expansion_weight"] = float(store_weights.max())
+    sweep_df["random_state"] = random_state
+    sweep_df["is_sampled"] = (
+        sample_stores is not None or sample_buildings_per_store is not None
+    )
+    sweep_df["coarse_only"] = coarse_only
+    sweep_df["tanner_beta"] = tanner_a
+    sweep_df["tanner_gamma"] = tanner_b
+    sweep_df["min_sales"] = min_sales
+
+    return sweep_df, best_alpha, best_mean
+
+
+def export_alpha_calibration_sweep_csv(
+    save_path=None,
+    target_mean_distance=2.23,
+    delivery_radius_km=5.0,
+    sample_stores=None,
+    sample_buildings_per_store=None,
+    sample_strategy="stratified_sales_spatial",
+    random_state=0,
+    coarse_only=False,
+):
+    """Export the α calibration sweep used by paper figures.
+
+    Args:
+        save_path: CSV path to write. Defaults to alpha_calibration_5km.csv
+            beside this module.
+        target_mean_distance: Target weighted mean distance in km.
+        delivery_radius_km: Delivery radius used for the sweep.
+        sample_stores: Optional number of stores to sample for fast checks.
+        sample_buildings_per_store: Deprecated; building caps are disabled here.
+        sample_strategy: Store sampling strategy for sampled checks.
+        random_state: Random seed for reproducible sampling.
+        coarse_only: If True, skip the fine sweep around the coarse best.
+
+    Returns:
+        Path to the written CSV.
+    """
+    from pathlib import Path
+
+    if save_path is None:
+        save_path = Path(__file__).with_name("alpha_calibration_5km.csv")
+    else:
+        save_path = Path(save_path)
+
+    sweep_df, best_alpha, best_mean = build_alpha_calibration_sweep(
+        target_mean_distance=target_mean_distance,
+        delivery_radius_km=delivery_radius_km,
+        sample_stores=sample_stores,
+        sample_buildings_per_store=sample_buildings_per_store,
+        sample_strategy=sample_strategy,
+        random_state=random_state,
+        coarse_only=coarse_only,
+    )
+    save_path.parent.mkdir(parents=True, exist_ok=True)
+    sweep_df.to_csv(save_path, index=False)
+    print(
+        "Alpha calibration sweep saved to "
+        f"{save_path} (best α = {best_alpha:.2f}, mean = {best_mean:.4f} km)"
+    )
+    return save_path
+
+
+def calibrate_alpha(target_mean_distance=2.23, delivery_radius_km=None,
+                    save_path=None, for_latex=False, plot_title=False):
+    """Calibrate building volume exponent α by matching target mean delivery distance.
+
+    Two-stage sweep: coarse (step 0.5) then fine (step 0.1) around the best.
+
+    Args:
+        target_mean_distance: Target weighted mean distance in km (default 2.23).
+        delivery_radius_km: Override delivery radius (default: use experiment.toml).
+        save_path: Path to save the calibration plot.
+
+    Returns:
+        The calibrated α value.
+    """
+    sweep_df, best_alpha, best_mean = build_alpha_calibration_sweep(
+        target_mean_distance=target_mean_distance,
+        delivery_radius_km=delivery_radius_km,
+    )
+
     plot_alpha_calibration(
-        all_alphas, all_means, target_mean_distance, best_alpha, best_mean,
-        config["delivery_radius_km"], save_path, for_latex, plot_title,
+        sweep_df["alpha"].to_numpy(),
+        sweep_df["weighted_mean_od_distance_km"].to_numpy(),
+        target_mean_distance,
+        best_alpha,
+        best_mean,
+        float(sweep_df["delivery_radius_km"].iloc[0]),
+        save_path,
+        for_latex,
+        plot_title,
     )
 
     return best_alpha

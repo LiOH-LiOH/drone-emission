@@ -8,7 +8,7 @@ Run:
     ../../.venv/bin/python -m visualization.paper --only shanghai_heatmap,distance_comparison
 
 Available figures:
-    tanner_impedance_fit, tanner_impedance_fit_panel_a,
+    tanner_impedance_fit, tanner_impedance_fit_panel_a, alpha_calibration_5km,
     detour_lifecycle_distance, lifecycle_distance_detour_boxplot,
     lifecycle_distance_route_factor, production_phase_per_km, end_of_life_phase_per_km,
     production_detour_eol_panels, emission_model_flowchart,
@@ -48,17 +48,19 @@ Available figures:
     regions_map_and_gef_scatter,
     regions_map_city_province_ranks,
     regions_map_city_rank_inset,
-    figure1_framework, figure2_framework,
+    figure1_framework, figure2_framework, figure3_framework, figure4_framework,
     regions_map_kappa_panels,
     drone_tech_sensitivity,
     oat_tornado_story, oat_tornado_full
 """
 
 import argparse
+from contextlib import contextmanager
 import json
 import os
 import pickle
 import sys
+import time
 
 import pandas as pd
 
@@ -174,6 +176,20 @@ POWER_MIX_COLORS = {
     "Solar": "#f2cf5b",
     "Other": "#9e9e9e",
 }
+
+
+@contextmanager
+def _profile_block(enabled, label):
+    """Print elapsed time for an optional paper-rendering block."""
+    if not enabled:
+        yield
+        return
+    start = time.perf_counter()
+    try:
+        yield
+    finally:
+        elapsed = time.perf_counter() - start
+        print(f"[profile] {label}: {elapsed:.2f}s")
 FIGURE1_FRAMEWORK_DEPENDENCIES = (
     "regions_map_oracle_reduction_rank",
     "shanghai_heatmap",
@@ -200,6 +216,27 @@ FIGURE2_FRAMEWORK_SOURCE_MODULES = {
     "tanner_impedance_fit_panel_a": ("calibration.py", "_utils.py"),
     "city_oracle_reduction_rank_top10": ("analysis.py", "_utils.py"),
     "regions_map_oracle_reduction_rank_map_only": ("analysis.py", "regions.py", "_utils.py"),
+}
+FIGURE3_FRAMEWORK_DEPENDENCIES = (
+    "city_population_detour_oracle_reduction_bubble",
+    "city_reduction_rank_all_macro_region",
+)
+FIGURE3_FRAMEWORK_SOURCE_MODULES = {
+    "city_population_detour_oracle_reduction_bubble": ("analysis.py", "_utils.py"),
+    "city_reduction_rank_all_macro_region": ("analysis.py", "macro_regions.py", "_utils.py"),
+}
+FIGURE4_FRAMEWORK_DEPENDENCIES = (
+    "flow_frame.drawio",
+    "tanner_impedance_fit",
+    "alpha_calibration_5km",
+)
+FIGURE4_FRAMEWORK_SOURCE_MODULES = {
+    "tanner_impedance_fit": ("calibration.py", "_utils.py"),
+    "alpha_calibration_5km": (
+        "calibration.py",
+        "_utils.py",
+        "../calibration/alpha_calibration_5km.csv",
+    ),
 }
 
 
@@ -1203,6 +1240,213 @@ def _render_figure2_framework(out, plot_title):
     with open(save_path, "wb") as f:
         writer.write(f)
     print(f"Figure 2 framework saved to {save_path}")
+
+
+def _draw_figure3_overlay(overlay_path, page_size, canvas_size):
+    """Draw vector panel labels for Figure 3."""
+    import matplotlib.pyplot as plt
+
+    page_w, page_h = page_size
+    canvas_w, canvas_h = canvas_size
+    fig = plt.figure(figsize=(page_w / 72.0, page_h / 72.0), facecolor="none")
+
+    for label, x, y in (
+        ("a", 0, 0),
+        ("b", 0, 270),
+    ):
+        fig.text(
+            x / canvas_w,
+            1.0 - y / canvas_h,
+            label,
+            ha="left",
+            va="top",
+            fontsize=13,
+            fontweight="bold",
+        )
+
+    fig.savefig(overlay_path, transparent=True)
+    plt.close(fig)
+
+
+def _render_figure3_framework(out, plot_title):
+    """Compose Figure 3 from vector PDF panels using the draw.io frame."""
+    import tempfile
+
+    from pypdf import PdfReader, PdfWriter
+
+    from visualization._utils import _add_title_suffix
+
+    canvas_w, canvas_h = 331.0, 421.0
+    page_w = 7.0 * 72.0
+    page_h = page_w * canvas_h / canvas_w
+
+    def rect_from_drawio_points(x, y, w, h):
+        return (
+            x / canvas_w * page_w,
+            page_h - (y + h) / canvas_h * page_h,
+            w / canvas_w * page_w,
+            h / canvas_h * page_h,
+        )
+
+    panel_specs = (
+        (
+            "city_population_detour_oracle_reduction_bubble",
+            rect_from_drawio_points(0, 20, 330, 230),
+        ),
+        (
+            "city_reduction_rank_all_macro_region",
+            rect_from_drawio_points(0, 290, 330, 130),
+        ),
+    )
+    source_paths = {
+        name: _paper_pdf_path(out, name, plot_title=plot_title)
+        for name in FIGURE3_FRAMEWORK_DEPENDENCIES
+    }
+    missing = [name for name, path in source_paths.items() if not os.path.exists(path)]
+    if missing:
+        print(
+            "figure3_framework skipped - missing vector source PDFs: "
+            + ", ".join(missing)
+        )
+        return
+
+    writer = PdfWriter()
+    page = writer.add_blank_page(width=page_w, height=page_h)
+    for name, target_rect in panel_specs:
+        source_page = PdfReader(source_paths[name]).pages[0]
+        transform = _fit_pdf_rect(source_page, target_rect)
+        page.merge_transformed_page(
+            source_page,
+            transform,
+            over=True,
+        )
+
+    with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
+        overlay_path = tmp.name
+    try:
+        _draw_figure3_overlay(
+            overlay_path,
+            page_size=(page_w, page_h),
+            canvas_size=(canvas_w, canvas_h),
+        )
+        overlay_page = PdfReader(overlay_path).pages[0]
+        page.merge_page(overlay_page, over=True)
+    finally:
+        try:
+            os.remove(overlay_path)
+        except OSError:
+            pass
+
+    save_path = os.path.join(out, "figure3_framework.pdf")
+    if plot_title:
+        save_path = _add_title_suffix(save_path)
+    os.makedirs(os.path.dirname(save_path), exist_ok=True)
+    with open(save_path, "wb") as f:
+        writer.write(f)
+    print(f"Figure 3 framework saved to {save_path}")
+
+
+def _draw_figure4_overlay(overlay_path, page_size, canvas_size):
+    """Draw vector panel labels for Figure 4."""
+    import matplotlib.pyplot as plt
+
+    page_w, page_h = page_size
+    canvas_w, canvas_h = canvas_size
+    fig = plt.figure(figsize=(page_w / 72.0, page_h / 72.0), facecolor="none")
+
+    for label, x, y in (
+        ("a", 0, 0),
+        ("b", 0, 200),
+        ("c", 190, 200),
+    ):
+        fig.text(
+            x / canvas_w,
+            1.0 - y / canvas_h,
+            label,
+            ha="left",
+            va="top",
+            fontsize=13,
+            fontweight="bold",
+        )
+
+    fig.savefig(overlay_path, transparent=True)
+    plt.close(fig)
+
+
+def _render_figure4_framework(out, plot_title):
+    """Compose Figure 4 from vector PDF panels using the draw.io frame."""
+    import tempfile
+
+    from pypdf import PdfReader, PdfWriter
+
+    from visualization._utils import _add_title_suffix
+
+    canvas_w, canvas_h = 362.0, 331.0
+    page_w = 7.0 * 72.0
+    page_h = page_w * canvas_h / canvas_w
+
+    def rect_from_drawio_points(x, y, w, h):
+        return (
+            x / canvas_w * page_w,
+            page_h - (y + h) / canvas_h * page_h,
+            w / canvas_w * page_w,
+            h / canvas_h * page_h,
+        )
+
+    panel_specs = (
+        ("flow_frame.drawio", rect_from_drawio_points(0, 20, 360, 160)),
+        ("tanner_impedance_fit", rect_from_drawio_points(0, 220, 170, 110)),
+        ("alpha_calibration_5km", rect_from_drawio_points(190, 220, 170, 110)),
+    )
+    source_paths = {}
+    for name in FIGURE4_FRAMEWORK_DEPENDENCIES:
+        source_paths[name] = _paper_pdf_path(
+            out,
+            name,
+            plot_title=plot_title and name != "flow_frame.drawio",
+        )
+    missing = [name for name, path in source_paths.items() if not os.path.exists(path)]
+    if missing:
+        print(
+            "figure4_framework skipped - missing vector source PDFs: "
+            + ", ".join(missing)
+        )
+        return
+
+    writer = PdfWriter()
+    page = writer.add_blank_page(width=page_w, height=page_h)
+    for name, target_rect in panel_specs:
+        source_page = PdfReader(source_paths[name]).pages[0]
+        transform = _fit_pdf_rect(source_page, target_rect)
+        page.merge_transformed_page(
+            source_page,
+            transform,
+            over=True,
+        )
+
+    with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
+        overlay_path = tmp.name
+    try:
+        _draw_figure4_overlay(
+            overlay_path,
+            page_size=(page_w, page_h),
+            canvas_size=(canvas_w, canvas_h),
+        )
+        overlay_page = PdfReader(overlay_path).pages[0]
+        page.merge_page(overlay_page, over=True)
+    finally:
+        try:
+            os.remove(overlay_path)
+        except OSError:
+            pass
+
+    save_path = os.path.join(out, "figure4_framework.pdf")
+    if plot_title:
+        save_path = _add_title_suffix(save_path)
+    os.makedirs(os.path.dirname(save_path), exist_ok=True)
+    with open(save_path, "wb") as f:
+        writer.write(f)
+    print(f"Figure 4 framework saved to {save_path}")
 
 
 def _plot_power_generation_mix_pie(
@@ -3781,46 +4025,45 @@ def _render_tanner_impedance_fit(data_dir, out, for_latex, plot_title):
     )
 
 
-def render_all(data_dir: str, figures_dir: str, for_latex: bool = False, plot_title: bool = False, only: set = None, exp_config: dict = None):
-    from visualization.analysis import (
-        _weighted_reduction_column,
-        plot_city_ebike_rank_bottom10,
-        plot_city_ebike_rank_top10,
-        plot_city_gef_distribution,
-        plot_city_gef_scatter_components,
-        plot_city_oracle_reduction_rank_top10,
-        plot_city_population_detour_oracle_reduction_bubble,
-        plot_city_reduction_rank_all_macro_region,
-        plot_city_reduction_rank_top10,
-        plot_grouped_scatter_split_panels,
-        plot_province_orders_both_emissions,
-        plot_province_orders_emission,
-        plot_province_total_ebike_lifecycle,
-        plot_regions_map_and_gef_scatter,
-        plot_regions_map_city_rank_and_drone_share,
-        plot_regions_map_city_province_ranks,
-        plot_regions_map_city_rank_inset,
-        plot_regions_map_kappa_panels,
-        plot_regions_map_oracle_reduction_rank,
-        plot_regions_map_oracle_reduction_rank_map_only,
-        plot_regions_map_optimal_drone_share,
-        plot_regions_map_pathway_scenario_maps,
-        plot_regions_map_pathway_scenarios,
+def _alpha_calibration_csv_path():
+    """Return the tracked α calibration sweep CSV path."""
+    return os.path.normpath(
+        os.path.join(
+            os.path.dirname(os.path.abspath(__file__)),
+            "..",
+            "calibration",
+            "alpha_calibration_5km.csv",
+        )
     )
-    from visualization.concepts import (
-        plot_detour_and_lifecycle,
-        plot_detour_lifecycle_distance,
-        plot_emission_model_flowchart,
-        plot_production_detour_eol_panels,
-    )
-    from visualization.emission import (
-        plot_end_of_life_phase_per_km,
-        plot_lifecycle_distance_route_factor,
-        plot_production_phase_per_km,
-    )
-    from visualization.regions import plot_regions_on_china_map
-    from visualization.roadnet import plot_distance_comparison
 
+
+def _render_alpha_calibration_5km(out, for_latex, plot_title):
+    """Render the paper α calibration panel from the tracked sweep CSV."""
+    csv_path = _alpha_calibration_csv_path()
+    if not os.path.exists(csv_path):
+        print(f"alpha_calibration_5km skipped — missing {csv_path}")
+        return
+
+    from visualization.calibration import plot_alpha_calibration_5km
+
+    df = pd.read_csv(csv_path)
+    plot_alpha_calibration_5km(
+        df,
+        save_path=os.path.join(out, "alpha_calibration_5km.png"),
+        for_latex=for_latex,
+        plot_title=plot_title,
+    )
+
+
+def render_all(
+    data_dir: str,
+    figures_dir: str,
+    for_latex: bool = False,
+    plot_title: bool = False,
+    only: set = None,
+    exp_config: dict = None,
+    profile: bool = False,
+):
     out = os.path.join(figures_dir, "paper")
     os.makedirs(out, exist_ok=True)
 
@@ -3829,6 +4072,8 @@ def render_all(data_dir: str, figures_dir: str, for_latex: bool = False, plot_ti
 
     figure1_framework_requested = _want("figure1_framework")
     figure2_framework_requested = _want("figure2_framework")
+    figure3_framework_requested = _want("figure3_framework")
+    figure4_framework_requested = _want("figure4_framework")
     graph_cache = {}
     router_cache = {}
 
@@ -3868,12 +4113,44 @@ def render_all(data_dir: str, figures_dir: str, for_latex: bool = False, plot_ti
             for path in module_paths
         )
 
+    def _figure3_needs_vector_source(name):
+        if not figure3_framework_requested:
+            return False
+        source_pdf = _paper_pdf_path(out, name, plot_title=plot_title)
+        if not os.path.exists(source_pdf):
+            return True
+        cache_mtime = os.path.getmtime(source_pdf)
+        viz_dir = os.path.dirname(os.path.abspath(__file__))
+        module_names = FIGURE3_FRAMEWORK_SOURCE_MODULES.get(name, ())
+        module_paths = [os.path.join(viz_dir, module) for module in module_names]
+        return any(
+            os.path.exists(path) and os.path.getmtime(path) > cache_mtime
+            for path in module_paths
+        )
+
+    def _figure4_needs_vector_source(name):
+        if not figure4_framework_requested:
+            return False
+        source_pdf = _paper_pdf_path(out, name, plot_title=plot_title)
+        if not os.path.exists(source_pdf):
+            return True
+        cache_mtime = os.path.getmtime(source_pdf)
+        viz_dir = os.path.dirname(os.path.abspath(__file__))
+        module_names = FIGURE4_FRAMEWORK_SOURCE_MODULES.get(name, ())
+        module_paths = [os.path.join(viz_dir, module) for module in module_names]
+        return any(
+            os.path.exists(path) and os.path.getmtime(path) > cache_mtime
+            for path in module_paths
+        )
+
     # --- Calibration figures ---
-    if _want("tanner_impedance_fit"):
+    if _want("tanner_impedance_fit") or _figure4_needs_vector_source(
+        "tanner_impedance_fit"
+    ):
         _render_tanner_impedance_fit(
             data_dir=data_dir,
             out=out,
-            for_latex=for_latex,
+            for_latex=for_latex if _want("tanner_impedance_fit") else True,
             plot_title=plot_title,
         )
 
@@ -3887,7 +4164,37 @@ def render_all(data_dir: str, figures_dir: str, for_latex: bool = False, plot_ti
             plot_title=plot_title,
         )
 
+    if _want("alpha_calibration_5km") or _figure4_needs_vector_source(
+        "alpha_calibration_5km"
+    ):
+        with _profile_block(profile, "alpha_calibration_5km"):
+            _render_alpha_calibration_5km(
+                out=out,
+                for_latex=for_latex if _want("alpha_calibration_5km") else True,
+                plot_title=plot_title,
+            )
+
     # --- Concept figures (no data dependency) ---
+    concept_figures = {
+        "emission_model_flowchart",
+        "production_phase_per_km",
+        "end_of_life_phase_per_km",
+        "production_detour_eol_panels",
+        "detour_and_lifecycle",
+        "detour_lifecycle_distance",
+    }
+    if only is None or only & concept_figures:
+        from visualization.concepts import (
+            plot_detour_and_lifecycle,
+            plot_detour_lifecycle_distance,
+            plot_emission_model_flowchart,
+            plot_production_detour_eol_panels,
+        )
+        from visualization.emission import (
+            plot_end_of_life_phase_per_km,
+            plot_production_phase_per_km,
+        )
+
     if _want("emission_model_flowchart"):
         plot_emission_model_flowchart(
             save_path=os.path.join(out, "emission_model_flowchart.png"),
@@ -3980,6 +4287,8 @@ def render_all(data_dir: str, figures_dir: str, for_latex: bool = False, plot_ti
                 missing = required - set(od_df.columns)
                 print(f"lifecycle_distance_route_factor skipped — {od_path} missing columns {missing}")
             else:
+                from visualization.emission import plot_lifecycle_distance_route_factor
+
                 plot_lifecycle_distance_route_factor(
                     od_df,
                     save_path=os.path.join(out, "lifecycle_distance_route_factor.png"),
@@ -4107,6 +4416,8 @@ def render_all(data_dir: str, figures_dir: str, for_latex: bool = False, plot_ti
         )
 
     if _want("distance_comparison") or _figure1_needs_vector_source("distance_comparison"):
+        from visualization.roadnet import plot_distance_comparison
+
         _render_distance_comparison(
             data_dir=data_dir,
             out=out,
@@ -4121,6 +4432,8 @@ def render_all(data_dir: str, figures_dir: str, for_latex: bool = False, plot_ti
         and not for_latex
         and _figure1_needs_vector_source("distance_comparison")
     ):
+        from visualization.roadnet import plot_distance_comparison
+
         _render_distance_comparison(
             data_dir=data_dir,
             out=out,
@@ -4183,18 +4496,75 @@ def render_all(data_dir: str, figures_dir: str, for_latex: bool = False, plot_ti
         "regions_map_city_rank_inset",
         "figure1_framework",
         "figure2_framework",
+        "figure3_framework",
         "regions_map_kappa_panels",
         "regions_map_pathway_scenario_maps",
         "regions_map_pathway_scenarios",
         *CITY_CONTEXT_FIGURES,
         *CITY_CONTEXT_GROUP_FIGURES,
     } | gef_figures | TOP6_REDUCTION_DETOUR_FIGURES
+    analysis_figures = {
+        "province_orders_emission",
+        "province_orders_both_emissions",
+        "province_total_ebike_lifecycle",
+        "city_ebike_rank_top10",
+        "city_ebike_rank_bottom10",
+        "city_oracle_reduction_rank_top10",
+        "city_reduction_rank_top10",
+        "city_reduction_rank_all_macro_region",
+        "regions_map_oracle_reduction_rank",
+        "regions_map_oracle_reduction_rank_map_only",
+        "regions_map_optimal_drone_share",
+        "regions_map_city_rank_and_drone_share",
+        "regions_map_city_province_ranks",
+        "regions_map_city_rank_inset",
+        "regions_map_kappa_panels",
+        "regions_map_pathway_scenario_maps",
+        "regions_map_pathway_scenarios",
+        *gef_figures,
+    }
+    analysis_source_needed = (
+        _figure1_needs_vector_source("regions_map_oracle_reduction_rank")
+        or _figure2_needs_vector_source("city_oracle_reduction_rank_top10")
+        or _figure2_needs_vector_source("regions_map_oracle_reduction_rank_map_only")
+        or _figure3_needs_vector_source("city_population_detour_oracle_reduction_bubble")
+        or _figure3_needs_vector_source("city_reduction_rank_all_macro_region")
+    )
     if only is None or only & stats_figures:
         stats_path = os.path.join(data_dir, "all_region_stats.csv")
         if not os.path.exists(stats_path):
             print(f"Missing {stats_path}; run consolidate_stats first — skipping stats figures")
         else:
             df = pd.read_csv(stats_path)
+            needs_analysis_import = (
+                only is None or bool(only & analysis_figures) or analysis_source_needed
+            )
+            if needs_analysis_import:
+                from visualization.analysis import (
+                    _weighted_reduction_column,
+                    plot_city_ebike_rank_bottom10,
+                    plot_city_ebike_rank_top10,
+                    plot_city_gef_distribution,
+                    plot_city_gef_scatter_components,
+                    plot_city_oracle_reduction_rank_top10,
+                    plot_city_population_detour_oracle_reduction_bubble,
+                    plot_city_reduction_rank_all_macro_region,
+                    plot_city_reduction_rank_top10,
+                    plot_grouped_scatter_split_panels,
+                    plot_province_orders_both_emissions,
+                    plot_province_orders_emission,
+                    plot_province_total_ebike_lifecycle,
+                    plot_regions_map_and_gef_scatter,
+                    plot_regions_map_city_rank_and_drone_share,
+                    plot_regions_map_city_province_ranks,
+                    plot_regions_map_city_rank_inset,
+                    plot_regions_map_kappa_panels,
+                    plot_regions_map_oracle_reduction_rank,
+                    plot_regions_map_oracle_reduction_rank_map_only,
+                    plot_regions_map_optimal_drone_share,
+                    plot_regions_map_pathway_scenario_maps,
+                    plot_regions_map_pathway_scenarios,
+                )
 
             if _want("province_orders_emission"):
                 plot_province_orders_emission(
@@ -4254,11 +4624,27 @@ def render_all(data_dir: str, figures_dir: str, for_latex: bool = False, plot_ti
                     plot_title=plot_title,
                 )
 
-            if _want("city_reduction_rank_all_macro_region"):
+            city_reduction_rank_all_requested = _want(
+                "city_reduction_rank_all_macro_region"
+            )
+            city_reduction_rank_all_pdf_needed = _figure3_needs_vector_source(
+                "city_reduction_rank_all_macro_region"
+            )
+            if city_reduction_rank_all_requested:
                 plot_city_reduction_rank_all_macro_region(
                     df,
                     save_path=os.path.join(out, "city_reduction_rank_all_macro_region"),
                     for_latex=for_latex,
+                    plot_title=plot_title,
+                )
+            if (
+                city_reduction_rank_all_pdf_needed
+                and not (city_reduction_rank_all_requested and for_latex)
+            ):
+                plot_city_reduction_rank_all_macro_region(
+                    df,
+                    save_path=os.path.join(out, "city_reduction_rank_all_macro_region"),
+                    for_latex=True,
                     plot_title=plot_title,
                 )
 
@@ -4412,6 +4798,8 @@ def render_all(data_dir: str, figures_dir: str, for_latex: bool = False, plot_ti
                         )
 
             if _want("regions_map"):
+                from visualization.regions import plot_regions_on_china_map
+
                 plot_regions_on_china_map(
                     csv_path=stats_path,
                     save_path=os.path.join(out, "regions_map.png"),
@@ -4585,7 +4973,13 @@ def render_all(data_dir: str, figures_dir: str, for_latex: bool = False, plot_ti
                         plot_title=plot_title,
                     )
 
-            if only is None or only & gef_figures:
+            if (
+                only is None
+                or only & gef_figures
+                or _figure3_needs_vector_source(
+                    "city_population_detour_oracle_reduction_bubble"
+                )
+            ):
                 enriched_path = os.path.join(data_dir, "all_region_stats_enriched.csv")
                 if not os.path.exists(enriched_path):
                     print(f"GEF figures skipped — missing {enriched_path}; run tools.enrich_stats first")
@@ -4606,7 +5000,13 @@ def render_all(data_dir: str, figures_dir: str, for_latex: bool = False, plot_ti
                             for_latex=for_latex,
                             plot_title=plot_title,
                         )
-                    if _want("city_population_detour_oracle_reduction_bubble"):
+                    city_population_bubble_requested = _want(
+                        "city_population_detour_oracle_reduction_bubble"
+                    )
+                    city_population_bubble_pdf_needed = _figure3_needs_vector_source(
+                        "city_population_detour_oracle_reduction_bubble"
+                    )
+                    if city_population_bubble_requested:
                         plot_city_population_detour_oracle_reduction_bubble(
                             df_enriched,
                             save_path=os.path.join(
@@ -4614,6 +5014,19 @@ def render_all(data_dir: str, figures_dir: str, for_latex: bool = False, plot_ti
                                 "city_population_detour_oracle_reduction_bubble.png",
                             ),
                             for_latex=for_latex,
+                            plot_title=plot_title,
+                        )
+                    if (
+                        city_population_bubble_pdf_needed
+                        and not (city_population_bubble_requested and for_latex)
+                    ):
+                        plot_city_population_detour_oracle_reduction_bubble(
+                            df_enriched,
+                            save_path=os.path.join(
+                                out,
+                                "city_population_detour_oracle_reduction_bubble.png",
+                            ),
+                            for_latex=True,
                             plot_title=plot_title,
                         )
                     if _want("scatter_detour_ratio_vs_reduction_by_gef"):
@@ -4668,16 +5081,32 @@ def render_all(data_dir: str, figures_dir: str, for_latex: bool = False, plot_ti
                         )
 
     if figure1_framework_requested:
-        _render_figure1_framework(
-            out=out,
-            plot_title=plot_title,
-        )
+        with _profile_block(profile, "figure1_framework"):
+            _render_figure1_framework(
+                out=out,
+                plot_title=plot_title,
+            )
 
     if figure2_framework_requested:
-        _render_figure2_framework(
-            out=out,
-            plot_title=plot_title,
-        )
+        with _profile_block(profile, "figure2_framework"):
+            _render_figure2_framework(
+                out=out,
+                plot_title=plot_title,
+            )
+
+    if figure3_framework_requested:
+        with _profile_block(profile, "figure3_framework"):
+            _render_figure3_framework(
+                out=out,
+                plot_title=plot_title,
+            )
+
+    if figure4_framework_requested:
+        with _profile_block(profile, "figure4_framework"):
+            _render_figure4_framework(
+                out=out,
+                plot_title=plot_title,
+            )
 
     # OAT tornado diagnostics (compact + SI full): independent of
     # all_region_stats.csv; only need all_sensitivity_oat.csv. Kept outside
@@ -4800,6 +5229,7 @@ def main():
     parser.add_argument("--png", action="store_true", help="Force PNG output")
     parser.add_argument("--titled", action="store_true", help="Add titles to figures")
     parser.add_argument("--only", type=str, default=None, help="Comma-separated figure names to render")
+    parser.add_argument("--profile", action="store_true", help="Print elapsed time for selected render blocks")
     args = parser.parse_args()
 
     project_root = os.path.normpath(
@@ -4810,8 +5240,20 @@ def main():
     plot_title = args.titled or config.get("plot_title", False)
     only = set(args.only.split(",")) if args.only else None
 
-    print(f"for_latex={for_latex}, plot_title={plot_title}, only={only or 'all'}")
-    render_all(config["data_dir"], config["figures_dir"], for_latex=for_latex, plot_title=plot_title, only=only, exp_config=config)
+    print(
+        "for_latex="
+        f"{for_latex}, plot_title={plot_title}, only={only or 'all'}, "
+        f"profile={args.profile}"
+    )
+    render_all(
+        config["data_dir"],
+        config["figures_dir"],
+        for_latex=for_latex,
+        plot_title=plot_title,
+        only=only,
+        exp_config=config,
+        profile=args.profile,
+    )
 
 
 

@@ -3,6 +3,7 @@ import os
 import contextily as ctx
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 from scipy import stats
 from scipy.optimize import curve_fit
 
@@ -305,7 +306,7 @@ def plot_tanner_distance_histogram(
 def plot_tanner_impedance_fit(
     distances,
     save_path=None,
-    figsize=(3.2, 2.2),
+    figsize=(5.0, 3.4),
     for_latex=False,
     plot_title=False,
 ):
@@ -320,7 +321,6 @@ def plot_tanner_impedance_fit(
     """
     beta = 1.113
     gamma = 1.412
-    r_squared = 0.985
     bin_width = 0.1
     max_distance = 5.0
     plot_distances = np.asarray(distances)
@@ -373,40 +373,25 @@ def plot_tanner_impedance_fit(
         lw=0.8,
         label=f"Peak = {d_peak:.2f} km",
     )
-    ax.text(
-        0.98,
-        0.95,
-        (
-            r"$f(d)=C d^{1.113}e^{-1.412d}$" + "\n"
-            + r"$R^2=0.985$"
-        ),
-        transform=ax.transAxes,
-        fontsize=6.0,
-        ha="right",
-        va="top",
-        linespacing=1.2,
-    )
 
     ax.set_xlim(0, max_distance)
     ax.set_ylim(bottom=0)
-    ax.set_xlabel("Delivery distance (km)", fontsize=7.2, labelpad=2)
-    ax.set_ylabel("Order count", fontsize=7.2, labelpad=2)
+    ax.set_xlabel("Delivery distance (km)", fontsize=10, labelpad=3)
+    ax.set_ylabel("Order count", fontsize=10, labelpad=3)
     ax.set_xticks(np.arange(0, max_distance + 1, 1))
-    ax.tick_params(axis="both", labelsize=6.4, length=2.5, pad=1)
+    ax.tick_params(axis="both", labelsize=9, length=3, pad=2)
     ax.spines["top"].set_visible(False)
     ax.spines["right"].set_visible(False)
     for spine in ax.spines.values():
         spine.set_linewidth(0.6)
     ax.legend(
         loc="upper right",
-        bbox_to_anchor=(0.98, 0.72),
-        fontsize=5.8,
+        fontsize=8.5,
         frameon=False,
-        handlelength=1.6,
-        borderaxespad=0,
+        handlelength=1.8,
     )
     if plot_title:
-        ax.set_title("Tanner Impedance Fit", fontsize=8)
+        ax.set_title("Tanner Impedance Fit", fontsize=11)
 
     plt.tight_layout()
 
@@ -545,3 +530,113 @@ def plot_alpha_calibration(
         fig.savefig(save_path, dpi=200)
         print(f"Saved to {save_path}")
     plt.show()
+
+
+def plot_alpha_calibration_5km(
+    df: pd.DataFrame,
+    save_path: str = None,
+    figsize: tuple = (3.2, 2.2),
+    for_latex: bool = False,
+    plot_title: bool = False,
+):
+    """Plot 5 km α calibration against the empirical mean-distance target.
+
+    Args:
+        df: Alpha sweep data with alpha and weighted mean OD distance columns.
+        save_path: Path to save figure. Shows plot if None.
+        figsize: Figure size tuple.
+        for_latex: If True, save as PDF.
+        plot_title: If True, show title.
+    """
+    required_cols = {"alpha", "weighted_mean_od_distance_km"}
+    missing_cols = required_cols - set(df.columns)
+    if missing_cols:
+        raise ValueError(
+            "alpha calibration data missing columns: "
+            + ", ".join(sorted(missing_cols))
+        )
+
+    plot_df = df.sort_values("alpha").copy()
+    target = float(plot_df.get("target_mean_distance_km", pd.Series([2.23])).iloc[0])
+    radius = float(plot_df.get("delivery_radius_km", pd.Series([5.0])).iloc[0])
+
+    if "is_best" in plot_df.columns and plot_df["is_best"].any():
+        best_row = plot_df.loc[plot_df["is_best"].astype(bool)].iloc[0]
+    else:
+        best_idx = (
+            plot_df["weighted_mean_od_distance_km"].sub(target).abs().idxmin()
+        )
+        best_row = plot_df.loc[best_idx]
+    best_alpha = float(best_row["alpha"])
+    best_mean = float(best_row["weighted_mean_od_distance_km"])
+
+    fig, ax = plt.subplots(figsize=figsize)
+    ax.plot(
+        plot_df["alpha"],
+        plot_df["weighted_mean_od_distance_km"],
+        color="#4C72B0",
+        lw=1.4,
+        marker="o",
+        markersize=3.2,
+        markerfacecolor="white",
+        markeredgewidth=0.9,
+        zorder=3,
+    )
+    ax.scatter(
+        [best_alpha],
+        [best_mean],
+        s=24,
+        color="#C44E52",
+        edgecolor="white",
+        linewidth=0.5,
+        zorder=5,
+    )
+    ax.axhline(target, color="#333333", lw=0.8, ls=(0, (3, 2)), zorder=1)
+    ax.axvline(best_alpha, color="#C44E52", lw=0.8, ls=(0, (3, 2)), zorder=1)
+
+    ax.annotate(
+        f"Target {target:.2f} km",
+        xy=(plot_df["alpha"].min(), target),
+        xytext=(4, 4),
+        textcoords="offset points",
+        ha="left",
+        va="bottom",
+        fontsize=6.0,
+        color="#333333",
+    )
+    ax.annotate(
+        f"α = {best_alpha:.1f}\nmean = {best_mean:.2f} km",
+        xy=(best_alpha, best_mean),
+        xytext=(12, -6),
+        textcoords="offset points",
+        ha="left",
+        va="top",
+        fontsize=6.0,
+        color="#9E2F33",
+        linespacing=1.1,
+    )
+
+    ax.set_xlabel("Building volume exponent, α", fontsize=6.8, labelpad=2)
+    ax.set_ylabel("Weighted mean OD distance (km)", fontsize=6.8, labelpad=2)
+    ax.tick_params(axis="both", labelsize=6.0, length=2.2, pad=1.5)
+    ax.grid(axis="y", color="#E0E0E0", linewidth=0.5, zorder=0)
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+    for spine in ax.spines.values():
+        spine.set_linewidth(0.6)
+    if plot_title:
+        ax.set_title(f"α calibration ({radius:g} km delivery radius)", fontsize=7.5)
+
+    plt.tight_layout()
+
+    if save_path:
+        os.makedirs(os.path.dirname(save_path), exist_ok=True)
+        if for_latex and not save_path.endswith(".pdf"):
+            save_path = save_path.rsplit(".", 1)[0] + ".pdf"
+        if plot_title:
+            save_path = _add_title_suffix(save_path)
+        fig.savefig(save_path, dpi=300, bbox_inches="tight")
+        print(f"Alpha calibration 5 km saved to {save_path}")
+    else:
+        plt.show()
+    plt.close(fig)
