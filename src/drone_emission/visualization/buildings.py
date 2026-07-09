@@ -305,13 +305,14 @@ def plot_building_height_merchant_map(
         zorder=10,
         legend=False,
     )
+    cbar_ax = ax.inset_axes([0.18, -0.24, 0.64, 0.035], transform=ax.transAxes)
+    cbar_ticks = np.linspace(0.0, height_max, 5)
     cbar = fig.colorbar(
         ScalarMappable(norm=norm, cmap=cmap),
-        ax=ax,
+        cax=cbar_ax,
         boundaries=height_bins,
-        ticks=height_bins,
-        shrink=0.75,
-        pad=0.02,
+        ticks=cbar_ticks,
+        orientation="horizontal",
     )
     cbar.set_label("Building height (m, capped at 95th pct)", fontsize=13)
     cbar.ax.tick_params(labelsize=12)
@@ -424,27 +425,25 @@ def plot_building_height_merchant_map(
     ax.set_yticks([])
     ax.tick_params(left=False, bottom=False, labelleft=False, labelbottom=False)
     ax.ticklabel_format(useOffset=False, style="plain")
-    ax.grid(True, alpha=0.35, linestyle="--", color="white", zorder=20)
+    ax.grid(False)
+    for spine in ax.spines.values():
+        spine.set_visible(False)
 
     legend = ax.legend(
-        loc="upper left",
-        bbox_to_anchor=(1.02, 1.0),
+        loc="upper center",
+        bbox_to_anchor=(0.5, -0.08),
         borderaxespad=0.0,
         fontsize=12,
-        framealpha=0.9,
+        frameon=False,
+        ncol=2 if od_line_count else 1,
         markerscale=1.4,
         handlelength=2.4,
         handletextpad=0.7,
+        columnspacing=1.6,
     )
     legend.set_zorder(100)
 
     if plot_title:
-        ax.set_title(
-            f"{region_name} building heights around a top-sales merchant",
-            fontsize=16,
-            fontweight="bold",
-            pad=18,
-        )
         ax.text(
             0.02,
             0.98,
@@ -505,7 +504,7 @@ def plot_building_height_merchant_map(
                     fig, cbar.ax, renderer=renderer, tight_bbox=tight_bbox
                 ),
                 "label": "Building height (m, capped at 95th pct)",
-                "orientation": "vertical",
+                "orientation": "horizontal",
             },
         }
         if legend is not None:
