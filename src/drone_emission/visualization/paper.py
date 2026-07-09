@@ -16,6 +16,7 @@ Available figures:
     distance_comparison_high_3x3, distance_comparison_low_3x3,
     shanghai_heatmap, shanghai_building_height_merchant,
     shanghai_building_footprint_heatmap,
+    shanghai_road_network_subfigure,
     shanghai_road_air_distance, shanghai_road_detour,
     shanghai_air_detour, shanghai_air_road_joint, shanghai_emission_reduction,
     shanghai_emission_by_distance, shanghai_reduction_detour_by_distance,
@@ -848,6 +849,47 @@ def _render_shanghai_building_footprint_heatmap(
         "Shanghai",
         "上海市",
         save_path=os.path.join(out, "shanghai_building_footprint_heatmap.png"),
+        for_latex=for_latex,
+        plot_title=plot_title,
+    )
+
+
+def _render_shanghai_road_network_subfigure(
+    data_dir,
+    out,
+    for_latex,
+    plot_title,
+    graph_cache=None,
+):
+    """Load Shanghai roadnet and sales to render the road-only subfigure."""
+    region_key = "shanghai"
+    region_level = "city"
+    region_dir = os.path.join(data_dir, region_level, region_key)
+    sales_path = os.path.join(region_dir, f"{region_key}_sales.csv")
+    roadnet_path = os.path.join(region_dir, f"{region_key}_roadnet.graphml")
+
+    if not os.path.exists(sales_path):
+        print(
+            "Shanghai road network subfigure skipped - missing "
+            f"{sales_path}"
+        )
+        return
+    if not os.path.exists(roadnet_path):
+        print(
+            "Shanghai road network subfigure skipped - missing "
+            f"{roadnet_path}"
+        )
+        return
+
+    from visualization.roadnet import plot_road_network_subfigure
+
+    stores_df = pd.read_csv(sales_path)
+    road_graph = _get_cached_sparse_graph(roadnet_path, graph_cache=graph_cache)
+    plot_road_network_subfigure(
+        road_graph,
+        stores_df,
+        "Shanghai",
+        save_path=os.path.join(out, "shanghai_road_network_subfigure.png"),
         for_latex=for_latex,
         plot_title=plot_title,
     )
@@ -4431,6 +4473,15 @@ def render_all(
             out=out,
             for_latex=for_latex,
             plot_title=plot_title,
+        )
+
+    if _want("shanghai_road_network_subfigure"):
+        _render_shanghai_road_network_subfigure(
+            data_dir=data_dir,
+            out=out,
+            for_latex=for_latex,
+            plot_title=plot_title,
+            graph_cache=graph_cache,
         )
 
     if _want("shanghai_road_air_distance"):

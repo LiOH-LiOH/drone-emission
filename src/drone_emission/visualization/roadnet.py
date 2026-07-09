@@ -5,15 +5,25 @@ import matplotlib.pyplot as plt
 import networkx as nx
 import numpy as np
 import osmnx as ox
+import pandas as pd
+from matplotlib.collections import LineCollection
+from utils.coordinates import gcj02_to_wgs84
 
 from ._utils import (
     add_basemap_and_boundaries,
     configure_contextily_cache,
     finalize_plot,
     plot_boundary_box,
+    saved_tight_axis_report,
     setup_figure,
     _add_title_suffix,
+    write_figure_report,
 )
+
+
+MERCHANT_MAP_DEGREE_SIZE = 0.01
+MERCHANT_MAP_RANDOM_SEED = 20260703
+MERCHANT_MAP_TOP_SALES_FRACTION = 0.01
 
 
 def visualize_roadnet(
@@ -123,6 +133,163 @@ def visualize_path(
         f"Nodes: {len(G.nodes)}, Edges: {len(G.edges)}\nPath Length: {len(route_nodes)}"
     )
     finalize_plot(fig, ax, save_path, title, stats_text, boundaries_dict, for_latex, plot_title)
+    plt.close(fig)
+
+
+def plot_road_network_subfigure(
+    graph,
+    stores_df,
+    region_name,
+    save_path=None,
+    figsize=(6.4, 3.2),
+    for_latex=False,
+    plot_title=False,
+):
+    """Show a road-network-only panel around a top-sales merchant.
+
+    Args:
+        graph: SparseGraph with get_local_edges support.
+        stores_df: DataFrame with lat, lng, and month_sales columns.
+        region_name: English region name.
+        save_path: Path to save figure. Shows plot if None.
+        figsize: Figure size tuple.
+        for_latex: If True, save as PDF.
+        plot_title: If True, show title.
+    """
+    required_store_cols = {"lat", "lng", "month_sales"}
+    missing_store_cols = required_store_cols - set(stores_df.columns)
+    if missing_store_cols:
+        print(
+            "Road network subfigure skipped - stores data missing "
+            f"columns {sorted(missing_store_cols)}"
+        )
+        return
+
+    valid_stores = stores_df.dropna(subset=["lat", "lng", "month_sales"]).copy()
+    valid_stores["month_sales"] = pd.to_numeric(
+        valid_stores["month_sales"], errors="coerce"
+    )
+    valid_stores = valid_stores.dropna(subset=["month_sales"])
+    if valid_stores.empty:
+        print("Road network subfigure skipped - no valid merchant sales rows")
+        return
+
+    top_n = max(
+        1,
+        int(np.ceil(len(valid_stores) * MERCHANT_MAP_TOP_SALES_FRACTION)),
+    )
+    top_merchants = valid_stores.nlargest(top_n, "month_sales")
+    merchant = top_merchants.sample(
+        n=1,
+        random_state=MERCHANT_MAP_RANDOM_SEED,
+    ).iloc[0]
+    merchant_lng, merchant_lat = gcj02_to_wgs84(
+        float(merchant["lng"]),
+        float(merchant["lat"]),
+    )
+
+    lat_span = MERCHANT_MAP_DEGREE_SIZE
+    avg_lat = merchant_lat
+    figure_ratio = float(figsize[0]) / float(figsize[1])
+    lng_span = figure_ratio * lat_span / np.cos(np.radians(avg_lat))
+    boundaries_dict = {
+        "min_lng": merchant_lng - lng_span / 2,
+        "max_lng": merchant_lng + lng_span / 2,
+        "min_lat": merchant_lat - lat_span / 2,
+        "max_lat": merchant_lat + lat_span / 2,
+    }
+
+    edge_coords = graph.get_local_edges(boundaries_dict, margin_deg=0.0)
+    if len(edge_coords) == 0:
+        print("Road network subfigure skipped - no road edges in frame")
+        return
+
+    fig, ax = plt.subplots(figsize=figsize)
+    ax.set_position([0.0, 0.0, 1.0, 1.0])
+    aspect_ratio = 1.0 / np.cos(np.radians(avg_lat))
+    ax.set_aspect(aspect_ratio)
+    ax.set_xlim(boundaries_dict["min_lng"], boundaries_dict["max_lng"])
+    ax.set_ylim(boundaries_dict["min_lat"], boundaries_dict["max_lat"])
+    ax.set_facecolor("#f7f7f5")
+
+    segments = [[(ec[1], ec[0]), (ec[3], ec[2])] for ec in edge_coords]
+    roads = LineCollection(
+        segments,
+        colors="#4f5963",
+        linewidths=0.55,
+        alpha=0.95,
+        zorder=10,
+    )
+    ax.add_collection(roads)
+
+    ax.set_xlabel("")
+    ax.set_ylabel("")
+    ax.set_xticks([])
+    ax.set_yticks([])
+    ax.tick_params(left=False, bottom=False, labelleft=False, labelbottom=False)
+    ax.ticklabel_format(useOffset=False, style="plain")
+    ax.grid(False)
+    for spine in ax.spines.values():
+        spine.set_visible(False)
+
+    if plot_title:
+        ax.text(
+            0.02,
+            0.98,
+            f"{region_name} road network\nEdges: {len(edge_coords):,}",
+            transform=ax.transAxes,
+            fontsize=10,
+            verticalalignment="top",
+            bbox=dict(boxstyle="round", facecolor="white", alpha=0.85),
+            zorder=100,
+        )
+
+    if save_path:
+        if for_latex and not save_path.endswith(".pdf"):
+            save_path = save_path.rsplit(".", 1)[0] + ".pdf"
+        if plot_title:
+            save_path = _add_title_suffix(save_path)
+        os.makedirs(os.path.dirname(save_path), exist_ok=True)
+        if save_path.endswith(".pdf"):
+            ax.set_rasterization_zorder(12)
+        fig.canvas.draw()
+        report_path = save_path.rsplit(".", 1)[0] + "_report.json"
+        renderer = fig.canvas.get_renderer()
+        tight_bbox = fig.get_tightbbox(renderer)
+        report = {
+            "figure_name": "shanghai_road_network_subfigure",
+            "figure_path": save_path,
+            "coordinate_convention": (
+                "bbox_saved_tight_fraction values are fractions of the saved "
+                "page after bbox_inches='tight'."
+            ),
+            "map": {
+                "axis": saved_tight_axis_report(
+                    fig, ax, renderer=renderer, tight_bbox=tight_bbox
+                ),
+                "lng_range": [
+                    float(boundaries_dict["min_lng"]),
+                    float(boundaries_dict["max_lng"]),
+                ],
+                "lat_range": [
+                    float(boundaries_dict["min_lat"]),
+                    float(boundaries_dict["max_lat"]),
+                ],
+                "road_edge_count": int(len(edge_coords)),
+                "merchant_center": {
+                    "lng": float(merchant_lng),
+                    "lat": float(merchant_lat),
+                    "month_sales": float(merchant["month_sales"]),
+                },
+            },
+        }
+        write_figure_report(report_path, report)
+        print(f"Road network subfigure report saved to {report_path}")
+        plt.savefig(save_path, dpi=300, bbox_inches="tight", pad_inches=0)
+        print(f"Road network subfigure saved to {save_path}")
+    else:
+        plt.show()
+
     plt.close(fig)
 
 
