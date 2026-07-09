@@ -519,9 +519,6 @@ def plot_distance_comparison(
     n_cols: int = 1,
     show_stats_box: bool = True,
     show_basemap: bool = True,
-    show_gap_dots: bool = False,
-    gap_width_ratio: float = 0.22,
-    gap_wspace: float = 0.02,
 ) -> None:
     """Visualize sampled delivery paths comparing straight-line vs road network distance.
 
@@ -541,9 +538,6 @@ def plot_distance_comparison(
         n_cols: Number of subplot columns.
         show_stats_box: If True, show per-panel distance summary text boxes.
         show_basemap: If True, add the OpenStreetMap tile background.
-        show_gap_dots: If True, draw centered ellipses between distance panels.
-        gap_width_ratio: Relative size of ellipsis separators when show_gap_dots is True.
-        gap_wspace: GridSpec spacing around distance panels and ellipsis separators.
     """
     sample_paths = _compute_distance_samples(od_df, router, n_samples)
     if not sample_paths:
@@ -552,52 +546,14 @@ def plot_distance_comparison(
 
     n_cols = max(1, min(int(n_cols), len(sample_paths)))
     n_rows = int(np.ceil(len(sample_paths) / n_cols))
-    use_gap_column = (
-        show_gap_dots
-        and len(sample_paths) == 3
-        and n_rows == 1
-        and n_cols == 3
+    fig, axes = plt.subplots(
+        n_rows,
+        n_cols,
+        figsize=figsize or (4 * n_cols, 4 * n_rows),
     )
-    use_gap_rows = (
-        show_gap_dots
-        and len(sample_paths) == 3
-        and n_rows == 3
-        and n_cols == 1
-    )
-    if use_gap_column:
-        fig, grid_axes = plt.subplots(
-            1,
-            4,
-            figsize=figsize or (12.9, 4),
-            gridspec_kw={
-                "width_ratios": [1, 1, gap_width_ratio, 1],
-                "wspace": gap_wspace,
-            },
-        )
-        panel_axes = np.array([grid_axes[0], grid_axes[1], grid_axes[3]])
-        gap_axes = [grid_axes[2]]
-    elif use_gap_rows:
-        fig, grid_axes = plt.subplots(
-            5,
-            1,
-            figsize=figsize or (4, 12.9),
-            gridspec_kw={
-                "height_ratios": [1, gap_width_ratio, 1, gap_width_ratio, 1],
-                "hspace": gap_wspace,
-            },
-        )
-        panel_axes = np.array([grid_axes[0], grid_axes[2], grid_axes[4]])
-        gap_axes = [grid_axes[1], grid_axes[3]]
-    else:
-        fig, axes = plt.subplots(
-            n_rows,
-            n_cols,
-            figsize=figsize or (4 * n_cols, 4 * n_rows),
-        )
-        if n_rows == 1 and n_cols == 1:
-            axes = np.array([axes])
-        panel_axes = axes.flatten()
-        gap_axes = []
+    if n_rows == 1 and n_cols == 1:
+        axes = np.array([axes])
+    panel_axes = axes.flatten()
 
     for idx, (ax, sample) in enumerate(zip(panel_axes, sample_paths)):
         _draw_distance_panel(
@@ -616,50 +572,7 @@ def plot_distance_comparison(
         plt.suptitle("Straight-line vs Road Network Distance Comparison",
                      fontsize=14, fontweight="bold", y=1.02)
 
-    if use_gap_column:
-        fig.subplots_adjust(
-            left=0.02,
-            right=0.98,
-            bottom=0.04,
-            top=0.96,
-            wspace=gap_wspace,
-        )
-    elif use_gap_rows:
-        fig.subplots_adjust(
-            left=0.04,
-            right=0.96,
-            bottom=0.02,
-            top=0.98,
-            hspace=gap_wspace,
-        )
-    else:
-        plt.tight_layout()
-
-    if gap_axes:
-        for gap_ax in gap_axes:
-            gap_ax.axis("off")
-            gap_ax.text(
-                0.5,
-                0.5,
-                r"$\cdots$",
-                transform=gap_ax.transAxes,
-                ha="center",
-                va="center",
-                fontsize=36,
-                color="#444444",
-            )
-    elif show_gap_dots and len(sample_paths) >= 3 and len(panel_axes) >= 3:
-        left = panel_axes[1].get_position()
-        right = panel_axes[2].get_position()
-        fig.text(
-            (left.x1 + right.x0) / 2,
-            (left.y0 + left.y1) / 2,
-            r"$\cdots$",
-            ha="center",
-            va="center",
-            fontsize=36,
-            color="#444444",
-        )
+    plt.tight_layout()
 
     if save_path:
         if for_latex and not save_path.endswith(".pdf"):
