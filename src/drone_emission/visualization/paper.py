@@ -3965,6 +3965,7 @@ def _render_distance_comparison(
         n_cols=1,
         show_stats_box=False,
         show_basemap=False,
+        target_aspect=1.6,
     )
 
 

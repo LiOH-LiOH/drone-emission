@@ -519,6 +519,7 @@ def plot_distance_comparison(
     n_cols: int = 1,
     show_stats_box: bool = True,
     show_basemap: bool = True,
+    target_aspect: float = 1.0,
 ) -> None:
     """Visualize sampled delivery paths comparing straight-line vs road network distance.
 
@@ -538,6 +539,7 @@ def plot_distance_comparison(
         n_cols: Number of subplot columns.
         show_stats_box: If True, show per-panel distance summary text boxes.
         show_basemap: If True, add the OpenStreetMap tile background.
+        target_aspect: Desired displayed panel width-to-height ratio.
     """
     sample_paths = _compute_distance_samples(od_df, router, n_samples)
     if not sample_paths:
@@ -563,6 +565,7 @@ def plot_distance_comparison(
             show_legend=(idx == 0),
             show_stats_box=show_stats_box,
             show_basemap=show_basemap,
+            target_aspect=target_aspect,
         )
 
     for idx in range(len(sample_paths), len(panel_axes)):
