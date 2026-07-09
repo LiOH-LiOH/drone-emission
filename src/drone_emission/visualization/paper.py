@@ -15,6 +15,7 @@ Available figures:
     detour_and_lifecycle, distance_comparison,
     distance_comparison_high_3x3, distance_comparison_low_3x3,
     shanghai_heatmap, shanghai_building_height_merchant,
+    shanghai_building_footprint_heatmap,
     shanghai_road_air_distance, shanghai_road_detour,
     shanghai_air_detour, shanghai_air_road_joint, shanghai_emission_reduction,
     shanghai_emission_by_distance, shanghai_reduction_detour_by_distance,
@@ -798,6 +799,55 @@ def _render_shanghai_building_height_merchant(
         od_df=od_df,
         road_graph=road_graph,
         save_path=os.path.join(out, "shanghai_building_height_merchant.png"),
+        for_latex=for_latex,
+        plot_title=plot_title,
+    )
+
+
+def _render_shanghai_building_footprint_heatmap(
+    data_dir,
+    out,
+    for_latex,
+    plot_title,
+):
+    """Load Shanghai buildings and sales to render the footprint heatmap."""
+    region_key = "shanghai"
+    region_level = "city"
+    region_dir = os.path.join(data_dir, region_level, region_key)
+    sales_path = os.path.join(region_dir, f"{region_key}_sales.csv")
+    building_path = _find_first_existing_path(
+        [
+            os.path.join(region_dir, f"{region_key}_buildings_preprocessed.gpkg"),
+            os.path.join(region_dir, f"{region_key}_buildings_preprocessed.geojson"),
+            os.path.join(region_dir, f"{region_key}_buildings.gpkg"),
+            os.path.join(region_dir, f"{region_key}_buildings.geojson"),
+        ]
+    )
+
+    if not os.path.exists(sales_path):
+        print(
+            "Shanghai building footprint heatmap skipped - missing "
+            f"{sales_path}"
+        )
+        return
+    if building_path is None:
+        print(
+            "Shanghai building footprint heatmap skipped - missing Shanghai "
+            f"building geometry in {region_dir}"
+        )
+        return
+
+    import geopandas as gpd
+    from visualization.buildings import plot_building_footprint_heatmap
+
+    stores_df = pd.read_csv(sales_path)
+    buildings_gdf = gpd.read_file(building_path)
+    plot_building_footprint_heatmap(
+        buildings_gdf,
+        stores_df,
+        "Shanghai",
+        "上海市",
+        save_path=os.path.join(out, "shanghai_building_footprint_heatmap.png"),
         for_latex=for_latex,
         plot_title=plot_title,
     )
@@ -4062,7 +4112,9 @@ def render_all(
     exp_config: dict = None,
     profile: bool = False,
 ):
-    out = os.path.join(figures_dir, "paper")
+    framework_out = os.path.join(figures_dir, "paper")
+    out = os.path.join(framework_out, "subfigure")
+    os.makedirs(framework_out, exist_ok=True)
     os.makedirs(out, exist_ok=True)
 
     def _want(name):
@@ -4078,12 +4130,14 @@ def render_all(
     def _figure1_needs_vector_source(name):
         if not figure1_framework_requested:
             return False
-        source_pdf = _paper_pdf_path(out, name, plot_title=plot_title)
+        source_pdf = _paper_pdf_path(framework_out, name, plot_title=plot_title)
         if not os.path.exists(source_pdf):
             return True
         cache_paths = [source_pdf]
         if name in FIGURE1_FRAMEWORK_REPORT_DEPENDENCIES:
-            source_report = _paper_report_path(out, name, plot_title=plot_title)
+            source_report = _paper_report_path(
+                framework_out, name, plot_title=plot_title
+            )
             if not os.path.exists(source_report):
                 return True
             cache_paths.append(source_report)
@@ -4099,7 +4153,7 @@ def render_all(
     def _figure2_needs_vector_source(name):
         if not figure2_framework_requested:
             return False
-        source_pdf = _paper_pdf_path(out, name, plot_title=plot_title)
+        source_pdf = _paper_pdf_path(framework_out, name, plot_title=plot_title)
         if not os.path.exists(source_pdf):
             return True
         cache_mtime = os.path.getmtime(source_pdf)
@@ -4114,7 +4168,7 @@ def render_all(
     def _figure3_needs_vector_source(name):
         if not figure3_framework_requested:
             return False
-        source_pdf = _paper_pdf_path(out, name, plot_title=plot_title)
+        source_pdf = _paper_pdf_path(framework_out, name, plot_title=plot_title)
         if not os.path.exists(source_pdf):
             return True
         cache_mtime = os.path.getmtime(source_pdf)
@@ -4129,7 +4183,7 @@ def render_all(
     def _figure4_needs_vector_source(name):
         if not figure4_framework_requested:
             return False
-        source_pdf = _paper_pdf_path(out, name, plot_title=plot_title)
+        source_pdf = _paper_pdf_path(framework_out, name, plot_title=plot_title)
         if not os.path.exists(source_pdf):
             return True
         cache_mtime = os.path.getmtime(source_pdf)
@@ -4142,33 +4196,60 @@ def render_all(
         )
 
     # --- Calibration figures ---
-    if _want("tanner_impedance_fit") or _figure4_needs_vector_source(
+    tanner_impedance_fit_requested = _want("tanner_impedance_fit")
+    tanner_impedance_fit_pdf_needed = _figure4_needs_vector_source(
         "tanner_impedance_fit"
-    ):
+    )
+    if tanner_impedance_fit_requested:
         _render_tanner_impedance_fit(
             data_dir=data_dir,
             out=out,
-            for_latex=for_latex if _want("tanner_impedance_fit") else True,
+            for_latex=for_latex,
+            plot_title=plot_title,
+        )
+    if tanner_impedance_fit_pdf_needed:
+        _render_tanner_impedance_fit(
+            data_dir=data_dir,
+            out=framework_out,
+            for_latex=True,
             plot_title=plot_title,
         )
 
-    if _want("tanner_impedance_fit_panel_a") or _figure2_needs_vector_source(
+    tanner_impedance_fit_panel_a_requested = _want("tanner_impedance_fit_panel_a")
+    tanner_impedance_fit_panel_a_pdf_needed = _figure2_needs_vector_source(
         "tanner_impedance_fit_panel_a"
-    ):
+    )
+    if tanner_impedance_fit_panel_a_requested:
         _render_tanner_impedance_fit_panel_a(
             data_dir=data_dir,
             out=out,
             for_latex=for_latex,
             plot_title=plot_title,
         )
+    if tanner_impedance_fit_panel_a_pdf_needed:
+        _render_tanner_impedance_fit_panel_a(
+            data_dir=data_dir,
+            out=framework_out,
+            for_latex=True,
+            plot_title=plot_title,
+        )
 
-    if _want("alpha_calibration_5km") or _figure4_needs_vector_source(
+    alpha_calibration_5km_requested = _want("alpha_calibration_5km")
+    alpha_calibration_5km_pdf_needed = _figure4_needs_vector_source(
         "alpha_calibration_5km"
-    ):
+    )
+    if alpha_calibration_5km_requested:
         with _profile_block(profile, "alpha_calibration_5km"):
             _render_alpha_calibration_5km(
                 out=out,
-                for_latex=for_latex if _want("alpha_calibration_5km") else True,
+                for_latex=for_latex,
+                plot_title=plot_title,
+            )
+    if alpha_calibration_5km_pdf_needed:
+        with _profile_block(profile, "alpha_calibration_5km source"):
+            _render_alpha_calibration_5km(
+                out=framework_out,
+                for_latex=True,
                 plot_title=plot_title,
             )
 
@@ -4304,49 +4385,52 @@ def render_all(
         )
 
     # --- Shanghai figures (independent of all_region_stats) ---
-    if _want("shanghai_heatmap") or _figure1_needs_vector_source("shanghai_heatmap"):
+    shanghai_heatmap_requested = _want("shanghai_heatmap")
+    shanghai_heatmap_pdf_needed = _figure1_needs_vector_source("shanghai_heatmap")
+    if shanghai_heatmap_requested:
         _render_shanghai_heatmap(
             data_dir=data_dir,
             out=out,
-            for_latex=for_latex if _want("shanghai_heatmap") else True,
+            for_latex=for_latex,
             plot_title=plot_title,
         )
-    if (
-        _want("shanghai_heatmap")
-        and not for_latex
-        and _figure1_needs_vector_source("shanghai_heatmap")
-    ):
+    if shanghai_heatmap_pdf_needed:
         _render_shanghai_heatmap(
             data_dir=data_dir,
-            out=out,
+            out=framework_out,
             for_latex=True,
             plot_title=plot_title,
         )
 
-    if (
-        _want("shanghai_building_height_merchant")
-        or _figure1_needs_vector_source("shanghai_building_height_merchant")
-    ):
+    shanghai_building_height_merchant_requested = _want(
+        "shanghai_building_height_merchant"
+    )
+    shanghai_building_height_merchant_pdf_needed = _figure1_needs_vector_source(
+        "shanghai_building_height_merchant"
+    )
+    if shanghai_building_height_merchant_requested:
         _render_shanghai_building_height_merchant(
             data_dir=data_dir,
             out=out,
-            for_latex=(
-                for_latex if _want("shanghai_building_height_merchant") else True
-            ),
+            for_latex=for_latex,
             plot_title=plot_title,
             graph_cache=graph_cache,
         )
-    if (
-        _want("shanghai_building_height_merchant")
-        and not for_latex
-        and _figure1_needs_vector_source("shanghai_building_height_merchant")
-    ):
+    if shanghai_building_height_merchant_pdf_needed:
         _render_shanghai_building_height_merchant(
             data_dir=data_dir,
-            out=out,
+            out=framework_out,
             for_latex=True,
             plot_title=plot_title,
             graph_cache=graph_cache,
+        )
+
+    if _want("shanghai_building_footprint_heatmap"):
+        _render_shanghai_building_footprint_heatmap(
+            data_dir=data_dir,
+            out=out,
+            for_latex=for_latex,
+            plot_title=plot_title,
         )
 
     if _want("shanghai_road_air_distance"):
@@ -4413,28 +4497,26 @@ def render_all(
             plot_title=plot_title,
         )
 
-    if _want("distance_comparison") or _figure1_needs_vector_source("distance_comparison"):
+    distance_comparison_requested = _want("distance_comparison")
+    distance_comparison_pdf_needed = _figure1_needs_vector_source("distance_comparison")
+    if distance_comparison_requested:
         from visualization.roadnet import plot_distance_comparison
 
         _render_distance_comparison(
             data_dir=data_dir,
             out=out,
-            for_latex=for_latex if _want("distance_comparison") else True,
+            for_latex=for_latex,
             plot_title=plot_title,
             plot_fn=plot_distance_comparison,
             graph_cache=graph_cache,
             router_cache=router_cache,
         )
-    if (
-        _want("distance_comparison")
-        and not for_latex
-        and _figure1_needs_vector_source("distance_comparison")
-    ):
+    if distance_comparison_pdf_needed:
         from visualization.roadnet import plot_distance_comparison
 
         _render_distance_comparison(
             data_dir=data_dir,
-            out=out,
+            out=framework_out,
             for_latex=True,
             plot_title=plot_title,
             plot_fn=plot_distance_comparison,
@@ -4604,13 +4686,26 @@ def render_all(
                     plot_title=plot_title,
                 )
 
-            if _want("city_oracle_reduction_rank_top10") or _figure2_needs_vector_source(
+            city_oracle_reduction_rank_top10_requested = _want(
                 "city_oracle_reduction_rank_top10"
-            ):
+            )
+            city_oracle_reduction_rank_top10_pdf_needed = (
+                _figure2_needs_vector_source("city_oracle_reduction_rank_top10")
+            )
+            if city_oracle_reduction_rank_top10_requested:
                 plot_city_oracle_reduction_rank_top10(
                     df,
                     save_path=os.path.join(out, "city_oracle_reduction_rank_top10"),
                     for_latex=for_latex,
+                    plot_title=plot_title,
+                )
+            if city_oracle_reduction_rank_top10_pdf_needed:
+                plot_city_oracle_reduction_rank_top10(
+                    df,
+                    save_path=os.path.join(
+                        framework_out, "city_oracle_reduction_rank_top10"
+                    ),
+                    for_latex=True,
                     plot_title=plot_title,
                 )
 
@@ -4635,13 +4730,12 @@ def render_all(
                     for_latex=for_latex,
                     plot_title=plot_title,
                 )
-            if (
-                city_reduction_rank_all_pdf_needed
-                and not (city_reduction_rank_all_requested and for_latex)
-            ):
+            if city_reduction_rank_all_pdf_needed:
                 plot_city_reduction_rank_all_macro_region(
                     df,
-                    save_path=os.path.join(out, "city_reduction_rank_all_macro_region"),
+                    save_path=os.path.join(
+                        framework_out, "city_reduction_rank_all_macro_region"
+                    ),
                     for_latex=True,
                     plot_title=plot_title,
                 )
@@ -4805,39 +4899,40 @@ def render_all(
                     plot_title=plot_title,
                 )
 
-            if (
-                _want("regions_map_oracle_reduction_rank")
-                or _figure1_needs_vector_source("regions_map_oracle_reduction_rank")
-            ):
+            regions_map_oracle_reduction_rank_requested = _want(
+                "regions_map_oracle_reduction_rank"
+            )
+            regions_map_oracle_reduction_rank_pdf_needed = (
+                _figure1_needs_vector_source("regions_map_oracle_reduction_rank")
+            )
+            if regions_map_oracle_reduction_rank_requested:
                 plot_regions_map_oracle_reduction_rank(
                     df_stats=df,
                     stats_csv_path=stats_path,
                     save_path=os.path.join(out, "regions_map_oracle_reduction_rank.png"),
-                    for_latex=(
-                        for_latex
-                        if _want("regions_map_oracle_reduction_rank")
-                        else True
-                    ),
+                    for_latex=for_latex,
                     plot_title=plot_title,
                 )
-            if (
-                _want("regions_map_oracle_reduction_rank")
-                and not for_latex
-                and _figure1_needs_vector_source("regions_map_oracle_reduction_rank")
-            ):
+            if regions_map_oracle_reduction_rank_pdf_needed:
                 plot_regions_map_oracle_reduction_rank(
                     df_stats=df,
                     stats_csv_path=stats_path,
-                    save_path=os.path.join(out, "regions_map_oracle_reduction_rank.png"),
+                    save_path=os.path.join(
+                        framework_out, "regions_map_oracle_reduction_rank.png"
+                    ),
                     for_latex=True,
                     plot_title=plot_title,
                 )
 
-            if _want(
+            regions_map_oracle_reduction_rank_map_only_requested = _want(
                 "regions_map_oracle_reduction_rank_map_only"
-            ) or _figure2_needs_vector_source(
-                "regions_map_oracle_reduction_rank_map_only"
-            ):
+            )
+            regions_map_oracle_reduction_rank_map_only_pdf_needed = (
+                _figure2_needs_vector_source(
+                    "regions_map_oracle_reduction_rank_map_only"
+                )
+            )
+            if regions_map_oracle_reduction_rank_map_only_requested:
                 plot_regions_map_oracle_reduction_rank_map_only(
                     df_stats=df,
                     stats_csv_path=stats_path,
@@ -4846,6 +4941,17 @@ def render_all(
                         "regions_map_oracle_reduction_rank_map_only.png",
                     ),
                     for_latex=for_latex,
+                    plot_title=plot_title,
+                )
+            if regions_map_oracle_reduction_rank_map_only_pdf_needed:
+                plot_regions_map_oracle_reduction_rank_map_only(
+                    df_stats=df,
+                    stats_csv_path=stats_path,
+                    save_path=os.path.join(
+                        framework_out,
+                        "regions_map_oracle_reduction_rank_map_only.png",
+                    ),
+                    for_latex=True,
                     plot_title=plot_title,
                 )
 
@@ -5014,14 +5120,11 @@ def render_all(
                             for_latex=for_latex,
                             plot_title=plot_title,
                         )
-                    if (
-                        city_population_bubble_pdf_needed
-                        and not (city_population_bubble_requested and for_latex)
-                    ):
+                    if city_population_bubble_pdf_needed:
                         plot_city_population_detour_oracle_reduction_bubble(
                             df_enriched,
                             save_path=os.path.join(
-                                out,
+                                framework_out,
                                 "city_population_detour_oracle_reduction_bubble.png",
                             ),
                             for_latex=True,
@@ -5081,28 +5184,28 @@ def render_all(
     if figure1_framework_requested:
         with _profile_block(profile, "figure1_framework"):
             _render_figure1_framework(
-                out=out,
+                out=framework_out,
                 plot_title=plot_title,
             )
 
     if figure2_framework_requested:
         with _profile_block(profile, "figure2_framework"):
             _render_figure2_framework(
-                out=out,
+                out=framework_out,
                 plot_title=plot_title,
             )
 
     if figure3_framework_requested:
         with _profile_block(profile, "figure3_framework"):
             _render_figure3_framework(
-                out=out,
+                out=framework_out,
                 plot_title=plot_title,
             )
 
     if figure4_framework_requested:
         with _profile_block(profile, "figure4_framework"):
             _render_figure4_framework(
-                out=out,
+                out=framework_out,
                 plot_title=plot_title,
             )
 

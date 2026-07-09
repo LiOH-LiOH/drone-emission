@@ -538,6 +538,211 @@ def plot_building_height_merchant_map(
     plt.close(fig)
 
 
+def plot_building_footprint_heatmap(
+    buildings_gdf,
+    stores_df,
+    region_name,
+    region_name_cn,
+    save_path=None,
+    figsize=(6.4, 3.2),
+    for_latex=False,
+    plot_title=False,
+):
+    """Show building footprints colored by height around a top-sales merchant.
+
+    Args:
+        buildings_gdf: GeoDataFrame with building geometries and a height column.
+        stores_df: DataFrame with lat, lng, and month_sales columns.
+        region_name: English region name.
+        region_name_cn: Chinese region name.
+        save_path: Path to save figure. Shows plot if None.
+        figsize: Figure size tuple.
+        for_latex: If True, save as PDF.
+        plot_title: If True, show title.
+    """
+    required_store_cols = {"lat", "lng", "month_sales"}
+    missing_store_cols = required_store_cols - set(stores_df.columns)
+    if missing_store_cols:
+        print(
+            "Building footprint heatmap skipped - stores data missing "
+            f"columns {sorted(missing_store_cols)}"
+        )
+        return
+
+    if "height" not in buildings_gdf.columns:
+        print(
+            "Building footprint heatmap skipped - buildings data missing "
+            "height column"
+        )
+        return
+
+    valid_stores = stores_df.dropna(subset=["lat", "lng", "month_sales"]).copy()
+    valid_stores["month_sales"] = pd.to_numeric(
+        valid_stores["month_sales"], errors="coerce"
+    )
+    valid_stores = valid_stores.dropna(subset=["month_sales"])
+    if valid_stores.empty:
+        print("Building footprint heatmap skipped - no valid merchant sales rows")
+        return
+
+    top_n = max(
+        1,
+        int(np.ceil(len(valid_stores) * MERCHANT_MAP_TOP_SALES_FRACTION)),
+    )
+    top_merchants = valid_stores.nlargest(top_n, "month_sales")
+    merchant = top_merchants.sample(
+        n=1,
+        random_state=MERCHANT_MAP_RANDOM_SEED,
+    ).iloc[0]
+    merchant_lng, merchant_lat = gcj02_to_wgs84(
+        float(merchant["lng"]),
+        float(merchant["lat"]),
+    )
+
+    lat_span = MERCHANT_MAP_DEGREE_SIZE
+    avg_lat = merchant_lat
+    figure_ratio = float(figsize[0]) / float(figsize[1])
+    lng_span = figure_ratio * lat_span / np.cos(np.radians(avg_lat))
+    boundaries_dict = {
+        "min_lng": merchant_lng - lng_span / 2,
+        "max_lng": merchant_lng + lng_span / 2,
+        "min_lat": merchant_lat - lat_span / 2,
+        "max_lat": merchant_lat + lat_span / 2,
+    }
+
+    if buildings_gdf.crs is not None and buildings_gdf.crs.to_epsg() != 4326:
+        print(f"Converting CRS from {buildings_gdf.crs} to EPSG:4326...")
+        buildings_gdf = buildings_gdf.to_crs(epsg=4326)
+
+    buildings_in_frame = buildings_gdf.cx[
+        boundaries_dict["min_lng"]:boundaries_dict["max_lng"],
+        boundaries_dict["min_lat"]:boundaries_dict["max_lat"],
+    ].copy()
+    if buildings_in_frame.empty:
+        print("Building footprint heatmap skipped - no buildings in frame")
+        return
+
+    buildings_in_frame["height"] = pd.to_numeric(
+        buildings_in_frame["height"], errors="coerce"
+    )
+    buildings_in_frame = buildings_in_frame.dropna(subset=["height"])
+    if buildings_in_frame.empty:
+        print("Building footprint heatmap skipped - no valid building heights in frame")
+        return
+
+    height_cap = buildings_in_frame["height"].quantile(0.95)
+    if not np.isfinite(height_cap) or height_cap <= 0:
+        print("Building footprint heatmap skipped - invalid building heights in frame")
+        return
+
+    buildings_in_frame["_height_capped_m"] = buildings_in_frame["height"].clip(
+        upper=height_cap
+    )
+    height_max = float(buildings_in_frame["_height_capped_m"].max())
+    height_bins = np.linspace(0.0, height_max, MERCHANT_MAP_HEIGHT_BINS + 1)
+    if np.unique(height_bins).size < 2:
+        print("Building footprint heatmap skipped - invalid segmented height bins")
+        return
+
+    fig, ax = plt.subplots(figsize=figsize)
+    ax.set_position([0.0, 0.0, 1.0, 1.0])
+    aspect_ratio = 1.0 / np.cos(np.radians(avg_lat))
+    ax.set_aspect(aspect_ratio)
+    ax.set_xlim(boundaries_dict["min_lng"], boundaries_dict["max_lng"])
+    ax.set_ylim(boundaries_dict["min_lat"], boundaries_dict["max_lat"])
+    ax.set_facecolor("#f7f7f5")
+
+    base_cmap = plt.get_cmap("Spectral_r")
+    cmap = ListedColormap(
+        base_cmap(np.linspace(0.12, 0.92, MERCHANT_MAP_HEIGHT_BINS))
+    )
+    norm = BoundaryNorm(height_bins, cmap.N, clip=True)
+    buildings_in_frame.plot(
+        ax=ax,
+        column="_height_capped_m",
+        cmap=cmap,
+        norm=norm,
+        edgecolor="none",
+        alpha=0.94,
+        zorder=10,
+        legend=False,
+    )
+
+    ax.set_xlabel("")
+    ax.set_ylabel("")
+    ax.set_xticks([])
+    ax.set_yticks([])
+    ax.tick_params(left=False, bottom=False, labelleft=False, labelbottom=False)
+    ax.ticklabel_format(useOffset=False, style="plain")
+    ax.grid(False)
+    for spine in ax.spines.values():
+        spine.set_visible(False)
+
+    if plot_title:
+        ax.text(
+            0.02,
+            0.98,
+            (
+                f"{region_name} building footprints\n"
+                f"Buildings: {len(buildings_in_frame):,}"
+            ),
+            transform=ax.transAxes,
+            fontsize=10,
+            verticalalignment="top",
+            bbox=dict(boxstyle="round", facecolor="white", alpha=0.85),
+            zorder=100,
+        )
+
+    if save_path:
+        if for_latex and not save_path.endswith(".pdf"):
+            save_path = save_path.rsplit(".", 1)[0] + ".pdf"
+        if plot_title:
+            save_path = _add_title_suffix(save_path)
+        os.makedirs(os.path.dirname(save_path), exist_ok=True)
+        if save_path.endswith(".pdf"):
+            ax.set_rasterization_zorder(12)
+        fig.canvas.draw()
+        report_path = save_path.rsplit(".", 1)[0] + "_report.json"
+        renderer = fig.canvas.get_renderer()
+        tight_bbox = fig.get_tightbbox(renderer)
+        report = {
+            "figure_name": "shanghai_building_footprint_heatmap",
+            "figure_path": save_path,
+            "coordinate_convention": (
+                "bbox_saved_tight_fraction values are fractions of the saved "
+                "page after bbox_inches='tight'."
+            ),
+            "map": {
+                "axis": saved_tight_axis_report(
+                    fig, ax, renderer=renderer, tight_bbox=tight_bbox
+                ),
+                "lng_range": [
+                    float(boundaries_dict["min_lng"]),
+                    float(boundaries_dict["max_lng"]),
+                ],
+                "lat_range": [
+                    float(boundaries_dict["min_lat"]),
+                    float(boundaries_dict["max_lat"]),
+                ],
+                "building_count": int(len(buildings_in_frame)),
+                "height_cap_m": float(height_cap),
+                "merchant_center": {
+                    "lng": float(merchant_lng),
+                    "lat": float(merchant_lat),
+                    "month_sales": float(merchant["month_sales"]),
+                },
+            },
+        }
+        write_figure_report(report_path, report)
+        print(f"Building footprint heatmap report saved to {report_path}")
+        plt.savefig(save_path, dpi=300, bbox_inches="tight", pad_inches=0)
+        print(f"Building footprint heatmap saved to {save_path}")
+    else:
+        plt.show()
+
+    plt.close(fig)
+
+
 def visualize_store_coverage(
     buildings_gdf,
     store_coord,
