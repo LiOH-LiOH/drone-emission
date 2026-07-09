@@ -3960,14 +3960,14 @@ def _render_distance_comparison(
         save_path=os.path.join(out, "distance_comparison.png"),
         for_latex=for_latex,
         plot_title=plot_title,
-        figsize=(10.4, 3.1),
+        figsize=(3.4, 10.4),
         n_samples=3,
-        n_cols=3,
+        n_cols=1,
         show_stats_box=False,
         show_basemap=False,
         show_gap_dots=True,
-        gap_width_ratio=0.55,
-        gap_wspace=0.10,
+        gap_width_ratio=0.18,
+        gap_wspace=0.08,
     )
 
 
