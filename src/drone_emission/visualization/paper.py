@@ -4616,8 +4616,11 @@ def render_all(
         plot_province_gef_china_map(
             gef_path=gef_path,
             save_path=os.path.join(out, "province_gef_china_map.png"),
+            figsize=(1.25, 0.95),
             for_latex=for_latex,
             plot_title=plot_title,
+            compact=True,
+            south_china_inset_bounds=(0.80, 0.04, 0.16, 0.28),
         )
 
     future_gef_figures = ("regions_map_and_gef_scatter_2030", "regions_map_and_gef_scatter_2060")

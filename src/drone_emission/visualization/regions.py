@@ -242,6 +242,8 @@ def _province_gef_report(
     missing_provinces,
     jd_drawn,
     south_china_inset_extent,
+    figsize,
+    compact,
 ):
     """Write a JSON audit report for the province GEF China map."""
     report_path = save_path.rsplit(".", 1)[0] + "_report.json"
@@ -260,11 +262,24 @@ def _province_gef_report(
             "min": min(values) if values else None,
             "max": max(values) if values else None,
         },
-        "color_scale": "low GEF green to high GEF red",
+        "layout_mode": "compact" if compact else "full",
+        "native_size_inches": [float(figsize[0]), float(figsize[1])],
+        "color_scale": "continuous colorblind-safe cool-to-warm",
+        "colorbar": (
+            "horizontal qualitative Low-High key"
+            if compact
+            else "vertical numeric scale"
+        ),
+        "missing_data_style": (
+            "light gray without in-panel legend"
+            if compact
+            else "light gray with in-panel legend"
+        ),
         "south_china_sea_inset": {
             "drawn": True,
             "extent": list(south_china_inset_extent),
             "nine_dash_feature_drawn": bool(jd_drawn),
+            "mode": "simplified outlines" if compact else "province fills",
         },
     }
     with open(report_path, "w", encoding="utf-8") as f:
@@ -280,6 +295,7 @@ def plot_province_gef_china_map(
     plot_title: bool = False,
     south_china_inset_bounds: tuple = (0.80, 0.05, 0.13, 0.24),
     south_china_inset_extent: tuple = (107, 123.5, 3, 25),
+    compact: bool = False,
 ):
     """Plot province-level China GEF heatmap with South China Sea inset.
 
@@ -292,6 +308,7 @@ def plot_province_gef_china_map(
         south_china_inset_bounds: Axes-fraction bounds for the South China Sea inset.
         south_china_inset_extent: Data extent for the inset as
             (min_lng, max_lng, min_lat, max_lat).
+        compact: If True, use a qualitative layout for a small composite panel.
     """
     if not gef_path or not os.path.exists(gef_path):
         print(f"Province GEF China map skipped — missing {gef_path}")
@@ -340,8 +357,8 @@ def plot_province_gef_china_map(
 
     values = np.array(list(gef_by_province.values()), dtype=float)
     cmap = LinearSegmentedColormap.from_list(
-        "gef_low_green_high_red",
-        ["#2ca25f", "#f7fcb9", "#fdae61", "#d73027"],
+        "gef_colorblind_cool_to_warm",
+        ["#3b6fb6", "#f1d18a", "#d55e00"],
     )
     norm = Normalize(vmin=float(np.nanmin(values)), vmax=float(np.nanmax(values)))
     no_data_color = "#d9d9d9"
@@ -352,10 +369,17 @@ def plot_province_gef_china_map(
     colored_provinces = []
     missing_provinces = []
 
-    def draw_panel(target_ax, draw_missing_legend=False, draw_nine_dash=False):
+    def draw_panel(
+        target_ax,
+        draw_missing_legend=False,
+        draw_nine_dash=False,
+        simplified=False,
+    ):
         for province, display_name, geometry in provinces:
             gef = gef_by_province.get(province)
-            if gef is None or np.isnan(gef):
+            if simplified:
+                facecolor = "#f4f4f4"
+            elif gef is None or np.isnan(gef):
                 facecolor = no_data_color
                 if province not in missing_provinces:
                     missing_provinces.append(province)
@@ -367,9 +391,9 @@ def plot_province_gef_china_map(
             _plot_geometry_outline(
                 target_ax,
                 geometry,
-                color=outline_color,
-                linewidth=0.35,
-                alpha=0.85,
+                color="#888888" if simplified else outline_color,
+                linewidth=0.14 if simplified else (0.18 if compact else 0.35),
+                alpha=0.7 if simplified else 0.8,
                 zorder=3,
             )
 
@@ -379,9 +403,9 @@ def plot_province_gef_china_map(
             _plot_geometry_outline(
                 target_ax,
                 nine_dash_feature.get("geometry"),
-                color="#4d4d4d",
-                linewidth=0.55,
-                alpha=0.95,
+                color="#666666" if compact else "#4d4d4d",
+                linewidth=0.28 if compact else 0.55,
+                alpha=0.85 if compact else 0.95,
                 zorder=5,
             )
             jd_drawn = True
@@ -404,7 +428,7 @@ def plot_province_gef_china_map(
             )
         return jd_drawn
 
-    draw_panel(ax, draw_missing_legend=True)
+    draw_panel(ax, draw_missing_legend=not compact)
 
     china_lat_range = (18, 54)
     china_lng_range = (73, 135)
@@ -420,7 +444,11 @@ def plot_province_gef_china_map(
         spine.set_visible(False)
 
     inset_ax = ax.inset_axes(south_china_inset_bounds, zorder=10)
-    jd_drawn = draw_panel(inset_ax, draw_nine_dash=True)
+    jd_drawn = draw_panel(
+        inset_ax,
+        draw_nine_dash=True,
+        simplified=compact,
+    )
     inset_min_lng, inset_max_lng, inset_min_lat, inset_max_lat = south_china_inset_extent
     inset_ax.set_xlim(inset_min_lng, inset_max_lng)
     inset_ax.set_ylim(inset_min_lat, inset_max_lat)
@@ -430,26 +458,46 @@ def plot_province_gef_china_map(
     inset_ax.set_yticks([])
     inset_ax.set_facecolor("white")
     for spine in inset_ax.spines.values():
-        spine.set_linestyle("--")
-        spine.set_linewidth(0.7)
-        spine.set_edgecolor("#777777")
+        spine.set_linestyle("-" if compact else "--")
+        spine.set_linewidth(0.25 if compact else 0.7)
+        spine.set_edgecolor("#999999" if compact else "#777777")
 
     sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
     sm.set_array([])
-    cbar = fig.colorbar(sm, ax=ax, shrink=0.66, pad=0.01, fraction=0.045)
-    cbar.set_label("GEF (kg CO2e/kWh)", fontsize=7)
-    cbar.ax.tick_params(labelsize=6.5, length=2)
-    cbar.outline.set_linewidth(0.4)
+    if compact:
+        fig.subplots_adjust(left=0.01, right=0.99, top=0.99, bottom=0.17)
+        cbar_ax = fig.add_axes((0.31, 0.065, 0.42, 0.035))
+        cbar = fig.colorbar(sm, cax=cbar_ax, orientation="horizontal")
+        cbar.set_ticks([norm.vmin, norm.vmax])
+        cbar.set_ticklabels(["Low", "High"])
+        cbar.ax.tick_params(labelsize=5, length=0, pad=1)
+        cbar.ax.text(
+            -0.10,
+            0.5,
+            "GEF",
+            transform=cbar.ax.transAxes,
+            ha="right",
+            va="center",
+            fontsize=5,
+        )
+        cbar.outline.set_linewidth(0.25)
+    else:
+        cbar = fig.colorbar(sm, ax=ax, shrink=0.66, pad=0.01, fraction=0.045)
+        cbar.set_label("GEF (kg CO2e/kWh)", fontsize=7)
+        cbar.ax.tick_params(labelsize=6.5, length=2)
+        cbar.outline.set_linewidth(0.4)
 
-    if plot_title:
+    show_title = plot_title and not compact
+    if show_title:
         ax.set_title("Province Grid Emission Factor", fontsize=9, fontweight="bold")
 
-    fig.tight_layout(pad=0.2)
+    if not compact:
+        fig.tight_layout(pad=0.2)
 
     if save_path:
         if for_latex and not save_path.endswith(".pdf"):
             save_path = save_path.rsplit(".", 1)[0] + ".pdf"
-        if plot_title:
+        if show_title:
             from ._utils import _add_title_suffix
             save_path = _add_title_suffix(save_path)
         os.makedirs(os.path.dirname(save_path), exist_ok=True)
@@ -463,6 +511,8 @@ def plot_province_gef_china_map(
             sorted(missing_provinces),
             jd_drawn,
             south_china_inset_extent,
+            figsize,
+            compact,
         )
     else:
         plt.show()
