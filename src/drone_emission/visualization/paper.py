@@ -26,6 +26,7 @@ Available figures:
     kunming_city_context, dali_chengdu_tianjin_guangzhou_city_context,
     top6_reduction_detour_grid, top6_reduction_detour_grid_low_gef,
     top6_reduction_detour_grid_random,
+    province_gef_china_map,
     province_orders_emission, province_orders_both_emissions,
     province_total_ebike_lifecycle,
     city_ebike_rank_top10, city_ebike_rank_bottom10,
@@ -4594,6 +4595,21 @@ def render_all(
         )
 
     # --- Cross-region stats figures ---
+    province_gef_figures = {"province_gef_china_map"}
+    if only is None or only & province_gef_figures:
+        from visualization.regions import plot_province_gef_china_map
+
+        gef_path = (exp_config or {}).get("gef_path") or os.path.join(
+            data_dir,
+            "gef_china.csv",
+        )
+        plot_province_gef_china_map(
+            gef_path=gef_path,
+            save_path=os.path.join(out, "province_gef_china_map.png"),
+            for_latex=for_latex,
+            plot_title=plot_title,
+        )
+
     future_gef_figures = ("regions_map_and_gef_scatter_2030", "regions_map_and_gef_scatter_2060")
     gef_figures = {
         "city_gef_distribution",

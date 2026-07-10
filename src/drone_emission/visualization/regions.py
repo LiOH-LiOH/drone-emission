@@ -6,7 +6,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import requests
-from matplotlib.colors import LinearSegmentedColormap, TwoSlopeNorm
+from matplotlib.colors import LinearSegmentedColormap, Normalize, TwoSlopeNorm
+from matplotlib.patches import Patch
 
 WEIGHTED_REDUCTION_COLUMNS = (
     "oracle_min_reduction_vs_ebike_pct",
@@ -135,6 +136,24 @@ def _plot_china_boundaries(ax, geojson_data):
 
 
 _MUNICIPALITY_PREFIXES = frozenset({"11", "12", "31", "50", "81", "82"})
+_PROVINCE_SUFFIXES = (
+    "省",
+    "市",
+    "壮族自治区",
+    "回族自治区",
+    "维吾尔自治区",
+    "自治区",
+    "特别行政区",
+)
+_PROVINCE_ALIASES = {
+    "内蒙古自治区": "内蒙古",
+    "广西壮族自治区": "广西",
+    "宁夏回族自治区": "宁夏",
+    "新疆维吾尔自治区": "新疆",
+    "西藏自治区": "西藏",
+    "香港特别行政区": "香港",
+    "澳门特别行政区": "澳门",
+}
 
 
 def _fill_geometry(ax, geometry, facecolor):
@@ -167,6 +186,287 @@ def _fill_geometry(ax, geometry, facecolor):
     elif geom_type == "MultiPolygon":
         for polygon in coords:
             fill_rings(polygon)
+
+
+def _normalize_province_feature_name(name: str) -> str:
+    """Normalize DataV province names to match the GEF table."""
+    name = str(name).strip()
+    if name in _PROVINCE_ALIASES:
+        return _PROVINCE_ALIASES[name]
+    for suffix in _PROVINCE_SUFFIXES:
+        if name.endswith(suffix):
+            return name[: -len(suffix)]
+    return name
+
+
+def _plot_geometry_outline(ax, geometry, color="#666666", linewidth=0.5, alpha=1.0, zorder=4):
+    """Plot GeoJSON polygon rings as outlines."""
+    if not geometry:
+        return
+
+    geom_type = geometry.get("type")
+    coords = geometry.get("coordinates")
+
+    def plot_rings(rings):
+        if not rings:
+            return
+        if isinstance(rings[0][0], (list, tuple)) and isinstance(
+            rings[0][0][0], (list, tuple)
+        ):
+            for subrings in rings:
+                plot_rings(subrings)
+        else:
+            for ring in rings:
+                xs, ys = zip(*[(pt[0], pt[1]) for pt in ring])
+                ax.plot(
+                    xs,
+                    ys,
+                    color=color,
+                    linewidth=linewidth,
+                    alpha=alpha,
+                    zorder=zorder,
+                )
+
+    if geom_type == "Polygon":
+        plot_rings(coords)
+    elif geom_type == "MultiPolygon":
+        for polygon in coords:
+            plot_rings(polygon)
+
+
+def _province_gef_report(
+    save_path,
+    gef_path,
+    gef_by_province,
+    colored_provinces,
+    missing_provinces,
+    jd_drawn,
+    south_china_inset_extent,
+):
+    """Write a JSON audit report for the province GEF China map."""
+    report_path = save_path.rsplit(".", 1)[0] + "_report.json"
+    values = [float(v) for v in gef_by_province.values()]
+    payload = {
+        "figure_name": "province_gef_china_map",
+        "figure_path": save_path,
+        "source_gef_path": gef_path,
+        "source_encoding": "gbk",
+        "value_column": "因子",
+        "unit": "kg CO2e/kWh",
+        "colored_province_count": len(colored_provinces),
+        "colored_provinces": colored_provinces,
+        "missing_provinces": missing_provinces,
+        "gef_range": {
+            "min": min(values) if values else None,
+            "max": max(values) if values else None,
+        },
+        "color_scale": "low GEF green to high GEF red",
+        "south_china_sea_inset": {
+            "drawn": True,
+            "extent": list(south_china_inset_extent),
+            "nine_dash_feature_drawn": bool(jd_drawn),
+        },
+    }
+    with open(report_path, "w", encoding="utf-8") as f:
+        json.dump(payload, f, indent=2, ensure_ascii=False, allow_nan=False)
+    print(f"Province GEF China map report saved to {report_path}")
+
+
+def plot_province_gef_china_map(
+    gef_path: str,
+    save_path: str = None,
+    figsize: tuple = (3.4, 3.0),
+    for_latex: bool = False,
+    plot_title: bool = False,
+    south_china_inset_bounds: tuple = (0.72, 0.03, 0.25, 0.32),
+    south_china_inset_extent: tuple = (107, 123.5, 3, 25),
+):
+    """Plot province-level China GEF heatmap with South China Sea inset.
+
+    Args:
+        gef_path: Path to province-level GEF CSV with columns `城市` and `因子`.
+        save_path: Path to save figure. Shows plot if None.
+        figsize: Figure size tuple.
+        for_latex: If True, save as PDF.
+        plot_title: If True, show title.
+        south_china_inset_bounds: Axes-fraction bounds for the South China Sea inset.
+        south_china_inset_extent: Data extent for the inset as
+            (min_lng, max_lng, min_lat, max_lat).
+    """
+    if not gef_path or not os.path.exists(gef_path):
+        print(f"Province GEF China map skipped — missing {gef_path}")
+        return
+
+    gef_df = pd.read_csv(gef_path, encoding="gbk")
+    needed = {"城市", "因子"}
+    missing_cols = needed - set(gef_df.columns)
+    if missing_cols:
+        print(f"Province GEF China map skipped — missing columns {sorted(missing_cols)}")
+        return
+
+    gef_df = gef_df.copy()
+    gef_df["province"] = gef_df["城市"].map(_normalize_province_feature_name)
+    gef_df["gef"] = pd.to_numeric(gef_df["因子"], errors="coerce")
+    gef_by_province = (
+        gef_df.dropna(subset=["province", "gef"])
+        .drop_duplicates("province")
+        .set_index("province")["gef"]
+        .to_dict()
+    )
+    if not gef_by_province:
+        print("Province GEF China map skipped — no valid GEF values")
+        return
+
+    china_geojson = _fetch_china_boundaries()
+    if not china_geojson:
+        print("Province GEF China map skipped — China boundaries unavailable")
+        return
+
+    provinces = []
+    nine_dash_feature = None
+    for feature in china_geojson.get("features", []):
+        props = feature.get("properties", {})
+        adcode = str(props.get("adcode", ""))
+        if adcode == "100000_JD" or props.get("adchar") == "JD":
+            nine_dash_feature = feature
+            continue
+        if not adcode.isdigit():
+            continue
+        name = props.get("name", "")
+        province = _normalize_province_feature_name(name)
+        geometry = feature.get("geometry")
+        if geometry:
+            provinces.append((province, name, geometry))
+
+    values = np.array(list(gef_by_province.values()), dtype=float)
+    cmap = LinearSegmentedColormap.from_list(
+        "gef_low_green_high_red",
+        ["#2ca25f", "#f7fcb9", "#fdae61", "#d73027"],
+    )
+    norm = Normalize(vmin=float(np.nanmin(values)), vmax=float(np.nanmax(values)))
+    no_data_color = "#d9d9d9"
+    outline_color = "#6f6f6f"
+
+    fig, ax = plt.subplots(figsize=figsize)
+
+    colored_provinces = []
+    missing_provinces = []
+
+    def draw_panel(target_ax, draw_missing_legend=False, draw_nine_dash=False):
+        for province, display_name, geometry in provinces:
+            gef = gef_by_province.get(province)
+            if gef is None or np.isnan(gef):
+                facecolor = no_data_color
+                if province not in missing_provinces:
+                    missing_provinces.append(province)
+            else:
+                facecolor = cmap(norm(float(gef)))
+                if province not in colored_provinces:
+                    colored_provinces.append(province)
+            _fill_geometry(target_ax, geometry, facecolor)
+            _plot_geometry_outline(
+                target_ax,
+                geometry,
+                color=outline_color,
+                linewidth=0.35,
+                alpha=0.85,
+                zorder=3,
+            )
+
+        jd_drawn = False
+        if draw_nine_dash and nine_dash_feature is not None:
+            _fill_geometry(target_ax, nine_dash_feature.get("geometry"), "#f7f7f7")
+            _plot_geometry_outline(
+                target_ax,
+                nine_dash_feature.get("geometry"),
+                color="#4d4d4d",
+                linewidth=0.55,
+                alpha=0.95,
+                zorder=5,
+            )
+            jd_drawn = True
+
+        if draw_missing_legend:
+            target_ax.legend(
+                handles=[
+                    Patch(
+                        facecolor=no_data_color,
+                        edgecolor=outline_color,
+                        linewidth=0.4,
+                        label="No GEF data",
+                    )
+                ],
+                loc="lower left",
+                fontsize=6.5,
+                frameon=False,
+                handlelength=1.0,
+                borderaxespad=0.2,
+            )
+        return jd_drawn
+
+    draw_panel(ax, draw_missing_legend=True)
+
+    china_lat_range = (18, 54)
+    china_lng_range = (73, 135)
+    ax.set_xlim(china_lng_range)
+    ax.set_ylim(china_lat_range)
+    ax.set_xticks([])
+    ax.set_yticks([])
+    ax.set_xlabel("")
+    ax.set_ylabel("")
+    avg_lat = np.mean(china_lat_range)
+    ax.set_aspect(1.0 / np.cos(np.radians(avg_lat)))
+    for spine in ax.spines.values():
+        spine.set_visible(False)
+
+    inset_ax = ax.inset_axes(south_china_inset_bounds, zorder=10)
+    jd_drawn = draw_panel(inset_ax, draw_nine_dash=True)
+    inset_min_lng, inset_max_lng, inset_min_lat, inset_max_lat = south_china_inset_extent
+    inset_ax.set_xlim(inset_min_lng, inset_max_lng)
+    inset_ax.set_ylim(inset_min_lat, inset_max_lat)
+    inset_ax.set_xticks([])
+    inset_ax.set_yticks([])
+    inset_ax.set_facecolor("white")
+    for spine in inset_ax.spines.values():
+        spine.set_linestyle("--")
+        spine.set_linewidth(0.7)
+        spine.set_edgecolor("#777777")
+
+    sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
+    sm.set_array([])
+    cbar = fig.colorbar(sm, ax=ax, shrink=0.66, pad=0.01, fraction=0.045)
+    cbar.set_label("GEF (kg CO2e/kWh)", fontsize=7)
+    cbar.ax.tick_params(labelsize=6.5, length=2)
+    cbar.outline.set_linewidth(0.4)
+
+    if plot_title:
+        ax.set_title("Province Grid Emission Factor", fontsize=9, fontweight="bold")
+
+    fig.tight_layout(pad=0.2)
+
+    if save_path:
+        if for_latex and not save_path.endswith(".pdf"):
+            save_path = save_path.rsplit(".", 1)[0] + ".pdf"
+        if plot_title:
+            from ._utils import _add_title_suffix
+            save_path = _add_title_suffix(save_path)
+        os.makedirs(os.path.dirname(save_path), exist_ok=True)
+        plt.savefig(save_path, dpi=300, bbox_inches="tight")
+        print(f"Province GEF China map saved to {save_path}")
+        _province_gef_report(
+            save_path,
+            gef_path,
+            gef_by_province,
+            sorted(colored_provinces),
+            sorted(missing_provinces),
+            jd_drawn,
+            south_china_inset_extent,
+        )
+    else:
+        plt.show()
+
+    plt.close(fig)
+    return fig, ax
 
 
 def _ensure_all_china_city_areas():
