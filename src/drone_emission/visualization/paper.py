@@ -89,6 +89,11 @@ CITY_CONTEXT_FIGURES = {
         "display_name": "Chengdu",
         "power_region_key": "sichuan",
     },
+    "beijing_city_context": {
+        "region_key": "beijing",
+        "display_name": "Beijing",
+        "power_region_key": "beijing",
+    },
     "guangzhou_city_context": {
         "region_key": "guangzhou",
         "display_name": "Guangzhou",
@@ -115,6 +120,11 @@ CITY_CONTEXT_GROUP_FIGURES = {
         CITY_CONTEXT_FIGURES["dali_city_context"],
         CITY_CONTEXT_FIGURES["chengdu_city_context"],
         CITY_CONTEXT_FIGURES["tianjin_city_context"],
+        CITY_CONTEXT_FIGURES["guangzhou_city_context"],
+    ),
+    "chengdu_beijing_guangzhou_city_context": (
+        CITY_CONTEXT_FIGURES["chengdu_city_context"],
+        CITY_CONTEXT_FIGURES["beijing_city_context"],
         CITY_CONTEXT_FIGURES["guangzhou_city_context"],
     ),
 }
@@ -3066,7 +3076,7 @@ def _write_city_gef_context_detour_report(
         "",
         "Each bar entry in JSON records `x_center`, `width`, production+EOL segment bottom/height/top, use-phase segment bottom/height/top, and total label location.",
         "",
-        "## Middle: dali_chengdu_tianjin_guangzhou_city_context",
+        "## Middle: selected_city_context",
         "",
     ]
     for city in city_reports:
@@ -3216,7 +3226,7 @@ def _render_city_gef_context_detour_summary(
     """Render GEF components, selected city contexts, and detour-reduction scatter."""
     figure_name = "city_gef_context_detour_summary"
     contexts = CITY_CONTEXT_GROUP_FIGURES[
-        "dali_chengdu_tianjin_guangzhou_city_context"
+        "chengdu_beijing_guangzhou_city_context"
     ]
     region_keys = [context["region_key"] for context in contexts]
     selected = city_df[city_df["region_key"].isin(region_keys)].copy()
@@ -3269,7 +3279,7 @@ def _render_city_gef_context_detour_summary(
 
     reduction_col = _weighted_reduction_column(df_enriched)
 
-    figure_size = (20.0, 17.0)
+    figure_size = (17.0, 17.0)
     fig = plt.figure(figsize=figure_size)
     outer = fig.add_gridspec(
         3,
