@@ -275,6 +275,8 @@ def finalize_plot(
     for_latex=False,
     plot_title=False,
     show_geo_axes=True,
+    show_grid=True,
+    show_frame=True,
     before_save=None,
 ):
     """Finalize plot with title, labels, and axis limits.
@@ -290,6 +292,8 @@ def finalize_plot(
         for_latex: If True, save as PDF format
         plot_title: If True, show title and stats text
         show_geo_axes: If False, hide longitude/latitude labels and ticks.
+        show_grid: If False, skip the plot grid.
+        show_frame: If False, hide the axes frame/spines.
         before_save: Optional callback receiving the final save path before savefig.
     """
     # Set labels
@@ -317,7 +321,14 @@ def finalize_plot(
         )
 
     # Add grid
-    ax.grid(True, alpha=0.3, linestyle="--", color="white")
+    if show_grid:
+        ax.grid(True, alpha=0.3, linestyle="--", color="white")
+    else:
+        ax.grid(False)
+
+    if not show_frame:
+        for spine in ax.spines.values():
+            spine.set_visible(False)
 
     # Disable scientific notation for coordinates
     ax.ticklabel_format(useOffset=False, style="plain")

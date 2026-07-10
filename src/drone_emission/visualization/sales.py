@@ -224,18 +224,16 @@ def plot_sales_heatmap(
 
     add_basemap_and_boundaries(ax, region_name_cn, boundaries_dict, zoom=zoom)
 
-    # Place colorbar above the map to preserve horizontal figure space.
+    # Place colorbar to the right, aligned with the map height.
     divider = make_axes_locatable(ax)
-    cax = divider.append_axes("top", size="4%", pad=0.28)
+    cax = divider.append_axes("right", size="4%", pad=0.1)
     cbar = plt.colorbar(
         im,
         cax=cax,
-        orientation="horizontal",
+        orientation="vertical",
         label="Sales Density (Weighted)",
     )
     cbar.set_label("Sales Density (Weighted)", fontsize=13)
-    cbar.ax.xaxis.set_label_position("top")
-    cbar.ax.xaxis.set_ticks_position("top")
     cbar.ax.tick_params(labelsize=12)
 
     stats_text = f"Total Stores: {len(df)}\nAvg Sales: {sales.mean():.1f}\nMax Sales: {sales.max():.0f}"
@@ -265,7 +263,7 @@ def plot_sales_heatmap(
                         fig, cax, renderer=renderer, tight_bbox=tight_bbox
                     ),
                     "label": "Sales Density (Weighted)",
-                    "orientation": "horizontal",
+                    "orientation": "vertical",
                 },
             },
         )
@@ -281,6 +279,8 @@ def plot_sales_heatmap(
         for_latex,
         plot_title,
         show_geo_axes=False,
+        show_grid=False,
+        show_frame=False,
         before_save=_write_report if save_path else None,
     )
 
