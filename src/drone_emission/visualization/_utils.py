@@ -6,6 +6,7 @@ import cpca
 import matplotlib.pyplot as plt
 import numpy as np
 import requests
+from matplotlib import patheffects
 from matplotlib.colors import LinearSegmentedColormap
 from utils.config import get_cache_dir
 from utils.coordinates import gcj02_to_wgs84
@@ -171,6 +172,8 @@ def add_basemap_and_boundaries(
     boundary_linewidth=2,
     boundary_alpha=0.8,
     attribution_size=8,
+    attribution_text=None,
+    attribution_wrap=True,
 ):
     # Set axis limits BEFORE adding basemap to ensure correct coverage
     if boundaries_dict:
@@ -194,9 +197,25 @@ def add_basemap_and_boundaries(
             source=ctx.providers.OpenStreetMap.Mapnik,
             zoom=zoom,  # Higher zoom = higher resolution
             alpha=alpha,  # Reduced opacity for better data visibility
+            attribution=False if not attribution_wrap else attribution_text,
             attribution_size=attribution_size,
             zorder=0,  # Map at bottom
         )
+        if not attribution_wrap:
+            ax.text(
+                0.005,
+                0.005,
+                attribution_text or "(C) OpenStreetMap contributors",
+                transform=ax.transAxes,
+                fontsize=attribution_size,
+                va="bottom",
+                ha="left",
+                wrap=False,
+                path_effects=[
+                    patheffects.withStroke(linewidth=1.25, foreground="white")
+                ],
+                zorder=100,
+            )
         print(f"Basemap added successfully (zoom={zoom}, alpha={alpha})")
     except Exception as e:
         print(f"Could not add basemap: {e}")
