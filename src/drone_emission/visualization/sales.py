@@ -273,7 +273,7 @@ def plot_sales_heatmap(
         boundary_color="#777777" if compact else "gray",
         boundary_linewidth=0.35 if compact else 2,
         boundary_alpha=0.65 if compact else 0.8,
-        attribution_size=3.5 if compact else 8,
+        attribution_size=3.0 if compact else 8,
         attribution_text="(C) OpenStreetMap contributors" if compact else None,
         attribution_wrap=not compact,
     )
@@ -340,7 +340,7 @@ def plot_sales_heatmap(
                     "provider": "OpenStreetMap.Mapnik",
                     "zoom": int(zoom),
                     "alpha": 0.28 if compact else 0.6,
-                    "attribution_fontsize_pt": 3.5 if compact else 8.0,
+                    "attribution_fontsize_pt": 3.0 if compact else 8.0,
                     "attribution_wrap": not compact,
                 },
                 "coordinate_convention": (

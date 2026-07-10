@@ -212,7 +212,7 @@ def add_basemap_and_boundaries(
                 ha="left",
                 wrap=False,
                 path_effects=[
-                    patheffects.withStroke(linewidth=1.25, foreground="white")
+                    patheffects.withStroke(linewidth=0.6, foreground="white")
                 ],
                 zorder=100,
             )
