@@ -58,7 +58,14 @@ def fetch_boundaries(adcode):
         return None
 
 
-def plot_geojson_boundaries(ax, geojson_data, zorder=15):
+def plot_geojson_boundaries(
+    ax,
+    geojson_data,
+    zorder=15,
+    color="gray",
+    linewidth=2,
+    alpha=0.8,
+):
     if not geojson_data:
         return
 
@@ -76,13 +83,27 @@ def plot_geojson_boundaries(ax, geojson_data, zorder=15):
                 # ring is a list of [x, y]
                 ring_wgs = [gcj02_to_wgs84(pt[0], pt[1]) for pt in ring]
                 xs, ys = zip(*ring_wgs)
-                ax.plot(xs, ys, color="gray", linewidth=2, alpha=0.8, zorder=zorder)
+                ax.plot(
+                    xs,
+                    ys,
+                    color=color,
+                    linewidth=linewidth,
+                    alpha=alpha,
+                    zorder=zorder,
+                )
         elif geom_type == "MultiPolygon":
             for polygon in coords:
                 for ring in polygon:
                     ring_wgs = [gcj02_to_wgs84(pt[0], pt[1]) for pt in ring]
                     xs, ys = zip(*ring_wgs)
-                    ax.plot(xs, ys, color="gray", linewidth=2, alpha=0.8, zorder=zorder)
+                    ax.plot(
+                        xs,
+                        ys,
+                        color=color,
+                        linewidth=linewidth,
+                        alpha=alpha,
+                        zorder=zorder,
+                    )
 
 
 def configure_contextily_cache():
@@ -141,7 +162,15 @@ def plot_boundary_box(
 
 
 def add_basemap_and_boundaries(
-    ax, city_name_cn, boundaries_dict=None, zoom=14, alpha=0.6
+    ax,
+    city_name_cn,
+    boundaries_dict=None,
+    zoom=14,
+    alpha=0.6,
+    boundary_color="gray",
+    boundary_linewidth=2,
+    boundary_alpha=0.8,
+    attribution_size=8,
 ):
     # Set axis limits BEFORE adding basemap to ensure correct coverage
     if boundaries_dict:
@@ -165,6 +194,7 @@ def add_basemap_and_boundaries(
             source=ctx.providers.OpenStreetMap.Mapnik,
             zoom=zoom,  # Higher zoom = higher resolution
             alpha=alpha,  # Reduced opacity for better data visibility
+            attribution_size=attribution_size,
             zorder=0,  # Map at bottom
         )
         print(f"Basemap added successfully (zoom={zoom}, alpha={alpha})")
@@ -175,7 +205,14 @@ def add_basemap_and_boundaries(
     adcode = get_adcode(city_name_cn)
     if adcode:
         geojson_data = fetch_boundaries(adcode)
-        plot_geojson_boundaries(ax, geojson_data, zorder=15)
+        plot_geojson_boundaries(
+            ax,
+            geojson_data,
+            zorder=15,
+            color=boundary_color,
+            linewidth=boundary_linewidth,
+            alpha=boundary_alpha,
+        )
     else:
         print(f"No adcode found for {city_name_cn}, skipping boundaries.")
 

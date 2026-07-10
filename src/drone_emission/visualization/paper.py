@@ -684,7 +684,13 @@ def _select_top6_reduction_detour_variants(city_df, gef_df):
     }
 
 
-def _render_shanghai_heatmap(data_dir, out, for_latex, plot_title):
+def _render_shanghai_heatmap(
+    data_dir,
+    out,
+    for_latex,
+    plot_title,
+    compact=False,
+):
     """Load Shanghai sales data and render the sales heatmap figure."""
     region_key = "shanghai"
     region_level = "city"
@@ -696,6 +702,17 @@ def _render_shanghai_heatmap(data_dir, out, for_latex, plot_title):
 
     from visualization.sales import plot_sales_heatmap
 
+    if compact:
+        lng_range = (121.25, 121.65)
+        lat_range = (31.10, 31.36)
+        figsize = (1.25, 1.05)
+        zoom = 12
+    else:
+        lng_range = (121.0, 121.9)
+        lat_range = (30.9, 31.55)
+        figsize = None
+        zoom = 14
+
     df = pd.read_csv(sales_path)
     plot_sales_heatmap(
         df,
@@ -705,8 +722,11 @@ def _render_shanghai_heatmap(data_dir, out, for_latex, plot_title):
         save_path=os.path.join(out, "shanghai_heatmap.png"),
         for_latex=for_latex,
         plot_title=plot_title,
-        lng_range=(121.0, 121.9),
-        lat_range=(30.9, 31.55),
+        lng_range=lng_range,
+        lat_range=lat_range,
+        zoom=zoom,
+        compact=compact,
+        figsize=figsize,
     )
 
 
@@ -4446,6 +4466,7 @@ def render_all(
             out=out,
             for_latex=for_latex,
             plot_title=plot_title,
+            compact=True,
         )
     if shanghai_heatmap_pdf_needed:
         _render_shanghai_heatmap(
@@ -4453,6 +4474,7 @@ def render_all(
             out=framework_out,
             for_latex=True,
             plot_title=plot_title,
+            compact=False,
         )
 
     shanghai_building_height_merchant_requested = _want(
