@@ -53,15 +53,25 @@ CONTRIBUTION_COMPONENT_SPECS = (
 CONTRIBUTION_COMPONENT_KEYS = tuple(
     spec["key"] for spec in CONTRIBUTION_COMPONENT_SPECS
 )
-CONTRIBUTION_CITY_B_REGION_KEYS = (
-    "beijing",
-    "shanghai",
-    "hangzhou",
-    "guangzhou",
-    "shenzhen",
-    "chengdu",
-    "chongqing",
+CONTRIBUTION_CITY_B_GROUPS = (
+    ("north_china", ("beijing", "tianjin", "shijiazhuang", "taiyuan")),
+    ("northeast_china", ("shenyang", "dalian", "changchun", "haerbin")),
+    ("east_china", ("shanghai", "hangzhou", "nanjing", "ningbo")),
+    ("central_china", ("zhengzhou", "wuhan", "changsha", "xiangyang")),
+    ("south_china", ("guangzhou", "shenzhen", "nanning", "haikou")),
+    ("southwest_china", ("chongqing", "chengdu", "guiyang", "kunming")),
+    ("northwest_china", ("xian", "lanzhou", "xining", "wulumuqi")),
 )
+CONTRIBUTION_CITY_B_REGION_KEYS = tuple(
+    region_key
+    for _, region_keys in CONTRIBUTION_CITY_B_GROUPS
+    for region_key in region_keys
+)
+CONTRIBUTION_CITY_B_DISPLAY_NAMES = {
+    "haerbin": "Harbin",
+    "wulumuqi": "Urumqi",
+    "xian": "Xi'an",
+}
 BREAK_EVEN_REPRESENTATIVE_AIR_DISTANCE_KM = 2.0
 BREAK_EVEN_CURVE_AIR_DISTANCES_KM = (0.5, 1.0, 2.0, 3.0, 5.0)
 BREAK_EVEN_DETOUR_LIMITS = (1.0, 2.4)
@@ -510,43 +520,66 @@ def _selected_city_component_rows(
     city_reports: list[dict],
     selected_region_keys: tuple[str, ...] = CONTRIBUTION_CITY_B_REGION_KEYS,
 ) -> list[dict]:
-    """Return selected city contribution rows ranked by absolute net reduction."""
+    """Return selected city contribution rows in grouped representative order."""
+    city_by_key = {
+        str(city.get("region_key", "")): city
+        for city in city_reports
+    }
     selected = set(selected_region_keys)
+    macro_region_by_key = {
+        spec["key"]: spec
+        for spec in CHINA_MACRO_REGION_SPECS
+    }
     rows = []
-    for city in city_reports:
-        region_key = str(city.get("region_key", ""))
-        if region_key not in selected:
-            continue
+    for macro_region_key, region_keys in CONTRIBUTION_CITY_B_GROUPS:
+        macro_region = macro_region_by_key.get(macro_region_key, {})
+        for region_key in region_keys:
+            if region_key not in selected:
+                continue
+            city = city_by_key.get(region_key)
+            if city is None:
+                continue
 
-        label = str(city.get("region_name_en", region_key))
-        row = _contribution_row_template(label)
-        city_baseline_kg = float(city.get("baseline_ebike_lifecycle_kg", 0.0))
-        row.update(
-            {
-                "region_key": region_key,
-                "province": str(city.get("province", "")),
-                "baseline_ebike_lifecycle_kg": city_baseline_kg,
-                "sampled_drone_rows": int(city.get("drone_assigned_sampled_rows", 0)),
-            }
-        )
-        component_kg = city.get("component_kg", {}) or {}
-        for key in CONTRIBUTION_COMPONENT_KEYS:
-            kg_value = float(component_kg.get(key, 0.0))
-            row[f"{key}_kg"] = kg_value
-            row[f"{key}_pp"] = (
-                kg_value / city_baseline_kg * 100.0
+            label = CONTRIBUTION_CITY_B_DISPLAY_NAMES.get(
+                region_key,
+                str(city.get("region_name_en", region_key)),
+            )
+            row = _contribution_row_template(label)
+            city_baseline_kg = float(city.get("baseline_ebike_lifecycle_kg", 0.0))
+            row.update(
+                {
+                    "region_key": region_key,
+                    "province": str(city.get("province", "")),
+                    "macro_region_key": macro_region_key,
+                    "macro_region_label": macro_region.get(
+                        "full_label",
+                        macro_region_key,
+                    ),
+                    "macro_region_label_cn": macro_region.get("cn_label", ""),
+                    "macro_region_color": macro_region.get("color", "#777777"),
+                    "baseline_ebike_lifecycle_kg": city_baseline_kg,
+                    "sampled_drone_rows": int(
+                        city.get("drone_assigned_sampled_rows", 0)
+                    ),
+                }
+            )
+            component_kg = city.get("component_kg", {}) or {}
+            for key in CONTRIBUTION_COMPONENT_KEYS:
+                kg_value = float(component_kg.get(key, 0.0))
+                row[f"{key}_kg"] = kg_value
+                row[f"{key}_pp"] = (
+                    kg_value / city_baseline_kg * 100.0
+                    if city_baseline_kg > 0
+                    else 0.0
+                )
+            row["total_net_kg"] = float(city.get("net_saving_kg", 0.0))
+            row["total_net_pp"] = (
+                row["total_net_kg"] / city_baseline_kg * 100.0
                 if city_baseline_kg > 0
                 else 0.0
             )
-        row["total_net_kg"] = float(city.get("net_saving_kg", 0.0))
-        row["total_net_pp"] = (
-            row["total_net_kg"] / city_baseline_kg * 100.0
-            if city_baseline_kg > 0
-            else 0.0
-        )
-        rows.append(row)
+            rows.append(row)
 
-    rows.sort(key=lambda row: (row["total_net_kg"], row["label"]), reverse=True)
     return rows
 
 
@@ -1180,7 +1213,20 @@ def _plot_selected_city_contribution_bars(ax, rows: list[dict]):
         ax.tick_params(left=False, bottom=False, labelleft=False, labelbottom=False)
         return np.array([], dtype=float)
 
-    y = np.arange(len(rows), dtype=float)
+    y_values = []
+    current_y = 0.0
+    previous_macro_region = None
+    for row in rows:
+        macro_region_key = row.get("macro_region_key")
+        if (
+            previous_macro_region is not None
+            and macro_region_key != previous_macro_region
+        ):
+            current_y += 0.85
+        y_values.append(current_y)
+        current_y += 1.0
+        previous_macro_region = macro_region_key
+    y = np.array(y_values, dtype=float)
     positive_acc = np.zeros(len(rows), dtype=float)
     negative_acc = np.zeros(len(rows), dtype=float)
     extrema = [0.0]
@@ -1238,7 +1284,63 @@ def _plot_selected_city_contribution_bars(ax, rows: list[dict]):
     xmax = max(extrema)
     span = max(xmax - xmin, 1.0)
     ax.set_xlim(xmin - span * 0.10, xmax + span * 0.10)
+    _annotate_selected_city_macro_regions(ax, rows, y)
     return y
+
+
+def _annotate_selected_city_macro_regions(ax, rows: list[dict], y: np.ndarray):
+    """Add macro-region headers and separators to selected-city rows."""
+    if not rows or y.size == 0:
+        return
+
+    groups = []
+    start_idx = 0
+    for idx in range(1, len(rows) + 1):
+        is_boundary = (
+            idx == len(rows)
+            or rows[idx].get("macro_region_key")
+            != rows[start_idx].get("macro_region_key")
+        )
+        if is_boundary:
+            groups.append((start_idx, idx - 1))
+            start_idx = idx
+
+    y_transform = ax.get_yaxis_transform()
+    for group_idx, (start, end) in enumerate(groups):
+        row = rows[start]
+        color = row.get("macro_region_color", "#777777")
+        label = row.get("macro_region_label", row.get("macro_region_key", ""))
+        y_top = float(y[start] - 0.43)
+        y_bottom = float(y[end] + 0.43)
+        ax.axhspan(
+            y_top,
+            y_bottom,
+            xmin=0.0,
+            xmax=0.012,
+            facecolor=color,
+            alpha=0.95,
+            linewidth=0,
+            zorder=1,
+        )
+        if group_idx:
+            ax.axhline(
+                y_top - 0.18,
+                color="#DDDDDD",
+                linewidth=0.8,
+                zorder=1,
+            )
+        ax.text(
+            -0.015,
+            y_top - 0.16,
+            label,
+            transform=y_transform,
+            ha="right",
+            va="bottom",
+            fontsize=8.5,
+            fontweight="bold",
+            color=color,
+            clip_on=False,
+        )
 
 
 def _plot_selected_city_absolute_reduction_points(
@@ -1874,6 +1976,22 @@ def _write_contribution_decomposition_city_b_report(
     """Write compact JSON report for the selected-city contribution figure."""
     ax_main, ax_top = axes
     report_path = save_path.rsplit(".", 1)[0] + "_report.json"
+    macro_region_by_key = {
+        spec["key"]: spec
+        for spec in CHINA_MACRO_REGION_SPECS
+    }
+    selected_city_groups = []
+    for macro_region_key, region_keys in CONTRIBUTION_CITY_B_GROUPS:
+        spec = macro_region_by_key.get(macro_region_key, {})
+        selected_city_groups.append(
+            {
+                "macro_region_key": macro_region_key,
+                "macro_region_label": spec.get("full_label", macro_region_key),
+                "macro_region_label_cn": spec.get("cn_label", ""),
+                "region_keys": list(region_keys),
+            }
+        )
+    plotted_region_keys = {row.get("region_key") for row in rows}
     payload = {
         "figure": "contribution_decomposition_city_b",
         "figure_path": save_path,
@@ -1883,14 +2001,21 @@ def _write_contribution_decomposition_city_b_report(
             "top_absolute_net_reduction": _report_axis(ax_top),
         },
         "selected_region_keys": list(CONTRIBUTION_CITY_B_REGION_KEYS),
-        "sort_order": "descending total_net_kg after filtering",
+        "selected_city_groups": selected_city_groups,
+        "missing_selected_region_keys": [
+            region_key
+            for region_key in CONTRIBUTION_CITY_B_REGION_KEYS
+            if region_key not in plotted_region_keys
+        ],
+        "sort_order": "China macro-region order with four curated representative cities per region",
         "bar_design": (
-            "Single horizontal one-row-per-city panel. Positive components "
-            "stack from zero to the right, negative components stack from "
-            "zero to the left, and a black point marks total net reduction "
-            "on the bottom percentage-point axis. White circles with dark "
-            "green outlines mark absolute net reduction on the top kt "
-            "CO2e/yr axis."
+            "Grouped horizontal one-row-per-city panel. The seven China "
+            "macro-regions follow the shared paper order, with four curated "
+            "representative cities per region. Positive components stack "
+            "from zero to the right, negative components stack from zero to "
+            "the left, and a black point marks total net reduction on the "
+            "bottom percentage-point axis. White circles with dark green "
+            "outlines mark absolute net reduction on the top kt CO2e/yr axis."
         ),
         "component_specs": _json_safe(CONTRIBUTION_COMPONENT_SPECS),
         "net_marker": {"label": "Net reduction", "color": "#111111"},
@@ -1911,7 +2036,7 @@ def _write_contribution_decomposition_city_b_report(
 def plot_contribution_decomposition_city_b(
     prepared: Dict,
     save_path: str = None,
-    figsize: tuple = (7.8, 8.4),
+    figsize: tuple = (8.4, 12.6),
     for_latex: bool = False,
     plot_title: bool = False,
 ):
@@ -1984,7 +2109,10 @@ def plot_contribution_decomposition_city_b(
         columnspacing=1.0,
     )
     if plot_title:
-        ax.set_title("Contribution decomposition by selected city", fontsize=13)
+        ax.set_title(
+            "Contribution decomposition by representative city",
+            fontsize=13,
+        )
 
     if save_path:
         if for_latex and not save_path.endswith(".pdf"):
