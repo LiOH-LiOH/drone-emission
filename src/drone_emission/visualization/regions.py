@@ -275,10 +275,10 @@ def _province_gef_report(
 def plot_province_gef_china_map(
     gef_path: str,
     save_path: str = None,
-    figsize: tuple = (3.4, 3.0),
+    figsize: tuple = (6.8, 3.4),
     for_latex: bool = False,
     plot_title: bool = False,
-    south_china_inset_bounds: tuple = (0.72, 0.03, 0.25, 0.32),
+    south_china_inset_bounds: tuple = (0.80, 0.05, 0.13, 0.24),
     south_china_inset_extent: tuple = (107, 123.5, 3, 25),
 ):
     """Plot province-level China GEF heatmap with South China Sea inset.
@@ -424,6 +424,8 @@ def plot_province_gef_china_map(
     inset_min_lng, inset_max_lng, inset_min_lat, inset_max_lat = south_china_inset_extent
     inset_ax.set_xlim(inset_min_lng, inset_max_lng)
     inset_ax.set_ylim(inset_min_lat, inset_max_lat)
+    inset_avg_lat = (inset_min_lat + inset_max_lat) / 2
+    inset_ax.set_aspect(1.0 / np.cos(np.radians(inset_avg_lat)), adjustable="box")
     inset_ax.set_xticks([])
     inset_ax.set_yticks([])
     inset_ax.set_facecolor("white")
