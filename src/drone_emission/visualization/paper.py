@@ -14,7 +14,8 @@ Available figures:
     production_detour_eol_panels, emission_model_flowchart,
     detour_and_lifecycle, distance_comparison,
     distance_comparison_high_3x3, distance_comparison_low_3x3,
-    shanghai_heatmap, shanghai_building_height_merchant,
+    shanghai_heatmap, shanghai_merchant_monthly_sales,
+    shanghai_building_height_merchant,
     shanghai_building_footprint_heatmap,
     shanghai_road_network_subfigure,
     shanghai_road_air_distance, shanghai_road_detour,
@@ -736,6 +737,50 @@ def _find_first_existing_path(paths):
         if os.path.exists(path):
             return path
     return None
+
+
+def _render_shanghai_merchant_monthly_sales(
+    data_dir,
+    out,
+    for_latex,
+    plot_title,
+):
+    """Render merchant monthly-sales records over local building footprints."""
+    region_key = "shanghai"
+    region_dir = os.path.join(data_dir, "city", region_key)
+    sales_path = os.path.join(region_dir, f"{region_key}_sales.csv")
+    building_path = _find_first_existing_path(
+        [
+            os.path.join(region_dir, f"{region_key}_buildings_preprocessed.gpkg"),
+            os.path.join(region_dir, f"{region_key}_buildings_preprocessed.geojson"),
+            os.path.join(region_dir, f"{region_key}_buildings.gpkg"),
+            os.path.join(region_dir, f"{region_key}_buildings.geojson"),
+        ]
+    )
+    if not os.path.exists(sales_path):
+        print(f"Shanghai merchant monthly sales skipped - missing {sales_path}")
+        return
+    if building_path is None:
+        print(
+            "Shanghai merchant monthly sales skipped - missing building "
+            f"geometry in {region_dir}"
+        )
+        return
+
+    import geopandas as gpd
+    from visualization.sales import plot_merchant_monthly_sales_map
+
+    stores_df = pd.read_csv(sales_path)
+    buildings_gdf = gpd.read_file(building_path)
+    plot_merchant_monthly_sales_map(
+        stores_df,
+        buildings_gdf,
+        "Shanghai",
+        save_path=os.path.join(out, "shanghai_merchant_monthly_sales.png"),
+        figsize=(1.25, 0.95),
+        for_latex=for_latex,
+        plot_title=plot_title,
+    )
 
 
 def _get_cached_sparse_graph(graphml_path, graph_cache=None):
@@ -4458,6 +4503,14 @@ def render_all(
         )
 
     # --- Shanghai figures (independent of all_region_stats) ---
+    if _want("shanghai_merchant_monthly_sales"):
+        _render_shanghai_merchant_monthly_sales(
+            data_dir=data_dir,
+            out=out,
+            for_latex=for_latex,
+            plot_title=plot_title,
+        )
+
     shanghai_heatmap_requested = _want("shanghai_heatmap")
     shanghai_heatmap_pdf_needed = _figure1_needs_vector_source("shanghai_heatmap")
     if shanghai_heatmap_requested:
