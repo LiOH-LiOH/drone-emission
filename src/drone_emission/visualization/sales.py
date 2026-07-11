@@ -595,7 +595,11 @@ def plot_merchant_monthly_sales_map(
                 },
                 "map": {
                     "axis": saved_tight_axis_report(
-                        fig, ax, renderer=renderer, tight_bbox=tight_bbox
+                        fig,
+                        ax,
+                        renderer=renderer,
+                        tight_bbox=tight_bbox,
+                        pad_inches=0.02,
                     ),
                     "lng_range": [boundaries["min_lng"], boundaries["max_lng"]],
                     "lat_range": [boundaries["min_lat"], boundaries["max_lat"]],
@@ -614,7 +618,7 @@ def plot_merchant_monthly_sales_map(
                 },
             },
         )
-        plt.savefig(save_path, dpi=300, bbox_inches="tight")
+        plt.savefig(save_path, dpi=300, bbox_inches="tight", pad_inches=0.02)
         print(f"Merchant monthly sales map saved to {save_path}")
         print(f"Merchant monthly sales map report saved to {report_path}")
     else:
