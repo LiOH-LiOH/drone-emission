@@ -925,8 +925,11 @@ def _render_shanghai_building_footprint_heatmap(
         "Shanghai",
         "上海市",
         save_path=os.path.join(out, "shanghai_building_footprint_heatmap.png"),
+        figsize=(1.25, 1.11),
         for_latex=for_latex,
         plot_title=plot_title,
+        lat_span=0.008,
+        compact=True,
     )
 
 
@@ -966,8 +969,11 @@ def _render_shanghai_road_network_subfigure(
         stores_df,
         "Shanghai",
         save_path=os.path.join(out, "shanghai_road_network_subfigure.png"),
+        figsize=(1.25, 1.11),
         for_latex=for_latex,
         plot_title=plot_title,
+        lat_span=0.012,
+        compact=True,
     )
 
 

@@ -144,6 +144,8 @@ def plot_road_network_subfigure(
     figsize=(6.4, 3.2),
     for_latex=False,
     plot_title=False,
+    lat_span=None,
+    compact=False,
 ):
     """Show a road-network-only panel around a top-sales merchant.
 
@@ -155,6 +157,8 @@ def plot_road_network_subfigure(
         figsize: Figure size tuple.
         for_latex: If True, save as PDF.
         plot_title: If True, show title.
+        lat_span: Optional latitude span in degrees.
+        compact: If True, use paper-panel styling and export padding.
     """
     required_store_cols = {"lat", "lng", "month_sales"}
     missing_store_cols = required_store_cols - set(stores_df.columns)
@@ -188,7 +192,10 @@ def plot_road_network_subfigure(
         float(merchant["lat"]),
     )
 
-    lat_span = MERCHANT_MAP_DEGREE_SIZE
+    lat_span = MERCHANT_MAP_DEGREE_SIZE if lat_span is None else float(lat_span)
+    if lat_span <= 0:
+        print("Road network subfigure skipped - lat_span must be positive")
+        return
     avg_lat = merchant_lat
     figure_ratio = float(figsize[0]) / float(figsize[1])
     lng_span = figure_ratio * lat_span / np.cos(np.radians(avg_lat))
@@ -210,13 +217,13 @@ def plot_road_network_subfigure(
     ax.set_aspect(aspect_ratio)
     ax.set_xlim(boundaries_dict["min_lng"], boundaries_dict["max_lng"])
     ax.set_ylim(boundaries_dict["min_lat"], boundaries_dict["max_lat"])
-    ax.set_facecolor("#f7f7f5")
+    ax.set_facecolor("white" if compact else "#f7f7f5")
 
     segments = [[(ec[1], ec[0]), (ec[3], ec[2])] for ec in edge_coords]
     roads = LineCollection(
         segments,
         colors="#4f5963",
-        linewidths=0.55,
+        linewidths=0.65 if compact else 0.55,
         alpha=0.95,
         zorder=10,
     )
@@ -259,13 +266,21 @@ def plot_road_network_subfigure(
         report = {
             "figure_name": "shanghai_road_network_subfigure",
             "figure_path": save_path,
+            "layout_mode": "compact" if compact else "full",
+            "native_size_inches": [float(figsize[0]), float(figsize[1])],
+            "configured_lat_span_degrees": float(lat_span),
+            "save_padding_inches": 0.02 if compact else 0.0,
             "coordinate_convention": (
                 "bbox_saved_tight_fraction values are fractions of the saved "
                 "page after bbox_inches='tight'."
             ),
             "map": {
                 "axis": saved_tight_axis_report(
-                    fig, ax, renderer=renderer, tight_bbox=tight_bbox
+                    fig,
+                    ax,
+                    renderer=renderer,
+                    tight_bbox=tight_bbox,
+                    pad_inches=0.02 if compact else 0.0,
                 ),
                 "lng_range": [
                     float(boundaries_dict["min_lng"]),
@@ -285,7 +300,12 @@ def plot_road_network_subfigure(
         }
         write_figure_report(report_path, report)
         print(f"Road network subfigure report saved to {report_path}")
-        plt.savefig(save_path, dpi=300, bbox_inches="tight", pad_inches=0)
+        plt.savefig(
+            save_path,
+            dpi=300,
+            bbox_inches="tight",
+            pad_inches=0.02 if compact else 0,
+        )
         print(f"Road network subfigure saved to {save_path}")
     else:
         plt.show()

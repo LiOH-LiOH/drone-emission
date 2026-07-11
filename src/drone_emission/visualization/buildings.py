@@ -547,6 +547,8 @@ def plot_building_footprint_heatmap(
     figsize=(6.4, 3.2),
     for_latex=False,
     plot_title=False,
+    lat_span=None,
+    compact=False,
 ):
     """Show building footprints colored by height around a top-sales merchant.
 
@@ -559,6 +561,8 @@ def plot_building_footprint_heatmap(
         figsize: Figure size tuple.
         for_latex: If True, save as PDF.
         plot_title: If True, show title.
+        lat_span: Optional latitude span in degrees.
+        compact: If True, use paper-panel export padding.
     """
     required_store_cols = {"lat", "lng", "month_sales"}
     missing_store_cols = required_store_cols - set(stores_df.columns)
@@ -599,7 +603,10 @@ def plot_building_footprint_heatmap(
         float(merchant["lat"]),
     )
 
-    lat_span = MERCHANT_MAP_DEGREE_SIZE
+    lat_span = MERCHANT_MAP_DEGREE_SIZE if lat_span is None else float(lat_span)
+    if lat_span <= 0:
+        print("Building footprint heatmap skipped - lat_span must be positive")
+        return
     avg_lat = merchant_lat
     figure_ratio = float(figsize[0]) / float(figsize[1])
     lng_span = figure_ratio * lat_span / np.cos(np.radians(avg_lat))
@@ -708,13 +715,21 @@ def plot_building_footprint_heatmap(
         report = {
             "figure_name": "shanghai_building_footprint_heatmap",
             "figure_path": save_path,
+            "layout_mode": "compact" if compact else "full",
+            "native_size_inches": [float(figsize[0]), float(figsize[1])],
+            "configured_lat_span_degrees": float(lat_span),
+            "save_padding_inches": 0.02 if compact else 0.0,
             "coordinate_convention": (
                 "bbox_saved_tight_fraction values are fractions of the saved "
                 "page after bbox_inches='tight'."
             ),
             "map": {
                 "axis": saved_tight_axis_report(
-                    fig, ax, renderer=renderer, tight_bbox=tight_bbox
+                    fig,
+                    ax,
+                    renderer=renderer,
+                    tight_bbox=tight_bbox,
+                    pad_inches=0.02 if compact else 0.0,
                 ),
                 "lng_range": [
                     float(boundaries_dict["min_lng"]),
@@ -735,7 +750,12 @@ def plot_building_footprint_heatmap(
         }
         write_figure_report(report_path, report)
         print(f"Building footprint heatmap report saved to {report_path}")
-        plt.savefig(save_path, dpi=300, bbox_inches="tight", pad_inches=0)
+        plt.savefig(
+            save_path,
+            dpi=300,
+            bbox_inches="tight",
+            pad_inches=0.02 if compact else 0,
+        )
         print(f"Building footprint heatmap saved to {save_path}")
     else:
         plt.show()
