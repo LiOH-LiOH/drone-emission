@@ -388,7 +388,7 @@ def plot_merchant_monthly_sales_map(
     buildings_gdf,
     region_name,
     save_path=None,
-    figsize=(1.25, 0.95),
+    figsize=(1.25, 1.17),
     for_latex=False,
     plot_title=False,
 ):

@@ -777,7 +777,7 @@ def _render_shanghai_merchant_monthly_sales(
         buildings_gdf,
         "Shanghai",
         save_path=os.path.join(out, "shanghai_merchant_monthly_sales.png"),
-        figsize=(1.25, 0.95),
+        figsize=(1.25, 1.17),
         for_latex=for_latex,
         plot_title=plot_title,
     )
