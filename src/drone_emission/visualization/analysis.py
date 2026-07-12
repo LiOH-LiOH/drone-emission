@@ -6061,7 +6061,7 @@ def plot_regions_map_oracle_reduction_rank_map_only(
     df_stats: "pd.DataFrame",
     stats_csv_path: str,
     save_path: str = None,
-    figsize: tuple = (4.17, 3.39),
+    figsize: tuple = (3.85, 3.39),
     for_latex: bool = False,
     plot_title: bool = False,
 ):
@@ -8102,7 +8102,7 @@ def plot_city_reduction_rank_top10(
 def plot_city_reduction_rank_all_macro_region(
     df: pd.DataFrame,
     save_path: str = None,
-    figsize: tuple = (7.09, 2.28),
+    figsize: tuple = (6.86, 2.28),
     for_latex: bool = False,
     plot_title: bool = False,
 ):
@@ -8405,7 +8405,7 @@ def plot_city_reduction_rank_all_macro_region(
 def plot_city_population_detour_oracle_reduction_bubble(
     df: pd.DataFrame,
     save_path: str = None,
-    figsize: tuple = (2.76, 3.39),
+    figsize: tuple = (2.31, 3.39),
     for_latex: bool = False,
     plot_title: bool = False,
 ):
