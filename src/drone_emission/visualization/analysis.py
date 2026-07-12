@@ -5833,7 +5833,7 @@ def plot_regions_map_oracle_reduction_rank(
         grid = fig.add_gridspec(
             2,
             1,
-            height_ratios=(1.0, 0.30),
+            height_ratios=(1.0, 0.42),
             hspace=0.02,
         )
         ax_map = fig.add_subplot(grid[0])
@@ -5904,12 +5904,12 @@ def plot_regions_map_oracle_reduction_rank(
     )
     unified_legend_style = {
         "loc": "lower right",
-        "fontsize": 7.6,
-        "title_fontsize": 7.6,
+        "fontsize": 6.5,
+        "title_fontsize": 6.5,
         "framealpha": 0.92,
-        "borderpad": 0.6,
-        "labelspacing": 0.45,
-        "handletextpad": 0.65,
+        "borderpad": 0.35,
+        "labelspacing": 0.2,
+        "handletextpad": 0.5,
     }
     size_legend_kwargs = (
         {
