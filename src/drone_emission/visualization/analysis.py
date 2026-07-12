@@ -6061,7 +6061,7 @@ def plot_regions_map_oracle_reduction_rank_map_only(
     df_stats: "pd.DataFrame",
     stats_csv_path: str,
     save_path: str = None,
-    figsize: tuple = (8.5, 7),
+    figsize: tuple = (4.17, 3.39),
     for_latex: bool = False,
     plot_title: bool = False,
 ):
@@ -8102,7 +8102,7 @@ def plot_city_reduction_rank_top10(
 def plot_city_reduction_rank_all_macro_region(
     df: pd.DataFrame,
     save_path: str = None,
-    figsize: tuple = (11.5, 4.8),
+    figsize: tuple = (7.09, 2.28),
     for_latex: bool = False,
     plot_title: bool = False,
 ):
@@ -8178,8 +8178,8 @@ def plot_city_reduction_rank_all_macro_region(
         zorder=2,
     )
 
-    ax.set_xlabel("City rank", fontsize=11)
-    ax.set_ylabel("Oracle reduction vs e-bike baseline (pp)", fontsize=11)
+    ax.set_xlabel("City rank", fontsize=7)
+    ax.set_ylabel("Oracle reduction vs e-bike (pp)", fontsize=7)
     ax.yaxis.grid(True, linestyle="--", alpha=0.35)
     ax.set_axisbelow(True)
     ax.set_xlim(0.5, len(plot_df) + 0.5)
@@ -8188,10 +8188,40 @@ def plot_city_reduction_rank_all_macro_region(
     if np.isclose(ymin, ymax):
         ymax = ymin + 1.0
     y_span = ymax - ymin
-    top_pad = 0.38 if not selected_cities.empty else 0.08
+    top_pad = 0.34 if not selected_cities.empty else 0.08
     ax.set_ylim(ymin - y_span * 0.04, ymax + y_span * top_pad)
-    ax.tick_params(axis="x", labelsize=9)
-    ax.tick_params(axis="y", labelsize=9)
+    ax.tick_params(axis="x", labelsize=6.5)
+    ax.tick_params(axis="y", labelsize=6.5)
+
+    handles = []
+    for spec in CHINA_MACRO_REGION_SPECS:
+        count = int((plot_df["macro_region_key"] == spec["key"]).sum())
+        if count:
+            handles.append(
+                Patch(
+                    facecolor=color_by_key[spec["key"]],
+                    edgecolor="none",
+                    label=f"{label_by_key[spec['key']]} ({count})",
+                )
+            )
+    macro_region_legend = ax.legend(
+        handles=handles,
+        loc="upper right",
+        ncol=4,
+        frameon=True,
+        fontsize=6.5,
+        title="Macro-region",
+        title_fontsize=7,
+        borderpad=0.35,
+        handlelength=0.9,
+        handletextpad=0.35,
+        labelspacing=0.25,
+        columnspacing=0.65,
+    )
+    fig.canvas.draw()
+    legend_box = macro_region_legend.get_window_extent(
+        renderer=fig.canvas.get_renderer()
+    ).padded(2.0)
 
     if not selected_cities.empty:
         selected_indices = set(selected_cities.index)
@@ -8213,7 +8243,7 @@ def plot_city_reduction_rank_all_macro_region(
             x_offsets.extend([-float(offset), float(offset)])
         label_y_values = [
             ymax + y_span * frac
-            for frac in (0.035, 0.145, 0.255)
+            for frac in (0.035, 0.18)
         ]
         label_box_style = {
             "boxstyle": "round,pad=0.18",
@@ -8229,7 +8259,7 @@ def plot_city_reduction_rank_all_macro_region(
                     0,
                     0,
                     row["_label_city"],
-                    fontsize=8,
+                    fontsize=6.5,
                     fontweight="bold",
                     bbox=label_box_style,
                     alpha=0,
@@ -8285,6 +8315,8 @@ def plot_city_reduction_rank_all_macro_region(
                 for _, _, label_x, label_y, box in label_candidate_sets[index]:
                     if require_order and placed_x and label_x < placed_x[-1]:
                         continue
+                    if _boxes_overlap(box, legend_box):
+                        continue
                     if any(_boxes_overlap(box, other) for other in placed_boxes):
                         continue
                     found = search(
@@ -8312,7 +8344,7 @@ def plot_city_reduction_rank_all_macro_region(
                     overlap_area = sum(
                         max(0.0, min(box.x1, other.x1) - max(box.x0, other.x0))
                         * max(0.0, min(box.y1, other.y1) - max(box.y0, other.y0))
-                        for other in placed_label_boxes
+                        for other in [legend_box, *placed_label_boxes]
                     )
                     scored.append(
                         (overlap_area > 0.0, overlap_area, abs_dx, row_idx, label_x, label_y, box)
@@ -8330,7 +8362,7 @@ def plot_city_reduction_rank_all_macro_region(
                 textcoords="data",
                 ha="center",
                 va="bottom",
-                fontsize=8,
+                fontsize=6.5,
                 fontweight="bold",
                 color="#111111",
                 arrowprops={
@@ -8346,27 +8378,6 @@ def plot_city_reduction_rank_all_macro_region(
                 zorder=5,
                 clip_on=False,
             )
-
-    handles = []
-    for spec in CHINA_MACRO_REGION_SPECS:
-        count = int((plot_df["macro_region_key"] == spec["key"]).sum())
-        if count:
-            handles.append(
-                Patch(
-                    facecolor=color_by_key[spec["key"]],
-                    edgecolor="none",
-                    label=f"{label_by_key[spec['key']]} ({count})",
-                )
-            )
-    ax.legend(
-        handles=handles,
-        loc="upper right",
-        ncol=2,
-        frameon=True,
-        fontsize=8,
-        title="Macro-region",
-        title_fontsize=9,
-    )
 
     if plot_title:
         fig.suptitle(
@@ -8394,7 +8405,7 @@ def plot_city_reduction_rank_all_macro_region(
 def plot_city_population_detour_oracle_reduction_bubble(
     df: pd.DataFrame,
     save_path: str = None,
-    figsize: tuple = (10.5, 6.8),
+    figsize: tuple = (2.76, 3.39),
     for_latex: bool = False,
     plot_title: bool = False,
 ):
@@ -8482,19 +8493,7 @@ def plot_city_population_detour_oracle_reduction_bubble(
         sizes = size_min + scaled * (size_max - size_min)
     plot_df["_bubble_size"] = sizes
 
-    fig = plt.figure(figsize=figsize)
-    gs = fig.add_gridspec(
-        2,
-        2,
-        width_ratios=(1.0, 0.18),
-        height_ratios=(0.18, 1.0),
-        wspace=0.08,
-        hspace=0.05,
-    )
-    ax_top = fig.add_subplot(gs[0, 0])
-    ax = fig.add_subplot(gs[1, 0], sharex=ax_top)
-    ax_right = fig.add_subplot(gs[1, 1], sharey=ax)
-    fig.add_subplot(gs[0, 1]).axis("off")
+    fig, ax = plt.subplots(figsize=figsize)
 
     ax.scatter(
         plot_df[reduction_t_col],
@@ -8508,52 +8507,13 @@ def plot_city_population_detour_oracle_reduction_bubble(
     )
 
     ax.set_xscale("log")
-    ax.set_xlabel("Annual Oracle emission reduction (t CO2e/yr)", fontsize=12)
-    ax.set_ylabel("Oracle lifecycle emission reduction (%)", fontsize=12)
+    ax.set_xlabel("Annual reduction (t CO2e yr$^{-1}$)", fontsize=7)
+    ax.set_ylabel("Lifecycle reduction (%)", fontsize=7)
+    ax.tick_params(axis="both", labelsize=6.5)
     ax.yaxis.set_major_formatter(FuncFormatter(lambda x, _: f"{x:.0f}%"))
     ax.grid(True, which="major", linestyle="--", alpha=0.28, zorder=0)
     ax.grid(True, which="minor", axis="x", linestyle=":", alpha=0.18, zorder=0)
     ax.set_axisbelow(True)
-
-    x_values = plot_df[reduction_t_col].to_numpy(dtype=float)
-    y_values = plot_df[reduction_pct_col].to_numpy(dtype=float)
-    x_log = np.log10(x_values)
-    if x_log.size > 1 and np.nanstd(x_log) > 0:
-        x_grid_log = np.linspace(x_log.min(), x_log.max(), 240)
-        x_density = stats.gaussian_kde(x_log)(x_grid_log)
-        ax_top.fill_between(
-            10 ** x_grid_log,
-            x_density,
-            color="#6baed6",
-            alpha=0.35,
-            linewidth=0,
-        )
-        ax_top.plot(10 ** x_grid_log, x_density, color="#2171b5", linewidth=1.0)
-    if y_values.size > 1 and np.nanstd(y_values) > 0:
-        y_pad = (y_values.max() - y_values.min()) * 0.05
-        y_grid = np.linspace(y_values.min() - y_pad, y_values.max() + y_pad, 240)
-        y_density = stats.gaussian_kde(y_values)(y_grid)
-        ax_right.fill_betweenx(
-            y_grid,
-            0,
-            y_density,
-            color="#6baed6",
-            alpha=0.35,
-            linewidth=0,
-        )
-        ax_right.plot(y_density, y_grid, color="#2171b5", linewidth=1.0)
-
-    ax_top.set_xscale("log")
-    ax_top.set_ylabel("Density", fontsize=9)
-    ax_top.tick_params(axis="x", labelbottom=False)
-    ax_top.tick_params(axis="y", labelsize=8, length=2)
-    ax_top.spines["top"].set_visible(False)
-    ax_top.spines["right"].set_visible(False)
-    ax_right.set_xlabel("Density", fontsize=9)
-    ax_right.tick_params(axis="y", labelleft=False)
-    ax_right.tick_params(axis="x", labelsize=8, length=2)
-    ax_right.spines["top"].set_visible(False)
-    ax_right.spines["right"].set_visible(False)
 
     legend_values = np.nanquantile(population_million, [0.25, 0.5, 0.9])
     legend_values = np.unique(np.round(legend_values, 1))
@@ -8583,51 +8543,20 @@ def plot_city_population_detour_oracle_reduction_bubble(
             handles,
             labels,
             title="Population",
-            loc="upper left",
-            bbox_to_anchor=(0.0, -0.22),
+            loc="upper center",
+            bbox_to_anchor=(0.5, -0.2),
             frameon=True,
             framealpha=0.92,
-            fontsize=8,
-            title_fontsize=8,
+            fontsize=6.5,
+            title_fontsize=6.5,
             borderaxespad=0.0,
-            borderpad=0.6,
-            labelspacing=0.3,
-            handletextpad=0.8,
+            borderpad=0.35,
+            labelspacing=0.2,
+            handletextpad=0.45,
             ncol=len(handles),
-            columnspacing=1.4,
+            columnspacing=0.65,
         )
         ax.add_artist(size_legend)
-
-    region_handles = []
-    plotted_region_keys = set(plot_df["_macro_region_key"])
-    for spec in CHINA_MACRO_REGION_SPECS:
-        if spec["key"] not in plotted_region_keys:
-            continue
-        region_handles.append(
-            Patch(
-                facecolor=spec["color"],
-                edgecolor="none",
-                label=spec["label"],
-            )
-        )
-    if region_handles:
-        ax.legend(
-            handles=region_handles,
-            title="Macro-region",
-            loc="upper right",
-            bbox_to_anchor=(1.0, -0.22),
-            frameon=True,
-            framealpha=0.92,
-            fontsize=7.6,
-            title_fontsize=7.6,
-            borderaxespad=0.0,
-            borderpad=0.6,
-            handlelength=1.0,
-            handletextpad=0.35,
-            labelspacing=0.25,
-            ncol=min(4, len(region_handles)),
-            columnspacing=0.75,
-        )
 
     if name_col:
         labeled = plot_df[
@@ -8648,7 +8577,7 @@ def plot_city_population_detour_oracle_reduction_bubble(
             linewidth=0.9,
             zorder=4,
         )
-        offsets = ((5, 4), (5, -8), (-5, 4), (-5, -8))
+        offsets = ((4, 4), (4, -7), (-4, 4), (-4, -7))
         for i, (_, row) in enumerate(labeled.iterrows()):
             dx, dy = offsets[i % len(offsets)]
             ax.annotate(
@@ -8658,9 +8587,16 @@ def plot_city_population_detour_oracle_reduction_bubble(
                 textcoords="offset points",
                 ha="left" if dx > 0 else "right",
                 va="bottom" if dy > 0 else "top",
-                fontsize=8,
+                fontsize=6.5,
                 color="#303030",
                 zorder=5,
+                arrowprops={
+                    "arrowstyle": "-",
+                    "color": "0.35",
+                    "lw": 0.5,
+                    "shrinkA": 1.0,
+                    "shrinkB": 1.0,
+                },
                 bbox={
                     "boxstyle": "round,pad=0.15",
                     "facecolor": "white",
@@ -8675,6 +8611,8 @@ def plot_city_population_detour_oracle_reduction_bubble(
             fontsize=14,
             fontweight="bold",
         )
+
+    fig.subplots_adjust(left=0.22, right=0.97, top=0.97, bottom=0.25)
 
     if save_path:
         if for_latex and not save_path.endswith(".pdf"):
