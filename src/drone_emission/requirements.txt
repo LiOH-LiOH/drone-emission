@@ -1,5 +1,6 @@
 contextily
 coord_convert
+adjustText
 tomli
 cpca
 geopandas

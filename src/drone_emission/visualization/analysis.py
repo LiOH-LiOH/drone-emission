@@ -7,7 +7,6 @@ import pickle
 import matplotlib.pyplot as plt
 from matplotlib.patches import Patch
 from matplotlib.ticker import FuncFormatter
-from matplotlib.transforms import Bbox
 import numpy as np
 import pandas as pd
 from scipy import stats
@@ -404,7 +403,7 @@ def _geometry_largest_ring_centroid(geometry):
     return best_centroid
 
 
-def _bubble_sizes_from_values(values, size_min=24.0, size_max=520.0):
+def _bubble_sizes_from_values(values, size_min=6.0, size_max=130.0):
     """Map positive values to scatter marker areas with square-root scaling."""
     values = pd.to_numeric(pd.Series(values), errors="coerce").to_numpy(dtype=float)
     positive = values[np.isfinite(values) & (values > 0)]
@@ -473,8 +472,8 @@ def _regions_oracle_bubble_df(map_df, reduction_col, reduction_pct_col):
 def _draw_bubble_size_legend(
     ax,
     values,
-    size_min=24.0,
-    size_max=520.0,
+    size_min=6.0,
+    size_max=130.0,
     loc="lower right",
     bbox_to_anchor=(0.98, 0.31),
     fontsize=8,
@@ -501,7 +500,7 @@ def _draw_bubble_size_legend(
             continue
         marker_size = size_min + np.sqrt(value / vmax) * (size_max - size_min)
         handles.append(
-            plt.scatter(
+            ax.scatter(
                 [],
                 [],
                 s=marker_size,
@@ -5827,7 +5826,20 @@ def plot_regions_map_oracle_reduction_rank(
     bubble_draw_df = bubble_df.sort_values("_bubble_size", ascending=True)
     is_map_only_figure = figure_name == ORACLE_REDUCTION_MAP_ONLY_FIGURE
 
-    fig, ax_map = plt.subplots(figsize=figsize)
+    if is_map_only_figure:
+        fig = plt.figure(figsize=figsize)
+        grid = fig.add_gridspec(
+            2,
+            1,
+            height_ratios=(1.0, 0.18),
+            hspace=0.02,
+        )
+        ax_map = fig.add_subplot(grid[0])
+        legend_ax = fig.add_subplot(grid[1])
+        legend_ax.axis("off")
+    else:
+        fig, ax_map = plt.subplots(figsize=figsize)
+        legend_ax = None
     gray_map_df = map_df.copy()
     gray_map_df["_bubble_gray"] = np.nan
     child_axes_before_map = len(ax_map.child_axes)
@@ -5900,8 +5912,8 @@ def plot_regions_map_oracle_reduction_rank(
     size_legend_kwargs = (
         {
             **unified_legend_style,
-            "loc": "upper left",
-            "bbox_to_anchor": (0.02, -0.045),
+            "loc": "center left",
+            "bbox_to_anchor": (0.0, 0.5),
             "labelspacing": 0.3,
             "handletextpad": 0.8,
             "ncol": 3,
@@ -5911,18 +5923,18 @@ def plot_regions_map_oracle_reduction_rank(
         else {}
     )
     size_legend = _draw_bubble_size_legend(
-        ax_map,
+        legend_ax if is_map_only_figure else ax_map,
         bubble_df[reduction_col],
         **size_legend_kwargs,
     )
     if size_legend is not None:
-        ax_map.add_artist(size_legend)
+        (legend_ax if is_map_only_figure else ax_map).add_artist(size_legend)
     if color_scale_style == "legend":
         color_legend_kwargs = (
             {
                 **unified_legend_style,
-                "loc": "upper right",
-                "bbox_to_anchor": (0.98, -0.045),
+                "loc": "center right",
+                "bbox_to_anchor": (1.0, 0.5),
                 "include_unstudied": False,
                 "labelspacing": 0.3,
                 "ncol": len(reduction_edges) - 1,
@@ -5932,13 +5944,13 @@ def plot_regions_map_oracle_reduction_rank(
             else {}
         )
         color_legend = _draw_bubble_color_legend(
-            ax_map,
+            legend_ax if is_map_only_figure else ax_map,
             cmap,
             bin_edges,
             reduction_edges,
             **color_legend_kwargs,
         )
-        ax_map.add_artist(color_legend)
+        (legend_ax if is_map_only_figure else ax_map).add_artist(color_legend)
     ax_map.set_xlabel("")
     ax_map.set_ylabel("")
     ax_map.set_xticks([])
@@ -5979,7 +5991,7 @@ def plot_regions_map_oracle_reduction_rank(
         )
 
     fig.tight_layout()
-    fig.subplots_adjust(left=0.11, bottom=0.24 if is_map_only_figure else None)
+    fig.subplots_adjust(left=0.11, bottom=0.04 if is_map_only_figure else None)
 
     if draw_south_china_inset_bubbles and south_china_inset_ax is not None:
         inset_bubble_records, inset_bubble_area_scale = _add_regions_oracle_inset_bubbles(
@@ -6266,7 +6278,7 @@ def _add_regions_oracle_city_highlights(
         x = float(row["lng"])
         y = float(row["lat"])
         bubble_size = float(row["_bubble_size"])
-        highlight_size = max(bubble_size * 1.08, bubble_size + 24.0)
+        highlight_size = bubble_size
         ax.scatter(
             [x],
             [y],
@@ -6274,7 +6286,7 @@ def _add_regions_oracle_city_highlights(
             marker="o",
             facecolors="none",
             edgecolors="#111111",
-            linewidths=1.45,
+            linewidths=0.7,
             zorder=18,
             clip_on=False,
         )
@@ -8204,26 +8216,23 @@ def plot_city_reduction_rank_all_macro_region(
                     label=f"{label_by_key[spec['key']]} ({count})",
                 )
             )
-    macro_region_legend = ax.legend(
+    fig.legend(
         handles=handles,
-        loc="upper right",
-        ncol=4,
+        loc="upper center",
+        bbox_to_anchor=(0.5, 0.99),
+        ncol=len(handles),
         frameon=True,
         fontsize=6.5,
-        title="Macro-region",
-        title_fontsize=7,
         borderpad=0.35,
         handlelength=0.9,
         handletextpad=0.35,
         labelspacing=0.25,
         columnspacing=0.65,
     )
-    fig.canvas.draw()
-    legend_box = macro_region_legend.get_window_extent(
-        renderer=fig.canvas.get_renderer()
-    ).padded(2.0)
 
     if not selected_cities.empty:
+        from adjustText import adjust_text
+
         selected_indices = set(selected_cities.index)
         for idx, bar in enumerate(bars):
             if idx not in selected_indices:
@@ -8233,18 +8242,6 @@ def plot_city_reduction_rank_all_macro_region(
             bar.set_zorder(3)
 
         selected_cities = selected_cities.sort_values("rank")
-        x_min, x_max = ax.get_xlim()
-        x_span = x_max - x_min
-        max_label_dx = x_span * 0.10
-        x_step = max(0.75, x_span * 0.0125)
-        offset_steps = np.arange(0.0, max_label_dx + x_step * 0.5, x_step)
-        x_offsets = [0.0]
-        for offset in offset_steps[1:]:
-            x_offsets.extend([-float(offset), float(offset)])
-        label_y_values = [
-            ymax + y_span * frac
-            for frac in (0.035, 0.18)
-        ]
         label_box_style = {
             "boxstyle": "round,pad=0.18",
             "facecolor": "white",
@@ -8252,132 +8249,38 @@ def plot_city_reduction_rank_all_macro_region(
             "alpha": 0.9,
         }
 
-        temp_texts = []
+        label_texts = []
         for _, row in selected_cities.iterrows():
-            temp_texts.append(
+            label_texts.append(
                 ax.text(
-                    0,
-                    0,
+                    row["rank"],
+                    row[reduction_col] + y_span * 0.025,
                     row["_label_city"],
+                    ha="center",
+                    va="bottom",
                     fontsize=6.5,
                     fontweight="bold",
+                    color="#111111",
                     bbox=label_box_style,
-                    alpha=0,
+                    zorder=5,
                 )
             )
-        fig.canvas.draw()
-        renderer = fig.canvas.get_renderer()
-        label_extents = [
-            text.get_window_extent(renderer=renderer).padded(4.0)
-            for text in temp_texts
-        ]
-        for text in temp_texts:
-            text.remove()
-
-        label_candidate_sets = []
-        for (_, row), extent in zip(selected_cities.iterrows(), label_extents):
-            rank = float(row["rank"])
-            candidates = []
-            for row_idx, label_y in enumerate(label_y_values):
-                for dx in x_offsets:
-                    label_x_candidate = float(np.clip(rank + dx, x_min, x_max))
-                    display_x, display_y = ax.transData.transform(
-                        (label_x_candidate, label_y)
-                    )
-                    box = Bbox.from_bounds(
-                        display_x - extent.width / 2.0,
-                        display_y,
-                        extent.width,
-                        extent.height,
-                    )
-                    candidates.append(
-                        (
-                            abs(dx),
-                            row_idx,
-                            label_x_candidate,
-                            label_y,
-                            box,
-                        )
-                    )
-            candidates.sort()
-            label_candidate_sets.append(candidates)
-
-        def _boxes_overlap(box, other):
-            return (
-                min(box.x1, other.x1) > max(box.x0, other.x0)
-                and min(box.y1, other.y1) > max(box.y0, other.y0)
-            )
-
-        def _find_non_overlapping_labels(require_order=True):
-            def search(index, placed_boxes, placed_x, positions):
-                if index == len(label_candidate_sets):
-                    return positions
-                for _, _, label_x, label_y, box in label_candidate_sets[index]:
-                    if require_order and placed_x and label_x < placed_x[-1]:
-                        continue
-                    if _boxes_overlap(box, legend_box):
-                        continue
-                    if any(_boxes_overlap(box, other) for other in placed_boxes):
-                        continue
-                    found = search(
-                        index + 1,
-                        [*placed_boxes, box],
-                        [*placed_x, label_x],
-                        [*positions, (label_x, label_y)],
-                    )
-                    if found is not None:
-                        return found
-                return None
-
-            return search(0, [], [], [])
-
-        label_positions = (
-            _find_non_overlapping_labels(require_order=True)
-            or _find_non_overlapping_labels(require_order=False)
+        adjust_text(
+            label_texts,
+            ax=ax,
+            only_move={
+                "text": "y",
+                "static": "y",
+                "explode": "y",
+                "pull": "y",
+            },
+            ensure_inside_axes=True,
+            arrowprops={
+                "arrowstyle": "-",
+                "color": "0.25",
+                "lw": 0.6,
+            },
         )
-        if label_positions is None:
-            placed_label_boxes = []
-            label_positions = []
-            for candidates in label_candidate_sets:
-                scored = []
-                for abs_dx, row_idx, label_x, label_y, box in candidates:
-                    overlap_area = sum(
-                        max(0.0, min(box.x1, other.x1) - max(box.x0, other.x0))
-                        * max(0.0, min(box.y1, other.y1) - max(box.y0, other.y0))
-                        for other in [legend_box, *placed_label_boxes]
-                    )
-                    scored.append(
-                        (overlap_area > 0.0, overlap_area, abs_dx, row_idx, label_x, label_y, box)
-                    )
-                scored.sort()
-                _, _, _, _, label_x, label_y, box = scored[0]
-                placed_label_boxes.append(box)
-                label_positions.append((label_x, label_y))
-
-        for (_, row), (text_x, text_y) in zip(selected_cities.iterrows(), label_positions):
-            ax.annotate(
-                row["_label_city"],
-                xy=(row["rank"], row[reduction_col]),
-                xytext=(text_x, text_y),
-                textcoords="data",
-                ha="center",
-                va="bottom",
-                fontsize=6.5,
-                fontweight="bold",
-                color="#111111",
-                arrowprops={
-                    "arrowstyle": "-",
-                    "color": "0.25",
-                    "lw": 0.75,
-                    "shrinkA": 1.5,
-                    "shrinkB": 1.5,
-                },
-                bbox={
-                    **label_box_style,
-                },
-                zorder=5,
-                clip_on=False,
-            )
 
     if plot_title:
         fig.suptitle(
@@ -8386,7 +8289,7 @@ def plot_city_reduction_rank_all_macro_region(
             fontweight="bold",
         )
 
-    plt.tight_layout()
+    fig.subplots_adjust(left=0.10, right=0.99, bottom=0.22, top=0.78)
 
     if save_path:
         ext = ".pdf" if for_latex else ".png"
@@ -8485,7 +8388,7 @@ def plot_city_population_detour_oracle_reduction_bubble(
     plot_df["population_million"] = plot_df["population_10k"] / 100.0
     reduction_t = plot_df[reduction_t_col]
     population_million = plot_df["population_million"]
-    size_min, size_max = 6.5, 190.0
+    size_min, size_max = 4.0, 50.0
     if np.isclose(population_million.max(), population_million.min()):
         sizes = np.full(len(plot_df), (size_min + size_max) / 2)
     else:
@@ -8527,7 +8430,7 @@ def plot_city_population_detour_oracle_reduction_bubble(
             + np.sqrt(value / population_million.max()) * (size_max - size_min)
         )
         handles.append(
-            plt.scatter(
+            ax.scatter(
                 [],
                 [],
                 s=marker_size,
@@ -8543,8 +8446,7 @@ def plot_city_population_detour_oracle_reduction_bubble(
             handles,
             labels,
             title="Population",
-            loc="upper center",
-            bbox_to_anchor=(0.5, -0.2),
+            loc="upper left",
             frameon=True,
             framealpha=0.92,
             fontsize=6.5,
@@ -8556,7 +8458,6 @@ def plot_city_population_detour_oracle_reduction_bubble(
             ncol=len(handles),
             columnspacing=0.65,
         )
-        ax.add_artist(size_legend)
 
     if name_col:
         labeled = plot_df[
@@ -8571,10 +8472,10 @@ def plot_city_population_detour_oracle_reduction_bubble(
         ax.scatter(
             labeled[reduction_t_col],
             labeled[reduction_pct_col],
-            s=labeled["_bubble_size"] * 1.35 + 18,
+            s=labeled["_bubble_size"],
             facecolors="none",
             edgecolors="#202020",
-            linewidth=0.9,
+            linewidth=0.7,
             zorder=4,
         )
         offsets = ((4, 4), (4, -7), (-4, 4), (-4, -7))
@@ -8612,7 +8513,7 @@ def plot_city_population_detour_oracle_reduction_bubble(
             fontweight="bold",
         )
 
-    fig.subplots_adjust(left=0.22, right=0.97, top=0.97, bottom=0.25)
+    fig.subplots_adjust(left=0.22, right=0.97, top=0.97, bottom=0.17)
 
     if save_path:
         if for_latex and not save_path.endswith(".pdf"):
