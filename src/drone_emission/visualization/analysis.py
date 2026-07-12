@@ -484,6 +484,7 @@ def _draw_bubble_size_legend(
     handletextpad=1.2,
     ncol=1,
     columnspacing=1.0,
+    title="E-bike - Oracle (t CO2eq / yr)",
 ):
     """Draw an in-map legend for absolute reduction bubble sizes."""
     values = pd.to_numeric(pd.Series(values), errors="coerce")
@@ -516,7 +517,7 @@ def _draw_bubble_size_legend(
     return ax.legend(
         handles,
         labels,
-        title="E-bike - Oracle (t CO2eq / yr)",
+        title=title,
         loc=loc,
         bbox_to_anchor=bbox_to_anchor,
         frameon=True,
@@ -547,6 +548,7 @@ def _draw_bubble_color_legend(
     include_unstudied=True,
     ncol=1,
     columnspacing=1.0,
+    title="Oracle reduction",
 ):
     """Draw an in-map legend for bubble color bins."""
     handles = []
@@ -570,7 +572,7 @@ def _draw_bubble_color_legend(
     return ax.legend(
         handles,
         labels,
-        title="Oracle reduction",
+        title=title,
         loc=loc,
         bbox_to_anchor=bbox_to_anchor,
         frameon=True,
@@ -5831,7 +5833,7 @@ def plot_regions_map_oracle_reduction_rank(
         grid = fig.add_gridspec(
             2,
             1,
-            height_ratios=(1.0, 0.18),
+            height_ratios=(1.0, 0.30),
             hspace=0.02,
         )
         ax_map = fig.add_subplot(grid[0])
@@ -5912,12 +5914,13 @@ def plot_regions_map_oracle_reduction_rank(
     size_legend_kwargs = (
         {
             **unified_legend_style,
-            "loc": "center left",
-            "bbox_to_anchor": (0.0, 0.5),
+            "loc": "upper center",
+            "bbox_to_anchor": (0.5, 1.0),
             "labelspacing": 0.3,
             "handletextpad": 0.8,
             "ncol": 3,
             "columnspacing": 1.4,
+            "title": "Annual reduction (t CO2e yr$^{-1}$)",
         }
         if is_map_only_figure
         else {}
@@ -5933,12 +5936,13 @@ def plot_regions_map_oracle_reduction_rank(
         color_legend_kwargs = (
             {
                 **unified_legend_style,
-                "loc": "center right",
-                "bbox_to_anchor": (1.0, 0.5),
+                "loc": "lower center",
+                "bbox_to_anchor": (0.5, 0.0),
                 "include_unstudied": False,
                 "labelspacing": 0.3,
                 "ncol": len(reduction_edges) - 1,
                 "columnspacing": 1.1,
+                "title": "Reduction (%)",
             }
             if is_map_only_figure
             else {}
@@ -5990,8 +5994,17 @@ def plot_regions_map_oracle_reduction_rank(
             fontweight="bold",
         )
 
-    fig.tight_layout()
-    fig.subplots_adjust(left=0.11, bottom=0.04 if is_map_only_figure else None)
+    if is_map_only_figure:
+        fig.subplots_adjust(
+            left=0.04,
+            right=0.98,
+            top=0.98,
+            bottom=0.04,
+            hspace=0.02,
+        )
+    else:
+        fig.tight_layout()
+        fig.subplots_adjust(left=0.11)
 
     if draw_south_china_inset_bubbles and south_china_inset_ax is not None:
         inset_bubble_records, inset_bubble_area_scale = _add_regions_oracle_inset_bubbles(
@@ -8268,12 +8281,9 @@ def plot_city_reduction_rank_all_macro_region(
         adjust_text(
             label_texts,
             ax=ax,
-            only_move={
-                "text": "y",
-                "static": "y",
-                "explode": "y",
-                "pull": "y",
-            },
+            expand=(1.25, 1.4),
+            force_text=(0.2, 0.4),
+            force_static=(0.1, 0.2),
             ensure_inside_axes=True,
             arrowprops={
                 "arrowstyle": "-",
@@ -8460,6 +8470,8 @@ def plot_city_population_detour_oracle_reduction_bubble(
         )
 
     if name_col:
+        from adjustText import adjust_text
+
         labeled = plot_df[
             plot_df[name_col].isin(ORACLE_REDUCTION_LABEL_CITIES)
         ].copy()
@@ -8478,33 +8490,41 @@ def plot_city_population_detour_oracle_reduction_bubble(
             linewidth=0.7,
             zorder=4,
         )
-        offsets = ((4, 4), (4, -7), (-4, 4), (-4, -7))
-        for i, (_, row) in enumerate(labeled.iterrows()):
-            dx, dy = offsets[i % len(offsets)]
-            ax.annotate(
-                str(row[name_col]),
-                xy=(row[reduction_t_col], row[reduction_pct_col]),
-                xytext=(dx, dy),
-                textcoords="offset points",
-                ha="left" if dx > 0 else "right",
-                va="bottom" if dy > 0 else "top",
-                fontsize=6.5,
-                color="#303030",
-                zorder=5,
-                arrowprops={
-                    "arrowstyle": "-",
-                    "color": "0.35",
-                    "lw": 0.5,
-                    "shrinkA": 1.0,
-                    "shrinkB": 1.0,
-                },
-                bbox={
-                    "boxstyle": "round,pad=0.15",
-                    "facecolor": "white",
-                    "edgecolor": "none",
-                    "alpha": 0.68,
-                },
+        label_texts = []
+        for _, row in labeled.iterrows():
+            label_texts.append(
+                ax.text(
+                    row[reduction_t_col],
+                    row[reduction_pct_col],
+                    str(row[name_col]),
+                    ha="center",
+                    va="center",
+                    fontsize=6.5,
+                    color="#303030",
+                    zorder=5,
+                    bbox={
+                        "boxstyle": "round,pad=0.15",
+                        "facecolor": "white",
+                        "edgecolor": "none",
+                        "alpha": 0.68,
+                    },
+                )
             )
+        adjust_text(
+            label_texts,
+            x=labeled[reduction_t_col].to_numpy(dtype=float),
+            y=labeled[reduction_pct_col].to_numpy(dtype=float),
+            ax=ax,
+            expand=(1.15, 1.25),
+            force_text=(0.2, 0.3),
+            force_static=(0.1, 0.2),
+            ensure_inside_axes=True,
+            arrowprops={
+                "arrowstyle": "-",
+                "color": "0.35",
+                "lw": 0.5,
+            },
+        )
 
     if plot_title:
         fig.suptitle(
