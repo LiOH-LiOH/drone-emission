@@ -8208,13 +8208,11 @@ def plot_city_reduction_rank_all_macro_region(
     ax.yaxis.grid(True, linestyle="--", alpha=0.35)
     ax.set_axisbelow(True)
     ax.set_xlim(0.5, len(plot_df) + 0.5)
-    ymin = min(0.0, float(plot_df[reduction_col].min()))
     ymax = max(0.0, float(plot_df[reduction_col].max()))
-    if np.isclose(ymin, ymax):
-        ymax = ymin + 1.0
-    y_span = ymax - ymin
-    top_pad = 0.34 if not selected_cities.empty else 0.08
-    ax.set_ylim(ymin - y_span * 0.04, ymax + y_span * top_pad)
+    y_upper = max(10.0, float(np.ceil(ymax / 10.0) * 10.0))
+    y_span = y_upper
+    ax.set_ylim(0.0, y_upper)
+    ax.set_yticks(np.arange(0.0, y_upper + 1.0, 10.0))
     ax.tick_params(axis="x", labelsize=6.5)
     ax.tick_params(axis="y", labelsize=6.5)
 
