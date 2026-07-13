@@ -5833,8 +5833,8 @@ def plot_regions_map_oracle_reduction_rank(
         grid = fig.add_gridspec(
             2,
             1,
-            height_ratios=(1.0, 0.42),
-            hspace=0.02,
+            height_ratios=(1.0, 0.18),
+            hspace=0.0,
         )
         ax_map = fig.add_subplot(grid[0])
         legend_ax = fig.add_subplot(grid[1])
@@ -5855,7 +5855,7 @@ def plot_regions_map_oracle_reduction_rank(
         draw_colorbar=False,
         draw_legend=False,
         south_china_inset_bounds=(
-            (0.84, 0.02, 0.14, 0.28)
+            (0.865, 0.02, 0.12, 0.235)
             if is_map_only_figure
             else (0.86, 0.0, 0.14, 0.28)
         ),
@@ -5914,34 +5914,45 @@ def plot_regions_map_oracle_reduction_rank(
     size_legend_kwargs = (
         {
             **unified_legend_style,
-            "loc": "upper center",
-            "bbox_to_anchor": (0.5, 1.0),
-            "labelspacing": 0.3,
-            "handletextpad": 0.8,
-            "ncol": 3,
-            "columnspacing": 1.4,
-            "title": "Annual reduction (t CO2e yr$^{-1}$)",
+            "loc": "lower left",
+            "bbox_to_anchor": (0.015, 0.015),
+            "fontsize": 6.2,
+            "title_fontsize": 6.3,
+            "framealpha": 0.78,
+            "borderpad": 0.3,
+            "labelspacing": 0.25,
+            "handletextpad": 0.45,
+            "ncol": 1,
+            "columnspacing": 0.8,
+            "title": "Annual reduction\n(t CO2e yr$^{-1}$)",
         }
         if is_map_only_figure
         else {}
     )
     size_legend = _draw_bubble_size_legend(
-        legend_ax if is_map_only_figure else ax_map,
+        ax_map,
         bubble_df[reduction_col],
         **size_legend_kwargs,
     )
     if size_legend is not None:
-        (legend_ax if is_map_only_figure else ax_map).add_artist(size_legend)
+        if is_map_only_figure:
+            size_legend.get_frame().set_edgecolor("none")
+            size_legend.get_frame().set_linewidth(0.0)
+        ax_map.add_artist(size_legend)
     if color_scale_style == "legend":
         color_legend_kwargs = (
             {
                 **unified_legend_style,
-                "loc": "lower center",
-                "bbox_to_anchor": (0.5, 0.0),
+                "loc": "center",
+                "bbox_to_anchor": (0.5, 0.5),
+                "fontsize": 6.2,
+                "title_fontsize": 6.3,
+                "borderpad": 0.0,
                 "include_unstudied": False,
-                "labelspacing": 0.3,
+                "labelspacing": 0.15,
+                "handletextpad": 0.35,
                 "ncol": len(reduction_edges) - 1,
-                "columnspacing": 1.1,
+                "columnspacing": 0.75,
                 "title": "Reduction (%)",
             }
             if is_map_only_figure
@@ -5954,16 +5965,15 @@ def plot_regions_map_oracle_reduction_rank(
             reduction_edges,
             **color_legend_kwargs,
         )
+        if is_map_only_figure:
+            color_legend.set_frame_on(False)
         (legend_ax if is_map_only_figure else ax_map).add_artist(color_legend)
     ax_map.set_xlabel("")
     ax_map.set_ylabel("")
     ax_map.set_xticks([])
     ax_map.set_yticks([])
     for spine in ax_map.spines.values():
-        spine.set_visible(is_map_only_figure)
-        if is_map_only_figure:
-            spine.set_edgecolor("black")
-            spine.set_linewidth(0.8)
+        spine.set_visible(False)
 
     inset_ax = None
     if show_rank_inset:
@@ -5996,11 +6006,11 @@ def plot_regions_map_oracle_reduction_rank(
 
     if is_map_only_figure:
         fig.subplots_adjust(
-            left=0.04,
-            right=0.98,
-            top=0.98,
-            bottom=0.04,
-            hspace=0.02,
+            left=0.01,
+            right=0.995,
+            top=0.995,
+            bottom=0.02,
+            hspace=0.0,
         )
     else:
         fig.tight_layout()
