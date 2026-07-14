@@ -5294,7 +5294,7 @@ def plot_province_orders_both_emissions(
 def plot_province_total_ebike_lifecycle(
     df: pd.DataFrame,
     save_path: str = None,
-    figsize: tuple = (7.48, 2.84),
+    figsize: tuple = (7.62, 2.84),
     for_latex: bool = False,
     plot_title: bool = False,
     ax: "plt.Axes" = None,
