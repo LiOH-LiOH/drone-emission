@@ -517,7 +517,11 @@ def plot_building_height_merchant_map(
             ),
             "map": {
                 "axis": saved_tight_axis_report(
-                    fig, ax, renderer=renderer, tight_bbox=tight_bbox
+                    fig,
+                    ax,
+                    renderer=renderer,
+                    tight_bbox=tight_bbox,
+                    pad_inches=0.02 if compact else None,
                 ),
                 "lng_range": [
                     float(boundaries_dict["min_lng"]),
@@ -535,7 +539,11 @@ def plot_building_height_merchant_map(
             },
             "colorbar": {
                 "axis": saved_tight_axis_report(
-                    fig, cbar.ax, renderer=renderer, tight_bbox=tight_bbox
+                    fig,
+                    cbar.ax,
+                    renderer=renderer,
+                    tight_bbox=tight_bbox,
+                    pad_inches=0.02 if compact else None,
                 ),
                 "label": cbar_label,
                 "orientation": "horizontal",
