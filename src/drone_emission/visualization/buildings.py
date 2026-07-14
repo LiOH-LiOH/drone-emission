@@ -316,7 +316,7 @@ def plot_building_height_merchant_map(
         legend=False,
     )
     if compact:
-        cbar_ax = fig.add_axes([0.12, 0.055, 0.76, 0.025])
+        cbar_ax = fig.add_axes([0.12, 0.075, 0.76, 0.025])
     else:
         cbar_ax = ax.inset_axes(
             [0.18, -0.24, 0.64, 0.035],
