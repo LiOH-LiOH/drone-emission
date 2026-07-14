@@ -876,10 +876,10 @@ def _render_shanghai_building_height_merchant(
         od_df=od_df,
         road_graph=road_graph,
         save_path=os.path.join(out, "shanghai_building_height_merchant.png"),
-        figsize=(2.56, 4.15),
+        figsize=(2.56, 2.56),
         for_latex=for_latex,
         plot_title=plot_title,
-        lat_span=0.012,
+        lat_span=0.007,
         compact=True,
     )
 

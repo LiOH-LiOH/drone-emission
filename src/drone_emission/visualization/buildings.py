@@ -270,7 +270,7 @@ def plot_building_height_merchant_map(
 
     fig, ax = plt.subplots(figsize=figsize)
     if compact:
-        ax.set_position([0.0, 0.13, 1.0, 0.87])
+        ax.set_position([0.0, 0.19, 1.0, 0.81])
     avg_lat = (boundaries_dict["min_lat"] + boundaries_dict["max_lat"]) / 2
     aspect_ratio = 1.0 / np.cos(np.radians(avg_lat))
     ax.set_aspect(aspect_ratio)
@@ -316,7 +316,7 @@ def plot_building_height_merchant_map(
         legend=False,
     )
     if compact:
-        cbar_ax = fig.add_axes([0.12, 0.045, 0.76, 0.018])
+        cbar_ax = fig.add_axes([0.12, 0.055, 0.76, 0.025])
     else:
         cbar_ax = ax.inset_axes(
             [0.18, -0.24, 0.64, 0.035],
@@ -461,7 +461,7 @@ def plot_building_height_merchant_map(
 
     legend = ax.legend(
         loc="center" if compact else "upper center",
-        bbox_to_anchor=(0.5, 0.105) if compact else (0.5, -0.08),
+        bbox_to_anchor=(0.5, 0.145) if compact else (0.5, -0.08),
         bbox_transform=fig.transFigure if compact else ax.transAxes,
         borderaxespad=0.0,
         fontsize=6.5 if compact else 12,
@@ -511,6 +511,16 @@ def plot_building_height_merchant_map(
             "native_size_inches": [float(figsize[0]), float(figsize[1])],
             "configured_lng_span_degrees": float(lng_span),
             "configured_lat_span_degrees": float(lat_span),
+            "od_demands": {
+                "count": int(od_line_count),
+                "selection_limit": MERCHANT_MAP_OD_LINE_COUNT,
+                "configured_line_width_range_points": (
+                    [2.5, 4.0] if compact else [4.0, 10.0]
+                ),
+                "equal_sales_line_width_points": 3.25 if compact else 2.5,
+                "alpha": 0.8 if compact else 0.88,
+                "scaling": "linear min-max within selected OD demands",
+            },
             "coordinate_convention": (
                 "bbox_saved_tight_fraction values are fractions of the saved "
                 "page after bbox_inches='tight'."
