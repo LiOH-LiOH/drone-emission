@@ -406,14 +406,14 @@ def plot_building_height_merchant_map(
                 sales_max = float(top_od["annual_sales"].max())
                 for _, row in top_od.iterrows():
                     if sales_max == sales_min:
-                        line_width = 1.4 if compact else 2.5
+                        line_width = 3.25 if compact else 2.5
                     else:
                         fraction = (
                             (float(row["annual_sales"]) - sales_min)
                             / (sales_max - sales_min)
                         )
                         if compact:
-                            line_width = 0.9 + fraction * 1.6
+                            line_width = 2.5 + fraction * 1.5
                         else:
                             line_width = 4.0 + fraction * 6.0
                     ax.plot(
@@ -421,7 +421,7 @@ def plot_building_height_merchant_map(
                         [row["from_lat"], row["to_lat"]],
                         color="#005f9e",
                         linewidth=line_width,
-                        alpha=0.88,
+                        alpha=0.8 if compact else 0.88,
                         solid_capstyle="round",
                         zorder=25,
                     )
@@ -443,7 +443,7 @@ def plot_building_height_merchant_map(
             [],
             [],
             color="#005f9e",
-            linewidth=1.8 if compact else 5,
+            linewidth=3.25 if compact else 5,
             label="OD demands",
         )
 
