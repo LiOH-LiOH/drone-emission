@@ -231,10 +231,19 @@ def _add_buildings(
                 i += 1
 
 
-def _add_marker(ax: plt.Axes, xy_world: Point, *, color: str, label: str,
-                label_offset: Point, zorder: int = 40,
-                shape: str = "circle", label_fontsize: float = 10.5,
-                marker_scale: float = 1.0) -> Point:
+def _add_marker(
+    ax: plt.Axes,
+    xy_world: Point,
+    *,
+    color: str,
+    label: str,
+    label_offset: Point,
+    zorder: int = 40,
+    shape: str = "circle",
+    label_fontsize: float = 10.5,
+    marker_scale: float = 1.0,
+    label_path_effects=None,
+) -> Point:
     xy = _project(*xy_world)
     path_effects = [pe.SimplePatchShadow(offset=(1.0, -1.0), alpha=0.25), pe.Normal()]
     if shape == "square":
@@ -262,16 +271,32 @@ def _add_marker(ax: plt.Axes, xy_world: Point, *, color: str, label: str,
     ax.add_patch(marker)
     ax.text(xy[0] + label_offset[0], xy[1] + label_offset[1], label,
             color=_COLORS["text"], fontsize=label_fontsize, fontweight="bold",
-            ha="center", va="center", zorder=zorder + 2)
+            ha="center", va="center", zorder=zorder + 2,
+            path_effects=label_path_effects)
     return xy
 
 
-def _add_arrow_head(ax: plt.Axes, points: Sequence[Sequence[float]], color: str,
-                    zorder: int, z: float = 0.0, alpha: float = 1.0) -> None:
+def _add_arrow_head(
+    ax: plt.Axes,
+    points: Sequence[Sequence[float]],
+    color: str,
+    zorder: int,
+    z: float = 0.0,
+    alpha: float = 1.0,
+    mutation_scale: float = 18.0,
+) -> None:
     start = _project(points[-2][0], points[-2][1], z)
     end   = _project(points[-1][0], points[-1][1], z)
-    ax.add_patch(FancyArrowPatch(start, end, arrowstyle="-|>", mutation_scale=18,
-                                 linewidth=0, color=color, zorder=zorder, alpha=alpha))
+    ax.add_patch(FancyArrowPatch(
+        start,
+        end,
+        arrowstyle="-|>",
+        mutation_scale=mutation_scale,
+        linewidth=0,
+        color=color,
+        zorder=zorder,
+        alpha=alpha,
+    ))
 
 
 def _add_drone_icon(ax: plt.Axes, center_world: tuple[float, float, float]) -> None:
@@ -358,9 +383,9 @@ def _draw_detour_ratio_concept(
 ) -> None:
     """Draw detour ratio concept scene onto *ax*.
 
-    The compact variant is reserved for the narrow mechanism panel in the
-    main paper figure. It keeps the complete 3D building scene while reducing
-    peripheral roads and non-essential labels.
+    The compact variant is reserved for the standalone 60 mm paper figure. It
+    keeps the complete 3D building scene while reducing peripheral roads and
+    non-essential labels.
     """
     ax.set_facecolor(_COLORS["background"])
 
@@ -375,7 +400,7 @@ def _draw_detour_ratio_concept(
             grid_x=grid_x,
             grid_y=grid_y,
             bounds=scene_bounds,
-            linewidth=10.0,
+            linewidth=4.5,
         )
         _add_buildings(
             ax,
@@ -407,7 +432,7 @@ def _draw_detour_ratio_concept(
     straight_distance = math.dist(origin, destination)
 
     # E-bike route: solid layer below buildings + transparent layer above
-    route_scale = 1.3 if compact else 1.0
+    route_scale = 0.6 if compact else 1.0
     _add_polyline(
         ax,
         bike_route,
@@ -423,7 +448,14 @@ def _draw_detour_ratio_concept(
         linewidth=4.0 * route_scale,
         zorder=8,
     )
-    _add_arrow_head(ax, bike_route, _COLORS["bike"], zorder=8)
+    arrow_scale = 9.0 if compact else 18.0
+    _add_arrow_head(
+        ax,
+        bike_route,
+        _COLORS["bike"],
+        zorder=8,
+        mutation_scale=arrow_scale,
+    )
     _add_polyline(
         ax,
         bike_route,
@@ -432,9 +464,25 @@ def _draw_detour_ratio_concept(
         zorder=25,
         alpha=0.2,
     )
-    _add_arrow_head(ax, bike_route, _COLORS["bike"], zorder=25, alpha=0.2)
+    _add_arrow_head(
+        ax,
+        bike_route,
+        _COLORS["bike"],
+        zorder=25,
+        alpha=0.2,
+        mutation_scale=arrow_scale,
+    )
 
     _add_drone_path(ax, origin, destination, line_scale=route_scale)
+
+    compact_text_effects = (
+        [
+            pe.Stroke(linewidth=1.4, foreground=_COLORS["background"]),
+            pe.Normal(),
+        ]
+        if compact
+        else None
+    )
 
     origin_xy = _add_marker(
         ax,
@@ -443,19 +491,21 @@ def _draw_detour_ratio_concept(
         label="Merchant",
         label_offset=(-0.08, -0.34) if compact else (-0.25, -0.36),
         zorder=65,
-        label_fontsize=14.0 if compact else 10.5,
-        marker_scale=1.2 if compact else 1.0,
+        label_fontsize=6.5 if compact else 10.5,
+        marker_scale=1.1 if compact else 1.0,
+        label_path_effects=compact_text_effects,
     )
     dest_xy = _add_marker(
         ax,
         destination,
         color=_COLORS["destination"],
         label="Customer",
-        label_offset=(0.58, 0.32) if compact else (0.90, 0.40),
+        label_offset=(0.25, 0.32) if compact else (0.90, 0.40),
         zorder=65,
         shape="square",
-        label_fontsize=14.0 if compact else 10.5,
-        marker_scale=1.2 if compact else 1.0,
+        label_fontsize=6.5 if compact else 10.5,
+        marker_scale=1.1 if compact else 1.0,
+        label_path_effects=compact_text_effects,
     )
 
     if not compact:
@@ -481,19 +531,21 @@ def _draw_detour_ratio_concept(
                 color=_COLORS["drone"], fontsize=8.5, ha="right", va="center", zorder=60)
 
     ax.plot([origin_xy[0], dest_xy[0]], [origin_xy[1], dest_xy[1]],
-            color=_COLORS["drone"], linewidth=1.8 if compact else 1.2,
+            color=_COLORS["drone"], linewidth=0.8 if compact else 1.2,
             alpha=0.28, linestyle=":", zorder=18)
 
     straight_mid = (np.array(origin_xy) + np.array(dest_xy)) / 2
     straight_offset = (-1.25, 0.55) if compact else (-1.8, 1.4)
     ax.text(straight_mid[0] + straight_offset[0], straight_mid[1] + straight_offset[1],
             "Straight-line distance", color=_COLORS["drone"],
-            fontsize=14.0 if compact else 9.5, ha="center", va="bottom", zorder=60)
+            fontsize=6.5 if compact else 9.5, ha="center", va="bottom",
+            zorder=60, path_effects=compact_text_effects)
 
     road_label = _project((grid_x[2] + grid_x[3]) / 2, grid_y[2])
     ax.text(road_label[0], road_label[1] - 0.28, "Road distance",
-            color=_COLORS["bike"], fontsize=14.0 if compact else 9.5,
-            ha="center", va="top", zorder=60)
+            color=_COLORS["bike"], fontsize=6.5 if compact else 9.5,
+            ha="center", va="top", zorder=60,
+            path_effects=compact_text_effects)
 
     if plot_title and not compact:
         _add_scale_annotation(ax, road_distance, straight_distance)
@@ -504,8 +556,8 @@ def _draw_detour_ratio_concept(
 
     ax.set_aspect("equal")
     if compact:
-        ax.set_xlim(0.55, 9.55)
-        ax.set_ylim(0.05, 4.65)
+        ax.set_xlim(0.4, 9.6)
+        ax.set_ylim(-0.2, 4.5)
     else:
         ax.set_xlim(-0.25, 12.75)
         ax.set_ylim(-0.25, 4.8)
@@ -514,7 +566,7 @@ def _draw_detour_ratio_concept(
 
 def plot_detour_ratio_concept(
     save_path: str = None,
-    figsize: tuple = (8.2, 5.2),
+    figsize: tuple = (60.0 / 25.4, (60.0 / 25.4) / (9.2 / 4.7)),
     for_latex: bool = False,
     plot_title: bool = False,
 ):
@@ -524,11 +576,13 @@ def plot_detour_ratio_concept(
         save_path: Path to save figure. Shows plot if None.
         figsize: Figure size tuple.
         for_latex: If True, save as PDF.
-        plot_title: If True, show title and formula annotation.
+        plot_title: Retained for the standard paper-figure interface. The
+            compact figure does not show a title or formula annotation.
     """
-    fig, ax = plt.subplots(figsize=figsize, constrained_layout=False)
+    fig = plt.figure(figsize=figsize)
+    ax = fig.add_axes((0.0, 0.0, 1.0, 1.0))
     fig.patch.set_facecolor(_COLORS["background"])
-    _draw_detour_ratio_concept(ax, plot_title=plot_title)
+    _draw_detour_ratio_concept(ax, plot_title=plot_title, compact=True)
 
     if save_path:
         if for_latex and not save_path.endswith(".pdf"):
@@ -536,8 +590,13 @@ def plot_detour_ratio_concept(
         if plot_title:
             save_path = _add_title_suffix(save_path)
         os.makedirs(os.path.dirname(save_path), exist_ok=True)
-        plt.savefig(save_path, dpi=300, bbox_inches="tight", pad_inches=0.05,
-                    facecolor=fig.get_facecolor())
+        fig.savefig(
+            save_path,
+            dpi=300,
+            facecolor=fig.get_facecolor(),
+            bbox_inches=None,
+            pad_inches=0,
+        )
         print(f"Detour ratio concept saved to {save_path}")
     else:
         plt.show()

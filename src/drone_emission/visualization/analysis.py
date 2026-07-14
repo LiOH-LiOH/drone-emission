@@ -6914,11 +6914,11 @@ def _selected_trip_phase_parts(sample, phase):
     )
 
 
-def _detour_concept_panel_report(ax, *, compact=False):
+def _detour_concept_panel_report(ax):
     """Return geometry and label data for the detour-ratio concept panel."""
     import math
 
-    grid_x = [1.0, 2.8, 4.6, 6.4] if compact else [1.0, 3.5, 6.0, 8.5]
+    grid_x = [1.0, 3.5, 6.0, 8.5]
     grid_y = [1.0, 3.0, 5.0]
     cruise_alt = 1.3
 
@@ -6939,22 +6939,6 @@ def _detour_concept_panel_report(ax, *, compact=False):
         math.dist(a, b) for a, b in zip(bike_route[:-1], bike_route[1:])
     )
     straight_distance = math.dist(origin, destination)
-    labels = [
-        {"text": "Merchant", "anchor": "origin", "marker": "circle"},
-        {"text": "Customer", "anchor": "destination", "marker": "square"},
-    ]
-    if not compact:
-        labels.extend([
-            {"text": "E-bike route on roads", "color": "#d95f35"},
-            {"text": "Drone route on air space", "color": "#1f77b4"},
-            {"text": "takeoff", "color": "#1f77b4"},
-            {"text": "cruise", "color": "#1f77b4"},
-            {"text": "land", "color": "#1f77b4"},
-        ])
-    labels.extend([
-        {"text": "Straight-line distance", "color": "#1f77b4"},
-        {"text": "Road distance", "color": "#d95f35"},
-    ])
     return {
         "axis": _axis_report(ax),
         "world_coordinates": {
@@ -6981,7 +6965,17 @@ def _detour_concept_panel_report(ax, *, compact=False):
             "straight_distance_world_units": _json_safe_scalar(straight_distance),
             "detour_ratio": _json_safe_scalar(road_distance / straight_distance),
         },
-        "labels": labels,
+        "labels": [
+            {"text": "Merchant", "anchor": "origin", "marker": "circle"},
+            {"text": "Customer", "anchor": "destination", "marker": "square"},
+            {"text": "E-bike route on roads", "color": "#d95f35"},
+            {"text": "Drone route on air space", "color": "#1f77b4"},
+            {"text": "takeoff", "color": "#1f77b4"},
+            {"text": "cruise", "color": "#1f77b4"},
+            {"text": "land", "color": "#1f77b4"},
+            {"text": "Straight-line distance", "color": "#1f77b4"},
+            {"text": "Road distance", "color": "#d95f35"},
+        ],
     }
 
 
@@ -7178,10 +7172,7 @@ def _write_regions_map_city_rank_and_drone_share_report(
                     reduction_pct_cmap,
                 ),
             },
-            "c_detour_ratio_concept": _detour_concept_panel_report(
-                ax_c,
-                compact=True,
-            ),
+            "c_detour_ratio_concept": _detour_concept_panel_report(ax_c),
             f"d_{median_trip_city}_median_trip_distance_comparison": (
                 _selected_trip_distance_comparison_report(
                     ax_d,
@@ -7327,12 +7318,12 @@ def plot_regions_map_city_rank_and_drone_share(
     mechanism_gs = gs[2, :].subgridspec(
         1,
         2,
-        width_ratios=[1.0, 2.0],
-        wspace=0.12,
+        width_ratios=[1.45, 1.0],
+        wspace=0.18,
     )
     ax_c = fig.add_subplot(mechanism_gs[0, 0])
     ax_d = fig.add_subplot(mechanism_gs[0, 1])
-    ax_d.set_box_aspect(1 / 4.0)
+    ax_d.set_box_aspect(1 / 2.0)
     phase_gs = gs[4, :].subgridspec(
         1,
         3,
@@ -7414,7 +7405,7 @@ def plot_regions_map_city_rank_and_drone_share(
         else None
     )
 
-    _draw_detour_ratio_concept(ax_c, plot_title=plot_title, compact=True)
+    _draw_detour_ratio_concept(ax_c, plot_title=plot_title)
     ax_c.text(-0.03, 1.02, "c", transform=ax_c.transAxes,
               fontsize=16, fontweight="bold", va="bottom", ha="right")
 
@@ -7422,7 +7413,7 @@ def plot_regions_map_city_rank_and_drone_share(
         selected_trip,
         median_trip_router,
     )
-    d_target_aspect = 4.0
+    d_target_aspect = 2.0
     if distance_comparison_sample is not None and median_trip_graph is not None:
         from visualization.roadnet import _draw_distance_panel
 

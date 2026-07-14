@@ -11,7 +11,7 @@ Available figures:
     tanner_impedance_fit, tanner_impedance_fit_panel_a, alpha_calibration_5km,
     detour_lifecycle_distance, lifecycle_distance_detour_boxplot,
     lifecycle_distance_route_factor, production_phase_per_km, end_of_life_phase_per_km,
-    production_detour_eol_panels, emission_model_flowchart,
+    production_detour_eol_panels, detour_ratio_concept, emission_model_flowchart,
     detour_and_lifecycle, distance_comparison,
     distance_comparison_high_3x3, distance_comparison_low_3x3,
     shanghai_heatmap, shanghai_merchant_monthly_sales,
@@ -4382,6 +4382,7 @@ def render_all(
 
     # --- Concept figures (no data dependency) ---
     concept_figures = {
+        "detour_ratio_concept",
         "emission_model_flowchart",
         "production_phase_per_km",
         "end_of_life_phase_per_km",
@@ -4393,12 +4394,20 @@ def render_all(
         from visualization.concepts import (
             plot_detour_and_lifecycle,
             plot_detour_lifecycle_distance,
+            plot_detour_ratio_concept,
             plot_emission_model_flowchart,
             plot_production_detour_eol_panels,
         )
         from visualization.emission import (
             plot_end_of_life_phase_per_km,
             plot_production_phase_per_km,
+        )
+
+    if _want("detour_ratio_concept"):
+        plot_detour_ratio_concept(
+            save_path=os.path.join(out, "detour_ratio_concept.png"),
+            for_latex=for_latex,
+            plot_title=plot_title,
         )
 
     if _want("emission_model_flowchart"):
