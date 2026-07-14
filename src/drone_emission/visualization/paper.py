@@ -12,7 +12,7 @@ Available figures:
     detour_lifecycle_distance, lifecycle_distance_detour_boxplot,
     lifecycle_distance_route_factor, production_phase_per_km, end_of_life_phase_per_km,
     production_detour_eol_panels, detour_ratio_concept, emission_model_flowchart,
-    detour_and_lifecycle, distance_comparison,
+    detour_and_lifecycle, distance_comparison, distance_comparison_single_panel,
     distance_comparison_high_3x3, distance_comparison_low_3x3,
     shanghai_heatmap, shanghai_merchant_monthly_sales,
     shanghai_building_height_merchant,
@@ -4146,6 +4146,56 @@ def _render_distance_comparison(
     )
 
 
+def _render_distance_comparison_single_panel(
+    data_dir,
+    out,
+    for_latex,
+    plot_title,
+    graph_cache=None,
+    router_cache=None,
+):
+    """Render a compact median-trip distance comparison for Shanghai."""
+    region_key = "shanghai"
+    region_level = "city"
+    od_path = os.path.join(
+        data_dir,
+        region_level,
+        region_key,
+        f"{region_key}_od_pairs.csv",
+    )
+    graphml_path = os.path.join(
+        data_dir,
+        region_level,
+        region_key,
+        f"{region_key}_roadnet.graphml",
+    )
+
+    if not os.path.exists(od_path) or not os.path.exists(graphml_path):
+        print(
+            "Single-panel distance comparison skipped — "
+            f"missing data for {region_key}"
+        )
+        return
+
+    from visualization.roadnet import plot_distance_comparison_single_panel
+
+    od_df = pd.read_csv(od_path)
+    graph = _get_cached_sparse_graph(graphml_path, graph_cache=graph_cache)
+    router = _get_cached_tile_router(
+        graphml_path,
+        graph,
+        router_cache=router_cache,
+    )
+    plot_distance_comparison_single_panel(
+        od_df=od_df,
+        graph=graph,
+        router=router,
+        save_path=os.path.join(out, "distance_comparison_single_panel.png"),
+        for_latex=for_latex,
+        plot_title=plot_title,
+    )
+
+
 def _render_tanner_impedance_fit_panel_a(data_dir, out, for_latex, plot_title):
     """Render the observed Eleme delivery distance histogram."""
     order_dir = os.path.join(
@@ -4675,6 +4725,16 @@ def render_all(
             for_latex=True,
             plot_title=plot_title,
             plot_fn=plot_distance_comparison,
+            graph_cache=graph_cache,
+            router_cache=router_cache,
+        )
+
+    if _want("distance_comparison_single_panel"):
+        _render_distance_comparison_single_panel(
+            data_dir=data_dir,
+            out=out,
+            for_latex=for_latex,
+            plot_title=plot_title,
             graph_cache=graph_cache,
             router_cache=router_cache,
         )

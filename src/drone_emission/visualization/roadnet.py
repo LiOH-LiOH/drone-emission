@@ -348,6 +348,31 @@ def _compute_distance_samples(od_df, router, n_samples=2):
     return sample_paths
 
 
+def _compute_distance_sample_at_quantile(od_df, router, quantile=0.5):
+    """Return the OD sample closest to one detour-ratio quantile."""
+    valid_df = od_df[
+        (od_df["road_distance_m"] > 100) & (od_df["distance_km"] > 0)
+    ].copy()
+    if len(valid_df) == 0:
+        return None
+
+    valid_df["detour_ratio"] = (
+        valid_df["road_distance_m"] / (valid_df["distance_km"] * 1000)
+    )
+    quantile_value = valid_df["detour_ratio"].quantile(quantile)
+    sample_idx = (valid_df["detour_ratio"] - quantile_value).abs().idxmin()
+    row = valid_df.loc[sample_idx]
+    origin = (row["from_lat"], row["from_lng"])
+    destination = (row["to_lat"], row["to_lng"])
+    return {
+        "origin": origin,
+        "destination": destination,
+        "straight_distance": row["distance_km"] * 1000,
+        "road_distance": row["road_distance_m"],
+        "path_result": router.find_shortest_path(origin, destination),
+    }
+
+
 def _compute_distance_samples_extreme(od_df, router, n_samples, extreme,
                                        air_km_min=None, air_km_max=None):
     """Sample OD pairs from the extreme tail of the detour-ratio distribution.
@@ -419,6 +444,9 @@ def _draw_distance_panel(
     padding=0.003,
     target_aspect=1.0,
     rotate_air_diagonal=False,
+    compact=False,
+    route_legend_only=False,
+    show_endpoint_labels=False,
 ):
     """Draw one distance comparison sample onto *ax*."""
     from matplotlib.collections import LineCollection
@@ -578,7 +606,13 @@ def _draw_distance_panel(
                 ]
                 for ec in edge_coords
             ]
-            lc = LineCollection(segments, colors="#ddd", linewidths=0.3, zorder=1)
+            network_width = 0.2 if compact else 0.3
+            lc = LineCollection(
+                segments,
+                colors="#ddd",
+                linewidths=network_width,
+                zorder=1,
+            )
             ax.add_collection(lc)
 
         if path_result.get("success") and len(path_result.get("path_coordinates", [])) > 1:
@@ -586,20 +620,53 @@ def _draw_distance_panel(
                 _transform(lat, lng)
                 for lat, lng in path_result["path_coordinates"]
             ])
-            ax.plot(path_xy[:, 0], path_xy[:, 1], color="#d95f35", linewidth=2.5,
+            road_width = 1.5 if compact else 2.5
+            ax.plot(path_xy[:, 0], path_xy[:, 1], color="#d95f35", linewidth=road_width,
                     alpha=0.9, zorder=10, label="E-bike (road)")
 
         origin_rot = _transform(origin[0], origin[1])
         dest_rot = _transform(destination[0], destination[1])
+        drone_width = 1.2 if compact else 2
+        marker_size = 22 if compact else 90
+        marker_edge_width = 0.7 if compact else 1.5
         ax.plot(
             [origin_rot[0], dest_rot[0]], [origin_rot[1], dest_rot[1]],
-            color="#1f77b4", linewidth=2, linestyle="--", alpha=0.9, zorder=20,
+            color="#1f77b4", linewidth=drone_width, linestyle="--", alpha=0.9, zorder=20,
             label="Drone (straight)",
         )
-        ax.scatter(origin_rot[0], origin_rot[1], c="#2f6f4e", s=90, marker="o",
-                   zorder=25, edgecolors="white", linewidth=1.5, label="Merchant")
-        ax.scatter(dest_rot[0], dest_rot[1], c="#3f4b64", s=90, marker="s",
-                   zorder=25, edgecolors="white", linewidth=1.5, label="Customer")
+        ax.scatter(origin_rot[0], origin_rot[1], c="#2f6f4e", s=marker_size, marker="o",
+                   zorder=25, edgecolors="white", linewidth=marker_edge_width, label="Merchant")
+        ax.scatter(dest_rot[0], dest_rot[1], c="#3f4b64", s=marker_size, marker="s",
+                   zorder=25, edgecolors="white", linewidth=marker_edge_width, label="Customer")
+
+        if show_endpoint_labels:
+            from matplotlib import patheffects
+
+            label_effects = [
+                patheffects.withStroke(linewidth=1.5, foreground="white")
+            ]
+            ax.annotate(
+                "Merchant",
+                xy=origin_rot,
+                xytext=(3, -2),
+                textcoords="offset points",
+                fontsize=5.5,
+                ha="left",
+                va="top",
+                zorder=30,
+                path_effects=label_effects,
+            )
+            ax.annotate(
+                "Customer",
+                xy=dest_rot,
+                xytext=(-3, 2),
+                textcoords="offset points",
+                fontsize=5.5,
+                ha="right",
+                va="bottom",
+                zorder=30,
+                path_effects=label_effects,
+            )
 
         ax.set_xlim(x_min, x_max)
         ax.set_ylim(y_min, y_max)
@@ -618,7 +685,26 @@ def _draw_distance_panel(
                 bbox=dict(boxstyle="round,pad=0.4", facecolor="white", edgecolor="#d3d8d5", alpha=0.92),
             )
         if show_legend:
-            ax.legend(loc="upper left", fontsize=9, framealpha=0.9)
+            handles, labels = ax.get_legend_handles_labels()
+            if route_legend_only:
+                route_items = [
+                    (handle, label)
+                    for handle, label in zip(handles, labels)
+                    if label in {"E-bike (road)", "Drone (straight)"}
+                ]
+                handles, labels = zip(*route_items) if route_items else ([], [])
+            ax.legend(
+                handles,
+                labels,
+                loc="upper left",
+                ncol=2 if compact else 1,
+                fontsize=5.5 if compact else 9,
+                handlelength=1.5 if compact else 2,
+                handletextpad=0.4 if compact else 0.8,
+                columnspacing=0.8 if compact else 2,
+                borderpad=0.25 if compact else 0.4,
+                framealpha=0.85 if compact else 0.9,
+            )
         return
 
     # Expand the tighter axis to match the target display shape while keeping
@@ -775,6 +861,75 @@ def plot_distance_comparison(
         os.makedirs(os.path.dirname(save_path), exist_ok=True)
         plt.savefig(save_path, dpi=200, bbox_inches="tight")
         print(f"Distance comparison saved to {save_path}")
+    else:
+        plt.show()
+
+    plt.close(fig)
+
+
+def plot_distance_comparison_single_panel(
+    od_df,
+    graph,
+    router,
+    save_path: Optional[str] = None,
+    figsize: tuple = (2.4, 1.2),
+    for_latex: bool = False,
+    plot_title: bool = False,
+) -> None:
+    """Plot a compact median-trip road-versus-air distance comparison.
+
+    Args:
+        od_df: OD DataFrame with coordinates and road/air distances.
+        graph: SparseGraph built from the region's graphml file.
+        router: TileRouter wrapping the SparseGraph.
+        save_path: Path to save figure. Shows plot if None.
+        figsize: Final figure size in inches.
+        for_latex: If True, save as PDF.
+        plot_title: If True, show title.
+    """
+    sample = _compute_distance_sample_at_quantile(od_df, router, quantile=0.5)
+    if sample is None:
+        print("No valid sample for single-panel distance comparison")
+        return
+
+    fig, ax = plt.subplots(figsize=figsize)
+    _draw_distance_panel(
+        ax,
+        sample,
+        graph,
+        show_legend=True,
+        show_stats_box=False,
+        show_basemap=False,
+        target_aspect=2.0,
+        rotate_air_diagonal=True,
+        compact=True,
+        route_legend_only=True,
+        show_endpoint_labels=True,
+    )
+    for spine in ax.spines.values():
+        spine.set_linewidth(0.5)
+
+    if plot_title:
+        fig.suptitle(
+            "Straight-line vs Road Network Distance",
+            fontsize=7,
+            fontweight="bold",
+            y=0.98,
+        )
+        fig.subplots_adjust(left=0.01, right=0.99, bottom=0.02, top=0.84)
+    else:
+        fig.subplots_adjust(left=0.01, right=0.99, bottom=0.02, top=0.98)
+
+    if save_path:
+        if for_latex and not save_path.endswith(".pdf"):
+            save_path = save_path.rsplit(".", 1)[0] + ".pdf"
+        if plot_title:
+            save_path = _add_title_suffix(save_path)
+        if save_path.endswith(".pdf"):
+            ax.set_rasterization_zorder(2)
+        os.makedirs(os.path.dirname(save_path), exist_ok=True)
+        fig.savefig(save_path, dpi=300, facecolor="white")
+        print(f"Single-panel distance comparison saved to {save_path}")
     else:
         plt.show()
 
