@@ -485,7 +485,7 @@ def _draw_detour_ratio_concept(
             alpha=0.28, linestyle=":", zorder=18)
 
     straight_mid = (np.array(origin_xy) + np.array(dest_xy)) / 2
-    straight_offset = (-0.45, 0.55) if compact else (-1.8, 1.4)
+    straight_offset = (-1.25, 0.55) if compact else (-1.8, 1.4)
     ax.text(straight_mid[0] + straight_offset[0], straight_mid[1] + straight_offset[1],
             "Straight-line distance", color=_COLORS["drone"],
             fontsize=14.0 if compact else 9.5, ha="center", va="bottom", zorder=60)
