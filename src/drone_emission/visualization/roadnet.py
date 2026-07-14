@@ -606,10 +606,11 @@ def _draw_distance_panel(
                 ]
                 for ec in edge_coords
             ]
-            network_width = 0.2 if compact else 0.3
+            network_color = "#cfd4d1" if compact else "#ddd"
+            network_width = 0.35 if compact else 0.3
             lc = LineCollection(
                 segments,
-                colors="#ddd",
+                colors=network_color,
                 linewidths=network_width,
                 zorder=1,
             )
