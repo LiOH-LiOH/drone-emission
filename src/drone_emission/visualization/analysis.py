@@ -3487,7 +3487,13 @@ def plot_regions_map_pathway_scenarios(
         ax_line.set_ylabel("Annual lifecycle (kt CO$_2$)", fontsize=6.5, color="dimgray")
         ax_line.tick_params(axis="y", labelsize=5.8, colors="dimgray", length=2)
         panel_axes[label] = (ax_map, ax_box, ax_line)
-        fig.tight_layout(pad=0.25)
+        fig.subplots_adjust(
+            left=0.08,
+            right=0.92,
+            bottom=0.08,
+            top=0.98,
+            hspace=0.12,
+        )
         fig.canvas.draw()
         map_box = ax_map.get_position()
         box_box = ax_box.get_position()
@@ -3509,7 +3515,7 @@ def plot_regions_map_pathway_scenarios(
     colorbar_figsize = (0.60, figsize[1])
     colorbar_fig = plt.figure(figsize=colorbar_figsize)
     cbar_ax = colorbar_fig.add_axes((0.08, 0.07, 0.22, 0.88))
-    cbar, n_bands = _draw_discrete_reduction_colorbar(
+    _, n_bands = _draw_discrete_reduction_colorbar(
         colorbar_fig,
         cbar_ax,
         shared_cmap,
@@ -3518,7 +3524,16 @@ def plot_regions_map_pathway_scenarios(
         reduction_edges,
         r"Reduction vs today's all-ebike anchor (%)",
     )
-    _annotate_unstudied(colorbar_fig, cbar, cbar_ax, n_bands)
+    cbar_ax.text(
+        -0.75,
+        0.5 / n_bands,
+        "Unstudied",
+        transform=cbar_ax.transAxes,
+        ha="center",
+        va="center",
+        fontsize=7,
+        rotation=90,
+    )
 
     if save_path:
         colorbar_path = f"{save_root}_colorbar{save_ext}"
