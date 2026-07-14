@@ -151,6 +151,8 @@ def plot_building_height_merchant_map(
     figsize=(10, 6),
     for_latex=False,
     plot_title=False,
+    lat_span=None,
+    compact=False,
 ):
     """Show building footprints colored by height around a top-sales merchant.
 
@@ -166,6 +168,8 @@ def plot_building_height_merchant_map(
         figsize: Figure size tuple.
         for_latex: If True, save as PDF.
         plot_title: If True, show title.
+        lat_span: Optional latitude span in degrees.
+        compact: If True, use styling and padding for a narrow paper panel.
     """
     required_store_cols = {"lat", "lng", "month_sales"}
     missing_store_cols = required_store_cols - set(stores_df.columns)
@@ -206,12 +210,16 @@ def plot_building_height_merchant_map(
         float(merchant["lat"]),
     )
 
-    half_size = MERCHANT_MAP_DEGREE_SIZE / 2
+    lat_span = MERCHANT_MAP_DEGREE_SIZE if lat_span is None else float(lat_span)
+    if lat_span <= 0:
+        print("Building height merchant map skipped - lat_span must be positive")
+        return
+    lng_span = MERCHANT_MAP_DEGREE_SIZE
     boundaries_dict = {
-        "min_lng": merchant_lng - half_size,
-        "max_lng": merchant_lng + half_size,
-        "min_lat": merchant_lat - half_size,
-        "max_lat": merchant_lat + half_size,
+        "min_lng": merchant_lng - lng_span / 2,
+        "max_lng": merchant_lng + lng_span / 2,
+        "min_lat": merchant_lat - lat_span / 2,
+        "max_lat": merchant_lat + lat_span / 2,
     }
 
     if buildings_gdf.crs is not None and buildings_gdf.crs.to_epsg() != 4326:
@@ -225,7 +233,7 @@ def plot_building_height_merchant_map(
     if buildings_in_frame.empty:
         print(
             "Building height merchant map skipped - no buildings in "
-            f"{MERCHANT_MAP_DEGREE_SIZE:.2f} degree frame"
+            f"{lng_span:.3f} x {lat_span:.3f} degree frame"
         )
         return
 
@@ -261,6 +269,8 @@ def plot_building_height_merchant_map(
         return
 
     fig, ax = plt.subplots(figsize=figsize)
+    if compact:
+        ax.set_position([0.0, 0.13, 1.0, 0.87])
     avg_lat = (boundaries_dict["min_lat"] + boundaries_dict["max_lat"]) / 2
     aspect_ratio = 1.0 / np.cos(np.radians(avg_lat))
     ax.set_aspect(aspect_ratio)
@@ -284,8 +294,8 @@ def plot_building_height_merchant_map(
             roads = LineCollection(
                 segments,
                 colors="#aeb4b9",
-                linewidths=0.75,
-                alpha=0.75,
+                linewidths=0.45 if compact else 0.75,
+                alpha=0.6 if compact else 0.75,
                 zorder=2,
             )
             ax.add_collection(roads)
@@ -305,7 +315,13 @@ def plot_building_height_merchant_map(
         zorder=10,
         legend=False,
     )
-    cbar_ax = ax.inset_axes([0.18, -0.24, 0.64, 0.035], transform=ax.transAxes)
+    if compact:
+        cbar_ax = fig.add_axes([0.12, 0.045, 0.76, 0.018])
+    else:
+        cbar_ax = ax.inset_axes(
+            [0.18, -0.24, 0.64, 0.035],
+            transform=ax.transAxes,
+        )
     cbar_ticks = np.linspace(0.0, height_max, 5)
     cbar = fig.colorbar(
         ScalarMappable(norm=norm, cmap=cmap),
@@ -314,8 +330,19 @@ def plot_building_height_merchant_map(
         ticks=cbar_ticks,
         orientation="horizontal",
     )
-    cbar.set_label("Building height (m, capped at 95th pct)", fontsize=13)
-    cbar.ax.tick_params(labelsize=12)
+    cbar_label = "Building height (m; 95th pct cap)" if compact else (
+        "Building height (m, capped at 95th pct)"
+    )
+    cbar.set_label(
+        cbar_label,
+        fontsize=6.5 if compact else 13,
+        labelpad=1.0 if compact else 4.0,
+    )
+    cbar.ax.tick_params(
+        labelsize=5.5 if compact else 12,
+        length=1.5 if compact else 3.5,
+        pad=1.0 if compact else 3.5,
+    )
 
     od_line_count = 0
     if od_df is None:
@@ -379,13 +406,16 @@ def plot_building_height_merchant_map(
                 sales_max = float(top_od["annual_sales"].max())
                 for _, row in top_od.iterrows():
                     if sales_max == sales_min:
-                        line_width = 2.5
+                        line_width = 1.4 if compact else 2.5
                     else:
-                        line_width = 4.0 + (
+                        fraction = (
                             (float(row["annual_sales"]) - sales_min)
                             / (sales_max - sales_min)
-                            * 6.0
                         )
+                        if compact:
+                            line_width = 0.9 + fraction * 1.6
+                        else:
+                            line_width = 4.0 + fraction * 6.0
                     ax.plot(
                         [row["from_lng"], row["to_lng"]],
                         [row["from_lat"], row["to_lat"]],
@@ -401,10 +431,10 @@ def plot_building_height_merchant_map(
         merchant_lng,
         merchant_lat,
         c="#ffd400",
-        s=260,
+        s=95 if compact else 260,
         marker="*",
         edgecolors="black",
-        linewidths=1.2,
+        linewidths=0.6 if compact else 1.2,
         zorder=30,
         label="Merchant",
     )
@@ -413,7 +443,7 @@ def plot_building_height_merchant_map(
             [],
             [],
             color="#005f9e",
-            linewidth=5,
+            linewidth=1.8 if compact else 5,
             label="OD demands",
         )
 
@@ -430,16 +460,17 @@ def plot_building_height_merchant_map(
         spine.set_visible(False)
 
     legend = ax.legend(
-        loc="upper center",
-        bbox_to_anchor=(0.5, -0.08),
+        loc="center" if compact else "upper center",
+        bbox_to_anchor=(0.5, 0.105) if compact else (0.5, -0.08),
+        bbox_transform=fig.transFigure if compact else ax.transAxes,
         borderaxespad=0.0,
-        fontsize=12,
+        fontsize=6.5 if compact else 12,
         frameon=False,
         ncol=2 if od_line_count else 1,
-        markerscale=1.4,
-        handlelength=2.4,
-        handletextpad=0.7,
-        columnspacing=1.6,
+        markerscale=1.0 if compact else 1.4,
+        handlelength=1.8 if compact else 2.4,
+        handletextpad=0.4 if compact else 0.7,
+        columnspacing=1.0 if compact else 1.6,
     )
     legend.set_zorder(100)
 
@@ -448,15 +479,14 @@ def plot_building_height_merchant_map(
             0.02,
             0.98,
             (
-                f"Frame: {MERCHANT_MAP_DEGREE_SIZE:.2f} deg x "
-                f"{MERCHANT_MAP_DEGREE_SIZE:.2f} deg\n"
+                f"Frame: {lng_span:.3f} deg x {lat_span:.3f} deg\n"
                 f"Buildings: {len(buildings_in_frame):,}\n"
                 f"Road edges: {road_edge_count:,}\n"
                 f"OD lines: {od_line_count}\n"
                 f"Merchant monthly sales: {merchant['month_sales']:.0f}"
             ),
             transform=ax.transAxes,
-            fontsize=10,
+            fontsize=6.5 if compact else 10,
             verticalalignment="top",
             bbox=dict(boxstyle="round", facecolor="white", alpha=0.85),
             zorder=100,
@@ -477,6 +507,10 @@ def plot_building_height_merchant_map(
         report = {
             "figure_name": "shanghai_building_height_merchant",
             "figure_path": save_path,
+            "layout_mode": "compact" if compact else "full",
+            "native_size_inches": [float(figsize[0]), float(figsize[1])],
+            "configured_lng_span_degrees": float(lng_span),
+            "configured_lat_span_degrees": float(lat_span),
             "coordinate_convention": (
                 "bbox_saved_tight_fraction values are fractions of the saved "
                 "page after bbox_inches='tight'."
@@ -503,7 +537,7 @@ def plot_building_height_merchant_map(
                 "axis": saved_tight_axis_report(
                     fig, cbar.ax, renderer=renderer, tight_bbox=tight_bbox
                 ),
-                "label": "Building height (m, capped at 95th pct)",
+                "label": cbar_label,
                 "orientation": "horizontal",
             },
         }
@@ -511,7 +545,11 @@ def plot_building_height_merchant_map(
             legend_bbox = legend.get_window_extent(renderer).transformed(
                 fig.dpi_scale_trans.inverted()
             )
-            pad_inches = plt.rcParams.get("savefig.pad_inches", 0.1)
+            pad_inches = (
+                0.02
+                if compact
+                else plt.rcParams.get("savefig.pad_inches", 0.1)
+            )
             tight_x0 = tight_bbox.x0 - pad_inches
             tight_y0 = tight_bbox.y0 - pad_inches
             tight_width = tight_bbox.width + 2 * pad_inches
@@ -530,7 +568,12 @@ def plot_building_height_merchant_map(
             }
         write_figure_report(report_path, report)
         print(f"Building height merchant map report saved to {report_path}")
-        plt.savefig(save_path, dpi=300, bbox_inches="tight")
+        plt.savefig(
+            save_path,
+            dpi=300,
+            bbox_inches="tight",
+            pad_inches=0.02 if compact else None,
+        )
         print(f"Building height merchant map saved to {save_path}")
     else:
         plt.show()
