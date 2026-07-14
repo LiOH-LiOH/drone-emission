@@ -3687,7 +3687,12 @@ def plot_regions_map_city_province_ranks(
     for spine in ax_a.spines.values():
         spine.set_visible(False)
     plot_city_ebike_rank_top10(df_stats, ax=ax_b, plot_title=plot_title)
-    plot_province_total_ebike_lifecycle(df_stats, ax=ax_c, plot_title=plot_title)
+    plot_province_total_ebike_lifecycle(
+        df_stats,
+        ax=ax_c,
+        plot_title=plot_title,
+        reduction_metric="percent",
+    )
 
     for ax_panel, label in ((ax_a, "a"), (ax_b, "b"), (ax_c, "c")):
         ax_panel.text(-0.05, 1.02, label, transform=ax_panel.transAxes,
@@ -5384,16 +5389,18 @@ def plot_province_orders_both_emissions(
 def plot_province_total_ebike_lifecycle(
     df: pd.DataFrame,
     save_path: str = None,
-    figsize: tuple = (14, 6),
+    figsize: tuple = (6.86, 3.5),
     for_latex: bool = False,
     plot_title: bool = False,
     ax: "plt.Axes" = None,
+    reduction_metric: str = "absolute",
 ):
     """Province bar chart ranked by total annual e-bike emission, with Oracle reduction overlay.
 
     Bars (left axis) show summed annual-sales-weighted total_ebike_lifecycle
     per province, sorted descending. Boxplot (right axis) shows the per-city
-    distribution of Oracle reduction versus the kappa-adjusted e-bike baseline.
+    distribution of absolute or percentage Oracle reduction versus the
+    kappa-adjusted e-bike baseline.
 
     Args:
         df: all_region_stats DataFrame with province, total_ebike_lifecycle,
@@ -5403,36 +5410,55 @@ def plot_province_total_ebike_lifecycle(
         for_latex: Save as PDF when True.
         plot_title: Add title when True.
         ax: External axes. When provided, skips figure creation and save.
+        reduction_metric: ``"absolute"`` for annual tonnes of CO2-equivalent
+            reduction or ``"percent"`` for reduction relative to e-bike emissions.
     """
+    if reduction_metric not in {"absolute", "percent"}:
+        raise ValueError(
+            "reduction_metric must be either 'absolute' or 'percent', "
+            f"got {reduction_metric!r}"
+        )
+
     needed = ["province", "total_ebike_lifecycle", "oracle_min_lifecycle_kg"]
     missing = [col for col in needed if col not in df.columns]
     if missing:
         print(f"Province total ebike lifecycle skipped — missing columns {missing}")
         return
 
-    sub = df[needed].copy()
+    source = df
+    if "region_level" in source.columns:
+        source = source[source["region_level"] == "city"]
+    sub = source[needed].copy()
     sub["total_ebike_lifecycle"] = pd.to_numeric(
         sub["total_ebike_lifecycle"], errors="coerce"
     )
     sub["oracle_min_lifecycle_kg"] = pd.to_numeric(
         sub["oracle_min_lifecycle_kg"], errors="coerce"
     )
-    sub["oracle_min_reduction_vs_ebike_pct"] = np.where(
-        sub["total_ebike_lifecycle"] > 0,
-        (
-            1.0
-            - sub["oracle_min_lifecycle_kg"] / sub["total_ebike_lifecycle"]
+    if reduction_metric == "absolute":
+        reduction_col = _oracle_reduction_tonnes_column(sub)
+        reduction_axis_label = "City Oracle emission reduction (t CO₂eq / yr)"
+        reduction_legend_label = "City Oracle reduction (per city)"
+    else:
+        sub["oracle_min_reduction_vs_ebike_pct"] = np.where(
+            sub["total_ebike_lifecycle"] > 0,
+            (
+                1.0
+                - sub["oracle_min_lifecycle_kg"] / sub["total_ebike_lifecycle"]
+            )
+            * 100.0,
+            np.nan,
         )
-        * 100.0,
-        np.nan,
-    )
-    sub = sub.dropna()
+        reduction_col = "oracle_min_reduction_vs_ebike_pct"
+        reduction_axis_label = "City Oracle reduction vs e-bike (%)"
+        reduction_legend_label = "Oracle reduction vs e-bike (per city)"
+
+    sub = sub.dropna(subset=[*needed, reduction_col])
     if sub.empty:
         print("Province total ebike lifecycle skipped — no rows with required columns")
         return
 
     sub["province_en"] = sub["province"].map(PROVINCE_NAME_EN).fillna(sub["province"])
-    reduction_col = "oracle_min_reduction_vs_ebike_pct"
 
     prov = (
         sub.groupby("province_en")
@@ -5486,7 +5512,7 @@ def plot_province_total_ebike_lifecycle(
         positions=x,
         widths=0.5,
         patch_artist=True,
-        showfliers=False,
+        showfliers=reduction_metric == "absolute",
         manage_ticks=False,
         zorder=3,
     )
@@ -5501,8 +5527,10 @@ def plot_province_total_ebike_lifecycle(
     for median in bp["medians"]:
         median.set_color(box_color)
         median.set_linewidth(1.5)
+    if reduction_metric == "absolute":
+        ax2.axhline(0.0, color=box_color, linewidth=0.8, alpha=0.55, zorder=1)
     ax2.set_ylabel(
-        "City Oracle reduction vs e-bike (%)",
+        reduction_axis_label,
         fontsize=12,
         color=box_color,
     )
@@ -5516,15 +5544,20 @@ def plot_province_total_ebike_lifecycle(
     ax1.legend(
         handles,
         [
-            "Kappa-adjusted e-bike emission",
-            "Oracle reduction vs e-bike (per city)",
+            "Province kappa-adjusted e-bike emission",
+            reduction_legend_label,
         ],
         loc="upper right",
         fontsize=10,
     )
 
     if plot_title:
-        title = "Province e-bike emission ranking with Oracle reduction distribution"
+        reduction_title = (
+            "absolute Oracle reduction"
+            if reduction_metric == "absolute"
+            else "Oracle reduction percentage"
+        )
+        title = f"Province e-bike emission ranking with city {reduction_title}"
         if _external_ax:
             ax1.set_title(title, fontsize=12, fontweight="bold")
         else:
