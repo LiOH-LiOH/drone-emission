@@ -601,8 +601,8 @@ def _draw_distance_panel(
         if len(edge_coords) > 0:
             segments = [
                 [
-                    tuple(_transform(ec[1], ec[0])),
-                    tuple(_transform(ec[3], ec[2])),
+                    tuple(_transform(ec[0], ec[1])),
+                    tuple(_transform(ec[2], ec[3])),
                 ]
                 for ec in edge_coords
             ]
