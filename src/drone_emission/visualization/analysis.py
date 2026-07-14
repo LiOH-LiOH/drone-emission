@@ -5437,7 +5437,7 @@ def plot_province_total_ebike_lifecycle(
     )
     if reduction_metric == "absolute":
         reduction_col = _oracle_reduction_tonnes_column(sub)
-        reduction_axis_label = "City Oracle emission reduction (t CO₂eq / yr)"
+        reduction_axis_label = "City Oracle reduction\n(t CO₂eq / yr)"
         reduction_legend_label = "City Oracle reduction (per city)"
     else:
         sub["oracle_min_reduction_vs_ebike_pct"] = np.where(
@@ -5485,6 +5485,9 @@ def plot_province_total_ebike_lifecycle(
         fig = ax1.get_figure()
     else:
         fig, ax1 = plt.subplots(figsize=figsize)
+    axis_label_size = 12 if _external_ax else 9
+    x_tick_size = 9 if _external_ax else 7
+    legend_size = 10 if _external_ax else 8
 
     ax1.bar(
         x,
@@ -5494,15 +5497,17 @@ def plot_province_total_ebike_lifecycle(
         zorder=2,
         label="Kappa-adjusted e-bike emission",
     )
-    ax1.set_xlabel("Province", fontsize=12)
+    ax1.set_xlabel("Province", fontsize=axis_label_size)
     ax1.set_ylabel(
         "Kappa-adjusted e-bike lifecycle emission (t CO₂eq / yr)",
-        fontsize=12,
+        fontsize=axis_label_size,
         color=bar_axis_color,
     )
     ax1.tick_params(axis="y", labelcolor=bar_axis_color)
+    if not _external_ax:
+        ax1.tick_params(axis="y", labelsize=8)
     ax1.set_xticks(x)
-    ax1.set_xticklabels(ordered, rotation=45, ha="right", fontsize=9)
+    ax1.set_xticklabels(ordered, rotation=45, ha="right", fontsize=x_tick_size)
     ax1.yaxis.grid(True, linestyle="--", alpha=0.4)
     ax1.set_axisbelow(True)
 
@@ -5513,6 +5518,13 @@ def plot_province_total_ebike_lifecycle(
         widths=0.5,
         patch_artist=True,
         showfliers=reduction_metric == "absolute",
+        flierprops={
+            "marker": "o",
+            "markersize": 3.5,
+            "markerfacecolor": "none",
+            "markeredgecolor": box_color,
+            "alpha": 0.75,
+        },
         manage_ticks=False,
         zorder=3,
     )
@@ -5531,10 +5543,12 @@ def plot_province_total_ebike_lifecycle(
         ax2.axhline(0.0, color=box_color, linewidth=0.8, alpha=0.55, zorder=1)
     ax2.set_ylabel(
         reduction_axis_label,
-        fontsize=12,
+        fontsize=axis_label_size,
         color=box_color,
     )
     ax2.tick_params(axis="y", labelcolor=box_color)
+    if not _external_ax:
+        ax2.tick_params(axis="y", labelsize=8)
     ax2.set_xlim(ax1.get_xlim())
 
     handles = [
@@ -5548,7 +5562,7 @@ def plot_province_total_ebike_lifecycle(
             reduction_legend_label,
         ],
         loc="upper right",
-        fontsize=10,
+        fontsize=legend_size,
     )
 
     if plot_title:
