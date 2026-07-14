@@ -87,25 +87,95 @@ def _add_polyline(
         line.set_clip_path(clip_patch)
 
 
-def _add_ground(ax: plt.Axes) -> "Polygon":
-    plane = _projected([(0, 0), (9.7, 0), (9.7, 6.3), (0, 6.3)])
+def _add_ground(
+    ax: plt.Axes,
+    bounds: tuple[float, float, float, float] | None = None,
+) -> "Polygon":
+    if bounds is None:
+        x_min, x_max, y_min, y_max = 0.0, 9.7, 0.0, 6.3
+        grid_xs = np.arange(1.0, 9.6, 1.0)
+        grid_ys = np.arange(0.8, 6.3, 0.9)
+        grid_pad = 0.2
+    else:
+        x_min, x_max, y_min, y_max = bounds
+        grid_xs = np.arange(x_min + 0.55, x_max, 0.75)
+        grid_ys = np.arange(y_min + 0.45, y_max, 0.75)
+        grid_pad = 0.12
+
+    plane = _projected([
+        (x_min, y_min),
+        (x_max, y_min),
+        (x_max, y_max),
+        (x_min, y_max),
+    ])
     patch = Polygon(plane, closed=True, facecolor=_COLORS["ground"],
                     edgecolor=_COLORS["ground_edge"], linewidth=1.2, zorder=1)
     ax.add_patch(patch)
-    for x in np.arange(1.0, 9.6, 1.0):
-        _add_polyline(ax, [(x, 0.2), (x, 6.1)], color=_COLORS["grid"], linewidth=0.7, zorder=2)
-    for y in np.arange(0.8, 6.3, 0.9):
-        _add_polyline(ax, [(0.2, y), (9.5, y)], color=_COLORS["grid"], linewidth=0.7, zorder=2)
+    for x in grid_xs:
+        _add_polyline(
+            ax,
+            [(x, y_min + grid_pad), (x, y_max - grid_pad)],
+            color=_COLORS["grid"],
+            linewidth=0.7,
+            zorder=2,
+        )
+    for y in grid_ys:
+        _add_polyline(
+            ax,
+            [(x_min + grid_pad, y), (x_max - grid_pad, y)],
+            color=_COLORS["grid"],
+            linewidth=0.7,
+            zorder=2,
+        )
     return patch
 
 
-def _add_road_network(ax: plt.Axes, clip_patch=None) -> None:
-    for x in _GRID_X:
-        _add_polyline(ax, [(x, 0.0), (x, 6.3)], color=_COLORS["road"], linewidth=12.0, zorder=5, clip_patch=clip_patch)
-        _add_polyline(ax, [(x, 0.0), (x, 6.3)], color=_COLORS["road_dark"], linewidth=1.0, zorder=6, alpha=0.32, clip_patch=clip_patch)
-    for y in _GRID_Y:
-        _add_polyline(ax, [(0.0, y), (9.7, y)], color=_COLORS["road"], linewidth=12.0, zorder=5, clip_patch=clip_patch)
-        _add_polyline(ax, [(0.0, y), (9.7, y)], color=_COLORS["road_dark"], linewidth=1.0, zorder=6, alpha=0.32, clip_patch=clip_patch)
+def _add_road_network(
+    ax: plt.Axes,
+    clip_patch=None,
+    *,
+    grid_x: Sequence[float] = _GRID_X,
+    grid_y: Sequence[float] = _GRID_Y,
+    bounds: tuple[float, float, float, float] = (0.0, 9.7, 0.0, 6.3),
+    linewidth: float = 12.0,
+) -> None:
+    x_min, x_max, y_min, y_max = bounds
+    for x in grid_x:
+        _add_polyline(
+            ax,
+            [(x, y_min), (x, y_max)],
+            color=_COLORS["road"],
+            linewidth=linewidth,
+            zorder=5,
+            clip_patch=clip_patch,
+        )
+        _add_polyline(
+            ax,
+            [(x, y_min), (x, y_max)],
+            color=_COLORS["road_dark"],
+            linewidth=1.0,
+            zorder=6,
+            alpha=0.32,
+            clip_patch=clip_patch,
+        )
+    for y in grid_y:
+        _add_polyline(
+            ax,
+            [(x_min, y), (x_max, y)],
+            color=_COLORS["road"],
+            linewidth=linewidth,
+            zorder=5,
+            clip_patch=clip_patch,
+        )
+        _add_polyline(
+            ax,
+            [(x_min, y), (x_max, y)],
+            color=_COLORS["road_dark"],
+            linewidth=1.0,
+            zorder=6,
+            alpha=0.32,
+            clip_patch=clip_patch,
+        )
 
 
 def _add_building(ax: plt.Axes, x: float, y: float, w: float, d: float, h: float) -> None:
@@ -123,14 +193,22 @@ def _add_building(ax: plt.Axes, x: float, y: float, w: float, d: float, h: float
                              edgecolor="#aab2ba", linewidth=0.45, zorder=depth_zorder))
 
 
-def _add_buildings(ax: plt.Axes) -> None:
+def _add_buildings(
+    ax: plt.Axes,
+    *,
+    grid_x: Sequence[float] = _GRID_X,
+    grid_y: Sequence[float] = _GRID_Y,
+    building_width: float = 0.65,
+    building_depth: float = 0.50,
+    margin: float = 0.38,
+) -> None:
     blocks = [
-        (_GRID_X[0], _GRID_Y[0], _GRID_X[1], _GRID_Y[1]),
-        (_GRID_X[1], _GRID_Y[0], _GRID_X[2], _GRID_Y[1]),
-        (_GRID_X[2], _GRID_Y[0], _GRID_X[3], _GRID_Y[1]),
-        (_GRID_X[0], _GRID_Y[1], _GRID_X[1], _GRID_Y[2]),
-        (_GRID_X[1], _GRID_Y[1], _GRID_X[2], _GRID_Y[2]),
-        (_GRID_X[2], _GRID_Y[1], _GRID_X[3], _GRID_Y[2]),
+        (grid_x[0], grid_y[0], grid_x[1], grid_y[1]),
+        (grid_x[1], grid_y[0], grid_x[2], grid_y[1]),
+        (grid_x[2], grid_y[0], grid_x[3], grid_y[1]),
+        (grid_x[0], grid_y[1], grid_x[1], grid_y[2]),
+        (grid_x[1], grid_y[1], grid_x[2], grid_y[2]),
+        (grid_x[2], grid_y[1], grid_x[3], grid_y[2]),
     ]
     block_heights = [
         [0.70, 0.45, 0.55, 0.80],
@@ -140,7 +218,7 @@ def _add_buildings(ax: plt.Axes) -> None:
         [0.75, 0.50, 0.65, 0.55],
         [0.45, 0.65, 0.75, 0.50],
     ]
-    bw, bd, margin = 0.65, 0.50, 0.38
+    bw, bd = building_width, building_depth
     for (x0, y0, x1, y1), heights in zip(blocks, block_heights):
         col_gap = x1 - x0 - 2 * margin - 2 * bw
         row_gap = y1 - y0 - 2 * margin - 2 * bd
@@ -155,11 +233,12 @@ def _add_buildings(ax: plt.Axes) -> None:
 
 def _add_marker(ax: plt.Axes, xy_world: Point, *, color: str, label: str,
                 label_offset: Point, zorder: int = 40,
-                shape: str = "circle") -> Point:
+                shape: str = "circle", label_fontsize: float = 10.5,
+                marker_scale: float = 1.0) -> Point:
     xy = _project(*xy_world)
     path_effects = [pe.SimplePatchShadow(offset=(1.0, -1.0), alpha=0.25), pe.Normal()]
     if shape == "square":
-        side = 0.26
+        side = 0.26 * marker_scale
         marker = Rectangle(
             (xy[0] - side / 2, xy[1] - side / 2),
             side,
@@ -173,7 +252,7 @@ def _add_marker(ax: plt.Axes, xy_world: Point, *, color: str, label: str,
     else:
         marker = Circle(
             xy,
-            radius=0.15,
+            radius=0.15 * marker_scale,
             facecolor=color,
             edgecolor=_COLORS["white"],
             linewidth=1.6,
@@ -182,7 +261,7 @@ def _add_marker(ax: plt.Axes, xy_world: Point, *, color: str, label: str,
         )
     ax.add_patch(marker)
     ax.text(xy[0] + label_offset[0], xy[1] + label_offset[1], label,
-            color=_COLORS["text"], fontsize=10.5, fontweight="bold",
+            color=_COLORS["text"], fontsize=label_fontsize, fontweight="bold",
             ha="center", va="center", zorder=zorder + 2)
     return xy
 
@@ -206,7 +285,13 @@ def _add_drone_icon(ax: plt.Axes, center_world: tuple[float, float, float]) -> N
                             edgecolor=_COLORS["drone"], linewidth=1.0, zorder=58))
 
 
-def _add_drone_path(ax: plt.Axes, start: Point, end: Point) -> None:
+def _add_drone_path(
+    ax: plt.Axes,
+    start: Point,
+    end: Point,
+    *,
+    line_scale: float = 1.0,
+) -> None:
     """Three straight segments: takeoff, cruise, land — each with a mid-segment arrow."""
     p0 = (start[0], start[1], 0.0)
     p1 = (start[0], start[1], _CRUISE_ALT)
@@ -215,16 +300,36 @@ def _add_drone_path(ax: plt.Axes, start: Point, end: Point) -> None:
 
     for pa, pb in [(p0, p1), (p1, p2), (p2, p3)]:
         xy = _projected([pa, pb])
-        ax.plot(xy[:, 0], xy[:, 1], color=_COLORS["drone"], linewidth=3.3,
-                solid_capstyle="round", zorder=50,
-                path_effects=[pe.Stroke(linewidth=5.5, foreground=_COLORS["white"], alpha=0.85), pe.Normal()])
+        ax.plot(
+            xy[:, 0],
+            xy[:, 1],
+            color=_COLORS["drone"],
+            linewidth=3.3 * line_scale,
+            solid_capstyle="round",
+            zorder=50,
+            path_effects=[
+                pe.Stroke(
+                    linewidth=5.5 * line_scale,
+                    foreground=_COLORS["white"],
+                    alpha=0.85,
+                ),
+                pe.Normal(),
+            ],
+        )
 
     for pa, pb in [(p0, p1), (p1, p2), (p2, p3)]:
         pa_np, pb_np = np.array(pa), np.array(pb)
         s = _project(*(pa_np * 0.60 + pb_np * 0.40))
         e = _project(*(pa_np * 0.40 + pb_np * 0.60))
-        ax.add_patch(FancyArrowPatch(s, e, arrowstyle="-|>", mutation_scale=16,
-                                     linewidth=0, color=_COLORS["drone"], zorder=55))
+        ax.add_patch(FancyArrowPatch(
+            s,
+            e,
+            arrowstyle="-|>",
+            mutation_scale=16 * line_scale,
+            linewidth=0,
+            color=_COLORS["drone"],
+            zorder=55,
+        ))
 
     _add_drone_icon(ax, ((start[0] + end[0]) / 2, (start[1] + end[1]) / 2, _CRUISE_ALT))
 
@@ -246,22 +351,55 @@ def _add_scale_annotation(ax: plt.Axes, road_distance: float, straight_distance:
 # Public plot function
 # ---------------------------------------------------------------------------
 
-def _draw_detour_ratio_concept(ax: "plt.Axes", plot_title: bool = False) -> None:
-    """Draw detour ratio concept scene onto *ax*."""
+def _draw_detour_ratio_concept(
+    ax: "plt.Axes",
+    plot_title: bool = False,
+    compact: bool = False,
+) -> None:
+    """Draw detour ratio concept scene onto *ax*.
+
+    The compact variant is reserved for the narrow mechanism panel in the
+    main paper figure. It keeps the complete 3D building scene while reducing
+    peripheral roads and non-essential labels.
+    """
     ax.set_facecolor(_COLORS["background"])
 
-    ground_patch = _add_ground(ax)
-    _add_road_network(ax, clip_patch=ground_patch)
-    _add_buildings(ax)
+    if compact:
+        grid_x = [1.0, 2.8, 4.6, 6.4]
+        grid_y = _GRID_Y
+        scene_bounds = (0.55, 7.0, 0.55, 5.45)
+        ground_patch = _add_ground(ax, bounds=scene_bounds)
+        _add_road_network(
+            ax,
+            clip_patch=ground_patch,
+            grid_x=grid_x,
+            grid_y=grid_y,
+            bounds=scene_bounds,
+            linewidth=10.0,
+        )
+        _add_buildings(
+            ax,
+            grid_x=grid_x,
+            grid_y=grid_y,
+            building_width=0.58,
+            building_depth=0.50,
+            margin=0.22,
+        )
+    else:
+        grid_x = _GRID_X
+        grid_y = _GRID_Y
+        ground_patch = _add_ground(ax)
+        _add_road_network(ax, clip_patch=ground_patch)
+        _add_buildings(ax)
 
-    origin      = (_GRID_X[0], _GRID_Y[0])
-    destination = (_GRID_X[3], _GRID_Y[2])
+    origin      = (grid_x[0], grid_y[0])
+    destination = (grid_x[3], grid_y[2])
     bike_route  = [
         origin,
-        (_GRID_X[1], _GRID_Y[0]),
-        (_GRID_X[1], _GRID_Y[1]),
-        (_GRID_X[2], _GRID_Y[1]),
-        (_GRID_X[2], _GRID_Y[2]),
+        (grid_x[1], grid_y[0]),
+        (grid_x[1], grid_y[1]),
+        (grid_x[2], grid_y[1]),
+        (grid_x[2], grid_y[2]),
         destination,
     ]
 
@@ -269,65 +407,95 @@ def _draw_detour_ratio_concept(ax: "plt.Axes", plot_title: bool = False) -> None
     straight_distance = math.dist(origin, destination)
 
     # E-bike route: solid layer below buildings + transparent layer above
-    _add_polyline(ax, bike_route, color=_COLORS["bike_shadow"], linewidth=7.5, zorder=7, alpha=0.16)
-    _add_polyline(ax, bike_route, color=_COLORS["bike"], linewidth=4.0, zorder=8)
+    route_scale = 1.3 if compact else 1.0
+    _add_polyline(
+        ax,
+        bike_route,
+        color=_COLORS["bike_shadow"],
+        linewidth=7.5 * route_scale,
+        zorder=7,
+        alpha=0.16,
+    )
+    _add_polyline(
+        ax,
+        bike_route,
+        color=_COLORS["bike"],
+        linewidth=4.0 * route_scale,
+        zorder=8,
+    )
     _add_arrow_head(ax, bike_route, _COLORS["bike"], zorder=8)
-    _add_polyline(ax, bike_route, color=_COLORS["bike"], linewidth=4.0, zorder=25, alpha=0.2)
+    _add_polyline(
+        ax,
+        bike_route,
+        color=_COLORS["bike"],
+        linewidth=4.0 * route_scale,
+        zorder=25,
+        alpha=0.2,
+    )
     _add_arrow_head(ax, bike_route, _COLORS["bike"], zorder=25, alpha=0.2)
 
-    _add_drone_path(ax, origin, destination)
+    _add_drone_path(ax, origin, destination, line_scale=route_scale)
 
     origin_xy = _add_marker(
         ax,
         origin,
         color=_COLORS["origin"],
         label="Merchant",
-        label_offset=(-0.25, -0.36),
+        label_offset=(-0.08, -0.34) if compact else (-0.25, -0.36),
         zorder=65,
+        label_fontsize=14.0 if compact else 10.5,
+        marker_scale=1.2 if compact else 1.0,
     )
     dest_xy = _add_marker(
         ax,
         destination,
         color=_COLORS["destination"],
         label="Customer",
-        label_offset=(0.90, 0.40),
+        label_offset=(0.58, 0.32) if compact else (0.90, 0.40),
         zorder=65,
         shape="square",
+        label_fontsize=14.0 if compact else 10.5,
+        marker_scale=1.2 if compact else 1.0,
     )
 
-    mid_bike = _project(4.75, _GRID_Y[1])
-    ax.text(mid_bike[0], mid_bike[1] - 0.72, "E-bike route\non roads",
-            color=_COLORS["bike"], fontsize=10.0, ha="center", va="top", fontweight="bold", zorder=60)
+    if not compact:
+        mid_bike = _project(4.75, _GRID_Y[1])
+        ax.text(mid_bike[0], mid_bike[1] - 0.72, "E-bike route\non roads",
+                color=_COLORS["bike"], fontsize=10.0, ha="center", va="top", fontweight="bold", zorder=60)
 
-    mid_drone = _project(4.75, 3.0, _CRUISE_ALT)
-    ax.text(mid_drone[0] + 0.3, mid_drone[1] + 0.55, "Drone route\non air space",
-            color=_COLORS["drone"], fontsize=10.5, ha="center", va="bottom", fontweight="bold", zorder=60)
+        mid_drone = _project(4.75, 3.0, _CRUISE_ALT)
+        ax.text(mid_drone[0] + 0.3, mid_drone[1] + 0.55, "Drone route\non air space",
+                color=_COLORS["drone"], fontsize=10.5, ha="center", va="bottom", fontweight="bold", zorder=60)
 
-    # Segment labels on the side of each drone flight phase
-    tkoff_mid = _project(_GRID_X[0], _GRID_Y[0], _CRUISE_ALT / 2)
-    ax.text(tkoff_mid[0] + 0.18, tkoff_mid[1], "takeoff",
-            color=_COLORS["drone"], fontsize=8.5, ha="left", va="center", zorder=60)
+        # Segment labels on the side of each drone flight phase
+        tkoff_mid = _project(_GRID_X[0], _GRID_Y[0], _CRUISE_ALT / 2)
+        ax.text(tkoff_mid[0] + 0.18, tkoff_mid[1], "takeoff",
+                color=_COLORS["drone"], fontsize=8.5, ha="left", va="center", zorder=60)
 
-    cruise_mid = _project(4.75, 3.0, _CRUISE_ALT)
-    ax.text(cruise_mid[0], cruise_mid[1] - 0.28, "cruise",
-            color=_COLORS["drone"], fontsize=8.5, ha="center", va="top", zorder=60)
+        cruise_mid = _project(4.75, 3.0, _CRUISE_ALT)
+        ax.text(cruise_mid[0], cruise_mid[1] - 0.28, "cruise",
+                color=_COLORS["drone"], fontsize=8.5, ha="center", va="top", zorder=60)
 
-    land_mid = _project(_GRID_X[3], _GRID_Y[2], _CRUISE_ALT / 2)
-    ax.text(land_mid[0] - 0.18, land_mid[1], "land",
-            color=_COLORS["drone"], fontsize=8.5, ha="right", va="center", zorder=60)
+        land_mid = _project(_GRID_X[3], _GRID_Y[2], _CRUISE_ALT / 2)
+        ax.text(land_mid[0] - 0.18, land_mid[1], "land",
+                color=_COLORS["drone"], fontsize=8.5, ha="right", va="center", zorder=60)
 
     ax.plot([origin_xy[0], dest_xy[0]], [origin_xy[1], dest_xy[1]],
-            color=_COLORS["drone"], linewidth=1.2, alpha=0.28, linestyle=":", zorder=18)
+            color=_COLORS["drone"], linewidth=1.8 if compact else 1.2,
+            alpha=0.28, linestyle=":", zorder=18)
 
     straight_mid = (np.array(origin_xy) + np.array(dest_xy)) / 2
-    ax.text(straight_mid[0] - 1.8, straight_mid[1] + 1.4, "Straight-line distance",
-            color=_COLORS["drone"], fontsize=9.5, ha="center", va="bottom", zorder=60)
+    straight_offset = (-0.45, 0.55) if compact else (-1.8, 1.4)
+    ax.text(straight_mid[0] + straight_offset[0], straight_mid[1] + straight_offset[1],
+            "Straight-line distance", color=_COLORS["drone"],
+            fontsize=14.0 if compact else 9.5, ha="center", va="bottom", zorder=60)
 
-    road_label = _project(7.25, _GRID_Y[2])
+    road_label = _project((grid_x[2] + grid_x[3]) / 2, grid_y[2])
     ax.text(road_label[0], road_label[1] - 0.28, "Road distance",
-            color=_COLORS["bike"], fontsize=9.5, ha="center", va="top", zorder=60)
+            color=_COLORS["bike"], fontsize=14.0 if compact else 9.5,
+            ha="center", va="top", zorder=60)
 
-    if plot_title:
+    if plot_title and not compact:
         _add_scale_annotation(ax, road_distance, straight_distance)
         ax.text(0.28, 6.62, "Reduced detours favor drones",
                 fontsize=12.8, fontweight="bold", color=_COLORS["text"], ha="left", va="top", zorder=80)
@@ -335,8 +503,12 @@ def _draw_detour_ratio_concept(ax: "plt.Axes", plot_title: bool = False) -> None
                 fontsize=9.4, color=_COLORS["muted"], ha="left", va="top", zorder=80)
 
     ax.set_aspect("equal")
-    ax.set_xlim(-0.25, 12.75)
-    ax.set_ylim(-0.25, 4.8)
+    if compact:
+        ax.set_xlim(0.55, 9.55)
+        ax.set_ylim(0.05, 4.65)
+    else:
+        ax.set_xlim(-0.25, 12.75)
+        ax.set_ylim(-0.25, 4.8)
     ax.axis("off")
 
 
