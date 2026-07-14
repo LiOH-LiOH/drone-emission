@@ -1745,8 +1745,10 @@ def _pathway_scenario_panel_report(
 
 
 def _write_regions_map_pathway_scenarios_report(
-    save_path: str,
+    report_path: str,
+    output_paths: dict,
     figsize: tuple,
+    colorbar_figsize: tuple,
     named_csv_path: str,
     stats_csv_path: str,
     panels: list[tuple],
@@ -1754,9 +1756,6 @@ def _write_regions_map_pathway_scenarios_report(
     panel_named: dict,
     panel_axes: dict,
     summary_bar_axes: dict,
-    curve_data: dict,
-    curve_axes: list,
-    curve_twins: list,
     province_order: list[str],
     annual_saved_total_kg: dict,
     drone_share_median: dict,
@@ -1764,21 +1763,15 @@ def _write_regions_map_pathway_scenarios_report(
     bin_edges,
     reduction_edges,
     cbar_ax,
-    panel_display_labels: dict = None,
-    curve_display_labels: dict = None,
 ):
-    """Write a compact JSON report for regions_map_pathway_scenarios."""
-    report_path = save_path.rsplit(".", 1)[0] + "_report.json"
+    """Write a compact JSON report for the pathway scenario subfigures."""
     scenario_reports = {}
     color_col = "max_lifecycle_reduction_pct"
-    panel_display_labels = panel_display_labels or {}
-    curve_display_labels = curve_display_labels or {}
     for label, title, kappa, gef_mult, _strategy in panels:
         rows = panel_named.get(label, pd.DataFrame())
         share_col = _scenario_drone_share_column(rows) if not rows.empty else "drone_ratio_pct"
         ax_map, ax_box, ax_line = panel_axes[label]
-        display_label = panel_display_labels.get(label, label)
-        scenario_reports[f"{display_label}_{title.lower().replace(' ', '_').replace('+', 'plus')}"] = (
+        scenario_reports[title.lower().replace(" ", "_").replace("+", "plus")] = (
             _pathway_scenario_panel_report(
                 rows=rows,
                 panel_df=panel_dfs[label],
@@ -1789,7 +1782,7 @@ def _write_regions_map_pathway_scenarios_report(
                 summary_axes=summary_bar_axes.get(label),
                 share_col=share_col,
                 province_order=province_order,
-                panel_label=display_label,
+                panel_label=None,
                 title=title,
                 kappa=kappa,
                 gef_mult=gef_mult,
@@ -1800,14 +1793,26 @@ def _write_regions_map_pathway_scenarios_report(
 
     payload = {
         "figure_name": "regions_map_pathway_scenarios",
-        "figure_path": save_path,
+        "figure_paths": output_paths,
         "source_named_csv_path": named_csv_path,
         "source_stats_csv_path": stats_csv_path,
-        "figure_size_inches": {"width": figsize[0], "height": figsize[1]},
+        "scenario_figure_size_inches": {"width": figsize[0], "height": figsize[1]},
+        "colorbar_figure_size_inches": {
+            "width": colorbar_figsize[0],
+            "height": colorbar_figsize[1],
+        },
         "coordinate_convention": (
             "Axis bbox values are figure-fraction coordinates. Map colors encode "
             "reduction vs today's all-ebike anchor; gray indicates unstudied regions."
         ),
+        "layout": {
+            "scenario_subfigure": "Map above province boxplot with lifecycle-emission overlay",
+            "suggested_assembly": [
+                ["today", "operator_bundling"],
+                ["halved_gef", "halved_gef_bundling"],
+            ],
+            "shared_colorbar": "Vertical strip placed to the right of the 2x2 scenario grid",
+        },
         "global_encodings": {
             "map_colorbar": _colorbar_report(
                 cbar_ax,
@@ -1816,41 +1821,12 @@ def _write_regions_map_pathway_scenarios_report(
                 "Reduction vs today's all-ebike anchor (%)",
                 shared_cmap,
             ),
-            "curve_colors": {
-                "co2_saved": "#1b7837",
-                "drone_share": "#2166ac",
-            },
-            "curve_marks": {
-                "co2_saved": "bar",
-                "drone_share": "line",
-            },
-            "curve_baselines": {
-                "co2_saved": 0.0,
-            },
             "scenario_summary_bar_colors": {
                 "drone_share": "#2166ac",
                 "co2_saved": "#1b7837",
             },
         },
-        "panels": {
-            **scenario_reports,
-            f"{curve_display_labels.get('gef', 'a')}_gef_pathway_curve": _pathway_curve_report(
-                curve_axes[0],
-                curve_twins[0],
-                curve_data.get("gef"),
-                "horizontal",
-                co2_saved_mark="bar",
-                co2_saved_baseline=0.0,
-            ),
-            f"{curve_display_labels.get('kappa', 'd')}_kappa_pathway_curve": _pathway_curve_report(
-                curve_axes[1],
-                curve_twins[1],
-                curve_data.get("kappa"),
-                "horizontal",
-                co2_saved_mark="bar",
-                co2_saved_baseline=0.0,
-            ),
-        },
+        "panels": scenario_reports,
     }
     with open(report_path, "w", encoding="utf-8") as f:
         json.dump(payload, f, indent=2, ensure_ascii=False, allow_nan=False)
@@ -2991,9 +2967,8 @@ def plot_regions_map_pathway_scenario_maps(
 
     Panels show emission reduction and drone share for the halved-GEF, today's
     base, and operator-bundling pathway scenarios, followed by the GEF and
-    kappa pathway curves from `plot_regions_map_pathway_scenarios`. Values use
-    the same cache-backed scenario preparation as
-    `plot_regions_map_pathway_scenarios`.
+    kappa pathway curves from the shared pathway helpers. Values use the same
+    cache-backed scenario preparation as `plot_regions_map_pathway_scenarios`.
 
     Args:
         named_csv_path: Path to all_sensitivity_named.csv.
@@ -3325,17 +3300,18 @@ def plot_regions_map_pathway_scenarios(
     data_dir: str = None,
     exp_config: dict = None,
     save_path: str = None,
-    figsize: tuple = (20, 12),
+    figsize: tuple = (3.05, 3.25),
     for_latex: bool = False,
     plot_title: bool = False,
 ):
-    """3x2 panel grid for pathway curves and scenario maps.
+    """Write four standalone pathway-scenario map and boxplot subfigures.
 
-    The left column shows pathway curves, while each of four scenarios occupies
-    a (map, boxplot) pair in the remaining cells, with the boxplot directly
-    under its map. The boxplot has one box per province (drone-share distribution
-    across cities within that province). Provinces are ordered by the weighted
-    all-ebike annual lifecycle baseline, consistent across panels.
+    Each scenario is saved as a separate subfigure with a map above a province
+    boxplot. The boxplot has one box per province (drone-share distribution
+    across cities within that province), plus a province lifecycle-emission
+    overlay. Provinces and all numeric scales are consistent across subfigures.
+    A fifth standalone vertical colorbar is written for shared use when the four
+    scenarios are assembled into a 2x2 paper figure.
 
     Panels use the per-OD oracle-min mixed allocation when city OD files and
     experiment config are available. The named threshold-sweep scenarios are
@@ -3353,12 +3329,13 @@ def plot_regions_map_pathway_scenarios(
     Args:
         named_csv_path: Path to all_sensitivity_named.csv.
         stats_csv_path: Path to all_region_stats.csv (provides region_name_cn lookup).
-        data_dir: Data root containing city OD-pair CSVs for sampled curve panels.
+        data_dir: Data root containing city OD-pair CSVs for oracle-min scenarios.
         exp_config: Experiment config for vehicle parameters and GEF path.
-        save_path: Path to save figure. Shows plot if None.
-        figsize: Figure size tuple.
+        save_path: Base output path. Scenario suffixes are added before extension.
+            Shows plots if None.
+        figsize: Size tuple for each standalone scenario subfigure.
         for_latex: If True, save as PDF.
-        plot_title: If True, show figure-level title.
+        plot_title: If True, show the scenario title in each subfigure.
     """
     from visualization.regions import plot_regions_on_china_map
 
@@ -3376,36 +3353,7 @@ def plot_regions_map_pathway_scenarios(
     drone_share_median = scenario_data["drone_share_median"]
     annual_saved_total_kg = scenario_data["annual_saved_total_kg"]
     all_values = scenario_data["all_values"]
-    curve_data = scenario_data["curve_data"]
     has_annual = scenario_data["has_annual"]
-    baseline_kappa = scenario_data["baseline_kappa"]
-
-    if "kappa" in curve_data:
-        curve_data["kappa"] = _override_pathway_curve_endpoint(
-            curve_data["kappa"],
-            baseline_kappa,
-            annual_saved_total_kg.get("a", np.nan) / 1e6,
-            drone_share_median.get("a", np.nan),
-        )
-        curve_data["kappa"] = _override_pathway_curve_endpoint(
-            curve_data["kappa"],
-            0.65,
-            annual_saved_total_kg.get("c", np.nan) / 1e6,
-            drone_share_median.get("c", np.nan),
-        )
-    if "gef" in curve_data:
-        curve_data["gef"] = _override_pathway_curve_endpoint(
-            curve_data["gef"],
-            1.0,
-            annual_saved_total_kg.get("a", np.nan) / 1e6,
-            drone_share_median.get("a", np.nan),
-        )
-        curve_data["gef"] = _override_pathway_curve_endpoint(
-            curve_data["gef"],
-            0.5,
-            annual_saved_total_kg.get("b", np.nan) / 1e6,
-            drone_share_median.get("b", np.nan),
-        )
 
     if not all_values:
         print("plot_regions_map_pathway_scenarios: no scenario rows matched any region in stats — "
@@ -3453,31 +3401,29 @@ def plot_regions_map_pathway_scenarios(
         annual_saved_total_kg,
     )
 
-    fig = plt.figure(figsize=figsize)
-    gs = fig.add_gridspec(
-        4, 3,
-        height_ratios=[5, 2.2, 5, 2.2],
-        width_ratios=[1.05, 1, 1],
-        hspace=0.32,
-        wspace=0.26,
-    )
-    pos = {"a": (0, 1), "b": (0, 2), "c": (2, 1), "d": (2, 2)}
-    panel_display_labels = {"a": "b", "b": "c", "c": "e", "d": "f"}
-    curve_display_labels = {"gef": "a", "kappa": "d"}
-    ax_pairs = []
+    output_suffixes = {
+        "a": "today",
+        "b": "halved_gef",
+        "c": "operator_bundling",
+        "d": "halved_gef_bundling",
+    }
     panel_axes = {}
     summary_bar_axes = {}
-    curve_axes = [
-        fig.add_subplot(gs[0:2, 0]),
-        fig.add_subplot(gs[2:4, 0]),
-    ]
+    scenario_figures = []
+    output_paths = {}
 
-    box_lines = []  # parallel list of twin axes for line overlay
+    if save_path:
+        save_root, save_ext = os.path.splitext(save_path)
+        if not save_ext:
+            save_ext = ".png"
+        if for_latex:
+            save_ext = ".pdf"
+
     for label, title, k, g, _s in panels:
-        r, c = pos[label]
-        ax_map = fig.add_subplot(gs[r, c])
-        ax_box = fig.add_subplot(gs[r + 1, c])
-        ax_pairs.append((ax_map, ax_box))
+        fig = plt.figure(figsize=figsize)
+        gs = fig.add_gridspec(2, 1, height_ratios=[5, 2.2], hspace=0.12)
+        ax_map = fig.add_subplot(gs[0, 0])
+        ax_box = fig.add_subplot(gs[1, 0])
 
         plot_regions_on_china_map(
             df=panel_dfs[label],
@@ -3495,9 +3441,8 @@ def plot_regions_map_pathway_scenarios(
         ax_map.set_yticks([])
         for spine in ax_map.spines.values():
             spine.set_visible(False)
-        ax_map.set_title(title, fontsize=12)
-        ax_map.text(-0.02, 1.02, panel_display_labels[label], transform=ax_map.transAxes,
-                    fontsize=14, fontweight="bold", va="bottom", ha="right")
+        if plot_title:
+            ax_map.set_title(title, fontsize=9)
 
         saved_kt = annual_saved_total_kg.get(label, np.nan) / 1e6
         if np.isfinite(drone_share_median[label]) and np.isfinite(saved_kt):
@@ -3512,22 +3457,22 @@ def plot_regions_map_pathway_scenarios(
         rows = panel_named[label]
         share_col = _scenario_drone_share_column(rows) if not rows.empty else "drone_ratio_pct"
         data = [rows.loc[rows["province_en"] == p, share_col].values for p in province_order]
-        bp = ax_box.boxplot(
+        ax_box.boxplot(
             data, positions=range(len(province_order)), widths=0.65,
             patch_artist=True, showfliers=False,
-            medianprops=dict(color="black", linewidth=1.2),
-            boxprops=dict(facecolor="#a6d96a", edgecolor="#1a9641", linewidth=0.6),
-            whiskerprops=dict(color="#1a9641", linewidth=0.6),
-            capprops=dict(color="#1a9641", linewidth=0.6),
+            medianprops=dict(color="black", linewidth=0.8),
+            boxprops=dict(facecolor="#a6d96a", edgecolor="#1a9641", linewidth=0.45),
+            whiskerprops=dict(color="#1a9641", linewidth=0.45),
+            capprops=dict(color="#1a9641", linewidth=0.45),
         )
         ax_box.set_ylim(0, 102)
         ax_box.set_xlim(-0.7, len(province_order) - 0.3)
         ax_box.set_xticks(range(len(province_order)))
-        ax_box.set_xticklabels(province_order, rotation=90, fontsize=7)
-        ax_box.set_ylabel("Drone share (%)", fontsize=9)
-        ax_box.tick_params(axis="y", labelsize=8)
+        ax_box.set_xticklabels(province_order, rotation=90, fontsize=5.2)
+        ax_box.set_ylabel("Drone share (%)", fontsize=6.5)
+        ax_box.tick_params(axis="y", labelsize=5.8, length=2)
         ax_box.grid(axis="y", linestyle=":", alpha=0.4)
-        ax_box.axhline(drone_share_median[label], color="#1a9641", linestyle="--", linewidth=0.7, alpha=0.8)
+        ax_box.axhline(drone_share_median[label], color="#1a9641", linestyle="--", linewidth=0.55, alpha=0.8)
 
         # Overlay: total annual lifecycle emission per province (gray line, right axis).
         emission_series = panel_province_emission_kt[label]
@@ -3535,80 +3480,62 @@ def plot_regions_map_pathway_scenarios(
         ax_line = ax_box.twinx()
         ax_line.plot(
             range(len(province_order)), emission_y,
-            color="dimgray", linewidth=1.0, marker="o", markersize=2.5,
+            color="dimgray", linewidth=0.7, marker="o", markersize=1.7,
             alpha=0.85, zorder=5,
         )
         ax_line.set_ylim(0, line_y_max)
-        ax_line.set_ylabel("Annual lifecycle (kt CO$_2$)", fontsize=9, color="dimgray")
-        ax_line.tick_params(axis="y", labelsize=8, colors="dimgray")
-        box_lines.append(ax_line)
+        ax_line.set_ylabel("Annual lifecycle (kt CO$_2$)", fontsize=6.5, color="dimgray")
+        ax_line.tick_params(axis="y", labelsize=5.8, colors="dimgray", length=2)
         panel_axes[label] = (ax_map, ax_box, ax_line)
-
-    curve_saved_limits, curve_share_limits = _pathway_curve_metric_limits(curve_data)
-    curve_twins = [
-        _plot_pathway_curve_panel(
-            curve_axes[0],
-            curve_data.get("gef"),
-            curve_display_labels["gef"],
-            "Grid emission factor multiplier",
-            orientation="horizontal",
-            saved_limits=curve_saved_limits,
-            share_limits=curve_share_limits,
-            saved_as_bar=True,
-        ),
-        _plot_pathway_curve_panel(
-            curve_axes[1],
-            curve_data.get("kappa"),
-            curve_display_labels["kappa"],
-            r"E-bike bundling factor $\kappa$",
-            orientation="horizontal",
-            saved_limits=curve_saved_limits,
-            share_limits=curve_share_limits,
-            saved_as_bar=True,
-        ),
-    ]
-
-    cbar_ax = fig.add_axes((0.925, 0.25, 0.012, 0.42))
-    cbar, n_bands = _draw_discrete_reduction_colorbar(
-        fig, cbar_ax, shared_cmap, shared_norm, bin_edges, reduction_edges,
-        r"Reduction vs today's all-ebike anchor (%)",
-    )
-
-    if plot_title:
-        fig.suptitle("Forward-pathway scenarios: per-delivery reduction across 314 cities",
-                     fontsize=14, fontweight="bold")
-
-    fig.tight_layout(rect=(0, 0.03, 0.92, 0.98))
-
-    # Align each boxplot's width with its map (the map shrinks horizontally due to
-    # its enforced geographic aspect ratio; gridspec leaves the boxplot wider).
-    # Also pull the boxplot up to sit right under the map.
-    fig.canvas.draw()
-    vgap = 0.015
-    for (ax_map, ax_box), ax_line in zip(ax_pairs, box_lines):
+        fig.tight_layout(pad=0.25)
+        fig.canvas.draw()
         map_box = ax_map.get_position()
         box_box = ax_box.get_position()
-        new_y0 = map_box.y0 - vgap - box_box.height
+        new_y0 = map_box.y0 - 0.012 - box_box.height
         new_pos = [map_box.x0, new_y0, map_box.width, box_box.height]
         ax_box.set_position(new_pos)
         ax_line.set_position(new_pos)
-    for ax, ax_twin in zip(curve_axes, curve_twins):
-        if ax_twin is not None:
-            ax_twin.set_position(ax.get_position())
 
-    _annotate_unstudied(fig, cbar, cbar_ax, n_bands)
+        if save_path:
+            scenario_path = f"{save_root}_{output_suffixes[label]}{save_ext}"
+            if plot_title:
+                scenario_path = _add_title_suffix(scenario_path)
+            os.makedirs(os.path.dirname(scenario_path), exist_ok=True)
+            fig.savefig(scenario_path, dpi=300, bbox_inches="tight")
+            output_paths[output_suffixes[label]] = scenario_path
+            print(f"Pathway scenario {title} saved to {scenario_path}")
+        scenario_figures.append(fig)
+
+    colorbar_figsize = (0.60, figsize[1])
+    colorbar_fig = plt.figure(figsize=colorbar_figsize)
+    cbar_ax = colorbar_fig.add_axes((0.08, 0.07, 0.22, 0.88))
+    cbar, n_bands = _draw_discrete_reduction_colorbar(
+        colorbar_fig,
+        cbar_ax,
+        shared_cmap,
+        shared_norm,
+        bin_edges,
+        reduction_edges,
+        r"Reduction vs today's all-ebike anchor (%)",
+    )
+    _annotate_unstudied(colorbar_fig, cbar, cbar_ax, n_bands)
 
     if save_path:
-        if for_latex and not save_path.endswith(".pdf"):
-            save_path = save_path.rsplit(".", 1)[0] + ".pdf"
+        colorbar_path = f"{save_root}_colorbar{save_ext}"
+        os.makedirs(os.path.dirname(colorbar_path), exist_ok=True)
+        colorbar_fig.savefig(colorbar_path, dpi=300, bbox_inches="tight")
+        output_paths["colorbar"] = colorbar_path
+        print(f"Pathway scenarios shared colorbar saved to {colorbar_path}")
+
+        report_path = f"{save_root}_report.json"
         if plot_title:
-            save_path = _add_title_suffix(save_path)
-        os.makedirs(os.path.dirname(save_path), exist_ok=True)
-        plt.savefig(save_path, dpi=300, bbox_inches="tight")
-        print(f"Regions map pathway scenarios saved to {save_path}")
+            report_path = _add_title_suffix(report_path)
+        output_paths["report"] = report_path
         _write_regions_map_pathway_scenarios_report(
-            save_path=save_path,
+            report_path=report_path,
+            output_paths=output_paths,
             figsize=figsize,
+            colorbar_figsize=colorbar_figsize,
             named_csv_path=named_csv_path,
             stats_csv_path=stats_csv_path,
             panels=panels,
@@ -3616,9 +3543,6 @@ def plot_regions_map_pathway_scenarios(
             panel_named=panel_named,
             panel_axes=panel_axes,
             summary_bar_axes=summary_bar_axes,
-            curve_data=curve_data,
-            curve_axes=curve_axes,
-            curve_twins=curve_twins,
             province_order=province_order,
             annual_saved_total_kg=annual_saved_total_kg,
             drone_share_median=drone_share_median,
@@ -3626,13 +3550,13 @@ def plot_regions_map_pathway_scenarios(
             bin_edges=bin_edges,
             reduction_edges=reduction_edges,
             cbar_ax=cbar_ax,
-            panel_display_labels=panel_display_labels,
-            curve_display_labels=curve_display_labels,
         )
     else:
         plt.show()
 
-    plt.close(fig)
+    for fig in scenario_figures:
+        plt.close(fig)
+    plt.close(colorbar_fig)
 
 
 def plot_regions_map_city_province_ranks(
