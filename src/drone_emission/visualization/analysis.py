@@ -3475,17 +3475,31 @@ def plot_regions_map_pathway_scenarios(
         reduction_edges,
         r"Reduction vs today's all-ebike anchor (%)",
     )
-    cbar.ax.tick_params(pad=14)
-    cbar_ax.text(
-        1.18,
+    cbar.ax.tick_params(pad=3)
+    colorbar_fig.canvas.draw()
+    numeric_tick = cbar.ax.yaxis.get_majorticklabels()[0]
+    numeric_left_px = numeric_tick.get_window_extent().x0
+    unstudied_text = cbar_ax.text(
+        1.0,
         0.5 / n_bands,
         "Unstudied",
         transform=cbar_ax.transAxes,
         ha="center",
         va="center",
-        fontsize=7,
+        fontsize=9,
         rotation=90,
     )
+    colorbar_fig.canvas.draw()
+    unstudied_left_px = unstudied_text.get_window_extent().x0
+    x_shift_axes = (
+        cbar_ax.transAxes.inverted().transform(
+            (numeric_left_px, 0)
+        )[0]
+        - cbar_ax.transAxes.inverted().transform(
+            (unstudied_left_px, 0)
+        )[0]
+    )
+    unstudied_text.set_x(unstudied_text.get_position()[0] + x_shift_axes)
 
     if save_path:
         colorbar_path = f"{save_root}_colorbar{save_ext}"
