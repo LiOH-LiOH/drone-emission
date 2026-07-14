@@ -7214,7 +7214,7 @@ def _save_median_trip_lifecycle_subfigures(
     )
     for figure_name, phase_df, ylabel in panel_specs:
         fig, ax = plt.subplots(figsize=(43.5 / mm_per_inch, 50.0 / mm_per_inch))
-        fig.subplots_adjust(left=0.29, right=0.97, bottom=0.23, top=0.80)
+        fig.subplots_adjust(left=0.30, right=0.97, bottom=0.23, top=0.78)
         if phase_df is None:
             phase_name = "production" if "production" in figure_name else "EOL"
             ax.text(
@@ -7245,13 +7245,28 @@ def _save_median_trip_lifecycle_subfigures(
                 legend_body_color=phase_body_color,
                 legend_battery_color=phase_battery_color,
             )
+            ax.set_ylabel(ylabel.replace("\n", " "))
+            legend_handles, legend_labels = ax.get_legend_handles_labels()
+            ax.legend(
+                legend_handles,
+                legend_labels,
+                frameon=False,
+                loc="lower center",
+                bbox_to_anchor=(0.5, 1.02),
+                borderaxespad=0,
+                ncol=2,
+                fontsize=7.5,
+                handlelength=1.2,
+                handletextpad=0.4,
+                columnspacing=0.8,
+            )
             if plot_title:
                 title = (
                     "Production emissions"
                     if "production" in figure_name
                     else "End-of-life emissions"
                 )
-                ax.set_title(title, fontsize=9)
+                ax.set_title(title, fontsize=9, y=1.30)
         _normalize_median_trip_subfigure_text(ax)
         output_path = os.path.join(save_dir, figure_name + extension)
         if plot_title:
@@ -7261,7 +7276,7 @@ def _save_median_trip_lifecycle_subfigures(
         print(f"Median-trip lifecycle subfigure saved to {output_path}")
 
     fig, ax = plt.subplots(figsize=(87.0 / mm_per_inch, 50.0 / mm_per_inch))
-    fig.subplots_adjust(left=0.17, right=0.98, bottom=0.23, top=0.96)
+    fig.subplots_adjust(left=0.17, right=0.98, bottom=0.23, top=0.80)
     if median_trip_od_df is None:
         ax.text(
             0.5,
@@ -7284,6 +7299,23 @@ def _save_median_trip_lifecycle_subfigures(
         )
         ax.set_xlabel("Distance (km)")
         ax.set_ylabel("Use-phase emission\n(g CO$_2$e/leg)")
+        legend_handles, legend_labels = ax.get_legend_handles_labels()
+        ax.legend(
+            legend_handles,
+            legend_labels,
+            frameon=False,
+            loc="lower left",
+            bbox_to_anchor=(0.0, 1.02),
+            borderaxespad=0,
+            ncol=2,
+            fontsize=8,
+            handlelength=1.6,
+            handletextpad=0.5,
+            columnspacing=1.0,
+        )
+        for text_artist in ax.texts:
+            if text_artist.get_text().endswith("median trip"):
+                text_artist.set_position((0.98, 0.30))
     _normalize_median_trip_subfigure_text(ax)
     output_path = os.path.join(save_dir, "median_trip_use_phase_emissions" + extension)
     if plot_title:
