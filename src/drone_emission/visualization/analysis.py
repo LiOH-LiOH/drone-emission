@@ -7150,6 +7150,135 @@ def _write_regions_map_city_rank_and_drone_share_report(
     print(f"Regions map city rank and drone share report saved to {report_path}")
 
 
+def _normalize_median_trip_subfigure_text(ax):
+    """Apply consistent publication-scale typography to a median-trip panel."""
+    ax.xaxis.label.set_fontsize(8.5)
+    ax.yaxis.label.set_fontsize(8.5)
+    ax.tick_params(axis="both", labelsize=8)
+    if ax.title:
+        ax.title.set_fontsize(9)
+    for text_artist in ax.texts:
+        text_artist.set_fontsize(8)
+    legend = ax.get_legend()
+    if legend is not None:
+        for legend_text in legend.get_texts():
+            legend_text.set_fontsize(8)
+
+
+def _save_median_trip_lifecycle_subfigures(
+    production_df,
+    eol_df,
+    median_trip_od_df,
+    median_trip_city_label,
+    distance_label,
+    phase_body_colors,
+    phase_battery_colors,
+    save_dir,
+    for_latex=False,
+    plot_title=False,
+):
+    """Save production, use-phase, and EOL median-trip subfigures."""
+    from visualization.emission import _draw_median_trip_emission_process
+
+    mm_per_inch = 25.4
+    extension = ".pdf" if for_latex else ".png"
+    os.makedirs(save_dir, exist_ok=True)
+
+    phase_body_color = "#5f6368"
+    phase_battery_color = "#c7c9cc"
+    panel_specs = (
+        (
+            "median_trip_production_emissions",
+            production_df,
+            "Production\n(g CO$_2$e/order)",
+        ),
+        (
+            "median_trip_eol_emissions",
+            eol_df,
+            "EOL\n(g CO$_2$e/order)",
+        ),
+    )
+    for figure_name, phase_df, ylabel in panel_specs:
+        fig, ax = plt.subplots(figsize=(43.5 / mm_per_inch, 50.0 / mm_per_inch))
+        fig.subplots_adjust(left=0.29, right=0.97, bottom=0.23, top=0.80)
+        if phase_df is None:
+            phase_name = "production" if "production" in figure_name else "EOL"
+            ax.text(
+                0.5,
+                0.5,
+                f"{median_trip_city_label} median trip {phase_name} data\nnot available",
+                transform=ax.transAxes,
+                ha="center",
+                va="center",
+                fontsize=8,
+                color="#777777",
+            )
+            ax.tick_params(left=False, bottom=False, labelleft=False, labelbottom=False)
+            for spine in ax.spines.values():
+                spine.set_visible(False)
+        else:
+            _draw_trip_phase_barplot(
+                ax,
+                phase_df,
+                ylabel=ylabel,
+                body_label="Body",
+                battery_label="Battery",
+                body_color=phase_body_color,
+                battery_color=phase_battery_color,
+                distance_label=distance_label,
+                body_colors_by_vehicle=phase_body_colors,
+                battery_colors_by_vehicle=phase_battery_colors,
+                legend_body_color=phase_body_color,
+                legend_battery_color=phase_battery_color,
+            )
+            if plot_title:
+                title = (
+                    "Production emissions"
+                    if "production" in figure_name
+                    else "End-of-life emissions"
+                )
+                ax.set_title(title, fontsize=9)
+        _normalize_median_trip_subfigure_text(ax)
+        output_path = os.path.join(save_dir, figure_name + extension)
+        if plot_title:
+            output_path = _add_title_suffix(output_path)
+        fig.savefig(output_path, dpi=300, facecolor="white")
+        plt.close(fig)
+        print(f"Median-trip lifecycle subfigure saved to {output_path}")
+
+    fig, ax = plt.subplots(figsize=(87.0 / mm_per_inch, 50.0 / mm_per_inch))
+    fig.subplots_adjust(left=0.17, right=0.98, bottom=0.23, top=0.96)
+    if median_trip_od_df is None:
+        ax.text(
+            0.5,
+            0.5,
+            f"{median_trip_city_label} median trip emission data\nnot available",
+            transform=ax.transAxes,
+            ha="center",
+            va="center",
+            fontsize=8,
+            color="#777777",
+        )
+        ax.tick_params(left=False, bottom=False, labelleft=False, labelbottom=False)
+        for spine in ax.spines.values():
+            spine.set_visible(False)
+    else:
+        _draw_median_trip_emission_process(
+            ax,
+            median_trip_od_df,
+            plot_title=plot_title,
+        )
+        ax.set_xlabel("Distance (km)")
+        ax.set_ylabel("Use-phase emission\n(g CO$_2$e/leg)")
+    _normalize_median_trip_subfigure_text(ax)
+    output_path = os.path.join(save_dir, "median_trip_use_phase_emissions" + extension)
+    if plot_title:
+        output_path = _add_title_suffix(output_path)
+    fig.savefig(output_path, dpi=300, facecolor="white")
+    plt.close(fig)
+    print(f"Median-trip use-phase subfigure saved to {output_path}")
+
+
 def plot_regions_map_city_rank_and_drone_share(
     df_stats: "pd.DataFrame",
     stats_csv_path: str,
@@ -7164,6 +7293,7 @@ def plot_regions_map_city_rank_and_drone_share(
     beijing_od_df: "pd.DataFrame" = None,
     beijing_graph=None,
     beijing_router=None,
+    subfigure_save_dir: str = None,
 ):
     """Maps for absolute and percentage Oracle reduction, with drone-share inset.
 
@@ -7181,6 +7311,7 @@ def plot_regions_map_city_rank_and_drone_share(
         beijing_od_df: Deprecated alias for median_trip_od_df.
         beijing_graph: Deprecated alias for median_trip_graph.
         beijing_router: Deprecated alias for median_trip_router.
+        subfigure_save_dir: Directory for standalone median-trip phase panels.
     """
     from visualization.concepts import _draw_detour_ratio_concept
     from visualization.emission import (
@@ -7381,6 +7512,8 @@ def plot_regions_map_city_rank_and_drone_share(
 
     production_df = _selected_trip_phase_parts(selected_trip, "production")
     eol_df = _selected_trip_phase_parts(selected_trip, "eol")
+    production_subfigure_df = production_df
+    eol_subfigure_df = eol_df
 
     if selected_trip is not None:
         air_km = float(selected_trip["distance_km"])
@@ -7535,6 +7668,20 @@ def plot_regions_map_city_rank_and_drone_share(
               fontsize=16, fontweight="bold", va="bottom", ha="right")
     ax_g.text(-0.03, 1.02, "g", transform=ax_g.transAxes,
               fontsize=16, fontweight="bold", va="bottom", ha="right")
+
+    if subfigure_save_dir:
+        _save_median_trip_lifecycle_subfigures(
+            production_df=production_subfigure_df,
+            eol_df=eol_subfigure_df,
+            median_trip_od_df=median_trip_od_df,
+            median_trip_city_label=median_trip_city_label,
+            distance_label=distance_label,
+            phase_body_colors=phase_body_colors,
+            phase_battery_colors=phase_battery_colors,
+            save_dir=subfigure_save_dir,
+            for_latex=for_latex,
+            plot_title=plot_title,
+        )
 
     if plot_title:
         fig.suptitle(

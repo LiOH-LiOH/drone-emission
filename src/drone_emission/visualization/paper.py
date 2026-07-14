@@ -5239,6 +5239,7 @@ def render_all(
                     median_trip_router=beijing_router,
                     median_trip_city="beijing",
                     save_path=os.path.join(out, "regions_map_city_rank_and_drone_share.png"),
+                    subfigure_save_dir=out,
                     for_latex=for_latex,
                     plot_title=plot_title,
                 )
