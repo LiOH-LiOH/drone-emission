@@ -5404,7 +5404,7 @@ def plot_province_total_ebike_lifecycle(
     )
     ax1.set_xlabel("Province", fontsize=axis_label_size)
     ax1.set_ylabel(
-        "Kappa-adjusted e-bike lifecycle emission\n(t CO₂eq / yr)",
+        "Kappa-adjusted e-bike\nlifecycle emission\n(t CO₂eq / yr)",
         fontsize=axis_label_size,
         color=bar_axis_color,
     )
