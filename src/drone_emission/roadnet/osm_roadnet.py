@@ -24,27 +24,22 @@ ox.settings.overpass_url = _os.environ.get(
 ox.settings.http_user_agent = _os.environ.get("OSMNX_USER_AGENT", "OverpassQL")
 
 
-def fetch_bikeable_roadnet(bbox_4326: Dict[str, float], save_path: str) -> None:
-    """
-    Fetch road network suitable for cycling in Chinese cities.
+BIKEABLE_ROAD_FILTER = (
+    '["highway"]'
+    '["area"!~"yes"]'
+    '["highway"!~"motorway|motorway_link|proposed|construction|abandoned|platform|raceway"]'
+    '["bicycle"!~"no"]'
+    '["service"!~"private"]'
+)
+ALL_HIGHWAY_FILTER = '["highway"]["area"!~"yes"]'
 
-    This includes:
-    - All roads where bicycles are allowed (explicit or implicit)
-    - Regular car roads (which bikes can use in China)
-    - Dedicated bike lanes and paths
-    - Excludes only motorways and roads explicitly forbidding bikes
-    """
 
-    # Custom filter: include all roads EXCEPT those explicitly forbidding bikes
-    # or high-speed motorways where bikes are prohibited
-    custom_filter = (
-        '["highway"]'
-        '["area"!~"yes"]'
-        '["highway"!~"motorway|motorway_link|proposed|construction|abandoned|platform|raceway"]'
-        '["bicycle"!~"no"]'
-        '["service"!~"private"]'
-    )
-
+def _fetch_roadnet(
+    bbox_4326: Dict[str, float],
+    save_path: str,
+    custom_filter: str,
+) -> None:
+    """Fetch an unsimplified OSM road graph using ``custom_filter``."""
     # osmnx 2.x uses bbox as (left, bottom, right, top) = (west, south, east, north)
     bbox = (
         bbox_4326["min_lng"],  # west
@@ -64,3 +59,16 @@ def fetch_bikeable_roadnet(bbox_4326: Dict[str, float], save_path: str) -> None:
 
     ox.save_graphml(G, save_path)
     print(f"Road network saved to {save_path}")
+
+
+def fetch_bikeable_roadnet(bbox_4326: Dict[str, float], save_path: str) -> None:
+    """Fetch roads suitable for cycling in Chinese cities."""
+    _fetch_roadnet(bbox_4326, save_path, BIKEABLE_ROAD_FILTER)
+
+
+def fetch_all_highway_roadnet(
+    bbox_4326: Dict[str, float],
+    save_path: str,
+) -> None:
+    """Fetch every non-area OSM highway for a local comparison map."""
+    _fetch_roadnet(bbox_4326, save_path, ALL_HIGHWAY_FILTER)

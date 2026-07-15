@@ -1,3 +1,5 @@
+import ast
+from collections import Counter
 from typing import Any, Dict, List, Optional, Tuple
 import os
 import contextily as ctx
@@ -7,6 +9,7 @@ import numpy as np
 import osmnx as ox
 import pandas as pd
 from matplotlib.collections import LineCollection
+from matplotlib.lines import Line2D
 from utils.coordinates import gcj02_to_wgs84
 
 from ._utils import (
@@ -27,6 +30,161 @@ MERCHANT_MAP_TOP_SALES_FRACTION = 0.01
 ROAD_NETWORK_BACKBONE_FRACTION = 0.15
 ROAD_NETWORK_CONTEXT_BACKGROUND = "#eef0eb"
 ROAD_NETWORK_SUBFIGURE_VARIANTS = {"context", "backbone"}
+ROAD_TYPE_CATEGORY_ORDER = (
+    "arterial",
+    "secondary",
+    "local",
+    "service",
+    "active",
+)
+ROAD_TYPE_STYLES = {
+    "arterial": {"label": "Arterial", "color": "#a85b4b", "width": 1.2},
+    "secondary": {"label": "Secondary", "color": "#c78a4a", "width": 0.9},
+    "local": {"label": "Local", "color": "#64839a", "width": 0.6},
+    "service": {"label": "Service", "color": "#969b9c", "width": 0.35},
+    "active": {"label": "Active travel", "color": "#6f9274", "width": 0.55},
+    "excluded": {"label": "Excluded", "color": "#cbd0ce", "width": 0.3},
+}
+ROAD_TYPE_TAGS = {
+    "arterial": {"trunk", "trunk_link", "primary", "primary_link"},
+    "secondary": {
+        "secondary",
+        "secondary_link",
+        "tertiary",
+        "tertiary_link",
+    },
+    "local": {"residential", "living_street", "unclassified", "road"},
+    "service": {"service"},
+    "active": {
+        "cycleway",
+        "path",
+        "footway",
+        "pedestrian",
+        "track",
+        "steps",
+        "bridleway",
+        "corridor",
+    },
+}
+EXCLUDED_HIGHWAY_TAGS = {
+    "motorway",
+    "motorway_link",
+    "proposed",
+    "construction",
+    "abandoned",
+    "platform",
+    "raceway",
+}
+
+
+def get_road_network_subfigure_frame(
+    stores_df,
+    figsize=(1.25, 1.11),
+    lat_span=0.018,
+):
+    """Return the deterministic merchant-centered frame used by road maps."""
+    required_store_cols = {"lat", "lng", "month_sales"}
+    missing_store_cols = required_store_cols - set(stores_df.columns)
+    if missing_store_cols:
+        print(
+            "Road network subfigure skipped - stores data missing "
+            f"columns {sorted(missing_store_cols)}"
+        )
+        return None
+
+    valid_stores = stores_df.dropna(subset=["lat", "lng", "month_sales"]).copy()
+    valid_stores["month_sales"] = pd.to_numeric(
+        valid_stores["month_sales"], errors="coerce"
+    )
+    valid_stores = valid_stores.dropna(subset=["month_sales"])
+    if valid_stores.empty:
+        print("Road network subfigure skipped - no valid merchant sales rows")
+        return None
+
+    top_n = max(
+        1,
+        int(np.ceil(len(valid_stores) * MERCHANT_MAP_TOP_SALES_FRACTION)),
+    )
+    merchant = valid_stores.nlargest(top_n, "month_sales").sample(
+        n=1,
+        random_state=MERCHANT_MAP_RANDOM_SEED,
+    ).iloc[0]
+    merchant_lng, merchant_lat = gcj02_to_wgs84(
+        float(merchant["lng"]),
+        float(merchant["lat"]),
+    )
+
+    lat_span = float(lat_span)
+    if lat_span <= 0:
+        print("Road network subfigure skipped - lat_span must be positive")
+        return None
+    figure_ratio = float(figsize[0]) / float(figsize[1])
+    lng_span = figure_ratio * lat_span / np.cos(np.radians(merchant_lat))
+    return {
+        "bounds": {
+            "min_lng": merchant_lng - lng_span / 2,
+            "max_lng": merchant_lng + lng_span / 2,
+            "min_lat": merchant_lat - lat_span / 2,
+            "max_lat": merchant_lat + lat_span / 2,
+        },
+        "merchant_lng": float(merchant_lng),
+        "merchant_lat": float(merchant_lat),
+        "month_sales": float(merchant["month_sales"]),
+        "lat_span": lat_span,
+    }
+
+
+def _normalise_osm_tag_values(value):
+    """Convert GraphML scalar/list-like OSM tags to lowercase strings."""
+    if value is None or (isinstance(value, float) and np.isnan(value)):
+        return []
+    if isinstance(value, str):
+        stripped = value.strip()
+        if stripped.startswith("[") and stripped.endswith("]"):
+            try:
+                value = ast.literal_eval(stripped)
+            except (SyntaxError, ValueError):
+                value = stripped
+        else:
+            value = stripped
+    if isinstance(value, (list, tuple, set)):
+        values = value
+    else:
+        values = [value]
+    return sorted({str(item).strip().lower() for item in values if str(item).strip()})
+
+
+def _classify_raw_road_edge(data):
+    """Return display category, exclusion reasons, and raw highway labels."""
+    highway_tags = _normalise_osm_tag_values(data.get("highway"))
+    bicycle_tags = set(_normalise_osm_tag_values(data.get("bicycle")))
+    service_tags = set(_normalise_osm_tag_values(data.get("service")))
+    reasons = []
+    excluded_highways = sorted(set(highway_tags) & EXCLUDED_HIGHWAY_TAGS)
+    if excluded_highways:
+        reasons.extend(f"highway={tag}" for tag in excluded_highways)
+    if "no" in bicycle_tags:
+        reasons.append("bicycle=no")
+    if "private" in service_tags:
+        reasons.append("service=private")
+    if reasons:
+        return "excluded", reasons, highway_tags
+
+    tag_set = set(highway_tags)
+    for category in ROAD_TYPE_CATEGORY_ORDER:
+        if tag_set & ROAD_TYPE_TAGS[category]:
+            return category, [], highway_tags
+    return "local", [], highway_tags
+
+
+def _canonical_edge_pair(source, target):
+    """Return a stable undirected endpoint-pair key."""
+    return tuple(
+        sorted(
+            (source, target),
+            key=lambda node: (type(node).__name__, str(node)),
+        )
+    )
 
 
 def _deduplicate_road_edges(edge_coords):
@@ -506,6 +664,323 @@ def plot_road_network_subfigure(
             facecolor=background_color,
         )
         print(f"Road network subfigure saved to {save_path}")
+    else:
+        plt.show()
+
+    plt.close(fig)
+
+
+def plot_road_type_subfigure(
+    graph,
+    stores_df,
+    region_name,
+    save_path=None,
+    figsize=(1.25, 1.11),
+    for_latex=False,
+    plot_title=False,
+    lat_span=0.018,
+    source_state="cached_local_osm_graphml",
+):
+    """Show a local OSM road network classified by raw highway type.
+
+    Args:
+        graph: Unsimplified OSM NetworkX graph with raw edge tags.
+        stores_df: DataFrame with lat, lng, and month_sales columns.
+        region_name: English region name.
+        save_path: Path to save figure. Shows plot if None.
+        figsize: Figure size tuple.
+        for_latex: If True, save as PDF.
+        plot_title: If True, show title.
+        lat_span: Latitude span in degrees.
+        source_state: Cache provenance label for the figure report.
+    """
+    frame = get_road_network_subfigure_frame(
+        stores_df,
+        figsize=figsize,
+        lat_span=lat_span,
+    )
+    if frame is None:
+        return
+    boundaries_dict = frame["bounds"]
+
+    raw_highway_counts = Counter()
+    raw_excluded_reason_counts = Counter()
+    unknown_included_counts = Counter()
+    pair_records = {}
+    known_included_tags = set().union(*ROAD_TYPE_TAGS.values())
+    raw_edge_count = 0
+    skipped_edge_count = 0
+
+    for source, target, data in graph.edges(data=True):
+        source_data = graph.nodes.get(source, {})
+        target_data = graph.nodes.get(target, {})
+        try:
+            source_coord = (
+                float(source_data["x"]),
+                float(source_data["y"]),
+            )
+            target_coord = (
+                float(target_data["x"]),
+                float(target_data["y"]),
+            )
+        except (KeyError, TypeError, ValueError):
+            skipped_edge_count += 1
+            continue
+
+        raw_edge_count += 1
+        category, reasons, highway_tags = _classify_raw_road_edge(data)
+        if highway_tags:
+            raw_highway_counts.update(highway_tags)
+        else:
+            raw_highway_counts["<missing>"] += 1
+        if category == "excluded":
+            raw_excluded_reason_counts.update(reasons)
+        else:
+            unknown_tags = set(highway_tags) - known_included_tags
+            if unknown_tags:
+                unknown_included_counts.update(sorted(unknown_tags))
+            elif not highway_tags:
+                unknown_included_counts["<missing>"] += 1
+
+        key = _canonical_edge_pair(source, target)
+        pair_records.setdefault(key, []).append(
+            {
+                "category": category,
+                "reasons": reasons,
+                "segment": [source_coord, target_coord],
+            }
+        )
+
+    segments_by_category = {
+        category: [] for category in (*ROAD_TYPE_CATEGORY_ORDER, "excluded")
+    }
+    displayed_excluded_reason_counts = Counter()
+    for key in sorted(pair_records, key=lambda item: tuple(str(v) for v in item)):
+        records = pair_records[key]
+        included = [
+            record for record in records if record["category"] != "excluded"
+        ]
+        if included:
+            record = min(
+                included,
+                key=lambda item: ROAD_TYPE_CATEGORY_ORDER.index(
+                    item["category"]
+                ),
+            )
+        else:
+            record = records[0]
+            displayed_excluded_reason_counts.update(
+                sorted(
+                    {
+                        reason
+                        for candidate in records
+                        for reason in candidate["reasons"]
+                    }
+                )
+            )
+        segments_by_category[record["category"]].append(record["segment"])
+
+    displayed_counts = {
+        category: len(segments)
+        for category, segments in segments_by_category.items()
+    }
+    if sum(displayed_counts.values()) == 0:
+        print("Road type subfigure skipped - no road edges in frame")
+        return
+
+    background_color = ROAD_NETWORK_CONTEXT_BACKGROUND
+    fig, ax = plt.subplots(figsize=figsize)
+    ax.set_position([0.0, 0.20, 1.0, 0.80])
+    ax.set_aspect(1.0 / np.cos(np.radians(frame["merchant_lat"])))
+    ax.set_xlim(boundaries_dict["min_lng"], boundaries_dict["max_lng"])
+    ax.set_ylim(boundaries_dict["min_lat"], boundaries_dict["max_lat"])
+    fig.patch.set_facecolor(background_color)
+    ax.set_facecolor(background_color)
+
+    draw_order = (
+        "excluded",
+        "service",
+        "active",
+        "local",
+        "secondary",
+        "arterial",
+    )
+    for zorder, category in enumerate(draw_order, start=10):
+        segments = segments_by_category[category]
+        if not segments:
+            continue
+        style = ROAD_TYPE_STYLES[category]
+        ax.add_collection(
+            LineCollection(
+                segments,
+                colors=style["color"],
+                linewidths=style["width"],
+                alpha=0.96 if category != "excluded" else 0.78,
+                zorder=zorder,
+            )
+        )
+
+    ax.set_xlim(boundaries_dict["min_lng"], boundaries_dict["max_lng"])
+    ax.set_ylim(boundaries_dict["min_lat"], boundaries_dict["max_lat"])
+    ax.set_xlabel("")
+    ax.set_ylabel("")
+    ax.set_xticks([])
+    ax.set_yticks([])
+    ax.tick_params(left=False, bottom=False, labelleft=False, labelbottom=False)
+    ax.grid(False)
+    for spine in ax.spines.values():
+        spine.set_visible(False)
+
+    legend_order = (*ROAD_TYPE_CATEGORY_ORDER, "excluded")
+    legend_handles = [
+        Line2D(
+            [0],
+            [0],
+            color=ROAD_TYPE_STYLES[category]["color"],
+            linewidth=ROAD_TYPE_STYLES[category]["width"],
+            label=ROAD_TYPE_STYLES[category]["label"],
+        )
+        for category in legend_order
+    ]
+    legend = fig.legend(
+        handles=legend_handles,
+        loc="lower center",
+        bbox_to_anchor=(0.5, 0.015),
+        ncol=3,
+        frameon=False,
+        fontsize=4.5,
+        handlelength=1.5,
+        handletextpad=0.45,
+        columnspacing=0.75,
+        borderaxespad=0.0,
+        labelspacing=0.32,
+    )
+
+    if plot_title:
+        ax.text(
+            0.02,
+            0.98,
+            f"{region_name} roads by OSM highway type",
+            transform=ax.transAxes,
+            fontsize=7,
+            verticalalignment="top",
+            bbox=dict(boxstyle="round", facecolor="white", alpha=0.85),
+            zorder=100,
+        )
+
+    if save_path:
+        if for_latex and not save_path.endswith(".pdf"):
+            save_path = save_path.rsplit(".", 1)[0] + ".pdf"
+        if plot_title:
+            save_path = _add_title_suffix(save_path)
+        os.makedirs(os.path.dirname(save_path), exist_ok=True)
+        fig.canvas.draw()
+        renderer = fig.canvas.get_renderer()
+        tight_bbox = fig.get_tightbbox(renderer)
+        pad_inches = 0.02
+        legend_bbox = legend.get_window_extent(renderer).transformed(
+            fig.dpi_scale_trans.inverted()
+        )
+        tight_x0 = tight_bbox.x0 - pad_inches
+        tight_y0 = tight_bbox.y0 - pad_inches
+        tight_width = tight_bbox.width + 2 * pad_inches
+        tight_height = tight_bbox.height + 2 * pad_inches
+        legend_fraction = {
+            "x0": float((legend_bbox.x0 - tight_x0) / tight_width),
+            "y0": float((legend_bbox.y0 - tight_y0) / tight_height),
+            "x1": float((legend_bbox.x1 - tight_x0) / tight_width),
+            "y1": float((legend_bbox.y1 - tight_y0) / tight_height),
+        }
+        legend_fraction["width"] = legend_fraction["x1"] - legend_fraction["x0"]
+        legend_fraction["height"] = legend_fraction["y1"] - legend_fraction["y0"]
+
+        report_path = save_path.rsplit(".", 1)[0] + "_report.json"
+        report = {
+            "figure_name": "shanghai_road_network_subfigure_option3",
+            "variant": "osm_highway_type",
+            "native_size_inches": [float(figsize[0]), float(figsize[1])],
+            "configured_lat_span_degrees": float(frame["lat_span"]),
+            "save_padding_inches": pad_inches,
+            "source": {
+                "kind": "local_osm_all_highways_graphml",
+                "state": source_state,
+                "filter": "all highway features where area is not yes",
+            },
+            "classification": {
+                "parallel_edge_rule": (
+                    "included wins; then arterial > secondary > local > "
+                    "service > active"
+                ),
+                "raw_edge_count": int(raw_edge_count),
+                "skipped_edge_count_missing_coordinates": int(skipped_edge_count),
+                "undirected_endpoint_pair_count": int(len(pair_records)),
+                "raw_highway_label_counts": dict(
+                    sorted(raw_highway_counts.items())
+                ),
+                "displayed_category_counts": displayed_counts,
+                "raw_excluded_reason_counts": dict(
+                    sorted(raw_excluded_reason_counts.items())
+                ),
+                "displayed_excluded_reason_counts": dict(
+                    sorted(displayed_excluded_reason_counts.items())
+                ),
+                "unknown_included_highway_counts": dict(
+                    sorted(unknown_included_counts.items())
+                ),
+                "styles": {
+                    category: {
+                        "label": ROAD_TYPE_STYLES[category]["label"],
+                        "color": ROAD_TYPE_STYLES[category]["color"],
+                        "width_points": ROAD_TYPE_STYLES[category]["width"],
+                    }
+                    for category in legend_order
+                },
+            },
+            "coordinate_convention": (
+                "bbox_saved_tight_fraction values are fractions of the saved "
+                "page after bbox_inches='tight'."
+            ),
+            "map": {
+                "axis": saved_tight_axis_report(
+                    fig,
+                    ax,
+                    renderer=renderer,
+                    tight_bbox=tight_bbox,
+                    pad_inches=pad_inches,
+                ),
+                "position_figure_fraction_requested": [0.0, 0.20, 1.0, 0.80],
+                "background_color": background_color,
+                "lng_range": [
+                    float(boundaries_dict["min_lng"]),
+                    float(boundaries_dict["max_lng"]),
+                ],
+                "lat_range": [
+                    float(boundaries_dict["min_lat"]),
+                    float(boundaries_dict["max_lat"]),
+                ],
+                "merchant_center": {
+                    "lng": frame["merchant_lng"],
+                    "lat": frame["merchant_lat"],
+                    "month_sales": frame["month_sales"],
+                },
+            },
+            "legend": {
+                "bbox_saved_tight_fraction": legend_fraction,
+                "labels": [text.get_text() for text in legend.get_texts()],
+                "rows": 2,
+                "columns": 3,
+            },
+        }
+        write_figure_report(report_path, report)
+        print(f"Road type subfigure report saved to {report_path}")
+        plt.savefig(
+            save_path,
+            dpi=300,
+            bbox_inches="tight",
+            pad_inches=pad_inches,
+            facecolor=background_color,
+        )
+        print(f"Road type subfigure saved to {save_path}")
     else:
         plt.show()
 

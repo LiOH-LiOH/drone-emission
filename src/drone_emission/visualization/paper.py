@@ -18,6 +18,7 @@ Available figures:
     shanghai_building_height_merchant,
     shanghai_building_footprint_heatmap,
     shanghai_road_network_subfigure, shanghai_road_network_subfigure_option2,
+    shanghai_road_network_subfigure_option3,
     shanghai_road_air_distance, shanghai_road_detour,
     shanghai_air_detour, shanghai_air_road_joint, shanghai_emission_reduction,
     shanghai_emission_by_distance, shanghai_reduction_detour_by_distance,
@@ -1012,6 +1013,100 @@ def _render_shanghai_road_network_subfigure(
         buildings_gdf=buildings_gdf,
         variant=variant,
     )
+
+
+def _render_shanghai_road_network_subfigure_option3(
+    data_dir,
+    out,
+    for_latex,
+    plot_title,
+):
+    """Render the local all-highway OSM road-type alternative."""
+    region_key = "shanghai"
+    region_dir = os.path.join(data_dir, "city", region_key)
+    sales_path = os.path.join(region_dir, f"{region_key}_sales.csv")
+    cache_path = os.path.join(
+        region_dir,
+        "shanghai_road_network_subfigure_option3_all_highways.graphml",
+    )
+    if not os.path.exists(sales_path):
+        print(
+            "Shanghai road type subfigure skipped - missing "
+            f"{sales_path}"
+        )
+        return
+
+    from roadnet._compat import load_networkx_graph
+    from roadnet.osm_roadnet import fetch_all_highway_roadnet
+    from utils.boundaries import graphml_covers_bbox
+    from visualization.roadnet import (
+        get_road_network_subfigure_frame,
+        plot_road_type_subfigure,
+    )
+
+    stores_df = pd.read_csv(sales_path)
+    figsize = (1.25, 1.11)
+    lat_span = 0.018
+    frame = get_road_network_subfigure_frame(
+        stores_df,
+        figsize=figsize,
+        lat_span=lat_span,
+    )
+    if frame is None:
+        return
+
+    cache_valid = False
+    if os.path.exists(cache_path):
+        try:
+            cache_valid = graphml_covers_bbox(cache_path, frame["bounds"])
+        except (OSError, RuntimeError, ValueError) as exc:
+            print(
+                "Shanghai road type cache rejected - could not validate "
+                f"coverage: {exc}"
+            )
+
+    source_state = "cached_local_osm_graphml"
+    if not cache_valid:
+        source_state = "fresh_local_osm_graphml"
+        try:
+            fetch_all_highway_roadnet(frame["bounds"], cache_path)
+            if not graphml_covers_bbox(cache_path, frame["bounds"]):
+                raise RuntimeError(
+                    "fetched graph does not cover the requested map frame"
+                )
+        except Exception as exc:
+            print(
+                "Shanghai road type subfigure skipped - local all-highway "
+                f"OSM fetch failed and no valid cache is available: {exc}"
+            )
+            return
+
+    try:
+        road_graph = load_networkx_graph(cache_path)
+    except Exception as exc:
+        print(
+            "Shanghai road type subfigure skipped - valid local OSM cache "
+            f"could not be loaded: {exc}"
+        )
+        return
+
+    try:
+        plot_road_type_subfigure(
+            road_graph,
+            stores_df,
+            "Shanghai",
+            save_path=os.path.join(
+                out,
+                "shanghai_road_network_subfigure_option3.png",
+            ),
+            figsize=figsize,
+            for_latex=for_latex,
+            plot_title=plot_title,
+            lat_span=lat_span,
+            source_state=source_state,
+        )
+    finally:
+        del road_graph
 
 
 def _paper_pdf_path(out, figure_name, plot_title=False):
@@ -4680,6 +4775,14 @@ def render_all(
             plot_title=plot_title,
             graph_cache=graph_cache,
             variant="backbone",
+        )
+
+    if _want("shanghai_road_network_subfigure_option3"):
+        _render_shanghai_road_network_subfigure_option3(
+            data_dir=data_dir,
+            out=out,
+            for_latex=for_latex,
+            plot_title=plot_title,
         )
 
     if _want("shanghai_road_air_distance"):
