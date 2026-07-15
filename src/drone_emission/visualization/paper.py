@@ -943,12 +943,20 @@ def _render_shanghai_road_network_subfigure(
     plot_title,
     graph_cache=None,
 ):
-    """Load Shanghai roadnet and sales to render the road-only subfigure."""
+    """Load Shanghai roads, buildings, and sales for the network subfigure."""
     region_key = "shanghai"
     region_level = "city"
     region_dir = os.path.join(data_dir, region_level, region_key)
     sales_path = os.path.join(region_dir, f"{region_key}_sales.csv")
     roadnet_path = os.path.join(region_dir, f"{region_key}_roadnet.graphml")
+    building_path = _find_first_existing_path(
+        [
+            os.path.join(region_dir, f"{region_key}_buildings_preprocessed.gpkg"),
+            os.path.join(region_dir, f"{region_key}_buildings_preprocessed.geojson"),
+            os.path.join(region_dir, f"{region_key}_buildings.gpkg"),
+            os.path.join(region_dir, f"{region_key}_buildings.geojson"),
+        ]
+    )
 
     if not os.path.exists(sales_path):
         print(
@@ -967,6 +975,16 @@ def _render_shanghai_road_network_subfigure(
 
     stores_df = pd.read_csv(sales_path)
     road_graph = _get_cached_sparse_graph(roadnet_path, graph_cache=graph_cache)
+    buildings_gdf = None
+    if building_path is None:
+        print(
+            "Shanghai road network subfigure building background skipped - "
+            f"missing Shanghai building geometry in {region_dir}"
+        )
+    else:
+        import geopandas as gpd
+
+        buildings_gdf = gpd.read_file(building_path)
     plot_road_network_subfigure(
         road_graph,
         stores_df,
@@ -975,8 +993,9 @@ def _render_shanghai_road_network_subfigure(
         figsize=(1.25, 1.11),
         for_latex=for_latex,
         plot_title=plot_title,
-        lat_span=0.012,
+        lat_span=0.018,
         compact=True,
+        buildings_gdf=buildings_gdf,
     )
 
 

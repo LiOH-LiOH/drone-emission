@@ -26,8 +26,8 @@ MERCHANT_MAP_RANDOM_SEED = 20260703
 MERCHANT_MAP_TOP_SALES_FRACTION = 0.01
 
 
-def _road_network_topology(edge_coords):
-    """Return unique undirected road segments and their local node degrees."""
+def _deduplicate_road_edges(edge_coords):
+    """Return unique undirected road segments."""
     source_nodes = edge_coords[:, :2]
     target_nodes = edge_coords[:, 2:]
     swap_endpoints = (
@@ -45,12 +45,7 @@ def _road_network_topology(edge_coords):
     undirected_edges[:, 2:] = np.where(
         swap_endpoints[:, None], source_nodes, target_nodes
     )
-    unique_edges = np.unique(undirected_edges, axis=0)
-
-    node_coords, node_degrees = np.unique(
-        unique_edges.reshape(-1, 2), axis=0, return_counts=True
-    )
-    return unique_edges, node_coords, node_degrees
+    return np.unique(undirected_edges, axis=0)
 
 
 def visualize_roadnet(
@@ -173,8 +168,9 @@ def plot_road_network_subfigure(
     plot_title=False,
     lat_span=None,
     compact=False,
+    buildings_gdf=None,
 ):
-    """Show a road-network-only panel around a top-sales merchant.
+    """Show a road network over subdued building footprints.
 
     Args:
         graph: SparseGraph with get_local_edges support.
@@ -186,6 +182,7 @@ def plot_road_network_subfigure(
         plot_title: If True, show title.
         lat_span: Optional latitude span in degrees.
         compact: If True, use paper-panel styling and export padding.
+        buildings_gdf: Optional GeoDataFrame with building geometries.
     """
     required_store_cols = {"lat", "lng", "month_sales"}
     missing_store_cols = required_store_cols - set(stores_df.columns)
@@ -238,7 +235,7 @@ def plot_road_network_subfigure(
         print("Road network subfigure skipped - no road edges in frame")
         return
 
-    unique_edges, node_coords, node_degrees = _road_network_topology(edge_coords)
+    unique_edges = _deduplicate_road_edges(edge_coords)
     displayed_edges = unique_edges if compact else edge_coords
 
     fig, ax = plt.subplots(figsize=figsize)
@@ -249,38 +246,70 @@ def plot_road_network_subfigure(
     ax.set_ylim(boundaries_dict["min_lat"], boundaries_dict["max_lat"])
     ax.set_facecolor("white" if compact else "#f7f7f5")
 
-    segments = [[(ec[1], ec[0]), (ec[3], ec[2])] for ec in displayed_edges]
-    roads = LineCollection(
-        segments,
-        colors="#4f5963",
-        linewidths=0.55,
-        alpha=0.82 if compact else 0.95,
-        zorder=10,
-    )
-    ax.add_collection(roads)
+    building_color = "#d8d2c5"
+    building_alpha = 0.5
+    building_count = 0
+    building_context_available = buildings_gdf is not None
+    if buildings_gdf is None:
+        print(
+            "Road network subfigure building background skipped - missing "
+            "building geometry"
+        )
+    else:
+        if (
+            buildings_gdf.crs is not None
+            and buildings_gdf.crs.to_epsg() != 4326
+        ):
+            print(f"Converting CRS from {buildings_gdf.crs} to EPSG:4326...")
+            buildings_gdf = buildings_gdf.to_crs(epsg=4326)
+        buildings_in_frame = buildings_gdf.cx[
+            boundaries_dict["min_lng"]:boundaries_dict["max_lng"],
+            boundaries_dict["min_lat"]:boundaries_dict["max_lat"],
+        ].copy()
+        building_count = len(buildings_in_frame)
+        if building_count == 0:
+            print(
+                "Road network subfigure building background skipped - no "
+                "buildings in frame"
+            )
+        else:
+            buildings_in_frame.plot(
+                ax=ax,
+                color=building_color,
+                edgecolor="none",
+                alpha=building_alpha,
+                zorder=2,
+            )
 
+    segments = [[(ec[1], ec[0]), (ec[3], ec[2])] for ec in displayed_edges]
     if compact:
-        three_way = node_degrees == 3
-        four_plus_way = node_degrees >= 4
-        ax.scatter(
-            node_coords[three_way, 1],
-            node_coords[three_way, 0],
-            s=2.2,
-            color="#1f77b4",
-            alpha=0.88,
-            linewidths=0,
+        road_casing = LineCollection(
+            segments,
+            colors="white",
+            linewidths=1.05,
+            alpha=0.92,
+            zorder=15,
+        )
+        ax.add_collection(road_casing)
+        roads = LineCollection(
+            segments,
+            colors="#3f4852",
+            linewidths=0.5,
+            alpha=0.98,
             zorder=20,
         )
-        ax.scatter(
-            node_coords[four_plus_way, 1],
-            node_coords[four_plus_way, 0],
-            s=5.0,
-            color="#1f77b4",
+    else:
+        roads = LineCollection(
+            segments,
+            colors="#4f5963",
+            linewidths=0.55,
             alpha=0.95,
-            linewidths=0,
-            zorder=21,
+            zorder=10,
         )
+    ax.add_collection(roads)
 
+    ax.set_xlim(boundaries_dict["min_lng"], boundaries_dict["max_lng"])
+    ax.set_ylim(boundaries_dict["min_lat"], boundaries_dict["max_lat"])
     ax.set_xlabel("")
     ax.set_ylabel("")
     ax.set_xticks([])
@@ -295,7 +324,11 @@ def plot_road_network_subfigure(
         ax.text(
             0.02,
             0.98,
-            f"{region_name} road network\nEdges: {len(edge_coords):,}",
+            (
+                f"{region_name} road network\n"
+                f"Buildings: {building_count:,}\n"
+                f"Edges: {len(edge_coords):,}"
+            ),
             transform=ax.transAxes,
             fontsize=10,
             verticalalignment="top",
@@ -344,10 +377,13 @@ def plot_road_network_subfigure(
                 ],
                 "road_edge_count": int(len(edge_coords)),
                 "undirected_road_segment_count": int(len(unique_edges)),
-                "three_way_junction_count": int(np.count_nonzero(node_degrees == 3)),
-                "four_plus_way_junction_count": int(
-                    np.count_nonzero(node_degrees >= 4)
-                ),
+                "building_context": {
+                    "available": bool(building_context_available),
+                    "building_count": int(building_count),
+                    "color": building_color,
+                    "alpha": float(building_alpha),
+                    "fallback_to_road_only": bool(building_count == 0),
+                },
                 "merchant_center": {
                     "lng": float(merchant_lng),
                     "lat": float(merchant_lat),
