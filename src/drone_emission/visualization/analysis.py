@@ -8563,6 +8563,7 @@ def plot_city_population_detour_oracle_reduction_bubble(
     ax.set_ylabel("Lifecycle reduction (%)", fontsize=7)
     ax.tick_params(axis="both", labelsize=6.5)
     ax.yaxis.set_major_formatter(FuncFormatter(lambda x, _: f"{x:.0f}%"))
+    ax.set_ylim(top=50)
     ax.grid(True, which="major", linestyle="--", alpha=0.28, zorder=0)
     ax.grid(True, which="minor", axis="x", linestyle=":", alpha=0.18, zorder=0)
     ax.set_axisbelow(True)
