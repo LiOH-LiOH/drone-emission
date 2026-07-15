@@ -8602,11 +8602,10 @@ def plot_city_population_detour_oracle_reduction_bubble(
             fontsize=6.5,
             title_fontsize=6.5,
             borderaxespad=0.0,
-            borderpad=0.35,
-            labelspacing=0.2,
-            handletextpad=0.45,
-            ncol=len(handles),
-            columnspacing=0.65,
+            borderpad=0.25,
+            labelspacing=0.1,
+            handletextpad=0.35,
+            ncol=1,
         )
 
     if name_col:
