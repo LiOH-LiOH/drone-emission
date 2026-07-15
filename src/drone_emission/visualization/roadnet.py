@@ -42,7 +42,7 @@ ROAD_TYPE_STYLES = {
     "secondary": {"label": "Secondary", "color": "#c78a4a", "width": 0.9},
     "local": {"label": "Local", "color": "#64839a", "width": 0.6},
     "service": {"label": "Service", "color": "#969b9c", "width": 0.35},
-    "active": {"label": "Active travel", "color": "#6f9274", "width": 0.55},
+    "active": {"label": "Active", "color": "#6f9274", "width": 0.55},
     "excluded": {"label": "Excluded", "color": "#cbd0ce", "width": 0.3},
 }
 ROAD_TYPE_TAGS = {
@@ -831,7 +831,15 @@ def plot_road_type_subfigure(
     for spine in ax.spines.values():
         spine.set_visible(False)
 
-    legend_order = (*ROAD_TYPE_CATEGORY_ORDER, "excluded")
+    category_order = (*ROAD_TYPE_CATEGORY_ORDER, "excluded")
+    legend_order = (
+        "arterial",
+        "service",
+        "secondary",
+        "active",
+        "local",
+        "excluded",
+    )
     legend_handles = [
         Line2D(
             [0],
@@ -933,7 +941,7 @@ def plot_road_type_subfigure(
                         "color": ROAD_TYPE_STYLES[category]["color"],
                         "width_points": ROAD_TYPE_STYLES[category]["width"],
                     }
-                    for category in legend_order
+                    for category in category_order
                 },
             },
             "coordinate_convention": (
@@ -967,6 +975,10 @@ def plot_road_type_subfigure(
             "legend": {
                 "bbox_saved_tight_fraction": legend_fraction,
                 "labels": [text.get_text() for text in legend.get_texts()],
+                "visual_rows": [
+                    ["Arterial", "Secondary", "Local"],
+                    ["Service", "Active", "Excluded"],
+                ],
                 "rows": 2,
                 "columns": 3,
             },
