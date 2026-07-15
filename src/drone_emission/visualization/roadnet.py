@@ -25,6 +25,7 @@ MERCHANT_MAP_DEGREE_SIZE = 0.01
 MERCHANT_MAP_RANDOM_SEED = 20260703
 MERCHANT_MAP_TOP_SALES_FRACTION = 0.01
 ROAD_NETWORK_BACKBONE_FRACTION = 0.15
+ROAD_NETWORK_CONTEXT_BACKGROUND = "#eef0eb"
 ROAD_NETWORK_SUBFIGURE_VARIANTS = {"context", "backbone"}
 
 
@@ -294,7 +295,14 @@ def plot_road_network_subfigure(
     ax.set_aspect(aspect_ratio)
     ax.set_xlim(boundaries_dict["min_lng"], boundaries_dict["max_lng"])
     ax.set_ylim(boundaries_dict["min_lat"], boundaries_dict["max_lat"])
-    ax.set_facecolor("white" if compact else "#f7f7f5")
+    if compact and variant == "context":
+        background_color = ROAD_NETWORK_CONTEXT_BACKGROUND
+    elif compact:
+        background_color = "white"
+    else:
+        background_color = "#f7f7f5"
+    fig.patch.set_facecolor(background_color)
+    ax.set_facecolor(background_color)
 
     building_color = "#d8d2c5"
     building_alpha = 0.5
@@ -450,6 +458,7 @@ def plot_road_network_subfigure(
             ],
             "road_edge_count": int(len(edge_coords)),
             "undirected_road_segment_count": int(len(unique_edges)),
+            "background_color": background_color,
             "merchant_center": {
                 "lng": float(merchant_lng),
                 "lat": float(merchant_lat),
@@ -494,6 +503,7 @@ def plot_road_network_subfigure(
             dpi=300,
             bbox_inches="tight",
             pad_inches=0.02 if compact else 0,
+            facecolor=background_color,
         )
         print(f"Road network subfigure saved to {save_path}")
     else:
