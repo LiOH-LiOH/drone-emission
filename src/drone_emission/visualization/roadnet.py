@@ -26,6 +26,33 @@ MERCHANT_MAP_RANDOM_SEED = 20260703
 MERCHANT_MAP_TOP_SALES_FRACTION = 0.01
 
 
+def _road_network_topology(edge_coords):
+    """Return unique undirected road segments and their local node degrees."""
+    source_nodes = edge_coords[:, :2]
+    target_nodes = edge_coords[:, 2:]
+    swap_endpoints = (
+        (source_nodes[:, 0] > target_nodes[:, 0])
+        | (
+            (source_nodes[:, 0] == target_nodes[:, 0])
+            & (source_nodes[:, 1] > target_nodes[:, 1])
+        )
+    )
+
+    undirected_edges = np.empty_like(edge_coords)
+    undirected_edges[:, :2] = np.where(
+        swap_endpoints[:, None], target_nodes, source_nodes
+    )
+    undirected_edges[:, 2:] = np.where(
+        swap_endpoints[:, None], source_nodes, target_nodes
+    )
+    unique_edges = np.unique(undirected_edges, axis=0)
+
+    node_coords, node_degrees = np.unique(
+        unique_edges.reshape(-1, 2), axis=0, return_counts=True
+    )
+    return unique_edges, node_coords, node_degrees
+
+
 def visualize_roadnet(
     G: nx.MultiDiGraph,
     city_name_cn: Optional[str] = None,
@@ -211,6 +238,9 @@ def plot_road_network_subfigure(
         print("Road network subfigure skipped - no road edges in frame")
         return
 
+    unique_edges, node_coords, node_degrees = _road_network_topology(edge_coords)
+    displayed_edges = unique_edges if compact else edge_coords
+
     fig, ax = plt.subplots(figsize=figsize)
     ax.set_position([0.0, 0.0, 1.0, 1.0])
     aspect_ratio = 1.0 / np.cos(np.radians(avg_lat))
@@ -219,15 +249,37 @@ def plot_road_network_subfigure(
     ax.set_ylim(boundaries_dict["min_lat"], boundaries_dict["max_lat"])
     ax.set_facecolor("white" if compact else "#f7f7f5")
 
-    segments = [[(ec[1], ec[0]), (ec[3], ec[2])] for ec in edge_coords]
+    segments = [[(ec[1], ec[0]), (ec[3], ec[2])] for ec in displayed_edges]
     roads = LineCollection(
         segments,
         colors="#4f5963",
-        linewidths=0.65 if compact else 0.55,
-        alpha=0.95,
+        linewidths=0.55,
+        alpha=0.82 if compact else 0.95,
         zorder=10,
     )
     ax.add_collection(roads)
+
+    if compact:
+        three_way = node_degrees == 3
+        four_plus_way = node_degrees >= 4
+        ax.scatter(
+            node_coords[three_way, 1],
+            node_coords[three_way, 0],
+            s=2.2,
+            color="#1f77b4",
+            alpha=0.88,
+            linewidths=0,
+            zorder=20,
+        )
+        ax.scatter(
+            node_coords[four_plus_way, 1],
+            node_coords[four_plus_way, 0],
+            s=5.0,
+            color="#1f77b4",
+            alpha=0.95,
+            linewidths=0,
+            zorder=21,
+        )
 
     ax.set_xlabel("")
     ax.set_ylabel("")
@@ -291,6 +343,11 @@ def plot_road_network_subfigure(
                     float(boundaries_dict["max_lat"]),
                 ],
                 "road_edge_count": int(len(edge_coords)),
+                "undirected_road_segment_count": int(len(unique_edges)),
+                "three_way_junction_count": int(np.count_nonzero(node_degrees == 3)),
+                "four_plus_way_junction_count": int(
+                    np.count_nonzero(node_degrees >= 4)
+                ),
                 "merchant_center": {
                     "lng": float(merchant_lng),
                     "lat": float(merchant_lat),
