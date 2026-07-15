@@ -17,7 +17,7 @@ Available figures:
     shanghai_heatmap, shanghai_merchant_monthly_sales,
     shanghai_building_height_merchant,
     shanghai_building_footprint_heatmap,
-    shanghai_road_network_subfigure,
+    shanghai_road_network_subfigure, shanghai_road_network_subfigure_option2,
     shanghai_road_air_distance, shanghai_road_detour,
     shanghai_air_detour, shanghai_air_road_joint, shanghai_emission_reduction,
     shanghai_emission_by_distance, shanghai_reduction_detour_by_distance,
@@ -942,21 +942,28 @@ def _render_shanghai_road_network_subfigure(
     for_latex,
     plot_title,
     graph_cache=None,
+    variant="context",
 ):
-    """Load Shanghai roads, buildings, and sales for the network subfigure."""
+    """Load Shanghai data for one road-network subfigure alternative."""
     region_key = "shanghai"
     region_level = "city"
     region_dir = os.path.join(data_dir, region_level, region_key)
     sales_path = os.path.join(region_dir, f"{region_key}_sales.csv")
     roadnet_path = os.path.join(region_dir, f"{region_key}_roadnet.graphml")
-    building_path = _find_first_existing_path(
-        [
-            os.path.join(region_dir, f"{region_key}_buildings_preprocessed.gpkg"),
-            os.path.join(region_dir, f"{region_key}_buildings_preprocessed.geojson"),
-            os.path.join(region_dir, f"{region_key}_buildings.gpkg"),
-            os.path.join(region_dir, f"{region_key}_buildings.geojson"),
-        ]
-    )
+    building_path = None
+    if variant == "context":
+        building_path = _find_first_existing_path(
+            [
+                os.path.join(
+                    region_dir, f"{region_key}_buildings_preprocessed.gpkg"
+                ),
+                os.path.join(
+                    region_dir, f"{region_key}_buildings_preprocessed.geojson"
+                ),
+                os.path.join(region_dir, f"{region_key}_buildings.gpkg"),
+                os.path.join(region_dir, f"{region_key}_buildings.geojson"),
+            ]
+        )
 
     if not os.path.exists(sales_path):
         print(
@@ -976,12 +983,12 @@ def _render_shanghai_road_network_subfigure(
     stores_df = pd.read_csv(sales_path)
     road_graph = _get_cached_sparse_graph(roadnet_path, graph_cache=graph_cache)
     buildings_gdf = None
-    if building_path is None:
+    if variant == "context" and building_path is None:
         print(
             "Shanghai road network subfigure building background skipped - "
             f"missing Shanghai building geometry in {region_dir}"
         )
-    else:
+    elif building_path is not None:
         import geopandas as gpd
 
         buildings_gdf = gpd.read_file(building_path)
@@ -989,13 +996,21 @@ def _render_shanghai_road_network_subfigure(
         road_graph,
         stores_df,
         "Shanghai",
-        save_path=os.path.join(out, "shanghai_road_network_subfigure.png"),
+        save_path=os.path.join(
+            out,
+            (
+                "shanghai_road_network_subfigure_option2.png"
+                if variant == "backbone"
+                else "shanghai_road_network_subfigure.png"
+            ),
+        ),
         figsize=(1.25, 1.11),
         for_latex=for_latex,
         plot_title=plot_title,
         lat_span=0.018,
         compact=True,
         buildings_gdf=buildings_gdf,
+        variant=variant,
     )
 
 
@@ -4655,6 +4670,16 @@ def render_all(
             for_latex=for_latex,
             plot_title=plot_title,
             graph_cache=graph_cache,
+        )
+
+    if _want("shanghai_road_network_subfigure_option2"):
+        _render_shanghai_road_network_subfigure(
+            data_dir=data_dir,
+            out=out,
+            for_latex=for_latex,
+            plot_title=plot_title,
+            graph_cache=graph_cache,
+            variant="backbone",
         )
 
     if _want("shanghai_road_air_distance"):

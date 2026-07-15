@@ -24,6 +24,8 @@ from ._utils import (
 MERCHANT_MAP_DEGREE_SIZE = 0.01
 MERCHANT_MAP_RANDOM_SEED = 20260703
 MERCHANT_MAP_TOP_SALES_FRACTION = 0.01
+ROAD_NETWORK_BACKBONE_FRACTION = 0.15
+ROAD_NETWORK_SUBFIGURE_VARIANTS = {"context", "backbone"}
 
 
 def _deduplicate_road_edges(edge_coords):
@@ -46,6 +48,37 @@ def _deduplicate_road_edges(edge_coords):
         swap_endpoints[:, None], source_nodes, target_nodes
     )
     return np.unique(undirected_edges, axis=0)
+
+
+def _select_topological_backbone(unique_edges, fraction):
+    """Select the highest unweighted edge-betweenness road segments."""
+    local_graph = nx.Graph()
+    edge_nodes = []
+    for edge in unique_edges:
+        source = (float(edge[0]), float(edge[1]))
+        target = (float(edge[2]), float(edge[3]))
+        local_graph.add_edge(source, target)
+        edge_nodes.append((source, target))
+
+    centrality = nx.edge_betweenness_centrality(
+        local_graph,
+        normalized=True,
+        weight=None,
+    )
+    centrality_values = np.array(
+        [
+            centrality.get((source, target), centrality.get((target, source), 0.0))
+            for source, target in edge_nodes
+        ],
+        dtype=float,
+    )
+    selected_count = max(1, int(np.ceil(len(unique_edges) * fraction)))
+    ranked_indices = sorted(
+        range(len(unique_edges)),
+        key=lambda idx: (-centrality_values[idx], *unique_edges[idx].tolist()),
+    )
+    selected_indices = np.asarray(ranked_indices[:selected_count], dtype=int)
+    return unique_edges[selected_indices], centrality_values[selected_indices]
 
 
 def visualize_roadnet(
@@ -169,6 +202,7 @@ def plot_road_network_subfigure(
     lat_span=None,
     compact=False,
     buildings_gdf=None,
+    variant="context",
 ):
     """Show a road network over subdued building footprints.
 
@@ -183,7 +217,16 @@ def plot_road_network_subfigure(
         lat_span: Optional latitude span in degrees.
         compact: If True, use paper-panel styling and export padding.
         buildings_gdf: Optional GeoDataFrame with building geometries.
+        variant: ``"context"`` for buildings and roads or ``"backbone"`` for
+            the topological-backbone alternative.
     """
+    if variant not in ROAD_NETWORK_SUBFIGURE_VARIANTS:
+        print(
+            "Road network subfigure skipped - unknown variant "
+            f"{variant!r}; expected one of {sorted(ROAD_NETWORK_SUBFIGURE_VARIANTS)}"
+        )
+        return
+
     required_store_cols = {"lat", "lng", "month_sales"}
     missing_store_cols = required_store_cols - set(stores_df.columns)
     if missing_store_cols:
@@ -237,6 +280,13 @@ def plot_road_network_subfigure(
 
     unique_edges = _deduplicate_road_edges(edge_coords)
     displayed_edges = unique_edges if compact else edge_coords
+    backbone_edges = np.empty((0, 4), dtype=float)
+    backbone_centrality = np.empty(0, dtype=float)
+    if variant == "backbone":
+        backbone_edges, backbone_centrality = _select_topological_backbone(
+            unique_edges,
+            ROAD_NETWORK_BACKBONE_FRACTION,
+        )
 
     fig, ax = plt.subplots(figsize=figsize)
     ax.set_position([0.0, 0.0, 1.0, 1.0])
@@ -250,7 +300,9 @@ def plot_road_network_subfigure(
     building_alpha = 0.5
     building_count = 0
     building_context_available = buildings_gdf is not None
-    if buildings_gdf is None:
+    if variant == "backbone":
+        building_context_available = False
+    elif buildings_gdf is None:
         print(
             "Road network subfigure building background skipped - missing "
             "building geometry"
@@ -282,7 +334,28 @@ def plot_road_network_subfigure(
             )
 
     segments = [[(ec[1], ec[0]), (ec[3], ec[2])] for ec in displayed_edges]
-    if compact:
+    if variant == "backbone":
+        roads = LineCollection(
+            segments,
+            colors="#c8cfd3",
+            linewidths=0.32,
+            alpha=0.9,
+            zorder=10,
+        )
+        ax.add_collection(roads)
+        backbone_segments = [
+            [(edge[1], edge[0]), (edge[3], edge[2])]
+            for edge in backbone_edges
+        ]
+        backbone = LineCollection(
+            backbone_segments,
+            colors="#3f5f70",
+            linewidths=1.05,
+            alpha=0.98,
+            zorder=20,
+        )
+        ax.add_collection(backbone)
+    elif compact:
         road_casing = LineCollection(
             segments,
             colors="white",
@@ -306,7 +379,8 @@ def plot_road_network_subfigure(
             alpha=0.95,
             zorder=10,
         )
-    ax.add_collection(roads)
+    if variant != "backbone":
+        ax.add_collection(roads)
 
     ax.set_xlim(boundaries_dict["min_lng"], boundaries_dict["max_lng"])
     ax.set_ylim(boundaries_dict["min_lat"], boundaries_dict["max_lat"])
@@ -325,9 +399,14 @@ def plot_road_network_subfigure(
             0.02,
             0.98,
             (
-                f"{region_name} road network\n"
-                f"Buildings: {building_count:,}\n"
-                f"Edges: {len(edge_coords):,}"
+                f"{region_name} topological backbone\n"
+                f"Backbone segments: {len(backbone_edges):,}"
+                if variant == "backbone"
+                else (
+                    f"{region_name} road network\n"
+                    f"Buildings: {building_count:,}\n"
+                    f"Edges: {len(edge_coords):,}"
+                )
             ),
             transform=ax.transAxes,
             fontsize=10,
@@ -348,9 +427,56 @@ def plot_road_network_subfigure(
         report_path = save_path.rsplit(".", 1)[0] + "_report.json"
         renderer = fig.canvas.get_renderer()
         tight_bbox = fig.get_tightbbox(renderer)
+        figure_name = (
+            "shanghai_road_network_subfigure_option2"
+            if variant == "backbone"
+            else "shanghai_road_network_subfigure"
+        )
+        map_report = {
+            "axis": saved_tight_axis_report(
+                fig,
+                ax,
+                renderer=renderer,
+                tight_bbox=tight_bbox,
+                pad_inches=0.02 if compact else 0.0,
+            ),
+            "lng_range": [
+                float(boundaries_dict["min_lng"]),
+                float(boundaries_dict["max_lng"]),
+            ],
+            "lat_range": [
+                float(boundaries_dict["min_lat"]),
+                float(boundaries_dict["max_lat"]),
+            ],
+            "road_edge_count": int(len(edge_coords)),
+            "undirected_road_segment_count": int(len(unique_edges)),
+            "merchant_center": {
+                "lng": float(merchant_lng),
+                "lat": float(merchant_lat),
+                "month_sales": float(merchant["month_sales"]),
+            },
+        }
+        if variant == "backbone":
+            map_report["topological_backbone"] = {
+                "metric": "edge_betweenness_centrality",
+                "weighted": False,
+                "selection_fraction": ROAD_NETWORK_BACKBONE_FRACTION,
+                "selected_segment_count": int(len(backbone_edges)),
+                "selected_centrality_min": float(backbone_centrality.min()),
+                "selected_centrality_max": float(backbone_centrality.max()),
+            }
+        else:
+            map_report["building_context"] = {
+                "available": bool(building_context_available),
+                "building_count": int(building_count),
+                "color": building_color,
+                "alpha": float(building_alpha),
+                "fallback_to_road_only": bool(building_count == 0),
+            }
         report = {
-            "figure_name": "shanghai_road_network_subfigure",
+            "figure_name": figure_name,
             "figure_path": save_path,
+            "variant": variant,
             "layout_mode": "compact" if compact else "full",
             "native_size_inches": [float(figsize[0]), float(figsize[1])],
             "configured_lat_span_degrees": float(lat_span),
@@ -359,37 +485,7 @@ def plot_road_network_subfigure(
                 "bbox_saved_tight_fraction values are fractions of the saved "
                 "page after bbox_inches='tight'."
             ),
-            "map": {
-                "axis": saved_tight_axis_report(
-                    fig,
-                    ax,
-                    renderer=renderer,
-                    tight_bbox=tight_bbox,
-                    pad_inches=0.02 if compact else 0.0,
-                ),
-                "lng_range": [
-                    float(boundaries_dict["min_lng"]),
-                    float(boundaries_dict["max_lng"]),
-                ],
-                "lat_range": [
-                    float(boundaries_dict["min_lat"]),
-                    float(boundaries_dict["max_lat"]),
-                ],
-                "road_edge_count": int(len(edge_coords)),
-                "undirected_road_segment_count": int(len(unique_edges)),
-                "building_context": {
-                    "available": bool(building_context_available),
-                    "building_count": int(building_count),
-                    "color": building_color,
-                    "alpha": float(building_alpha),
-                    "fallback_to_road_only": bool(building_count == 0),
-                },
-                "merchant_center": {
-                    "lng": float(merchant_lng),
-                    "lat": float(merchant_lat),
-                    "month_sales": float(merchant["month_sales"]),
-                },
-            },
+            "map": map_report,
         }
         write_figure_report(report_path, report)
         print(f"Road network subfigure report saved to {report_path}")
