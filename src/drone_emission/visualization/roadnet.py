@@ -859,7 +859,7 @@ def plot_road_type_subfigure(
         fontsize=4.5,
         handlelength=1.5,
         handletextpad=0.45,
-        columnspacing=0.75,
+        columnspacing=0.5,
         borderaxespad=0.0,
         labelspacing=0.32,
     )
