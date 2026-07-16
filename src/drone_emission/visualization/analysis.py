@@ -2361,6 +2361,9 @@ def _plot_grouped_scatter_split_panels_axes(
     panel_letters: tuple = ("a", "b"),
     compact: bool = False,
     horizontal_colorbar: bool = False,
+    external_colorbar_ax=None,
+    colorbar_boundaries: tuple = None,
+    colorbar_label: str = None,
 ):
     """Draw threshold-split scatter panels into a parent subplot spec."""
     valid_mask = df[[feature_var, result_var, group_var]].notna().all(axis=1)
@@ -2389,16 +2392,36 @@ def _plot_grouped_scatter_split_panels_axes(
     y_global_min = y_data_min - y_pad
     y_global_max = y_data_max + y_pad
 
-    from matplotlib.colors import LinearSegmentedColormap, Normalize
+    from matplotlib.colors import (
+        BoundaryNorm,
+        LinearSegmentedColormap,
+        ListedColormap,
+        Normalize,
+    )
     from matplotlib.cm import ScalarMappable
 
-    cmap = LinearSegmentedColormap.from_list(
+    base_cmap = LinearSegmentedColormap.from_list(
         "gef", ["#006837", "#31A354", "#D95F0E", "#A50F15"]
     )
     gef_vals = plot_df[group_var].values
-    norm = Normalize(vmin=gef_vals.min(), vmax=gef_vals.max())
+    if colorbar_boundaries is not None:
+        boundaries = np.asarray(colorbar_boundaries, dtype=float)
+        colors = base_cmap(np.linspace(0.0, 1.0, len(boundaries) - 1))
+        cmap = ListedColormap(colors, name="gef_discrete")
+        norm = BoundaryNorm(boundaries, cmap.N, clip=True)
+    else:
+        boundaries = None
+        cmap = base_cmap
+        norm = Normalize(vmin=gef_vals.min(), vmax=gef_vals.max())
 
-    if horizontal_colorbar:
+    if external_colorbar_ax is not None:
+        panels_grid = subplot_spec.subgridspec(1, 2, wspace=0.20)
+        cbar_ax = external_colorbar_ax
+        ax_low = fig.add_subplot(panels_grid[0, 0])
+        ax_high = fig.add_subplot(
+            panels_grid[0, 1], sharex=ax_low, sharey=ax_low
+        )
+    elif horizontal_colorbar:
         root = subplot_spec.subgridspec(
             2,
             1,
@@ -2528,14 +2551,30 @@ def _plot_grouped_scatter_split_panels_axes(
     cbar = fig.colorbar(
         sm,
         cax=cbar_ax,
-        orientation="horizontal" if horizontal_colorbar else "vertical",
+        orientation=(
+            "horizontal"
+            if horizontal_colorbar and external_colorbar_ax is None
+            else "vertical"
+        ),
+        boundaries=boundaries,
+        ticks=boundaries,
+        spacing="uniform",
+    )
+    resolved_colorbar_label = (
+        colorbar_label
+        if colorbar_label is not None
+        else VARIABLE_LABELS.get(group_var, group_var)
     )
     if compact:
         cbar.set_label(
             (
                 "GEF (kg CO$_2$e/kWh)"
-                if horizontal_colorbar and group_var == "grid_emission_factor"
-                else VARIABLE_LABELS.get(group_var, group_var)
+                if (
+                    horizontal_colorbar
+                    and external_colorbar_ax is None
+                    and group_var == "grid_emission_factor"
+                )
+                else resolved_colorbar_label
             ),
             fontsize=7,
             labelpad=1.5,
@@ -2544,8 +2583,14 @@ def _plot_grouped_scatter_split_panels_axes(
             cbar.ax.xaxis.set_label_position("top")
             cbar.ax.xaxis.set_ticks_position("bottom")
         cbar.ax.tick_params(labelsize=6.8, length=2.2)
+        if boundaries is not None:
+            tick_labels = [f"{value:.1f}" for value in boundaries]
+            if horizontal_colorbar and external_colorbar_ax is None:
+                cbar.ax.set_xticklabels(tick_labels)
+            else:
+                cbar.ax.set_yticklabels(tick_labels)
     else:
-        cbar.set_label(VARIABLE_LABELS.get(group_var, group_var), fontsize=10)
+        cbar.set_label(resolved_colorbar_label, fontsize=10)
 
     if plot_title:
         fig.suptitle(
@@ -4371,6 +4416,7 @@ def _plot_city_gef_scatter_components_axes(
     df: pd.DataFrame,
     plot_title: bool = False,
     compact: bool = False,
+    show_legend: bool = True,
 ):
     """Draw GEF-binned per-order emission components into a parent subplot spec."""
     gef_col = None
@@ -4593,21 +4639,22 @@ def _plot_city_gef_scatter_components_axes(
         )
         for spec in vehicle_specs
     ]
-    legend1 = ax.legend(
-        handles=vehicle_handles,
-        loc="upper left",
-        fontsize=7 if compact else 9,
-        title="Vehicle",
-        title_fontsize=7 if compact else 9,
-    )
-    ax.add_artist(legend1)
-    ax.legend(
-        handles=legend_handles,
-        loc="center left",
-        fontsize=7 if compact else 9,
-        title="Component",
-        title_fontsize=7 if compact else 9,
-    )
+    if show_legend:
+        legend1 = ax.legend(
+            handles=vehicle_handles,
+            loc="upper left",
+            fontsize=7 if compact else 9,
+            title="Vehicle",
+            title_fontsize=7 if compact else 9,
+        )
+        ax.add_artist(legend1)
+        ax.legend(
+            handles=legend_handles,
+            loc="center left",
+            fontsize=7 if compact else 9,
+            title="Component",
+            title_fontsize=7 if compact else 9,
+        )
 
     density_x = plot_df[gef_col].to_numpy(dtype=float)
     if len(density_x) > 5 and np.unique(density_x).size > 1:

@@ -143,6 +143,7 @@ CITY_CONTEXT_MARKERS = {
     "shanghai": "D",
     "guangzhou": "^",
 }
+CITY_GEF_COLOR_BIN_EDGES = tuple(value / 10.0 for value in range(1, 9))
 
 REDUCTION_DETOUR_CACHE_VERSION = 4
 BREAK_EVEN_PHASE_CACHE_VERSION = 9
@@ -2354,36 +2355,57 @@ def _plot_compact_city_context_summary_panels(
     labels,
     contexts,
     panel_start_letter="b",
+    legend_ax=None,
+    right_label_offset=0.055,
 ):
     """Draw compact power-mix and distance panels for the city summary."""
     import numpy as np
     from matplotlib.lines import Line2D
     from matplotlib.patches import Patch
 
-    middle = subplot_spec.subgridspec(
-        2,
-        1,
-        height_ratios=[0.12, 0.88],
-        hspace=0.08,
-    )
-    legend_ax = fig.add_subplot(middle[0])
-    legend_ax.legend(
-        handles=[
-            Patch(facecolor=POWER_MIX_COLORS[name], edgecolor="none", label=name)
-            for name in ("Hydro", "Thermal", "Wind", "Solar", "Other")
-        ],
-        loc="center",
-        ncol=5,
-        frameon=False,
-        fontsize=7,
-        handlelength=1.0,
-        handletextpad=0.35,
-        columnspacing=0.75,
-        borderaxespad=0.0,
-    )
+    power_mix_handles = [
+        Patch(facecolor=POWER_MIX_COLORS[name], edgecolor="none", label=name)
+        for name in ("Hydro", "Thermal", "Wind", "Solar", "Other")
+    ]
+    if legend_ax is None:
+        middle = subplot_spec.subgridspec(
+            2,
+            1,
+            height_ratios=[0.12, 0.88],
+            hspace=0.08,
+        )
+        legend_ax = fig.add_subplot(middle[0])
+        plot_spec = middle[1]
+        legend_ax.legend(
+            handles=power_mix_handles,
+            loc="center",
+            ncol=5,
+            frameon=False,
+            fontsize=7,
+            handlelength=1.0,
+            handletextpad=0.35,
+            columnspacing=0.75,
+            borderaxespad=0.0,
+        )
+    else:
+        plot_spec = subplot_spec
+        legend_ax.legend(
+            handles=power_mix_handles,
+            loc="center left",
+            ncol=1,
+            frameon=False,
+            fontsize=7,
+            title="Power mix",
+            title_fontsize=7.5,
+            handlelength=1.05,
+            handletextpad=0.45,
+            labelspacing=0.60,
+            borderaxespad=0.0,
+        )
+        legend_ax.get_legend().get_title().set_fontweight("bold")
     legend_ax.set_axis_off()
 
-    outer = middle[1].subgridspec(1, len(contexts), wspace=0.24)
+    outer = plot_spec.subgridspec(1, len(contexts), wspace=0.24)
     visible_by_city = {}
     absolute_values = []
     for context in contexts:
@@ -2626,7 +2648,7 @@ def _plot_compact_city_context_summary_panels(
             }
         )
 
-    middle_pos = middle[1].get_position(fig)
+    middle_pos = plot_spec.get_position(fig)
     fig.text(
         middle_pos.x0 - 0.055,
         middle_pos.y0 + middle_pos.height * 0.32,
@@ -2638,7 +2660,7 @@ def _plot_compact_city_context_summary_panels(
         color="#3182bd",
     )
     fig.text(
-        middle_pos.x1 + 0.055,
+        middle_pos.x1 + right_label_offset,
         middle_pos.y0 + middle_pos.height * 0.32,
         "E-bike - Drone (g CO$_2$e/order)",
         rotation=90,
@@ -2656,6 +2678,92 @@ def _plot_compact_city_context_summary_panels(
         va="top",
     )
     return panel_records
+
+
+def _create_city_gef_summary_legend_rail(fig):
+    """Create three vertically aligned legend sections beside the summary."""
+    from matplotlib.patches import Patch
+
+    rail = fig.add_gridspec(
+        3,
+        1,
+        left=0.855,
+        right=0.985,
+        bottom=0.055,
+        top=0.985,
+        hspace=0.20,
+    )
+    ax_top = fig.add_subplot(rail[0])
+    ax_middle = fig.add_subplot(rail[1])
+    ax_bottom = fig.add_subplot(rail[2])
+    for ax in (ax_top, ax_middle, ax_bottom):
+        ax.set_axis_off()
+
+    vehicle_handles = [
+        Patch(facecolor="#4C8CBF", edgecolor="none", label="E-bike"),
+        Patch(facecolor="#E05C2B", edgecolor="none", label="Drone"),
+    ]
+    component_handles = [
+        Patch(
+            facecolor="#777777",
+            alpha=0.35,
+            edgecolor="#555555",
+            label="Production + EOL",
+        ),
+        Patch(
+            facecolor="#777777",
+            alpha=0.90,
+            edgecolor="#555555",
+            label="Use phase",
+        ),
+    ]
+    vehicle_legend = ax_top.legend(
+        handles=vehicle_handles,
+        loc="upper left",
+        bbox_to_anchor=(0.0, 0.90),
+        frameon=False,
+        fontsize=7,
+        title="Vehicle",
+        title_fontsize=7.5,
+        handlelength=1.05,
+        handletextpad=0.45,
+        labelspacing=0.60,
+        borderaxespad=0.0,
+    )
+    vehicle_legend.get_title().set_fontweight("bold")
+    ax_top.add_artist(vehicle_legend)
+    component_legend = ax_top.legend(
+        handles=component_handles,
+        loc="lower left",
+        bbox_to_anchor=(0.0, 0.10),
+        frameon=False,
+        fontsize=7,
+        title="Component",
+        title_fontsize=7.5,
+        handlelength=1.05,
+        handletextpad=0.45,
+        labelspacing=0.60,
+        borderaxespad=0.0,
+    )
+    component_legend.get_title().set_fontweight("bold")
+
+    ax_bottom.text(
+        0.0,
+        0.93,
+        "GEF",
+        transform=ax_bottom.transAxes,
+        fontsize=7.5,
+        fontweight="bold",
+        ha="left",
+        va="top",
+    )
+    cbar_ax = ax_bottom.inset_axes([0.08, 0.12, 0.25, 0.68])
+    return {
+        "top": ax_top,
+        "middle": ax_middle,
+        "bottom": ax_bottom,
+        "colorbar": cbar_ax,
+    }
 
 
 def _report_number(value):
@@ -3718,6 +3826,7 @@ def _write_city_gef_context_detour_report(
     city_reports,
     bottom_report,
     connector_lines,
+    legend_rail=None,
 ):
     """Write JSON and Markdown reports for the city GEF context figure."""
     report_base = save_path.rsplit(".", 1)[0] + "_report"
@@ -3740,6 +3849,7 @@ def _write_city_gef_context_detour_report(
             "bottom_detour_ratio_vs_reduction_by_gef": bottom_report,
         },
         "connector_lines": connector_lines,
+        "legend_rail": legend_rail,
     }
     with open(json_path, "w", encoding="utf-8") as f:
         json.dump(payload, f, indent=2, ensure_ascii=False, allow_nan=False)
@@ -3752,6 +3862,8 @@ def _write_city_gef_context_detour_report(
         f"- Figure size: {figure_size[0]} x {figure_size[1]} inches",
         "- Coordinate convention: data coordinates for plotted elements; figure-fraction coordinates for axes.",
         f"- Connector line groups: {len(connector_lines)}",
+        f"- Legend rail orientation: {(legend_rail or {}).get('orientation')}",
+        f"- GEF bin edges: {(legend_rail or {}).get('gef_bin_edges')}",
         "",
         "## Top: city_gef_scatter_components",
         "",
@@ -3957,6 +4069,7 @@ def _render_city_gef_context_detour_summary(
         return
 
     import matplotlib.pyplot as plt
+    from matplotlib.colors import to_hex
 
     from visualization._utils import _add_title_suffix
     from visualization.analysis import (
@@ -3987,18 +4100,19 @@ def _render_city_gef_context_detour_summary(
 
     reduction_col = _weighted_reduction_column(summary_df)
 
-    figure_size = (7.2, 8.4)
+    figure_size = (7.8, 8.4)
     fig = plt.figure(figsize=figure_size)
     outer = fig.add_gridspec(
         3,
         1,
         height_ratios=[1.0, 1.0, 1.0],
         hspace=0.20,
-        left=0.10,
-        right=0.90,
+        left=0.09,
+        right=0.81,
         bottom=0.055,
         top=0.985,
     )
+    legend_rail = _create_city_gef_summary_legend_rail(fig)
 
     top_axes = _plot_city_gef_scatter_components_axes(
         fig=fig,
@@ -4006,6 +4120,7 @@ def _render_city_gef_context_detour_summary(
         df=summary_df,
         plot_title=plot_title,
         compact=True,
+        show_legend=False,
     )
     if top_axes is None:
         plt.close(fig)
@@ -4035,6 +4150,8 @@ def _render_city_gef_context_detour_summary(
         labels=labels,
         contexts=available_contexts,
         panel_start_letter="b",
+        legend_ax=legend_rail["middle"],
+        right_label_offset=0.035,
     )
 
     bottom_start_ord = ord("b") + 2 * len(available_contexts)
@@ -4053,7 +4170,10 @@ def _render_city_gef_context_detour_summary(
         plot_title=False,
         panel_letters=bottom_panel_letters,
         compact=True,
-        horizontal_colorbar=True,
+        horizontal_colorbar=False,
+        external_colorbar_ax=legend_rail["colorbar"],
+        colorbar_boundaries=CITY_GEF_COLOR_BIN_EDGES,
+        colorbar_label="kg CO$_2$e/kWh",
     )
     if bottom_axes is None:
         plt.close(fig)
@@ -4105,6 +4225,18 @@ def _render_city_gef_context_detour_summary(
     )
     bottom_report["selected_city_scatter_markers"] = bottom_city_markers
     bottom_report["major_city_labels"] = bottom_major_city_labels
+    gef_cmap = bottom_axes[0].collections[0].cmap
+    legend_rail_report = {
+        "orientation": "vertical",
+        "sections": {
+            "top_vehicle_component": _report_axis(legend_rail["top"]),
+            "middle_power_mix": _report_axis(legend_rail["middle"]),
+            "bottom_gef": _report_axis(legend_rail["bottom"]),
+            "gef_colorbar": _report_axis(legend_rail["colorbar"]),
+        },
+        "gef_bin_edges": _report_array(CITY_GEF_COLOR_BIN_EDGES),
+        "gef_bin_colors": [to_hex(gef_cmap(index)) for index in range(gef_cmap.N)],
+    }
     _write_city_gef_context_detour_report(
         save_path=save_path,
         figure_name=figure_name,
@@ -4113,6 +4245,7 @@ def _render_city_gef_context_detour_summary(
         city_reports=city_reports,
         bottom_report=bottom_report,
         connector_lines=connector_lines,
+        legend_rail=legend_rail_report,
     )
     plt.close(fig)
     print(f"City GEF context detour summary saved to {save_path}")
