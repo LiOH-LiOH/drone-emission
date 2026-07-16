@@ -380,8 +380,8 @@ def plot_road_network_subfigure(
     fig.patch.set_facecolor(background_color)
     ax.set_facecolor(background_color)
 
-    building_color = "#d8d2c5"
-    building_alpha = 0.5
+    building_color = "#c8c1b3"
+    building_alpha = 0.65
     building_count = 0
     building_context_available = buildings_gdf is not None
     if buildings_gdf is None:
