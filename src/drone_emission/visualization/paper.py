@@ -17,8 +17,7 @@ Available figures:
     shanghai_heatmap, shanghai_merchant_monthly_sales,
     shanghai_building_height_merchant,
     shanghai_building_footprint_heatmap,
-    shanghai_road_network_subfigure, shanghai_road_network_subfigure_option2,
-    shanghai_road_network_subfigure_option3,
+    beijing_road_network_subfigure, beijing_road_network_subfigure_option3,
     shanghai_road_air_distance, shanghai_road_detour,
     shanghai_air_detour, shanghai_air_road_joint, shanghai_emission_reduction,
     shanghai_emission_by_distance, shanghai_reduction_detour_by_distance,
@@ -937,104 +936,85 @@ def _render_shanghai_building_footprint_heatmap(
     )
 
 
-def _render_shanghai_road_network_subfigure(
+BEIJING_ROAD_NETWORK_CENTER = (116.447, 39.910)
+BEIJING_ROAD_NETWORK_FIGSIZE = (1.25, 1.11)
+BEIJING_ROAD_NETWORK_LAT_SPAN = 0.018
+
+
+def _render_beijing_road_network_subfigure(
     data_dir,
     out,
     for_latex,
     plot_title,
     graph_cache=None,
-    variant="context",
 ):
-    """Load Shanghai data for one road-network subfigure alternative."""
-    region_key = "shanghai"
+    """Render the fixed Beijing road network with building context."""
+    region_key = "beijing"
     region_level = "city"
     region_dir = os.path.join(data_dir, region_level, region_key)
-    sales_path = os.path.join(region_dir, f"{region_key}_sales.csv")
     roadnet_path = os.path.join(region_dir, f"{region_key}_roadnet.graphml")
-    building_path = None
-    if variant == "context":
-        building_path = _find_first_existing_path(
-            [
-                os.path.join(
-                    region_dir, f"{region_key}_buildings_preprocessed.gpkg"
-                ),
-                os.path.join(
-                    region_dir, f"{region_key}_buildings_preprocessed.geojson"
-                ),
-                os.path.join(region_dir, f"{region_key}_buildings.gpkg"),
-                os.path.join(region_dir, f"{region_key}_buildings.geojson"),
-            ]
-        )
+    building_path = _find_first_existing_path(
+        [
+            os.path.join(
+                region_dir, f"{region_key}_buildings_preprocessed.gpkg"
+            ),
+            os.path.join(
+                region_dir, f"{region_key}_buildings_preprocessed.geojson"
+            ),
+            os.path.join(region_dir, f"{region_key}_buildings.gpkg"),
+            os.path.join(region_dir, f"{region_key}_buildings.geojson"),
+        ]
+    )
 
-    if not os.path.exists(sales_path):
-        print(
-            "Shanghai road network subfigure skipped - missing "
-            f"{sales_path}"
-        )
-        return
     if not os.path.exists(roadnet_path):
         print(
-            "Shanghai road network subfigure skipped - missing "
+            "Beijing road network subfigure skipped - missing "
             f"{roadnet_path}"
         )
         return
 
     from visualization.roadnet import plot_road_network_subfigure
 
-    stores_df = pd.read_csv(sales_path)
     road_graph = _get_cached_sparse_graph(roadnet_path, graph_cache=graph_cache)
     buildings_gdf = None
-    if variant == "context" and building_path is None:
+    if building_path is None:
         print(
-            "Shanghai road network subfigure building background skipped - "
-            f"missing Shanghai building geometry in {region_dir}"
+            "Beijing road network subfigure building background skipped - "
+            f"missing Beijing building geometry in {region_dir}"
         )
-    elif building_path is not None:
+    else:
         import geopandas as gpd
 
         buildings_gdf = gpd.read_file(building_path)
     plot_road_network_subfigure(
         road_graph,
-        stores_df,
-        "Shanghai",
-        save_path=os.path.join(
-            out,
-            (
-                "shanghai_road_network_subfigure_option2.png"
-                if variant == "backbone"
-                else "shanghai_road_network_subfigure.png"
-            ),
-        ),
-        figsize=(1.25, 1.11),
+        "Beijing",
+        BEIJING_ROAD_NETWORK_CENTER[0],
+        BEIJING_ROAD_NETWORK_CENTER[1],
+        save_path=os.path.join(out, "beijing_road_network_subfigure.png"),
+        figsize=BEIJING_ROAD_NETWORK_FIGSIZE,
         for_latex=for_latex,
         plot_title=plot_title,
-        lat_span=0.018,
+        lat_span=BEIJING_ROAD_NETWORK_LAT_SPAN,
         compact=True,
         buildings_gdf=buildings_gdf,
-        variant=variant,
+        figure_name="beijing_road_network_subfigure",
     )
 
 
-def _render_shanghai_road_network_subfigure_option3(
+def _render_beijing_road_network_subfigure_option3(
     data_dir,
     out,
     for_latex,
     plot_title,
 ):
     """Render the local all-highway OSM road-type alternative."""
-    region_key = "shanghai"
+    region_key = "beijing"
     region_dir = os.path.join(data_dir, "city", region_key)
-    sales_path = os.path.join(region_dir, f"{region_key}_sales.csv")
     cache_path = os.path.join(
         region_dir,
-        "shanghai_road_network_subfigure_option3_all_highways.graphml",
+        "beijing_road_network_subfigure_option3_all_highways.graphml",
     )
-    if not os.path.exists(sales_path):
-        print(
-            "Shanghai road type subfigure skipped - missing "
-            f"{sales_path}"
-        )
-        return
 
     from roadnet._compat import load_networkx_graph
     from roadnet.osm_roadnet import fetch_all_highway_roadnet
@@ -1044,13 +1024,11 @@ def _render_shanghai_road_network_subfigure_option3(
         plot_road_type_subfigure,
     )
 
-    stores_df = pd.read_csv(sales_path)
-    figsize = (1.25, 1.11)
-    lat_span = 0.018
     frame = get_road_network_subfigure_frame(
-        stores_df,
-        figsize=figsize,
-        lat_span=lat_span,
+        BEIJING_ROAD_NETWORK_CENTER[0],
+        BEIJING_ROAD_NETWORK_CENTER[1],
+        figsize=BEIJING_ROAD_NETWORK_FIGSIZE,
+        lat_span=BEIJING_ROAD_NETWORK_LAT_SPAN,
     )
     if frame is None:
         return
@@ -1061,7 +1039,7 @@ def _render_shanghai_road_network_subfigure_option3(
             cache_valid = graphml_covers_bbox(cache_path, frame["bounds"])
         except (OSError, RuntimeError, ValueError) as exc:
             print(
-                "Shanghai road type cache rejected - could not validate "
+                "Beijing road type cache rejected - could not validate "
                 f"coverage: {exc}"
             )
 
@@ -1076,7 +1054,7 @@ def _render_shanghai_road_network_subfigure_option3(
                 )
         except Exception as exc:
             print(
-                "Shanghai road type subfigure skipped - local all-highway "
+                "Beijing road type subfigure skipped - local all-highway "
                 f"OSM fetch failed and no valid cache is available: {exc}"
             )
             return
@@ -1085,7 +1063,7 @@ def _render_shanghai_road_network_subfigure_option3(
         road_graph = load_networkx_graph(cache_path)
     except Exception as exc:
         print(
-            "Shanghai road type subfigure skipped - valid local OSM cache "
+            "Beijing road type subfigure skipped - valid local OSM cache "
             f"could not be loaded: {exc}"
         )
         return
@@ -1093,17 +1071,19 @@ def _render_shanghai_road_network_subfigure_option3(
     try:
         plot_road_type_subfigure(
             road_graph,
-            stores_df,
-            "Shanghai",
+            "Beijing",
+            BEIJING_ROAD_NETWORK_CENTER[0],
+            BEIJING_ROAD_NETWORK_CENTER[1],
             save_path=os.path.join(
                 out,
-                "shanghai_road_network_subfigure_option3.png",
+                "beijing_road_network_subfigure_option3.png",
             ),
-            figsize=figsize,
+            figsize=BEIJING_ROAD_NETWORK_FIGSIZE,
             for_latex=for_latex,
             plot_title=plot_title,
-            lat_span=lat_span,
+            lat_span=BEIJING_ROAD_NETWORK_LAT_SPAN,
             source_state=source_state,
+            figure_name="beijing_road_network_subfigure_option3",
         )
     finally:
         del road_graph
@@ -4758,8 +4738,8 @@ def render_all(
             plot_title=plot_title,
         )
 
-    if _want("shanghai_road_network_subfigure"):
-        _render_shanghai_road_network_subfigure(
+    if _want("beijing_road_network_subfigure"):
+        _render_beijing_road_network_subfigure(
             data_dir=data_dir,
             out=out,
             for_latex=for_latex,
@@ -4767,18 +4747,8 @@ def render_all(
             graph_cache=graph_cache,
         )
 
-    if _want("shanghai_road_network_subfigure_option2"):
-        _render_shanghai_road_network_subfigure(
-            data_dir=data_dir,
-            out=out,
-            for_latex=for_latex,
-            plot_title=plot_title,
-            graph_cache=graph_cache,
-            variant="backbone",
-        )
-
-    if _want("shanghai_road_network_subfigure_option3"):
-        _render_shanghai_road_network_subfigure_option3(
+    if _want("beijing_road_network_subfigure_option3"):
+        _render_beijing_road_network_subfigure_option3(
             data_dir=data_dir,
             out=out,
             for_latex=for_latex,
