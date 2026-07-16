@@ -548,6 +548,7 @@ def _selected_city_component_rows(
             city_baseline_kg = float(city.get("baseline_ebike_lifecycle_kg", 0.0))
             row.update(
                 {
+                    "row_type": "city",
                     "region_key": region_key,
                     "province": str(city.get("province", "")),
                     "macro_region_key": macro_region_key,
@@ -581,6 +582,28 @@ def _selected_city_component_rows(
             rows.append(row)
 
     return rows
+
+
+def _national_contribution_row(national: dict) -> dict:
+    """Return the all-study-regions row for the selected-city panel."""
+    row = _contribution_row_template("All study regions")
+    row.update(
+        {
+            "row_type": "overall",
+            "baseline_ebike_lifecycle_kg": float(
+                national.get("baseline_ebike_lifecycle_kg", 0.0)
+            ),
+            "sampled_drone_rows": int(
+                national.get("drone_assigned_sampled_rows", 0)
+            ),
+        }
+    )
+    for key in CONTRIBUTION_COMPONENT_KEYS:
+        row[f"{key}_kg"] = float(national.get(f"{key}_kg", 0.0))
+        row[f"{key}_pp"] = float(national.get(f"{key}_pp", 0.0))
+    row["total_net_kg"] = float(national.get("total_net_kg", 0.0))
+    row["total_net_pp"] = float(national.get("total_net_pp", 0.0))
+    return row
 
 
 def prepare_contribution_decomposition_data(
@@ -1215,17 +1238,18 @@ def _plot_selected_city_contribution_bars(ax, rows: list[dict]):
 
     y_values = []
     current_y = 0.0
-    previous_macro_region = None
-    for row in rows:
-        macro_region_key = row.get("macro_region_key")
-        if (
-            previous_macro_region is not None
-            and macro_region_key != previous_macro_region
-        ):
-            current_y += 0.85
+    for idx, row in enumerate(rows):
+        if idx:
+            previous = rows[idx - 1]
+            current_y += 1.0
+            if previous.get("row_type") == "overall":
+                current_y += 0.85
+            elif (
+                row.get("macro_region_key")
+                != previous.get("macro_region_key")
+            ):
+                current_y += 0.65
         y_values.append(current_y)
-        current_y += 1.0
-        previous_macro_region = macro_region_key
     y = np.array(y_values, dtype=float)
     positive_acc = np.zeros(len(rows), dtype=float)
     negative_acc = np.zeros(len(rows), dtype=float)
@@ -1276,9 +1300,13 @@ def _plot_selected_city_contribution_bars(ax, rows: list[dict]):
     ax.axvline(0, color="#555555", linewidth=0.8)
     ax.set_yticks(y, [row["label"] for row in rows])
     ax.invert_yaxis()
-    ax.set_xlabel("Contribution to city all-e-bike baseline (pp)", fontsize=12)
+    tick_labels = ax.get_yticklabels()
+    if tick_labels and rows[0].get("row_type") == "overall":
+        tick_labels[0].set_fontweight("bold")
+        tick_labels[0].set_color("#222222")
+    ax.set_xlabel("Contribution to all-e-bike baseline (pp)", fontsize=9.5)
     ax.grid(axis="x", alpha=0.25)
-    ax.tick_params(axis="both", labelsize=10)
+    ax.tick_params(axis="both", labelsize=8.2)
 
     xmin = min(extrema)
     xmax = max(extrema)
@@ -1289,54 +1317,84 @@ def _plot_selected_city_contribution_bars(ax, rows: list[dict]):
 
 
 def _annotate_selected_city_macro_regions(ax, rows: list[dict], y: np.ndarray):
-    """Add macro-region headers and separators to selected-city rows."""
+    """Add left-side macro-region labels and brackets to selected-city rows."""
     if not rows or y.size == 0:
         return
 
+    city_indices = [
+        idx for idx, row in enumerate(rows) if row.get("row_type") == "city"
+    ]
+    if not city_indices:
+        return
+
     groups = []
-    start_idx = 0
-    for idx in range(1, len(rows) + 1):
-        is_boundary = (
-            idx == len(rows)
-            or rows[idx].get("macro_region_key")
+    start_idx = city_indices[0]
+    for position, idx in enumerate(city_indices):
+        is_last = position == len(city_indices) - 1
+        next_idx = None if is_last else city_indices[position + 1]
+        if is_last or (
+            rows[next_idx].get("macro_region_key")
             != rows[start_idx].get("macro_region_key")
-        )
-        if is_boundary:
-            groups.append((start_idx, idx - 1))
-            start_idx = idx
+        ):
+            groups.append((start_idx, idx))
+            if next_idx is not None:
+                start_idx = next_idx
 
     y_transform = ax.get_yaxis_transform()
+    if rows[0].get("row_type") == "overall":
+        separator_y = (float(y[0]) + float(y[city_indices[0]])) / 2.0
+        ax.axhline(
+            separator_y,
+            color="#C9C9C9",
+            linewidth=0.9,
+            zorder=1,
+        )
+
+    bracket_x = -0.205
+    bracket_cap_x = -0.165
+    label_x = -0.235
     for group_idx, (start, end) in enumerate(groups):
         row = rows[start]
         color = row.get("macro_region_color", "#777777")
         label = row.get("macro_region_label", row.get("macro_region_key", ""))
-        y_top = float(y[start] - 0.43)
-        y_bottom = float(y[end] + 0.43)
-        ax.axhspan(
-            y_top,
-            y_bottom,
-            xmin=0.0,
-            xmax=0.012,
-            facecolor=color,
-            alpha=0.95,
-            linewidth=0,
-            zorder=1,
+        y_top = float(y[start] - 0.38)
+        y_bottom = float(y[end] + 0.38)
+        ax.plot(
+            [bracket_x, bracket_x],
+            [y_top, y_bottom],
+            transform=y_transform,
+            color=color,
+            linewidth=1.25,
+            solid_capstyle="butt",
+            clip_on=False,
+            zorder=4,
         )
+        for y_cap in (y_top, y_bottom):
+            ax.plot(
+                [bracket_x, bracket_cap_x],
+                [y_cap, y_cap],
+                transform=y_transform,
+                color=color,
+                linewidth=1.25,
+                solid_capstyle="butt",
+                clip_on=False,
+                zorder=4,
+            )
         if group_idx:
             ax.axhline(
-                y_top - 0.18,
+                y_top - 0.32,
                 color="#DDDDDD",
-                linewidth=0.8,
+                linewidth=0.7,
                 zorder=1,
             )
         ax.text(
-            -0.015,
-            y_top - 0.16,
+            label_x,
+            (y_top + y_bottom) / 2.0,
             label,
             transform=y_transform,
             ha="right",
-            va="bottom",
-            fontsize=8.5,
+            va="center",
+            fontsize=7.2,
             fontweight="bold",
             color=color,
             clip_on=False,
@@ -1350,17 +1408,20 @@ def _plot_selected_city_absolute_reduction_points(
     zero_fraction: float,
 ):
     """Draw selected-city absolute net reductions on a top x-axis."""
-    if not rows:
+    city_indices = [
+        idx for idx, row in enumerate(rows) if row.get("row_type") == "city"
+    ]
+    if not city_indices:
         ax.tick_params(top=False, labeltop=False, bottom=False, labelbottom=False)
         return
 
     reductions_kt = np.array(
-        [float(row.get("total_net_kg", 0.0)) / 1e6 for row in rows],
+        [float(rows[idx].get("total_net_kg", 0.0)) / 1e6 for idx in city_indices],
         dtype=float,
     )
     ax.scatter(
         reductions_kt,
-        y,
+        y[city_indices],
         s=42,
         facecolor="white",
         edgecolor="#1B5E20",
@@ -1368,14 +1429,14 @@ def _plot_selected_city_absolute_reduction_points(
         zorder=6,
         label="Absolute net reduction",
     )
-    ax.set_xlabel("Absolute net reduction (kt CO2e yr$^{-1}$)", fontsize=12)
+    ax.set_xlabel("Absolute net reduction (kt CO2e yr$^{-1}$)", fontsize=9.5)
     ax.tick_params(
         axis="x",
         top=True,
         labeltop=True,
         bottom=False,
         labelbottom=False,
-        labelsize=10,
+        labelsize=8.2,
         colors="#1B5E20",
     )
     ax.xaxis.label.set_color("#1B5E20")
@@ -1991,7 +2052,12 @@ def _write_contribution_decomposition_city_b_report(
                 "region_keys": list(region_keys),
             }
         )
-    plotted_region_keys = {row.get("region_key") for row in rows}
+    overall_row = next(
+        (row for row in rows if row.get("row_type") == "overall"),
+        None,
+    )
+    city_rows = [row for row in rows if row.get("row_type") == "city"]
+    plotted_region_keys = {row.get("region_key") for row in city_rows}
     payload = {
         "figure": "contribution_decomposition_city_b",
         "figure_path": save_path,
@@ -2007,15 +2073,22 @@ def _write_contribution_decomposition_city_b_report(
             for region_key in CONTRIBUTION_CITY_B_REGION_KEYS
             if region_key not in plotted_region_keys
         ],
-        "sort_order": "China macro-region order with four curated representative cities per region",
+        "overall": _json_safe(overall_row),
+        "overall_scope": "All successfully processed study cities",
+        "sort_order": (
+            "All study regions first, followed by China macro-region order "
+            "with four curated representative cities per region"
+        ),
         "bar_design": (
-            "Grouped horizontal one-row-per-city panel. The seven China "
-            "macro-regions follow the shared paper order, with four curated "
-            "representative cities per region. Positive components stack "
-            "from zero to the right, negative components stack from zero to "
-            "the left, and a black point marks total net reduction on the "
-            "bottom percentage-point axis. White circles with dark green "
-            "outlines mark absolute net reduction on the top kt CO2e/yr axis."
+            "An independent all-study-regions row precedes the grouped city "
+            "rows. The seven China macro-regions follow the shared paper "
+            "order, with colored left-side labels and brackets spanning four "
+            "curated representative cities per region. Positive components "
+            "stack from zero to the right, negative components stack from "
+            "zero to the left, and a black point marks total net reduction "
+            "on the bottom percentage-point axis. White circles with dark "
+            "green outlines mark city absolute net reduction on the top kt "
+            "CO2e/yr axis; the overall row is excluded from that axis."
         ),
         "component_specs": _json_safe(CONTRIBUTION_COMPONENT_SPECS),
         "net_marker": {"label": "Net reduction", "color": "#111111"},
@@ -2023,8 +2096,9 @@ def _write_contribution_decomposition_city_b_report(
             "label": "Absolute net reduction",
             "facecolor": "white",
             "edgecolor": "#1B5E20",
+            "scope": "Representative city rows only",
         },
-        "cities": _json_safe(rows),
+        "cities": _json_safe(city_rows),
         "sampling": _json_safe(prepared.get("sampling", {})),
         "runtime": _json_safe(prepared.get("runtime", {})),
     }
@@ -2036,7 +2110,7 @@ def _write_contribution_decomposition_city_b_report(
 def plot_contribution_decomposition_city_b(
     prepared: Dict,
     save_path: str = None,
-    figsize: tuple = (8.4, 12.6),
+    figsize: tuple = (6.3, 7.5),
     for_latex: bool = False,
     plot_title: bool = False,
 ):
@@ -2053,8 +2127,10 @@ def plot_contribution_decomposition_city_b(
         print("Contribution decomposition city-b skipped — prepared data missing")
         return
 
-    rows = _selected_city_component_rows(prepared.get("cities", []))
+    city_rows = _selected_city_component_rows(prepared.get("cities", []))
+    rows = [_national_contribution_row(prepared.get("national", {})), *city_rows]
     fig, ax = plt.subplots(figsize=figsize)
+    fig.subplots_adjust(left=0.43, right=0.97, bottom=0.075, top=0.80)
     y = _plot_selected_city_contribution_bars(ax, rows)
     ax_top = ax.twiny()
     bottom_xlim = ax.get_xlim()
@@ -2101,12 +2177,12 @@ def plot_contribution_decomposition_city_b(
     ax.legend(
         handles=legend_handles,
         loc="lower center",
-        bbox_to_anchor=(0.5, 1.08),
+        bbox_to_anchor=(0.5, 1.105),
         ncol=2,
         frameon=False,
-        fontsize=9,
-        handlelength=1.3,
-        columnspacing=1.0,
+        fontsize=7.3,
+        handlelength=1.15,
+        columnspacing=0.8,
     )
     if plot_title:
         ax.set_title(
