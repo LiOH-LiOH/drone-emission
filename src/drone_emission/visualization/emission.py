@@ -1526,7 +1526,10 @@ def _plot_selected_city_gdp_profile(
         if source_years
         else "year unavailable"
     )
-    ax.set_xlabel(f"GDP (¥ trillion)\nLatest available ({year_label})", fontsize=9.0)
+    ax.set_xlabel(
+        f"GDP (¥ trillion)\nLatest available\n({year_label})",
+        fontsize=8.2,
+    )
     ax.grid(axis="x", color="#DDDDDD", linewidth=0.6, alpha=0.8)
     ax.tick_params(axis="x", labelsize=8.2)
     ax.tick_params(axis="y", left=False, labelleft=False)
@@ -2253,7 +2256,7 @@ def plot_contribution_decomposition_city_b(
     gs = fig.add_gridspec(1, 2, width_ratios=[2.8, 1.0], wspace=0.16)
     ax = fig.add_subplot(gs[0, 0])
     ax_gdp = fig.add_subplot(gs[0, 1], sharey=ax)
-    fig.subplots_adjust(left=0.375, right=0.98, bottom=0.075, top=0.80)
+    fig.subplots_adjust(left=0.375, right=0.98, bottom=0.09, top=0.80)
     y = _plot_selected_city_contribution_bars(ax, rows)
     ax_top = ax.twiny()
     bottom_xlim = ax.get_xlim()
