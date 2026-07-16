@@ -2196,7 +2196,8 @@ def plot_contribution_decomposition_city_b(
         if plot_title:
             save_path = _add_title_suffix(save_path)
         os.makedirs(os.path.dirname(save_path), exist_ok=True)
-        fig.savefig(save_path, dpi=300, bbox_inches="tight")
+        # Preserve the 160 mm paper-width canvas instead of trimming it to artists.
+        fig.savefig(save_path, dpi=300)
         _write_contribution_decomposition_city_b_report(
             prepared,
             save_path,
