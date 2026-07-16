@@ -2532,10 +2532,17 @@ def _plot_grouped_scatter_split_panels_axes(
     )
     if compact:
         cbar.set_label(
-            VARIABLE_LABELS.get(group_var, group_var),
+            (
+                "GEF (kg CO$_2$e/kWh)"
+                if horizontal_colorbar and group_var == "grid_emission_factor"
+                else VARIABLE_LABELS.get(group_var, group_var)
+            ),
             fontsize=7,
             labelpad=1.5,
         )
+        if horizontal_colorbar:
+            cbar.ax.xaxis.set_label_position("top")
+            cbar.ax.xaxis.set_ticks_position("bottom")
         cbar.ax.tick_params(labelsize=6.8, length=2.2)
     else:
         cbar.set_label(VARIABLE_LABELS.get(group_var, group_var), fontsize=10)

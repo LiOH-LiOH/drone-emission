@@ -4013,12 +4013,12 @@ def _render_city_gef_context_detour_summary(
     ax_top, _ = top_axes
     top_pos = ax_top.get_position()
     fig.text(
-        top_pos.x0,
+        top_pos.x0 + 0.004,
         top_pos.y1 - 0.004,
         "a",
         fontsize=9,
         fontweight="bold",
-        ha="right",
+        ha="left",
         va="bottom",
     )
     top_city_gef_markers = _add_city_gef_xaxis_markers(
@@ -4087,7 +4087,7 @@ def _render_city_gef_context_detour_summary(
         save_path = _add_title_suffix(save_path)
     os.makedirs(os.path.dirname(save_path), exist_ok=True)
     fig.canvas.draw()
-    fig.savefig(save_path, dpi=300, bbox_inches="tight", pad_inches=0.0)
+    fig.savefig(save_path, dpi=300, bbox_inches=fig.bbox_inches, pad_inches=0.0)
     top_report = _city_gef_components_report(summary_df, top_axes)
     top_report["selected_city_gef_markers"] = top_city_gef_markers
     city_reports = _city_context_summary_report(
