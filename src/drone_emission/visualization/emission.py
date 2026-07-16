@@ -1475,6 +1475,7 @@ def _plot_selected_city_gdp_profile(
     ax,
     rows: list[dict],
     y: np.ndarray,
+    all_study_gdp_range: dict | None = None,
 ):
     """Draw city GDP as a horizontal profile aligned with contribution rows."""
     city_indices = [
@@ -1515,7 +1516,16 @@ def _plot_selected_city_gdp_profile(
         markeredgewidth=1.0,
         zorder=4,
     )
-    ax.set_xlim(0.0, float(np.max(gdp_trillion_cny)) * 1.08)
+    all_study_max_trillion = (
+        float(all_study_gdp_range.get("gdp_max_100m", 0.0)) / 10_000.0
+        if all_study_gdp_range
+        else 0.0
+    )
+    gdp_max_trillion = max(
+        float(np.max(gdp_trillion_cny)),
+        all_study_max_trillion,
+    )
+    ax.set_xlim(0.0, gdp_max_trillion * 1.08)
     source_years = [
         int(rows[idx]["gdp_source_year"])
         for idx in city_indices
@@ -1537,6 +1547,56 @@ def _plot_selected_city_gdp_profile(
     ax.spines["left"].set_linewidth(0.8)
     ax.spines["right"].set_visible(False)
     ax.spines["top"].set_visible(False)
+
+
+def _plot_all_study_city_gdp_range(
+    ax,
+    all_study_gdp_range: dict,
+    overall_y: float,
+):
+    """Draw the all-study-city GDP min-max range on the overall row."""
+    if not all_study_gdp_range:
+        ax.tick_params(top=False, labeltop=False, bottom=False, labelbottom=False)
+        return
+
+    gdp_min = float(all_study_gdp_range["gdp_min_100m"]) / 10_000.0
+    gdp_max = float(all_study_gdp_range["gdp_max_100m"]) / 10_000.0
+    cap_half_height = 0.20
+    ax.hlines(
+        overall_y,
+        gdp_min,
+        gdp_max,
+        color="#B07A1C",
+        linewidth=2.0,
+        zorder=5,
+    )
+    ax.vlines(
+        [gdp_min, gdp_max],
+        overall_y - cap_half_height,
+        overall_y + cap_half_height,
+        color="#B07A1C",
+        linewidth=1.4,
+        zorder=5,
+    )
+    ax.set_xlabel(
+        "All study cities\nGDP range (¥ trillion)",
+        fontsize=8.2,
+        color="#8A5E12",
+    )
+    ax.tick_params(
+        axis="x",
+        top=True,
+        labeltop=True,
+        bottom=False,
+        labelbottom=False,
+        labelsize=8.2,
+        colors="#8A5E12",
+    )
+    ax.tick_params(axis="y", left=False, labelleft=False)
+    ax.spines["top"].set_color("#B07A1C")
+    ax.spines["bottom"].set_visible(False)
+    ax.spines["left"].set_visible(False)
+    ax.spines["right"].set_visible(False)
 
 
 def _plot_contribution_decomposition_panels(
@@ -2123,7 +2183,7 @@ def _write_contribution_decomposition_city_b_report(
     rows: list[dict],
 ):
     """Write compact JSON report for the selected-city contribution figure."""
-    ax_main, ax_top, ax_gdp = axes
+    ax_main, ax_top, ax_gdp, ax_gdp_top = axes
     report_path = save_path.rsplit(".", 1)[0] + "_report.json"
     macro_region_by_key = {
         spec["key"]: spec
@@ -2169,6 +2229,7 @@ def _write_contribution_decomposition_city_b_report(
             "bottom_relative_contribution_decomposition": _report_axis(ax_main),
             "top_absolute_net_reduction": _report_axis(ax_top),
             "right_city_gdp": _report_axis(ax_gdp),
+            "top_all_study_city_gdp_range": _report_axis(ax_gdp_top),
         },
         "selected_region_keys": list(CONTRIBUTION_CITY_B_REGION_KEYS),
         "selected_city_groups": selected_city_groups,
@@ -2196,7 +2257,9 @@ def _write_contribution_decomposition_city_b_report(
             "continuous gold line on the right shows city GDP in the same "
             "macro-region and representative-city order. GDP uses latest "
             f"available source years ({gdp_source_year_label}), and the overall row is "
-            "excluded from the GDP profile."
+            "excluded from the GDP profile. A gold min-max range line on the "
+            "overall row uses all city-level study regions and shares the "
+            "representative-city GDP scale."
         ),
         "component_specs": _json_safe(CONTRIBUTION_COMPONENT_SPECS),
         "net_marker": {"label": "Net reduction", "color": "#111111"},
@@ -2220,6 +2283,17 @@ def _write_contribution_decomposition_city_b_report(
             ),
             "source_year_policy": "Latest available city value",
             "source_year_range": gdp_source_year_range,
+        },
+        "all_study_city_gdp_range": _json_safe(
+            prepared.get("all_study_city_gdp_range", {})
+        ),
+        "export": {
+            "bbox_inches": "tight",
+            "pad_inches": 0.03,
+            "source_canvas_inches": {
+                "width": figsize[0],
+                "height": figsize[1],
+            },
         },
         "cities": _json_safe(city_rows),
         "sampling": _json_safe(prepared.get("sampling", {})),
@@ -2263,8 +2337,22 @@ def plot_contribution_decomposition_city_b(
     zero_fraction = (0.0 - bottom_xlim[0]) / (bottom_xlim[1] - bottom_xlim[0])
     _plot_selected_city_absolute_reduction_points(ax_top, rows, y, zero_fraction)
     ax_top.set_ylim(ax.get_ylim())
-    _plot_selected_city_gdp_profile(ax_gdp, rows, y)
+    all_study_gdp_range = prepared.get("all_study_city_gdp_range", {})
+    _plot_selected_city_gdp_profile(
+        ax_gdp,
+        rows,
+        y,
+        all_study_gdp_range=all_study_gdp_range,
+    )
     ax_gdp.set_ylim(ax.get_ylim())
+    ax_gdp_top = ax_gdp.twiny()
+    ax_gdp_top.set_xlim(ax_gdp.get_xlim())
+    ax_gdp_top.set_ylim(ax.get_ylim())
+    _plot_all_study_city_gdp_range(
+        ax_gdp_top,
+        all_study_gdp_range,
+        overall_y=float(y[0]),
+    )
 
     legend_handles = [
         plt.Rectangle(
@@ -2324,13 +2412,17 @@ def plot_contribution_decomposition_city_b(
         if plot_title:
             save_path = _add_title_suffix(save_path)
         os.makedirs(os.path.dirname(save_path), exist_ok=True)
-        # Preserve the 183 mm paper-width canvas instead of trimming it to artists.
-        fig.savefig(save_path, dpi=300)
+        fig.savefig(
+            save_path,
+            dpi=300,
+            bbox_inches="tight",
+            pad_inches=0.03,
+        )
         _write_contribution_decomposition_city_b_report(
             prepared,
             save_path,
             figsize,
-            axes=(ax, ax_top, ax_gdp),
+            axes=(ax, ax_top, ax_gdp, ax_gdp_top),
             rows=rows,
         )
         plt.close(fig)

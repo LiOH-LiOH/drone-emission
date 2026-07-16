@@ -4591,7 +4591,10 @@ def _render_contribution_decomposition_city_b(
         "gdp_source_year",
         "source_url_gdp",
     )
-    missing_gdp_columns = sorted(set(gdp_columns) - set(enriched_df.columns))
+    required_gdp_columns = (*gdp_columns, "region_level")
+    missing_gdp_columns = sorted(
+        set(required_gdp_columns) - set(enriched_df.columns)
+    )
     if missing_gdp_columns:
         print(
             "contribution_decomposition_city_b skipped — enriched city stats "
@@ -4605,6 +4608,50 @@ def _render_contribution_decomposition_city_b(
         gdp_df["gdp_source_year"],
         errors="coerce",
     )
+    all_study_gdp_df = enriched_df[
+        enriched_df["region_level"].astype(str).eq("city")
+    ][list(gdp_columns)].drop_duplicates("region_key")
+    all_study_gdp_df["gdp_100m"] = pd.to_numeric(
+        all_study_gdp_df["gdp_100m"],
+        errors="coerce",
+    )
+    all_study_gdp_df["gdp_source_year"] = pd.to_numeric(
+        all_study_gdp_df["gdp_source_year"],
+        errors="coerce",
+    )
+    if all_study_gdp_df.empty:
+        print(
+            "contribution_decomposition_city_b skipped — no city-level "
+            "study regions found in enriched city stats"
+        )
+        return
+    missing_all_study_gdp = all_study_gdp_df[
+        all_study_gdp_df["gdp_100m"].isna()
+        | (all_study_gdp_df["gdp_100m"] <= 0)
+        | all_study_gdp_df["gdp_source_year"].isna()
+    ]
+    if not missing_all_study_gdp.empty:
+        missing_keys = missing_all_study_gdp["region_key"].astype(str).tolist()
+        print(
+            "contribution_decomposition_city_b skipped — GDP or source year "
+            f"missing for all-study city rows {missing_keys}"
+        )
+        return
+
+    gdp_min_idx = all_study_gdp_df["gdp_100m"].idxmin()
+    gdp_max_idx = all_study_gdp_df["gdp_100m"].idxmax()
+    gdp_min_row = all_study_gdp_df.loc[gdp_min_idx]
+    gdp_max_row = all_study_gdp_df.loc[gdp_max_idx]
+    all_study_gdp_range = {
+        "scope": "All city-level study regions",
+        "city_count": int(len(all_study_gdp_df)),
+        "gdp_min_100m": float(gdp_min_row["gdp_100m"]),
+        "gdp_max_100m": float(gdp_max_row["gdp_100m"]),
+        "gdp_min_region_key": str(gdp_min_row["region_key"]),
+        "gdp_max_region_key": str(gdp_max_row["region_key"]),
+        "source_year_min": int(all_study_gdp_df["gdp_source_year"].min()),
+        "source_year_max": int(all_study_gdp_df["gdp_source_year"].max()),
+    }
     valid_gdp = gdp_df[
         gdp_df["gdp_100m"].notna()
         & (gdp_df["gdp_100m"] > 0)
@@ -4636,6 +4683,7 @@ def _render_contribution_decomposition_city_b(
     )
     if prepared is None:
         return
+    prepared["all_study_city_gdp_range"] = all_study_gdp_range
 
     plot_contribution_decomposition_city_b(
         prepared,
