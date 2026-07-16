@@ -155,6 +155,13 @@ POWER_GENERATION_2022_100M_KWH = {
         "Wind": 34.02,
         "Solar": 5.56,
     },
+    "beijing": {
+        "total": 467.0,
+        "Hydro": 9.43,
+        "Thermal": 443.57,
+        "Wind": 4.95,
+        "Solar": 9.14,
+    },
     "sichuan": {
         "total": 4846.0,
         "Hydro": 3886.56,
