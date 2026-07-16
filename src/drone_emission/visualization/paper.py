@@ -17,7 +17,8 @@ Available figures:
     shanghai_heatmap, shanghai_merchant_monthly_sales,
     shanghai_building_height_merchant,
     shanghai_building_footprint_heatmap,
-    beijing_road_network_subfigure, beijing_road_network_subfigure_option3,
+    beijing_road_network_subfigure, beijing_road_network_candidate_grid,
+    beijing_road_network_subfigure_option3,
     shanghai_road_air_distance, shanghai_road_detour,
     shanghai_air_detour, shanghai_air_road_joint, shanghai_emission_reduction,
     shanghai_emission_by_distance, shanghai_reduction_detour_by_distance,
@@ -939,6 +940,52 @@ def _render_shanghai_building_footprint_heatmap(
 BEIJING_ROAD_NETWORK_CENTER = (116.447, 39.910)
 BEIJING_ROAD_NETWORK_FIGSIZE = (1.25, 1.11)
 BEIJING_ROAD_NETWORK_LAT_SPAN = 0.018
+BEIJING_ROAD_NETWORK_CANDIDATES = (
+    {
+        "label": "A",
+        "name": "Dongsi north hutongs",
+        "lng": 116.423,
+        "lat": 39.942,
+    },
+    {
+        "label": "B",
+        "name": "Xisi north hutongs",
+        "lng": 116.380,
+        "lat": 39.942,
+    },
+    {"label": "C", "name": "Hepingli", "lng": 116.419, "lat": 39.960},
+    {
+        "label": "D",
+        "name": "Yuetan-Sanlihe",
+        "lng": 116.337,
+        "lat": 39.914,
+    },
+    {"label": "E", "name": "Zhanlanlu", "lng": 116.349, "lat": 39.934},
+    {
+        "label": "F",
+        "name": "Xuanwu-Baizhifang",
+        "lng": 116.373,
+        "lat": 39.897,
+    },
+    {
+        "label": "G",
+        "name": "Fangzhuang interior",
+        "lng": 116.431,
+        "lat": 39.864,
+    },
+    {"label": "H", "name": "Jinsong east", "lng": 116.480, "lat": 39.884},
+    {
+        "label": "I",
+        "name": "Jiuxianqiao east",
+        "lng": 116.505,
+        "lat": 39.973,
+    },
+)
+BEIJING_ROAD_NETWORK_RESERVES = (
+    {"name": "Wanshoulu east", "lng": 116.304, "lat": 39.914},
+    {"name": "Shuangyushu", "lng": 116.329, "lat": 39.968},
+    {"name": "Jiugong", "lng": 116.445, "lat": 39.806},
+)
 
 
 def _render_beijing_road_network_subfigure(
@@ -999,6 +1046,45 @@ def _render_beijing_road_network_subfigure(
         compact=True,
         buildings_gdf=buildings_gdf,
         figure_name="beijing_road_network_subfigure",
+    )
+
+
+def _render_beijing_road_network_candidate_grid(
+    data_dir,
+    out,
+    for_latex,
+    plot_title,
+    graph_cache=None,
+):
+    """Render nine fixed Beijing road-only windows for visual selection."""
+    region_key = "beijing"
+    region_dir = os.path.join(data_dir, "city", region_key)
+    roadnet_path = os.path.join(region_dir, f"{region_key}_roadnet.graphml")
+    if not os.path.exists(roadnet_path):
+        print(
+            "Beijing road candidate grid skipped - missing "
+            f"{roadnet_path}"
+        )
+        return
+
+    from visualization.roadnet import plot_road_network_candidate_grid
+
+    road_graph = _get_cached_sparse_graph(roadnet_path, graph_cache=graph_cache)
+    plot_road_network_candidate_grid(
+        road_graph,
+        BEIJING_ROAD_NETWORK_CANDIDATES,
+        reserve_centers=BEIJING_ROAD_NETWORK_RESERVES,
+        save_path=os.path.join(
+            out,
+            "beijing_road_network_candidate_grid.png",
+        ),
+        figsize=(3.9, 3.5),
+        for_latex=for_latex,
+        plot_title=plot_title,
+        lat_span=BEIJING_ROAD_NETWORK_LAT_SPAN,
+        panel_figsize=BEIJING_ROAD_NETWORK_FIGSIZE,
+        min_segments=100,
+        figure_name="beijing_road_network_candidate_grid",
     )
 
 
@@ -4740,6 +4826,15 @@ def render_all(
 
     if _want("beijing_road_network_subfigure"):
         _render_beijing_road_network_subfigure(
+            data_dir=data_dir,
+            out=out,
+            for_latex=for_latex,
+            plot_title=plot_title,
+            graph_cache=graph_cache,
+        )
+
+    if _want("beijing_road_network_candidate_grid"):
+        _render_beijing_road_network_candidate_grid(
             data_dir=data_dir,
             out=out,
             for_latex=for_latex,

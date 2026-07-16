@@ -177,6 +177,37 @@ def _deduplicate_road_edges(edge_coords):
     return np.unique(undirected_edges, axis=0)
 
 
+def _add_context_road_lines(ax, edge_coords, compact):
+    """Draw road lines with the context-map styling."""
+    segments = [[(ec[1], ec[0]), (ec[3], ec[2])] for ec in edge_coords]
+    if compact:
+        ax.add_collection(
+            LineCollection(
+                segments,
+                colors="white",
+                linewidths=1.05,
+                alpha=0.92,
+                zorder=15,
+            )
+        )
+        roads = LineCollection(
+            segments,
+            colors="#3f4852",
+            linewidths=0.5,
+            alpha=0.98,
+            zorder=20,
+        )
+    else:
+        roads = LineCollection(
+            segments,
+            colors="#4f5963",
+            linewidths=0.55,
+            alpha=0.95,
+            zorder=10,
+        )
+    ax.add_collection(roads)
+
+
 def visualize_roadnet(
     G: nx.MultiDiGraph,
     city_name_cn: Optional[str] = None,
@@ -384,32 +415,7 @@ def plot_road_network_subfigure(
                 zorder=2,
             )
 
-    segments = [[(ec[1], ec[0]), (ec[3], ec[2])] for ec in displayed_edges]
-    if compact:
-        road_casing = LineCollection(
-            segments,
-            colors="white",
-            linewidths=1.05,
-            alpha=0.92,
-            zorder=15,
-        )
-        ax.add_collection(road_casing)
-        roads = LineCollection(
-            segments,
-            colors="#3f4852",
-            linewidths=0.5,
-            alpha=0.98,
-            zorder=20,
-        )
-    else:
-        roads = LineCollection(
-            segments,
-            colors="#4f5963",
-            linewidths=0.55,
-            alpha=0.95,
-            zorder=10,
-        )
-    ax.add_collection(roads)
+    _add_context_road_lines(ax, displayed_edges, compact=compact)
 
     ax.set_xlim(boundaries_dict["min_lng"], boundaries_dict["max_lng"])
     ax.set_ylim(boundaries_dict["min_lat"], boundaries_dict["max_lat"])
@@ -508,6 +514,238 @@ def plot_road_network_subfigure(
             facecolor=background_color,
         )
         print(f"Road network subfigure saved to {save_path}")
+    else:
+        plt.show()
+
+    plt.close(fig)
+
+
+def plot_road_network_candidate_grid(
+    graph,
+    candidate_centers,
+    reserve_centers=None,
+    save_path=None,
+    figsize=(3.9, 3.5),
+    for_latex=False,
+    plot_title=False,
+    lat_span=0.018,
+    panel_figsize=(1.25, 1.11),
+    min_segments=100,
+    figure_name="road_network_candidate_grid",
+):
+    """Compare nine fixed road-only candidate windows in a 3x3 grid.
+
+    Args:
+        graph: SparseGraph with get_local_edges support.
+        candidate_centers: Nine dictionaries with label, name, lng, and lat.
+        reserve_centers: Optional ordered replacement center dictionaries.
+        save_path: Path to save figure. Shows plot if None.
+        figsize: Overall figure size tuple.
+        for_latex: If True, save as PDF.
+        plot_title: If True, show title.
+        lat_span: Latitude span for every candidate panel.
+        panel_figsize: Reference panel aspect ratio used to calculate bounds.
+        min_segments: Minimum undirected road segments per panel.
+        figure_name: Stable figure identifier written to the report.
+    """
+    if len(candidate_centers) != 9:
+        print("Road candidate grid skipped - exactly nine centers are required")
+        return
+    labels = [str(candidate["label"]) for candidate in candidate_centers]
+    if len(set(labels)) != 9:
+        print("Road candidate grid skipped - panel labels must be unique")
+        return
+
+    reserves = list(reserve_centers or [])
+    panel_data = []
+    for candidate in candidate_centers:
+        original = dict(candidate)
+        selected = dict(candidate)
+        used_reserve = False
+        while True:
+            frame = get_road_network_subfigure_frame(
+                selected["lng"],
+                selected["lat"],
+                figsize=panel_figsize,
+                lat_span=lat_span,
+            )
+            if frame is None:
+                return
+            edge_coords = graph.get_local_edges(
+                frame["bounds"],
+                margin_deg=0.0,
+            )
+            unique_edges = _deduplicate_road_edges(edge_coords)
+            if len(unique_edges) >= int(min_segments):
+                break
+            if not reserves:
+                print(
+                    "Road candidate grid skipped - fewer than "
+                    f"{min_segments} segments for panel {original['label']} "
+                    "and no reserve center remains"
+                )
+                return
+            selected = dict(reserves.pop(0))
+            used_reserve = True
+
+        panel_data.append(
+            {
+                "label": str(original["label"]),
+                "original": original,
+                "selected": selected,
+                "used_reserve": used_reserve,
+                "frame": frame,
+                "road_edge_count": int(len(edge_coords)),
+                "unique_edges": unique_edges,
+            }
+        )
+
+    background_color = ROAD_NETWORK_CONTEXT_BACKGROUND
+    fig, axes = plt.subplots(3, 3, figsize=figsize)
+    fig.patch.set_facecolor(background_color)
+    fig.subplots_adjust(
+        left=0.0,
+        right=1.0,
+        bottom=0.0,
+        top=0.94 if plot_title else 1.0,
+        wspace=0.035,
+        hspace=0.035,
+    )
+
+    for ax, panel in zip(axes.flat, panel_data):
+        frame = panel["frame"]
+        bounds = frame["bounds"]
+        ax.set_aspect(1.0 / np.cos(np.radians(frame["center_lat"])))
+        ax.set_xlim(bounds["min_lng"], bounds["max_lng"])
+        ax.set_ylim(bounds["min_lat"], bounds["max_lat"])
+        ax.set_facecolor(background_color)
+        _add_context_road_lines(ax, panel["unique_edges"], compact=True)
+        ax.set_xlim(bounds["min_lng"], bounds["max_lng"])
+        ax.set_ylim(bounds["min_lat"], bounds["max_lat"])
+        ax.set_xlabel("")
+        ax.set_ylabel("")
+        ax.set_xticks([])
+        ax.set_yticks([])
+        ax.tick_params(
+            left=False,
+            bottom=False,
+            labelleft=False,
+            labelbottom=False,
+        )
+        ax.grid(False)
+        for spine in ax.spines.values():
+            spine.set_visible(False)
+        ax.text(
+            0.045,
+            0.95,
+            panel["label"],
+            transform=ax.transAxes,
+            ha="left",
+            va="top",
+            fontsize=8,
+            fontweight="bold",
+            color="#20262b",
+            bbox=dict(
+                boxstyle="circle,pad=0.18",
+                facecolor="white",
+                edgecolor="none",
+                alpha=0.9,
+            ),
+            zorder=100,
+        )
+
+    if plot_title:
+        fig.suptitle(
+            "Beijing road-network candidate windows",
+            fontsize=9,
+            y=0.995,
+        )
+
+    if save_path:
+        if for_latex and not save_path.endswith(".pdf"):
+            save_path = save_path.rsplit(".", 1)[0] + ".pdf"
+        if plot_title:
+            save_path = _add_title_suffix(save_path)
+        os.makedirs(os.path.dirname(save_path), exist_ok=True)
+        if save_path.endswith(".pdf"):
+            for ax in axes.flat:
+                ax.set_rasterization_zorder(12)
+        fig.canvas.draw()
+        renderer = fig.canvas.get_renderer()
+        tight_bbox = fig.get_tightbbox(renderer)
+        pad_inches = 0.02
+        report_panels = []
+        for ax, panel in zip(axes.flat, panel_data):
+            frame = panel["frame"]
+            bounds = frame["bounds"]
+            report_panels.append(
+                {
+                    "label": panel["label"],
+                    "original_location_hint": panel["original"]["name"],
+                    "original_center": {
+                        "lng": float(panel["original"]["lng"]),
+                        "lat": float(panel["original"]["lat"]),
+                    },
+                    "selected_location_hint": panel["selected"]["name"],
+                    "selected_center": {
+                        "lng": frame["center_lng"],
+                        "lat": frame["center_lat"],
+                    },
+                    "used_reserve": bool(panel["used_reserve"]),
+                    "lng_range": [
+                        float(bounds["min_lng"]),
+                        float(bounds["max_lng"]),
+                    ],
+                    "lat_range": [
+                        float(bounds["min_lat"]),
+                        float(bounds["max_lat"]),
+                    ],
+                    "road_edge_count": panel["road_edge_count"],
+                    "undirected_road_segment_count": int(
+                        len(panel["unique_edges"])
+                    ),
+                    "axis": saved_tight_axis_report(
+                        fig,
+                        ax,
+                        renderer=renderer,
+                        tight_bbox=tight_bbox,
+                        pad_inches=pad_inches,
+                    ),
+                }
+            )
+        report = {
+            "figure_name": figure_name,
+            "region_name": "Beijing",
+            "variant": "road_only_candidate_grid",
+            "candidate_source": "experience_selected_fixed_centers",
+            "native_size_inches": [float(figsize[0]), float(figsize[1])],
+            "panel_reference_size_inches": [
+                float(panel_figsize[0]),
+                float(panel_figsize[1]),
+            ],
+            "configured_lat_span_degrees": float(lat_span),
+            "minimum_undirected_segment_count": int(min_segments),
+            "building_context_included": False,
+            "background_color": background_color,
+            "road_style": {
+                "casing_color": "white",
+                "casing_width_points": 1.05,
+                "road_color": "#3f4852",
+                "road_width_points": 0.5,
+            },
+            "panels": report_panels,
+        }
+        report_path = save_path.rsplit(".", 1)[0] + "_report.json"
+        write_figure_report(report_path, report)
+        print(f"Road candidate grid report saved to {report_path}")
+        plt.savefig(
+            save_path,
+            dpi=300,
+            bbox_inches="tight",
+            pad_inches=pad_inches,
+            facecolor=background_color,
+        )
+        print(f"Road candidate grid saved to {save_path}")
     else:
         plt.show()
 
