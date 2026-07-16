@@ -1350,9 +1350,9 @@ def _annotate_selected_city_macro_regions(ax, rows: list[dict], y: np.ndarray):
             zorder=1,
         )
 
-    bracket_x = -0.205
-    bracket_cap_x = -0.165
-    label_x = -0.235
+    bracket_x = -0.255
+    bracket_cap_x = -0.210
+    label_x = -0.295
     for group_idx, (start, end) in enumerate(groups):
         row = rows[start]
         color = row.get("macro_region_color", "#777777")
