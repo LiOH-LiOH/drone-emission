@@ -4561,6 +4561,7 @@ def _render_contribution_decomposition_city_b(
 ):
     """Render the selected-city horizontal contribution-decomposition figure."""
     from visualization.emission import (
+        CONTRIBUTION_CITY_B_REGION_KEYS,
         plot_contribution_decomposition_city_b,
         prepare_contribution_decomposition_data,
     )
@@ -4574,6 +4575,58 @@ def _render_contribution_decomposition_city_b(
             "contribution_decomposition_city_b: missing "
             f"{named_path}; thresholds will fall back to sampled sweeps"
         )
+
+    enriched_path = os.path.join(data_dir, "all_region_stats_enriched.csv")
+    if not os.path.exists(enriched_path):
+        print(
+            "contribution_decomposition_city_b skipped — missing "
+            f"{enriched_path}; run tools.enrich_stats first"
+        )
+        return
+
+    enriched_df = pd.read_csv(enriched_path)
+    gdp_columns = (
+        "region_key",
+        "gdp_100m",
+        "gdp_source_year",
+        "source_url_gdp",
+    )
+    missing_gdp_columns = sorted(set(gdp_columns) - set(enriched_df.columns))
+    if missing_gdp_columns:
+        print(
+            "contribution_decomposition_city_b skipped — enriched city stats "
+            f"missing columns {missing_gdp_columns}"
+        )
+        return
+
+    gdp_df = enriched_df[list(gdp_columns)].drop_duplicates("region_key")
+    gdp_df["gdp_100m"] = pd.to_numeric(gdp_df["gdp_100m"], errors="coerce")
+    gdp_df["gdp_source_year"] = pd.to_numeric(
+        gdp_df["gdp_source_year"],
+        errors="coerce",
+    )
+    valid_gdp = gdp_df[
+        gdp_df["gdp_100m"].notna()
+        & (gdp_df["gdp_100m"] > 0)
+        & gdp_df["gdp_source_year"].notna()
+    ]
+    valid_gdp_keys = set(valid_gdp["region_key"].astype(str))
+    missing_gdp_keys = [
+        region_key
+        for region_key in CONTRIBUTION_CITY_B_REGION_KEYS
+        if region_key not in valid_gdp_keys
+    ]
+    if missing_gdp_keys:
+        print(
+            "contribution_decomposition_city_b skipped — GDP missing for "
+            f"selected cities {missing_gdp_keys}"
+        )
+        return
+
+    city_df = city_df.drop(
+        columns=["gdp_100m", "gdp_source_year", "source_url_gdp"],
+        errors="ignore",
+    ).merge(gdp_df, on="region_key", how="left")
 
     prepared = prepare_contribution_decomposition_data(
         city_df=city_df,

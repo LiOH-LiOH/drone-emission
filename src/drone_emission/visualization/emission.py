@@ -562,6 +562,9 @@ def _selected_city_component_rows(
                     "sampled_drone_rows": int(
                         city.get("drone_assigned_sampled_rows", 0)
                     ),
+                    "gdp_100m": city.get("gdp_100m"),
+                    "gdp_source_year": city.get("gdp_source_year"),
+                    "source_url_gdp": city.get("source_url_gdp", ""),
                 }
             )
             component_kg = city.get("component_kg", {}) or {}
@@ -848,6 +851,23 @@ def prepare_contribution_decomposition_data(
                 "region_name_en": str(city_row.region_name_en),
                 "province": str(city_row.province),
                 "gef": gef,
+                "gdp_100m": (
+                    float(city_row.gdp_100m)
+                    if hasattr(city_row, "gdp_100m")
+                    and pd.notna(city_row.gdp_100m)
+                    else None
+                ),
+                "gdp_source_year": (
+                    int(city_row.gdp_source_year)
+                    if hasattr(city_row, "gdp_source_year")
+                    and pd.notna(city_row.gdp_source_year)
+                    else None
+                ),
+                "source_url_gdp": str(
+                    getattr(city_row, "source_url_gdp", "")
+                    if pd.notna(getattr(city_row, "source_url_gdp", ""))
+                    else ""
+                ),
                 "baseline_ebike_lifecycle_kg": city_baseline_kg,
                 "assignment_rule": assignment_meta["rule"],
                 "assignment_meta": assignment_meta,
@@ -1451,6 +1471,71 @@ def _plot_selected_city_absolute_reduction_points(
     ax.set_xlim(-negative_limit, positive_limit)
 
 
+def _plot_selected_city_gdp_profile(
+    ax,
+    rows: list[dict],
+    y: np.ndarray,
+):
+    """Draw city GDP as a horizontal profile aligned with contribution rows."""
+    city_indices = [
+        idx
+        for idx, row in enumerate(rows)
+        if row.get("row_type") == "city"
+        and row.get("gdp_100m") is not None
+        and np.isfinite(float(row["gdp_100m"]))
+        and float(row["gdp_100m"]) > 0
+    ]
+    if not city_indices:
+        ax.text(
+            0.5,
+            0.5,
+            "GDP unavailable",
+            transform=ax.transAxes,
+            ha="center",
+            va="center",
+            fontsize=8.2,
+            color="#777777",
+        )
+        ax.tick_params(left=False, labelleft=False, bottom=False, labelbottom=False)
+        return
+
+    gdp_trillion_cny = np.array(
+        [float(rows[idx]["gdp_100m"]) / 10_000.0 for idx in city_indices],
+        dtype=float,
+    )
+    ax.plot(
+        gdp_trillion_cny,
+        y[city_indices],
+        color="#B07A1C",
+        linewidth=1.2,
+        marker="o",
+        markersize=3.8,
+        markerfacecolor="white",
+        markeredgecolor="#B07A1C",
+        markeredgewidth=1.0,
+        zorder=4,
+    )
+    ax.set_xlim(0.0, float(np.max(gdp_trillion_cny)) * 1.08)
+    source_years = [
+        int(rows[idx]["gdp_source_year"])
+        for idx in city_indices
+        if rows[idx].get("gdp_source_year") is not None
+    ]
+    year_label = (
+        f"{min(source_years)}–{max(source_years)}"
+        if source_years
+        else "year unavailable"
+    )
+    ax.set_xlabel(f"GDP (¥ trillion)\nLatest available ({year_label})", fontsize=9.0)
+    ax.grid(axis="x", color="#DDDDDD", linewidth=0.6, alpha=0.8)
+    ax.tick_params(axis="x", labelsize=8.2)
+    ax.tick_params(axis="y", left=False, labelleft=False)
+    ax.spines["left"].set_color("#B8B8B8")
+    ax.spines["left"].set_linewidth(0.8)
+    ax.spines["right"].set_visible(False)
+    ax.spines["top"].set_visible(False)
+
+
 def _plot_contribution_decomposition_panels(
     fig,
     ax_a,
@@ -2035,7 +2120,7 @@ def _write_contribution_decomposition_city_b_report(
     rows: list[dict],
 ):
     """Write compact JSON report for the selected-city contribution figure."""
-    ax_main, ax_top = axes
+    ax_main, ax_top, ax_gdp = axes
     report_path = save_path.rsplit(".", 1)[0] + "_report.json"
     macro_region_by_key = {
         spec["key"]: spec
@@ -2057,6 +2142,21 @@ def _write_contribution_decomposition_city_b_report(
         None,
     )
     city_rows = [row for row in rows if row.get("row_type") == "city"]
+    gdp_source_years = [
+        int(row["gdp_source_year"])
+        for row in city_rows
+        if row.get("gdp_source_year") is not None
+    ]
+    gdp_source_year_range = (
+        [min(gdp_source_years), max(gdp_source_years)]
+        if gdp_source_years
+        else None
+    )
+    gdp_source_year_label = (
+        f"{gdp_source_year_range[0]}–{gdp_source_year_range[1]}"
+        if gdp_source_year_range
+        else "unavailable"
+    )
     plotted_region_keys = {row.get("region_key") for row in city_rows}
     payload = {
         "figure": "contribution_decomposition_city_b",
@@ -2065,6 +2165,7 @@ def _write_contribution_decomposition_city_b_report(
         "axes": {
             "bottom_relative_contribution_decomposition": _report_axis(ax_main),
             "top_absolute_net_reduction": _report_axis(ax_top),
+            "right_city_gdp": _report_axis(ax_gdp),
         },
         "selected_region_keys": list(CONTRIBUTION_CITY_B_REGION_KEYS),
         "selected_city_groups": selected_city_groups,
@@ -2088,7 +2189,11 @@ def _write_contribution_decomposition_city_b_report(
             "zero to the left, and a black point marks total net reduction "
             "on the bottom percentage-point axis. White circles with dark "
             "green outlines mark city absolute net reduction on the top kt "
-            "CO2e/yr axis; the overall row is excluded from that axis."
+            "CO2e/yr axis; the overall row is excluded from that axis. A "
+            "continuous gold line on the right shows city GDP in the same "
+            "macro-region and representative-city order. GDP uses latest "
+            f"available source years ({gdp_source_year_label}), and the overall row is "
+            "excluded from the GDP profile."
         ),
         "component_specs": _json_safe(CONTRIBUTION_COMPONENT_SPECS),
         "net_marker": {"label": "Net reduction", "color": "#111111"},
@@ -2097,6 +2202,21 @@ def _write_contribution_decomposition_city_b_report(
             "facecolor": "white",
             "edgecolor": "#1B5E20",
             "scope": "Representative city rows only",
+        },
+        "gdp_profile": {
+            "label": "GDP",
+            "source_column": "gdp_100m",
+            "display_unit": "trillion CNY",
+            "conversion": "gdp_100m / 10000",
+            "scale": "linear from zero",
+            "line_color": "#B07A1C",
+            "scope": "Representative city rows only",
+            "connection_order": (
+                "One continuous line in the displayed China macro-region and "
+                "representative-city order; it is not a temporal trend."
+            ),
+            "source_year_policy": "Latest available city value",
+            "source_year_range": gdp_source_year_range,
         },
         "cities": _json_safe(city_rows),
         "sampling": _json_safe(prepared.get("sampling", {})),
@@ -2110,7 +2230,7 @@ def _write_contribution_decomposition_city_b_report(
 def plot_contribution_decomposition_city_b(
     prepared: Dict,
     save_path: str = None,
-    figsize: tuple = (6.3, 7.5),
+    figsize: tuple = (7.2, 7.5),
     for_latex: bool = False,
     plot_title: bool = False,
 ):
@@ -2129,14 +2249,19 @@ def plot_contribution_decomposition_city_b(
 
     city_rows = _selected_city_component_rows(prepared.get("cities", []))
     rows = [_national_contribution_row(prepared.get("national", {})), *city_rows]
-    fig, ax = plt.subplots(figsize=figsize)
-    fig.subplots_adjust(left=0.43, right=0.97, bottom=0.075, top=0.80)
+    fig = plt.figure(figsize=figsize)
+    gs = fig.add_gridspec(1, 2, width_ratios=[2.8, 1.0], wspace=0.16)
+    ax = fig.add_subplot(gs[0, 0])
+    ax_gdp = fig.add_subplot(gs[0, 1], sharey=ax)
+    fig.subplots_adjust(left=0.375, right=0.98, bottom=0.075, top=0.80)
     y = _plot_selected_city_contribution_bars(ax, rows)
     ax_top = ax.twiny()
     bottom_xlim = ax.get_xlim()
     zero_fraction = (0.0 - bottom_xlim[0]) / (bottom_xlim[1] - bottom_xlim[0])
     _plot_selected_city_absolute_reduction_points(ax_top, rows, y, zero_fraction)
     ax_top.set_ylim(ax.get_ylim())
+    _plot_selected_city_gdp_profile(ax_gdp, rows, y)
+    ax_gdp.set_ylim(ax.get_ylim())
 
     legend_handles = [
         plt.Rectangle(
@@ -2186,7 +2311,7 @@ def plot_contribution_decomposition_city_b(
     )
     if plot_title:
         ax.set_title(
-            "Contribution decomposition by representative city",
+            "Contribution decomposition and GDP by representative city",
             fontsize=13,
         )
 
@@ -2196,13 +2321,13 @@ def plot_contribution_decomposition_city_b(
         if plot_title:
             save_path = _add_title_suffix(save_path)
         os.makedirs(os.path.dirname(save_path), exist_ok=True)
-        # Preserve the 160 mm paper-width canvas instead of trimming it to artists.
+        # Preserve the 183 mm paper-width canvas instead of trimming it to artists.
         fig.savefig(save_path, dpi=300)
         _write_contribution_decomposition_city_b_report(
             prepared,
             save_path,
             figsize,
-            axes=(ax, ax_top),
+            axes=(ax, ax_top, ax_gdp),
             rows=rows,
         )
         plt.close(fig)
