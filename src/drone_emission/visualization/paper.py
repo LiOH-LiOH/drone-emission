@@ -131,7 +131,20 @@ CITY_CONTEXT_GROUP_FIGURES = {
     ),
 }
 
-REDUCTION_DETOUR_CACHE_VERSION = 3
+CITY_GEF_CONTEXT_DETOUR_CONTEXTS = (
+    CITY_CONTEXT_FIGURES["chengdu_city_context"],
+    CITY_CONTEXT_FIGURES["beijing_city_context"],
+    CITY_CONTEXT_FIGURES["shanghai_city_context"],
+    CITY_CONTEXT_FIGURES["guangzhou_city_context"],
+)
+CITY_CONTEXT_MARKERS = {
+    "chengdu": "o",
+    "beijing": "s",
+    "shanghai": "D",
+    "guangzhou": "^",
+}
+
+REDUCTION_DETOUR_CACHE_VERSION = 4
 BREAK_EVEN_PHASE_CACHE_VERSION = 9
 CONTRIBUTION_DECOMPOSITION_FULL_CACHE_VERSION = 5
 REDUCTION_DETOUR_SELECTION_METRIC = "total_ebike_lifecycle"
@@ -443,6 +456,8 @@ def _build_reduction_detour_binned_by_city(
     """Return binned reduction-detour data for selected city rows."""
     from dataclasses import asdict, replace
 
+    import numpy as np
+
     from emission.cal_single_delivery import create_ebike_params, get_emission_params
     from sensitivity.vectorized_lca import EbikeScenario, compute_ebike_per_order_g
     from utils.config import get_cache_dir
@@ -535,9 +550,35 @@ def _build_reduction_detour_binned_by_city(
         if not required.issubset(od_df.columns):
             print(f"{figure_name}: {key} missing columns — skipping")
             continue
+        road_m = pd.to_numeric(
+            od_df["road_distance_m"], errors="coerce"
+        ).to_numpy()
+        air_km = pd.to_numeric(od_df["distance_km"], errors="coerce").to_numpy()
+        annual_sales = pd.to_numeric(
+            od_df["annual_sales"], errors="coerce"
+        ).to_numpy()
+        valid_detour = (
+            np.isfinite(road_m)
+            & np.isfinite(air_km)
+            & np.isfinite(annual_sales)
+            & (road_m >= 0)
+            & (air_km > 0)
+            & (annual_sales > 0)
+        )
+        weighted_road_m = float(
+            np.sum(road_m[valid_detour] * annual_sales[valid_detour])
+        )
+        weighted_air_m = float(
+            np.sum(air_km[valid_detour] * 1000.0 * annual_sales[valid_detour])
+        )
+        city_detour_ratio = (
+            weighted_road_m / weighted_air_m
+            if weighted_air_m > 0
+            else np.nan
+        )
         gef = gef_map[key]
         ebike_pp = replace(ebike_params, e_use=float(gef))
-        road_km = od_df["road_distance_m"].to_numpy(dtype=float) / 1000.0
+        road_km = road_m / 1000.0
         od_df = od_df.copy()
         od_df["ebike_lifecycle_g"] = compute_ebike_per_order_g(road_km, ebike_pp, scenario)
         (
@@ -559,6 +600,9 @@ def _build_reduction_detour_binned_by_city(
             "detour_by_bin": detour_by_bin,
             "max_km": max_km,
             "oracle_drone_share_pct": oracle_drone_share_pct,
+            "city_detour_ratio": city_detour_ratio,
+            "valid_path_count": int(valid_detour.sum()),
+            "invalid_path_count": int((~valid_detour).sum()),
         }
 
     if use_binned_cache and binned_by_city:
@@ -2303,6 +2347,317 @@ def _plot_city_context_group_panels(
     return panel_records
 
 
+def _plot_compact_city_context_summary_panels(
+    fig,
+    subplot_spec,
+    binned_by_city,
+    labels,
+    contexts,
+    panel_start_letter="b",
+):
+    """Draw compact power-mix and distance panels for the city summary."""
+    import numpy as np
+    from matplotlib.lines import Line2D
+    from matplotlib.patches import Patch
+
+    middle = subplot_spec.subgridspec(
+        2,
+        1,
+        height_ratios=[0.12, 0.88],
+        hspace=0.08,
+    )
+    legend_ax = fig.add_subplot(middle[0])
+    legend_ax.legend(
+        handles=[
+            Patch(facecolor=POWER_MIX_COLORS[name], edgecolor="none", label=name)
+            for name in ("Hydro", "Thermal", "Wind", "Solar", "Other")
+        ],
+        loc="center",
+        ncol=5,
+        frameon=False,
+        fontsize=7,
+        handlelength=1.0,
+        handletextpad=0.35,
+        columnspacing=0.75,
+        borderaxespad=0.0,
+    )
+    legend_ax.set_axis_off()
+
+    outer = middle[1].subgridspec(1, len(contexts), wspace=0.24)
+    visible_by_city = {}
+    absolute_values = []
+    for context in contexts:
+        region_key = context["region_key"]
+        binned = binned_by_city[region_key]
+        centres = np.asarray(binned["centres"], dtype=float)
+        reduction_abs = np.asarray(binned["reduction_abs"], dtype=float)
+        x_max = min(5.0, float(binned["max_km"]))
+        x_min = min(0.2, x_max)
+        visible = (
+            (centres >= x_min)
+            & (centres <= x_max)
+            & np.isfinite(centres)
+            & np.isfinite(reduction_abs)
+        )
+        visible_by_city[region_key] = (centres, reduction_abs, visible, x_min, x_max)
+        absolute_values.extend(reduction_abs[visible].tolist())
+        if visible.sum() >= 2:
+            slope, intercept = np.polyfit(
+                centres[visible], reduction_abs[visible], deg=1
+            )
+            absolute_values.extend(
+                [slope * x_min + intercept, slope * x_max + intercept]
+            )
+
+    finite_absolute = np.asarray(absolute_values, dtype=float)
+    finite_absolute = finite_absolute[np.isfinite(finite_absolute)]
+    if finite_absolute.size:
+        absolute_min = min(0.0, float(finite_absolute.min()))
+        absolute_max = max(0.0, float(finite_absolute.max()))
+        absolute_pad = max((absolute_max - absolute_min) * 0.08, 0.5)
+        shared_absolute_ylim = (
+            absolute_min - absolute_pad,
+            absolute_max + absolute_pad,
+        )
+    else:
+        shared_absolute_ylim = (-1.0, 1.0)
+
+    panel_records = []
+    panel_start_ord = ord(panel_start_letter)
+    for i, context in enumerate(contexts):
+        region_key = context["region_key"]
+        display_name = context["display_name"]
+        power_region_key = context.get("power_region_key", region_key)
+        block = outer[0, i].subgridspec(
+            2,
+            1,
+            height_ratios=[0.34, 1.0],
+            hspace=0.12,
+        )
+        ax_power = fig.add_subplot(block[0])
+        ax_distance = fig.add_subplot(block[1])
+        ax_absolute = ax_distance.twinx()
+        ax_absolute.patch.set_visible(False)
+
+        generation = POWER_GENERATION_2022_100M_KWH[power_region_key]
+        total = float(generation["total"])
+        components = ["Hydro", "Thermal", "Wind", "Solar"]
+        values = [float(generation[name]) for name in components]
+        remainder = total - sum(values)
+        if remainder / total > 0.005:
+            components.append("Other")
+            values.append(remainder)
+        shares = [value / total * 100.0 for value in values]
+        left = 0.0
+        for name, share in zip(components, shares):
+            ax_power.barh(
+                [0],
+                [share],
+                left=[left],
+                height=0.52,
+                color=POWER_MIX_COLORS[name],
+                edgecolor="white",
+                linewidth=0.45,
+                zorder=3,
+            )
+            if share >= 12.0:
+                ax_power.text(
+                    left + share / 2.0,
+                    0,
+                    f"{share:.0f}%",
+                    ha="center",
+                    va="center",
+                    fontsize=7,
+                    color="white" if name in {"Hydro", "Thermal"} else "#222222",
+                    fontweight="bold",
+                    zorder=4,
+                )
+            left += share
+        ax_power.set_xlim(0, 100)
+        ax_power.set_ylim(-0.55, 0.55)
+        ax_power.set_axis_off()
+
+        power_letter = chr(panel_start_ord + 2 * i)
+        distance_letter = chr(panel_start_ord + 2 * i + 1)
+        marker = CITY_CONTEXT_MARKERS.get(region_key, "o")
+        ax_power.text(
+            0.0,
+            1.18,
+            power_letter,
+            transform=ax_power.transAxes,
+            fontsize=9,
+            fontweight="bold",
+            ha="left",
+            va="bottom",
+        )
+        ax_power.plot(
+            [0.18],
+            [1.25],
+            marker=marker,
+            markersize=4.3,
+            markerfacecolor="none",
+            markeredgecolor="#111111",
+            markeredgewidth=0.8,
+            linestyle="None",
+            transform=ax_power.transAxes,
+            clip_on=False,
+        )
+        ax_power.text(
+            0.27,
+            1.18,
+            display_name,
+            transform=ax_power.transAxes,
+            fontsize=8,
+            fontweight="bold",
+            ha="left",
+            va="bottom",
+        )
+
+        binned = binned_by_city[region_key]
+        centres, reduction_abs, visible, x_min, x_max = visible_by_city[region_key]
+        drone_share = np.asarray(
+            binned.get("oracle_drone_share_pct", np.full_like(centres, np.nan)),
+            dtype=float,
+        )
+        bar_visible = visible & np.isfinite(drone_share)
+        ax_distance.bar(
+            centres[bar_visible],
+            drone_share[bar_visible],
+            width=0.156,
+            color="#9ecae1",
+            edgecolor="white",
+            linewidth=0.25,
+            zorder=2,
+        )
+        ax_distance.set_xlim(x_min, x_max)
+        ax_distance.set_ylim(0, 105)
+        ax_distance.set_xticks([0.2, 2.5, 5.0])
+        ax_distance.set_yticks([0, 50, 100])
+        ax_distance.tick_params(axis="both", labelsize=7, length=2.5, pad=1.5)
+        ax_distance.grid(True, axis="y", alpha=0.18, linewidth=0.45)
+        ax_distance.set_axisbelow(True)
+        ax_distance.spines["top"].set_visible(False)
+        if i != 0:
+            ax_distance.tick_params(axis="y", left=False, labelleft=False)
+            ax_distance.spines["left"].set_visible(False)
+
+        ax_absolute.scatter(
+            centres[visible],
+            reduction_abs[visible],
+            s=7,
+            color="#555555",
+            alpha=0.72,
+            linewidth=0,
+            zorder=5,
+        )
+        if visible.sum() >= 2:
+            slope, intercept = np.polyfit(
+                centres[visible], reduction_abs[visible], deg=1
+            )
+            x_fit = np.array([x_min, x_max], dtype=float)
+            ax_absolute.plot(
+                x_fit,
+                slope * x_fit + intercept,
+                color="#111111",
+                linewidth=0.9,
+                alpha=0.82,
+                zorder=6,
+            )
+        ax_absolute.axhline(0, color="#555555", linewidth=0.4, alpha=0.3)
+        ax_absolute.set_ylim(*shared_absolute_ylim)
+        ax_absolute.tick_params(
+            axis="y",
+            labelsize=7,
+            labelcolor="#555555",
+            length=2.5,
+            pad=1.5,
+        )
+        ax_absolute.spines["top"].set_visible(False)
+        if i != len(contexts) - 1:
+            ax_absolute.tick_params(axis="y", right=False, labelright=False)
+            ax_absolute.spines["right"].set_visible(False)
+
+        ax_distance.text(
+            0.0,
+            1.02,
+            distance_letter,
+            transform=ax_distance.transAxes,
+            fontsize=9,
+            fontweight="bold",
+            ha="left",
+            va="bottom",
+        )
+
+        panel_pos = outer[0, i].get_position(fig)
+        panel_x_center = (panel_pos.x0 + panel_pos.x1) / 2.0
+        panel_anchor_points = {
+            "top": (panel_x_center, panel_pos.y1),
+            "bottom": (panel_x_center, panel_pos.y0),
+        }
+        for x, y in panel_anchor_points.values():
+            fig.add_artist(
+                Line2D(
+                    [x],
+                    [y],
+                    marker=marker,
+                    markersize=3.8,
+                    markerfacecolor="white",
+                    markeredgecolor="#111111",
+                    markeredgewidth=0.75,
+                    linestyle="None",
+                    transform=fig.transFigure,
+                    zorder=60,
+                    clip_on=False,
+                )
+            )
+
+        panel_records.append(
+            {
+                "context": context,
+                "panel_letter": power_letter,
+                "power_panel_letter": power_letter,
+                "reduction_panel_letter": distance_letter,
+                "panel_anchor_points": panel_anchor_points,
+                "power_mix_ax": ax_power,
+                "power_legend_ax": legend_ax,
+                "reduction_ax": ax_distance,
+                "absolute_ax": ax_absolute,
+                "shared_absolute_ylim": shared_absolute_ylim,
+            }
+        )
+
+    middle_pos = middle[1].get_position(fig)
+    fig.text(
+        middle_pos.x0 - 0.055,
+        middle_pos.y0 + middle_pos.height * 0.32,
+        "Oracle drone share (%)",
+        rotation=90,
+        fontsize=7.5,
+        ha="center",
+        va="center",
+        color="#3182bd",
+    )
+    fig.text(
+        middle_pos.x1 + 0.055,
+        middle_pos.y0 + middle_pos.height * 0.32,
+        "E-bike - Drone (g CO$_2$e/order)",
+        rotation=90,
+        fontsize=7.5,
+        ha="center",
+        va="center",
+        color="#555555",
+    )
+    fig.text(
+        (middle_pos.x0 + middle_pos.x1) / 2.0,
+        middle_pos.y0 - 0.030,
+        "Air distance (km)",
+        fontsize=7.5,
+        ha="center",
+        va="top",
+    )
+    return panel_records
+
+
 def _report_number(value):
     """Return a JSON-safe scalar with NaN/Inf represented as None."""
     import numpy as np
@@ -2720,6 +3075,11 @@ def _city_context_summary_report(
                 "region_key": region_key,
                 "city_label": labels.get(region_key, context["display_name"]),
                 "display_name": context["display_name"],
+                "city_detour_ratio": _report_number(
+                    binned.get("city_detour_ratio")
+                ),
+                "valid_path_count": int(binned.get("valid_path_count", 0)),
+                "invalid_path_count": int(binned.get("invalid_path_count", 0)),
                 "axes": {
                     "power_mix": _report_axis(record["power_mix_ax"]),
                     "power_legend": _report_axis(record["power_legend_ax"]),
@@ -2792,6 +3152,11 @@ def _city_context_summary_report(
                 ],
                 "absolute_linear_fit": linear_fit,
                 "reduction_saturation_fit": saturation_fit,
+                "shared_absolute_ylim": (
+                    _report_array(record["shared_absolute_ylim"])
+                    if record.get("shared_absolute_ylim") is not None
+                    else None
+                ),
             }
         )
     return reports
@@ -2804,6 +3169,7 @@ def _add_city_gef_xaxis_markers(fig, axes, selected, contexts):
 
     for context in contexts:
         region_key = context["region_key"]
+        marker = CITY_CONTEXT_MARKERS.get(region_key, "o")
         city_rows = selected[selected["region_key"] == region_key]
         if city_rows.empty or "gef" not in city_rows.columns:
             continue
@@ -2817,8 +3183,8 @@ def _add_city_gef_xaxis_markers(fig, axes, selected, contexts):
         ax_dist.scatter(
             [x],
             [y],
-            s=28,
-            marker="o",
+            s=22,
+            marker=marker,
             facecolors="none",
             edgecolors="#111111",
             linewidths=1.0,
@@ -2834,6 +3200,7 @@ def _add_city_gef_xaxis_markers(fig, axes, selected, contexts):
                 "power_region_key": context.get("power_region_key", region_key),
                 "province": _report_number(city_rows.iloc[0].get("province")),
                 "gef": _report_number(x),
+                "marker": marker,
                 "x_data": _report_number(x),
                 "y_data": _report_number(y),
                 "x_figure_fraction": _report_number(fig_point[0]),
@@ -2873,6 +3240,7 @@ def _add_city_detour_reduction_markers(
 
     for context in contexts:
         region_key = context["region_key"]
+        marker = CITY_CONTEXT_MARKERS.get(region_key, "o")
         city_rows = df[df["region_key"] == region_key].copy()
         if city_rows.empty:
             continue
@@ -2892,13 +3260,39 @@ def _add_city_detour_reduction_markers(
         ax.scatter(
             [x],
             [y],
-            s=34,
-            marker="o",
+            s=28,
+            marker=marker,
             facecolors="none",
             edgecolors="#111111",
             linewidths=1.1,
             zorder=35,
             clip_on=False,
+        )
+        label_offsets = {
+            "chengdu": (-4, 7),
+            "beijing": (-8, -11),
+            "shanghai": (6, 7),
+            "guangzhou": (6, -11),
+        }
+        offset = label_offsets.get(region_key, (5, 5))
+        ax.annotate(
+            context["display_name"],
+            (x, y),
+            xytext=offset,
+            textcoords="offset points",
+            fontsize=7,
+            fontweight="bold",
+            color="#111111",
+            ha="right" if offset[0] < 0 else "left",
+            va="bottom" if offset[1] >= 0 else "top",
+            bbox=dict(
+                boxstyle="round,pad=0.12",
+                facecolor="white",
+                edgecolor="0.72",
+                linewidth=0.45,
+                alpha=0.88,
+            ),
+            zorder=36,
         )
         display_point = ax.transData.transform((x, y))
         fig_point = fig.transFigure.inverted().transform(display_point)
@@ -2911,6 +3305,8 @@ def _add_city_detour_reduction_markers(
                 "x_detour_ratio": _report_number(x),
                 "y_reduction_pct": _report_number(y),
                 "grid_emission_factor": _report_number(gef),
+                "marker": marker,
+                "label_offset_points": {"x": offset[0], "y": offset[1]},
                 "x_figure_fraction": _report_number(fig_point[0]),
                 "y_figure_fraction": _report_number(fig_point[1]),
             }
@@ -3150,16 +3546,19 @@ def _add_city_panel_connector_lines(
                 marker_record["y_figure_fraction"],
             )
             end = anchors[anchor_key]
+            gutter_y = (start[1] + end[1]) / 2.0
+            route_x = [start[0], start[0], end[0], end[0]]
+            route_y = [start[1], gutter_y, gutter_y, end[1]]
             fig.add_artist(
                 Line2D(
-                    [start[0], end[0]],
-                    [start[1], end[1]],
-                    color="#111111",
-                    linewidth=0.8,
-                    alpha=0.42,
+                    route_x,
+                    route_y,
+                    color="#555555",
+                    linewidth=0.45,
+                    alpha=0.25,
                     linestyle="-",
                     transform=fig.transFigure,
-                    zorder=58,
+                    zorder=2,
                     clip_on=False,
                 )
             )
@@ -3174,6 +3573,13 @@ def _add_city_panel_connector_lines(
                         "x_figure_fraction": _report_number(end[0]),
                         "y_figure_fraction": _report_number(end[1]),
                     },
+                    "route": [
+                        {
+                            "x_figure_fraction": _report_number(x),
+                            "y_figure_fraction": _report_number(y),
+                        }
+                        for x, y in zip(route_x, route_y)
+                    ],
                 }
             )
 
@@ -3182,7 +3588,13 @@ def _add_city_panel_connector_lines(
     return connector_records
 
 
-def _detour_reduction_scatter_report(df, reduction_col, axes, panel_letters=("f", "g")):
+def _detour_reduction_scatter_report(
+    df,
+    reduction_col,
+    axes,
+    panel_letters=("f", "g"),
+    compact=False,
+):
     """Return exact plotted data for the bottom detour-reduction scatter panels."""
     import numpy as np
     from scipy import stats
@@ -3267,8 +3679,8 @@ def _detour_reduction_scatter_report(df, reduction_col, axes, panel_letters=("f"
                 "axes": _report_axis(ax),
                 "panel_label": {
                     "text": panel_letter,
-                    "x_axes_fraction": -0.10,
-                    "y_axes_fraction": 1.02,
+                    "x_axes_fraction": 0.0 if compact else -0.10,
+                    "y_axes_fraction": 1.01 if compact else 1.02,
                 },
                 "group_label": {
                     "text": label,
@@ -3276,7 +3688,7 @@ def _detour_reduction_scatter_report(df, reduction_col, axes, panel_letters=("f"
                     "y_axes_fraction": 0.96,
                 },
                 "scatter_style": {
-                    "size": 24,
+                    "size": 12 if compact else 24,
                     "alpha": 0.68,
                     "edgecolors": "none",
                     "zorder": 10,
@@ -3365,6 +3777,8 @@ def _write_city_gef_context_detour_report(
                 f"### Panel {city['panel_letter']}: {city['display_name']}",
                 "",
                 f"- Region key: `{city['region_key']}`",
+                f"- OD-derived detour ratio: {city['city_detour_ratio']}",
+                f"- Valid/invalid paths: {city['valid_path_count']}/{city['invalid_path_count']}",
                 f"- Visible distance-bin count: {len(visible_bins)}",
                 f"- Power mix components: {', '.join(item['component'] for item in city['power_mix'])}",
                 f"- Bar metric: `{city['bar_metric']}`",
@@ -3501,9 +3915,7 @@ def _render_city_gef_context_detour_summary(
 ):
     """Render GEF components, selected city contexts, and detour-reduction scatter."""
     figure_name = "city_gef_context_detour_summary"
-    contexts = CITY_CONTEXT_GROUP_FIGURES[
-        "chengdu_beijing_guangzhou_city_context"
-    ]
+    contexts = CITY_GEF_CONTEXT_DETOUR_CONTEXTS
     region_keys = [context["region_key"] for context in contexts]
     selected = city_df[city_df["region_key"].isin(region_keys)].copy()
     selected["_context_order"] = selected["region_key"].map(
@@ -3520,7 +3932,7 @@ def _render_city_gef_context_detour_summary(
         figure_name=figure_name,
         exp_config=exp_config,
         absolute_reduction_metric="per_order_g",
-        use_binned_cache=False,
+        use_binned_cache=True,
         bin_width_km=0.2,
     )
     if built is None:
@@ -3553,26 +3965,47 @@ def _render_city_gef_context_detour_summary(
         _weighted_reduction_column,
     )
 
-    reduction_col = _weighted_reduction_column(df_enriched)
+    summary_df = df_enriched.copy()
+    if "detour_ratio" not in summary_df.columns:
+        summary_df["detour_ratio"] = float("nan")
+    for context in available_contexts:
+        region_key = context["region_key"]
+        city_detour = binned_by_city[region_key].get("city_detour_ratio")
+        if city_detour is None or pd.isna(city_detour):
+            print(f"{figure_name}: {region_key} OD detour unavailable")
+            continue
+        city_mask = summary_df["region_key"] == region_key
+        existing = pd.to_numeric(
+            summary_df.loc[city_mask, "detour_ratio"], errors="coerce"
+        ).dropna()
+        if not existing.empty and abs(float(existing.iloc[0]) - city_detour) > 1e-6:
+            print(
+                f"{figure_name}: {region_key} OD detour {city_detour:.6f} "
+                f"differs from stats {float(existing.iloc[0]):.6f}"
+            )
+        summary_df.loc[city_mask, "detour_ratio"] = city_detour
 
-    figure_size = (17.0, 17.0)
+    reduction_col = _weighted_reduction_column(summary_df)
+
+    figure_size = (7.2, 8.4)
     fig = plt.figure(figsize=figure_size)
     outer = fig.add_gridspec(
         3,
         1,
-        height_ratios=[1.05, 1.70, 1.05],
-        hspace=0.34,
-        left=0.06,
-        right=0.97,
-        bottom=0.04,
-        top=0.98,
+        height_ratios=[1.0, 1.0, 1.0],
+        hspace=0.20,
+        left=0.10,
+        right=0.90,
+        bottom=0.055,
+        top=0.985,
     )
 
     top_axes = _plot_city_gef_scatter_components_axes(
         fig=fig,
         subplot_spec=outer[0],
-        df=df_enriched,
+        df=summary_df,
         plot_title=plot_title,
+        compact=True,
     )
     if top_axes is None:
         plt.close(fig)
@@ -3580,10 +4013,10 @@ def _render_city_gef_context_detour_summary(
     ax_top, _ = top_axes
     top_pos = ax_top.get_position()
     fig.text(
-        top_pos.x0 - 0.035,
-        top_pos.y1 + 0.006,
+        top_pos.x0,
+        top_pos.y1 - 0.004,
         "a",
-        fontsize=13,
+        fontsize=9,
         fontweight="bold",
         ha="right",
         va="bottom",
@@ -3595,16 +4028,13 @@ def _render_city_gef_context_detour_summary(
         available_contexts,
     )
 
-    city_panel_records = _plot_city_context_group_panels(
+    city_panel_records = _plot_compact_city_context_summary_panels(
         fig=fig,
         subplot_spec=outer[1],
         binned_by_city=binned_by_city,
         labels=labels,
         contexts=available_contexts,
         panel_start_letter="b",
-        label_each_subplot=True,
-        show_city_panel_anchors=True,
-        bar_metric="oracle_drone_share_pct",
     )
 
     bottom_start_ord = ord("b") + 2 * len(available_contexts)
@@ -3615,13 +4045,15 @@ def _render_city_gef_context_detour_summary(
     bottom_axes = _plot_grouped_scatter_split_panels_axes(
         fig=fig,
         subplot_spec=outer[2],
-        df=df_enriched,
+        df=summary_df,
         feature_var="detour_ratio",
         result_var=reduction_col,
         group_var="grid_emission_factor",
         threshold=0.3,
         plot_title=False,
         panel_letters=bottom_panel_letters,
+        compact=True,
+        horizontal_colorbar=True,
     )
     if bottom_axes is None:
         plt.close(fig)
@@ -3629,18 +4061,12 @@ def _render_city_gef_context_detour_summary(
     bottom_city_markers = _add_city_detour_reduction_markers(
         fig,
         bottom_axes,
-        df_enriched,
+        summary_df,
         available_contexts,
         reduction_col,
         panel_letters=bottom_panel_letters,
     )
-    bottom_major_city_labels = _add_major_city_detour_reduction_labels(
-        fig,
-        bottom_axes,
-        df_enriched,
-        reduction_col,
-        panel_letters=bottom_panel_letters,
-    )
+    bottom_major_city_labels = []
     connector_lines = _add_city_panel_connector_lines(
         fig,
         top_city_gef_markers,
@@ -3651,7 +4077,7 @@ def _render_city_gef_context_detour_summary(
     if plot_title:
         fig.suptitle(
             "City Grid Intensity, Context, and Detour-reduction Relationships",
-            fontsize=14,
+            fontsize=9,
         )
 
     save_path = os.path.join(out, f"{figure_name}.png")
@@ -3661,8 +4087,8 @@ def _render_city_gef_context_detour_summary(
         save_path = _add_title_suffix(save_path)
     os.makedirs(os.path.dirname(save_path), exist_ok=True)
     fig.canvas.draw()
-    fig.savefig(save_path, dpi=300, bbox_inches="tight")
-    top_report = _city_gef_components_report(df_enriched, top_axes)
+    fig.savefig(save_path, dpi=300, bbox_inches="tight", pad_inches=0.0)
+    top_report = _city_gef_components_report(summary_df, top_axes)
     top_report["selected_city_gef_markers"] = top_city_gef_markers
     city_reports = _city_context_summary_report(
         binned_by_city,
@@ -3671,10 +4097,11 @@ def _render_city_gef_context_detour_summary(
         bar_metric="oracle_drone_share_pct",
     )
     bottom_report = _detour_reduction_scatter_report(
-        df_enriched,
+        summary_df,
         reduction_col,
         bottom_axes,
         panel_letters=bottom_panel_letters,
+        compact=True,
     )
     bottom_report["selected_city_scatter_markers"] = bottom_city_markers
     bottom_report["major_city_labels"] = bottom_major_city_labels

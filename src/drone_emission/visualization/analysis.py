@@ -2359,6 +2359,8 @@ def _plot_grouped_scatter_split_panels_axes(
     plot_title: bool = False,
     group_labels: tuple = None,
     panel_letters: tuple = ("a", "b"),
+    compact: bool = False,
+    horizontal_colorbar: bool = False,
 ):
     """Draw threshold-split scatter panels into a parent subplot spec."""
     valid_mask = df[[feature_var, result_var, group_var]].notna().all(axis=1)
@@ -2396,15 +2398,34 @@ def _plot_grouped_scatter_split_panels_axes(
     gef_vals = plot_df[group_var].values
     norm = Normalize(vmin=gef_vals.min(), vmax=gef_vals.max())
 
-    gs = subplot_spec.subgridspec(
-        1,
-        3,
-        width_ratios=[1, 0.055, 1],
-        wspace=0.22,
-    )
-    ax_low = fig.add_subplot(gs[0, 0])
-    cbar_ax = fig.add_subplot(gs[0, 1])
-    ax_high = fig.add_subplot(gs[0, 2], sharex=ax_low, sharey=ax_low)
+    if horizontal_colorbar:
+        root = subplot_spec.subgridspec(
+            2,
+            1,
+            height_ratios=[0.10, 0.90],
+            hspace=0.13,
+        )
+        cbar_grid = root[0].subgridspec(
+            1,
+            3,
+            width_ratios=[1.0, 0.72, 1.0],
+        )
+        panels_grid = root[1].subgridspec(1, 2, wspace=0.20)
+        cbar_ax = fig.add_subplot(cbar_grid[0, 1])
+        ax_low = fig.add_subplot(panels_grid[0, 0])
+        ax_high = fig.add_subplot(
+            panels_grid[0, 1], sharex=ax_low, sharey=ax_low
+        )
+    else:
+        gs = subplot_spec.subgridspec(
+            1,
+            3,
+            width_ratios=[1, 0.055, 1],
+            wspace=0.22,
+        )
+        ax_low = fig.add_subplot(gs[0, 0])
+        cbar_ax = fig.add_subplot(gs[0, 1])
+        ax_high = fig.add_subplot(gs[0, 2], sharex=ax_low, sharey=ax_low)
     axes = [ax_low, ax_high]
     masks = [low_mask, high_mask]
     line_colors = ["#006837", "#A50F15"]
@@ -2416,7 +2437,7 @@ def _plot_grouped_scatter_split_panels_axes(
         ax.scatter(
             panel_df[feature_var].values,
             panel_df[result_var].values,
-            s=24,
+            s=12 if compact else 24,
             alpha=0.68,
             c=panel_df[group_var].values,
             cmap=cmap,
@@ -2435,7 +2456,7 @@ def _plot_grouped_scatter_split_panels_axes(
                 x_line,
                 y_line,
                 color=line_color,
-                linewidth=2.5,
+                linewidth=1.35 if compact else 2.5,
                 alpha=0.42,
                 zorder=15,
             )
@@ -2456,25 +2477,25 @@ def _plot_grouped_scatter_split_panels_axes(
             )
 
         ax.text(
-            -0.10,
-            1.02,
+            0.0 if compact else -0.10,
+            1.01 if compact else 1.02,
             panel_letter,
             transform=ax.transAxes,
-            fontsize=14,
+            fontsize=9 if compact else 14,
             fontweight="bold",
             va="bottom",
-            ha="right",
+            ha="left" if compact else "right",
         )
         ax.text(
-            0.03,
-            0.96,
+            0.04,
+            0.95,
             label,
             transform=ax.transAxes,
-            fontsize=9,
+            fontsize=7 if compact else 9,
             va="top",
             ha="left",
             bbox=dict(
-                boxstyle="round,pad=0.22",
+                boxstyle="round,pad=0.14" if compact else "round,pad=0.22",
                 facecolor="white",
                 edgecolor="0.7",
                 alpha=0.9,
@@ -2482,17 +2503,42 @@ def _plot_grouped_scatter_split_panels_axes(
         )
         ax.set_xlim(x_global_min, x_global_max)
         ax.set_ylim(y_global_min, y_global_max)
-        ax.set_xlabel(VARIABLE_LABELS.get(feature_var, feature_var), fontsize=12)
-        ax.grid(True, alpha=0.3, linestyle="--")
+        ax.set_xlabel(
+            VARIABLE_LABELS.get(feature_var, feature_var),
+            fontsize=7.5 if compact else 12,
+        )
+        if compact:
+            ax.tick_params(axis="both", labelsize=7, length=2.5, pad=1.5)
+        ax.grid(
+            True,
+            alpha=0.18 if compact else 0.3,
+            linestyle="--",
+            linewidth=0.45 if compact else 0.8,
+        )
 
-    ax_low.set_ylabel(VARIABLE_LABELS.get(result_var, result_var), fontsize=12)
+    ax_low.set_ylabel(
+        VARIABLE_LABELS.get(result_var, result_var),
+        fontsize=7.5 if compact else 12,
+    )
     ax_high.set_ylabel("")
     ax_high.tick_params(axis="y", left=False, labelleft=False)
 
     sm = ScalarMappable(norm=norm, cmap=cmap)
     sm.set_array([])
-    cbar = fig.colorbar(sm, cax=cbar_ax)
-    cbar.set_label(VARIABLE_LABELS.get(group_var, group_var), fontsize=10)
+    cbar = fig.colorbar(
+        sm,
+        cax=cbar_ax,
+        orientation="horizontal" if horizontal_colorbar else "vertical",
+    )
+    if compact:
+        cbar.set_label(
+            VARIABLE_LABELS.get(group_var, group_var),
+            fontsize=7,
+            labelpad=1.5,
+        )
+        cbar.ax.tick_params(labelsize=6.8, length=2.2)
+    else:
+        cbar.set_label(VARIABLE_LABELS.get(group_var, group_var), fontsize=10)
 
     if plot_title:
         fig.suptitle(
@@ -4317,6 +4363,7 @@ def _plot_city_gef_scatter_components_axes(
     subplot_spec,
     df: pd.DataFrame,
     plot_title: bool = False,
+    compact: bool = False,
 ):
     """Draw GEF-binned per-order emission components into a parent subplot spec."""
     gef_col = None
@@ -4420,7 +4467,7 @@ def _plot_city_gef_scatter_components_axes(
     gs = subplot_spec.subgridspec(
         2,
         1,
-        height_ratios=[4.0, 1.0],
+        height_ratios=[3.6, 1.0] if compact else [4.0, 1.0],
         hspace=0.0,
     )
     ax = fig.add_subplot(gs[0])
@@ -4508,12 +4555,23 @@ def _plot_city_gef_scatter_components_axes(
             )
 
     gef_label = VARIABLE_LABELS.get(gef_col, "Grid Emission Factor (kg CO2e/kWh)")
-    ax.set_ylabel("Lifecycle emission\n(g CO2e/order)", fontsize=12)
+    ax.set_ylabel(
+        "Lifecycle emission\n(g CO2e/order)",
+        fontsize=7.5 if compact else 12,
+    )
     ax.set_xticks(bin_edges)
     ax.tick_params(axis="x", which="both", bottom=False, labelbottom=False)
     ax.set_xlim(0.05, 0.85)
     ax.set_ylim(0, max_total * 1.22)
-    ax.grid(True, axis="y", alpha=0.3, linestyle="--")
+    ax.grid(
+        True,
+        axis="y",
+        alpha=0.18 if compact else 0.3,
+        linestyle="--",
+        linewidth=0.45 if compact else 0.8,
+    )
+    if compact:
+        ax.tick_params(axis="y", labelsize=7, length=2.5, pad=1.5)
     ax.set_axisbelow(True)
 
     vehicle_handles = [
@@ -4531,17 +4589,17 @@ def _plot_city_gef_scatter_components_axes(
     legend1 = ax.legend(
         handles=vehicle_handles,
         loc="upper left",
-        fontsize=9,
+        fontsize=7 if compact else 9,
         title="Vehicle",
-        title_fontsize=9,
+        title_fontsize=7 if compact else 9,
     )
     ax.add_artist(legend1)
     ax.legend(
         handles=legend_handles,
         loc="center left",
-        fontsize=9,
+        fontsize=7 if compact else 9,
         title="Component",
-        title_fontsize=9,
+        title_fontsize=7 if compact else 9,
     )
 
     density_x = plot_df[gef_col].to_numpy(dtype=float)
@@ -4582,11 +4640,13 @@ def _plot_city_gef_scatter_components_axes(
     ax_dist.axhline(0, color="#555555", linewidth=0.8, zorder=2)
     ax_dist.set_ylim(-0.12, 1.15)
     ax_dist.set_yticks([])
-    ax_dist.set_ylabel("Cities", fontsize=10)
-    ax_dist.set_xlabel(gef_label, fontsize=12)
+    ax_dist.set_ylabel("Cities", fontsize=7 if compact else 10)
+    ax_dist.set_xlabel(gef_label, fontsize=7.5 if compact else 12)
     ax_dist.set_xticks(bin_edges)
     ax_dist.set_xticklabels(tick_labels)
     ax_dist.tick_params(axis="x", which="both", bottom=True, labelbottom=True, pad=2)
+    if compact:
+        ax_dist.tick_params(axis="x", labelsize=7, length=2.5, pad=1.5)
     ax_dist.set_xlim(0.05, 0.85)
     ax_dist.spines["left"].set_visible(False)
     ax_dist.spines["right"].set_visible(False)
@@ -4595,7 +4655,7 @@ def _plot_city_gef_scatter_components_axes(
     if plot_title:
         ax.set_title(
             "City Per-order Emission Components by Grid Emission Factor",
-            fontsize=14,
+            fontsize=9 if compact else 14,
             fontweight="bold",
         )
 
