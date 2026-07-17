@@ -8735,7 +8735,7 @@ def plot_city_population_detour_oracle_reduction_bubble(
             framealpha=0.92,
             fontsize=6.5,
             title_fontsize=6.5,
-            borderaxespad=0.0,
+            borderaxespad=0.3,
             borderpad=0.25,
             labelspacing=0.1,
             handletextpad=0.35,
