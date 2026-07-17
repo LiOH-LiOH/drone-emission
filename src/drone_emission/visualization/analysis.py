@@ -7429,7 +7429,7 @@ def _save_median_trip_lifecycle_subfigures(
         )
         for text_artist in ax.texts:
             if text_artist.get_text().endswith("median trip"):
-                text_artist.set_position((0.98, 0.30))
+                text_artist.remove()
     _normalize_median_trip_subfigure_text(ax)
     output_path = os.path.join(save_dir, "median_trip_use_phase_emissions" + extension)
     if plot_title:
