@@ -4238,6 +4238,7 @@ def _render_city_gef_context_detour_summary(
     if bottom_axes is None:
         plt.close(fig)
         return
+    bottom_axes[0].set_ylabel("Oracle lifecycle reduction (%)")
     bottom_city_markers = _add_city_detour_reduction_markers(
         fig,
         bottom_axes,
