@@ -6019,7 +6019,7 @@ def plot_regions_map_oracle_reduction_rank(
                 "handletextpad": 0.35,
                 "ncol": len(reduction_edges) - 1,
                 "columnspacing": 0.75,
-                "title": "Reduction (%)",
+                "title": "Annual reduction (%)",
             }
             if is_map_only_figure
             else {}
