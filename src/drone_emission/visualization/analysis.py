@@ -1768,7 +1768,7 @@ def _write_regions_map_pathway_scenarios_report(
                 cbar_ax,
                 bin_edges,
                 reduction_edges,
-                "Reduction vs today's all-ebike anchor (%)",
+                "Reduction vs all-e-bike baseline (%)",
                 shared_cmap,
             ),
             "scenario_parameter_bar_colors": {
@@ -3571,7 +3571,7 @@ def plot_regions_map_pathway_scenarios(
         shared_norm,
         bin_edges,
         reduction_edges,
-        r"Reduction vs today's all-ebike anchor (%)",
+        r"Reduction vs all-e-bike baseline (%)",
     )
     cbar.ax.tick_params(pad=3)
     colorbar_fig.canvas.draw()
