@@ -6797,6 +6797,8 @@ def _draw_trip_phase_barplot(
     battery_colors_by_vehicle=None,
     legend_body_color=None,
     legend_battery_color=None,
+    body_hatch=None,
+    battery_hatch=None,
 ):
     """Draw stacked body/battery phase emissions for one selected OD trip."""
     x = np.arange(len(df))
@@ -6825,6 +6827,7 @@ def _draw_trip_phase_barplot(
         color=body_colors,
         edgecolor=edge_color,
         linewidth=0.8,
+        hatch=body_hatch,
         label=body_label,
     )
     ax.bar(
@@ -6835,6 +6838,7 @@ def _draw_trip_phase_barplot(
         color=battery_colors,
         edgecolor=edge_color,
         linewidth=0.8,
+        hatch=battery_hatch,
         label=battery_label,
     )
 
@@ -6864,12 +6868,14 @@ def _draw_trip_phase_barplot(
             facecolor=legend_body_color or body_color,
             edgecolor=edge_color,
             linewidth=0.8,
+            hatch=body_hatch,
             label=body_label,
         ),
         Patch(
             facecolor=legend_battery_color or battery_color,
             edgecolor=edge_color,
             linewidth=0.8,
+            hatch=battery_hatch,
             label=battery_label,
         ),
     ]
@@ -7353,17 +7359,31 @@ def _save_median_trip_lifecycle_subfigures(
                 battery_label="Battery",
                 body_color=phase_body_color,
                 battery_color=phase_battery_color,
-                distance_label=distance_label,
+                distance_label="",
                 body_colors_by_vehicle=phase_body_colors,
                 battery_colors_by_vehicle=phase_battery_colors,
                 legend_body_color=phase_body_color,
                 legend_battery_color=phase_battery_color,
+                battery_hatch="/",
             )
             ax.set_ylabel(ylabel.replace("\n", " "))
-            legend_handles, legend_labels = ax.get_legend_handles_labels()
+            legend_handles = [
+                Patch(
+                    facecolor=phase_body_color,
+                    edgecolor="#2f3437",
+                    linewidth=0.8,
+                    label="Body",
+                ),
+                Patch(
+                    facecolor=phase_battery_color,
+                    edgecolor="#2f3437",
+                    linewidth=0.8,
+                    hatch="/",
+                    label="Battery",
+                ),
+            ]
             ax.legend(
-                legend_handles,
-                legend_labels,
+                handles=legend_handles,
                 frameon=False,
                 loc="lower center",
                 bbox_to_anchor=(0.5, 1.02),
