@@ -7310,6 +7310,7 @@ def _save_median_trip_lifecycle_subfigures(
     save_dir,
     for_latex=False,
     plot_title=False,
+    only=None,
 ):
     """Save production, use-phase, and EOL median-trip subfigures."""
     from visualization.emission import _draw_median_trip_emission_process
@@ -7333,6 +7334,8 @@ def _save_median_trip_lifecycle_subfigures(
         ),
     )
     for figure_name, phase_df, ylabel in panel_specs:
+        if only is not None and figure_name not in only:
+            continue
         fig, ax = plt.subplots(figsize=(43.5 / mm_per_inch, 50.0 / mm_per_inch))
         fig.subplots_adjust(left=0.30, right=0.97, bottom=0.23, top=0.78)
         if phase_df is None:
@@ -7364,7 +7367,7 @@ def _save_median_trip_lifecycle_subfigures(
                 battery_colors_by_vehicle=phase_battery_colors,
                 legend_body_color=phase_body_color,
                 legend_battery_color=phase_battery_color,
-                battery_hatch="/",
+                battery_hatch="///",
             )
             ax.set_ylabel(ylabel.replace("\n", " "))
             legend_handles = [
@@ -7378,7 +7381,7 @@ def _save_median_trip_lifecycle_subfigures(
                     facecolor=phase_battery_color,
                     edgecolor="#2f3437",
                     linewidth=0.8,
-                    hatch="/",
+                    hatch="///",
                     label="Battery",
                 ),
             ]
@@ -7408,6 +7411,9 @@ def _save_median_trip_lifecycle_subfigures(
         fig.savefig(output_path, dpi=300, facecolor="white")
         plt.close(fig)
         print(f"Median-trip lifecycle subfigure saved to {output_path}")
+
+    if only is not None and "median_trip_use_phase_emissions" not in only:
+        return
 
     fig, ax = plt.subplots(figsize=(87.0 / mm_per_inch, 50.0 / mm_per_inch))
     fig.subplots_adjust(left=0.17, right=0.98, bottom=0.23, top=0.80)

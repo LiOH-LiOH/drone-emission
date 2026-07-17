@@ -49,6 +49,7 @@ Available figures:
     regions_map_oracle_reduction_rank_map_only,
     regions_map_optimal_drone_share,
     regions_map_city_rank_and_drone_share,
+    median_trip_production_emissions, median_trip_eol_emissions,
     scatter_detour_ratio_vs_reduction_by_gef,
     regions_map_and_gef_scatter,
     regions_map_city_province_ranks,
@@ -4489,6 +4490,73 @@ def _render_beijing_median_trip_emission_process(data_dir, out, for_latex, plot_
     )
 
 
+def _render_beijing_median_trip_phase_emissions(
+    data_dir,
+    out,
+    for_latex,
+    plot_title,
+    only,
+):
+    """Render selected Beijing median-trip production and EOL bar plots."""
+    region_key = "beijing"
+    region_level = "city"
+    od_path = os.path.join(
+        data_dir,
+        region_level,
+        region_key,
+        f"{region_key}_od_pairs.csv",
+    )
+    if not os.path.exists(od_path):
+        print(f"Beijing median trip phase emissions skipped — missing {od_path}")
+        return
+
+    from visualization.analysis import (
+        _save_median_trip_lifecycle_subfigures,
+        _selected_trip_phase_parts,
+    )
+    from visualization.emission import _select_median_trip_emission_sample
+
+    df = pd.read_csv(od_path)
+    required = {
+        "distance_km",
+        "road_distance_m",
+        "drone_emission_kg",
+        "ebike_emission_kg",
+    }
+    if not required.issubset(df.columns):
+        missing = required - set(df.columns)
+        print(
+            "Beijing median trip phase emissions skipped — "
+            f"{od_path} missing columns {missing}"
+        )
+        return
+
+    selected_trip = _select_median_trip_emission_sample(df)
+    production_df = (
+        _selected_trip_phase_parts(selected_trip, "production")
+        if "median_trip_production_emissions" in only
+        else None
+    )
+    eol_df = (
+        _selected_trip_phase_parts(selected_trip, "eol")
+        if "median_trip_eol_emissions" in only
+        else None
+    )
+    _save_median_trip_lifecycle_subfigures(
+        production_df=production_df,
+        eol_df=eol_df,
+        median_trip_od_df=None,
+        median_trip_city_label="Beijing",
+        distance_label="",
+        phase_body_colors={"E-bike": "#d95f35", "Drone": "#1f77b4"},
+        phase_battery_colors={"E-bike": "#f2a07f", "Drone": "#9ecae1"},
+        save_dir=out,
+        for_latex=for_latex,
+        plot_title=plot_title,
+        only=only,
+    )
+
+
 def _render_shanghai_air_road_joint(data_dir, out, for_latex, plot_title):
     """Load Shanghai OD pairs and render the air vs road joint distribution figure."""
     region_key = "shanghai"
@@ -5634,6 +5702,23 @@ def render_all(
             for_latex=for_latex,
             plot_title=plot_title,
         )
+
+    median_trip_phase_figures = {
+        "median_trip_production_emissions",
+        "median_trip_eol_emissions",
+    }
+    requested_median_trip_phase_figures = (
+        only & median_trip_phase_figures if only is not None else set()
+    )
+    if requested_median_trip_phase_figures:
+        with _profile_block(profile, "median trip phase emissions"):
+            _render_beijing_median_trip_phase_emissions(
+                data_dir=data_dir,
+                out=out,
+                for_latex=for_latex,
+                plot_title=plot_title,
+                only=requested_median_trip_phase_figures,
+            )
 
     if _want("shanghai_air_road_joint"):
         _render_shanghai_air_road_joint(
