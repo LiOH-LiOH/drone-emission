@@ -49,7 +49,8 @@ Available figures:
     regions_map_oracle_reduction_rank_map_only,
     regions_map_optimal_drone_share,
     regions_map_city_rank_and_drone_share,
-    median_trip_production_emissions, median_trip_eol_emissions,
+    median_trip_production_emissions, median_trip_use_phase_emissions,
+    median_trip_eol_emissions,
     scatter_detour_ratio_vs_reduction_by_gef,
     regions_map_and_gef_scatter,
     regions_map_city_province_ranks,
@@ -4376,7 +4377,7 @@ def _render_beijing_median_trip_phase_emissions(
     plot_title,
     only,
 ):
-    """Render selected Beijing median-trip production and EOL bar plots."""
+    """Render selected Beijing median-trip lifecycle subfigures."""
     region_key = "beijing"
     region_level = "city"
     od_path = os.path.join(
@@ -4424,7 +4425,9 @@ def _render_beijing_median_trip_phase_emissions(
     _save_median_trip_lifecycle_subfigures(
         production_df=production_df,
         eol_df=eol_df,
-        median_trip_od_df=None,
+        median_trip_od_df=(
+            df if "median_trip_use_phase_emissions" in only else None
+        ),
         median_trip_city_label="Beijing",
         distance_label="",
         phase_body_colors={"E-bike": "#d95f35", "Drone": "#1f77b4"},
@@ -5584,6 +5587,7 @@ def render_all(
 
     median_trip_phase_figures = {
         "median_trip_production_emissions",
+        "median_trip_use_phase_emissions",
         "median_trip_eol_emissions",
     }
     requested_median_trip_phase_figures = (

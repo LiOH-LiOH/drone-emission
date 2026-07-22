@@ -7359,12 +7359,12 @@ def _save_median_trip_lifecycle_subfigures(
         (
             "median_trip_production_emissions",
             production_df,
-            "Production\n(g CO$_2$e/order)",
+            "Production emissions\n(g CO$_2$e/order)",
         ),
         (
             "median_trip_eol_emissions",
             eol_df,
-            "EOL\n(g CO$_2$e/order)",
+            "End-of-life emissions\n(g CO$_2$e/order)",
         ),
     )
     for figure_name, phase_df, ylabel in panel_specs:
@@ -7403,7 +7403,6 @@ def _save_median_trip_lifecycle_subfigures(
                 legend_battery_color=phase_battery_color,
                 battery_hatch="///",
             )
-            ax.set_ylabel(ylabel.replace("\n", " "))
             legend_handles = [
                 Patch(
                     facecolor=phase_body_color,
@@ -7472,7 +7471,7 @@ def _save_median_trip_lifecycle_subfigures(
             plot_title=plot_title,
         )
         ax.set_xlabel("Distance (km)")
-        ax.set_ylabel("Use-phase emission\n(g CO$_2$e/leg)")
+        ax.set_ylabel("Use-phase emissions\n(g CO$_2$e/leg)")
         legend_handles, legend_labels = ax.get_legend_handles_labels()
         ax.legend(
             legend_handles,
