@@ -7371,7 +7371,7 @@ def _save_median_trip_lifecycle_subfigures(
         if only is not None and figure_name not in only:
             continue
         fig, ax = plt.subplots(figsize=(43.5 / mm_per_inch, 50.0 / mm_per_inch))
-        fig.subplots_adjust(left=0.30, right=0.97, bottom=0.23, top=0.78)
+        fig.subplots_adjust(left=0.34, right=0.97, bottom=0.23, top=0.78)
         if phase_df is None:
             phase_name = "production" if "production" in figure_name else "EOL"
             ax.text(
