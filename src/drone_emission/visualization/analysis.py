@@ -5536,7 +5536,11 @@ def plot_province_total_ebike_lifecycle(
         fig, ax1 = plt.subplots(figsize=figsize)
     axis_label_size = 12 if _external_ax else 9
     x_tick_size = 9 if _external_ax else 7
-    legend_size = 10 if _external_ax else 8
+    ebike_axis_label = (
+        "Kappa-adjusted e-bike\nlifecycle emission\n(t CO₂eq / yr)"
+        if _external_ax
+        else "Annual e-bike lifecycle emissions\n(t CO₂eq yr⁻¹)"
+    )
 
     ax1.bar(
         x,
@@ -5548,7 +5552,7 @@ def plot_province_total_ebike_lifecycle(
     )
     ax1.set_xlabel("Provincial-level region", fontsize=axis_label_size)
     ax1.set_ylabel(
-        "Kappa-adjusted e-bike\nlifecycle emission\n(t CO₂eq / yr)",
+        ebike_axis_label,
         fontsize=axis_label_size,
         color=bar_axis_color,
     )
@@ -5600,19 +5604,27 @@ def plot_province_total_ebike_lifecycle(
         ax2.tick_params(axis="y", labelsize=8)
     ax2.set_xlim(ax1.get_xlim())
 
-    handles = [
-        plt.Rectangle((0, 0), 1, 1, color=bar_color, alpha=0.85),
-        plt.Rectangle((0, 0), 1, 1, facecolor=box_color, alpha=0.35, edgecolor=box_color),
-    ]
-    ax1.legend(
-        handles,
-        [
-            "Provincial-level kappa-adjusted e-bike emission",
-            reduction_legend_label,
-        ],
-        loc="upper right",
-        fontsize=legend_size,
-    )
+    if _external_ax:
+        handles = [
+            plt.Rectangle((0, 0), 1, 1, color=bar_color, alpha=0.85),
+            plt.Rectangle(
+                (0, 0),
+                1,
+                1,
+                facecolor=box_color,
+                alpha=0.35,
+                edgecolor=box_color,
+            ),
+        ]
+        ax1.legend(
+            handles,
+            [
+                "Provincial-level kappa-adjusted e-bike emission",
+                reduction_legend_label,
+            ],
+            loc="upper right",
+            fontsize=10,
+        )
 
     if plot_title:
         reduction_title = (
