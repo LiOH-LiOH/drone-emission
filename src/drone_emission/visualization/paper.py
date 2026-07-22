@@ -2635,7 +2635,7 @@ def _plot_compact_city_context_summary_panels(
     fig.text(
         middle_pos.x1 + right_label_offset,
         middle_pos.y0 + middle_pos.height * 0.32,
-        "Oracle drone share (%)",
+        "Optimal drone share (%)",
         rotation=90,
         fontsize=7.5,
         ha="center",
@@ -3809,7 +3809,7 @@ def _write_city_gef_context_detour_report(
                 f"- Power mix components: {', '.join(item['component'] for item in city['power_mix'])}",
                 f"- Bar metric: `{city['bar_metric']}`",
                 "- JSON records every distance bin with air-distance x center, "
-                "plotted bar height, oracle drone share, reduction metrics, "
+                "plotted bar height, optimal drone share, reduction metrics, "
                 "absolute scatter y value, and compact detour-ratio summary "
                 "statistics.",
                 "",
@@ -4122,7 +4122,7 @@ def _render_city_gef_context_detour_summary(
     if bottom_axes is None:
         plt.close(fig)
         return
-    bottom_axes[0].set_ylabel("Oracle lifecycle reduction (%)")
+    bottom_axes[0].set_ylabel("Optimal lifecycle reduction (%)")
     bottom_city_markers = _add_city_detour_reduction_markers(
         fig,
         bottom_axes,

@@ -494,7 +494,7 @@ def _draw_bubble_size_legend(
     handletextpad=1.2,
     ncol=1,
     columnspacing=1.0,
-    title="E-bike - Oracle (t CO2eq / yr)",
+    title="E-bike - Optimal (t CO2eq / yr)",
     quantiles=(0.25, 0.5, 0.9),
 ):
     """Draw an in-map legend for absolute reduction bubble sizes."""
@@ -559,7 +559,7 @@ def _draw_bubble_color_legend(
     include_unstudied=True,
     ncol=1,
     columnspacing=1.0,
-    title="Oracle reduction",
+    title="Optimal reduction",
 ):
     """Draw an in-map legend for bubble color bins."""
     handles = []
@@ -4960,13 +4960,16 @@ def plot_province_boxplot(
         patch.set_alpha(0.8)
 
     ax.set_xlabel(VARIABLE_LABELS.get(variable, variable), fontsize=12)
-    ax.set_ylabel("Province", fontsize=12)
+    ax.set_ylabel("Provincial-level region", fontsize=12)
     ax.tick_params(axis="y", labelsize=9)
     ax.grid(True, alpha=0.3, linestyle="--", axis="x")
 
     if plot_title:
         ax.set_title(
-            f"{VARIABLE_LABELS.get(variable, variable)} by Province",
+            (
+                f"{VARIABLE_LABELS.get(variable, variable)} by "
+                "Provincial-Level Region"
+            ),
             fontsize=14,
             fontweight="bold",
         )
@@ -5300,7 +5303,7 @@ def plot_province_orders_emission(
     fig, ax1 = plt.subplots(figsize=figsize)
 
     ax1.bar(x, orders_m, color=bar_color, alpha=0.8, label="Annual orders")
-    ax1.set_xlabel("Province", fontsize=12)
+    ax1.set_xlabel("Provincial-level region", fontsize=12)
     ax1.set_ylabel("Annual orders (millions)", fontsize=12, color=bar_color)
     ax1.tick_params(axis="y", labelcolor=bar_color)
     ax1.set_xticks(x)
@@ -5320,7 +5323,12 @@ def plot_province_orders_emission(
     ax1.legend(handles, ["Annual orders", "E-bike lifecycle emission"], loc="upper right", fontsize=10)
 
     if plot_title:
-        fig.suptitle("Province-level Delivery Orders and E-bike Lifecycle Emissions", fontsize=14, fontweight="bold")
+        fig.suptitle(
+            "Delivery Orders and E-bike Lifecycle Emissions by "
+            "Provincial-Level Region",
+            fontsize=14,
+            fontweight="bold",
+        )
 
     plt.tight_layout()
 
@@ -5382,7 +5390,7 @@ def plot_province_orders_both_emissions(
     fig, ax1 = plt.subplots(figsize=figsize)
 
     ax1.bar(x, orders_m, color=bar_color, alpha=0.8)
-    ax1.set_xlabel("Province", fontsize=12)
+    ax1.set_xlabel("Provincial-level region", fontsize=12)
     ax1.set_ylabel("Annual orders (millions)", fontsize=12, color=bar_color)
     ax1.tick_params(axis="y", labelcolor=bar_color)
     ax1.set_xticks(x)
@@ -5404,7 +5412,12 @@ def plot_province_orders_both_emissions(
     ax1.legend(handles, ["Annual orders", "E-bike emission", "Drone emission"], loc="upper right", fontsize=10)
 
     if plot_title:
-        fig.suptitle("Province-level Delivery Orders and Lifecycle Emissions", fontsize=14, fontweight="bold")
+        fig.suptitle(
+            "Delivery Orders and Lifecycle Emissions by "
+            "Provincial-Level Region",
+            fontsize=14,
+            fontweight="bold",
+        )
 
     plt.tight_layout()
 
@@ -5473,8 +5486,8 @@ def plot_province_total_ebike_lifecycle(
     )
     if reduction_metric == "absolute":
         reduction_col = _oracle_reduction_tonnes_column(sub)
-        reduction_axis_label = "City Oracle reduction\n(t CO₂eq / yr)"
-        reduction_legend_label = "City Oracle reduction (per city)"
+        reduction_axis_label = "City optimal reduction\n(t CO₂eq / yr)"
+        reduction_legend_label = "City optimal reduction (per city)"
     else:
         sub["oracle_min_reduction_vs_ebike_pct"] = np.where(
             sub["total_ebike_lifecycle"] > 0,
@@ -5486,8 +5499,8 @@ def plot_province_total_ebike_lifecycle(
             np.nan,
         )
         reduction_col = "oracle_min_reduction_vs_ebike_pct"
-        reduction_axis_label = "City Oracle reduction vs e-bike (%)"
-        reduction_legend_label = "Oracle reduction vs e-bike (per city)"
+        reduction_axis_label = "City optimal reduction vs e-bike (%)"
+        reduction_legend_label = "Optimal reduction vs e-bike (per city)"
 
     sub = sub.dropna(subset=[*needed, reduction_col])
     if sub.empty:
@@ -5533,7 +5546,7 @@ def plot_province_total_ebike_lifecycle(
         zorder=2,
         label="Kappa-adjusted e-bike emission",
     )
-    ax1.set_xlabel("Province", fontsize=axis_label_size)
+    ax1.set_xlabel("Provincial-level region", fontsize=axis_label_size)
     ax1.set_ylabel(
         "Kappa-adjusted e-bike\nlifecycle emission\n(t CO₂eq / yr)",
         fontsize=axis_label_size,
@@ -5594,7 +5607,7 @@ def plot_province_total_ebike_lifecycle(
     ax1.legend(
         handles,
         [
-            "Province kappa-adjusted e-bike emission",
+            "Provincial-level kappa-adjusted e-bike emission",
             reduction_legend_label,
         ],
         loc="upper right",
@@ -5603,11 +5616,14 @@ def plot_province_total_ebike_lifecycle(
 
     if plot_title:
         reduction_title = (
-            "absolute Oracle reduction"
+            "absolute optimal reduction"
             if reduction_metric == "absolute"
-            else "Oracle reduction percentage"
+            else "optimal reduction percentage"
         )
-        title = f"Province e-bike emission ranking with city {reduction_title}"
+        title = (
+            "Provincial-level e-bike emission ranking with city "
+            f"{reduction_title}"
+        )
         if _external_ax:
             ax1.set_title(title, fontsize=12, fontweight="bold")
         else:
@@ -5713,7 +5729,7 @@ def plot_regions_map_city_rank_inset(
                             0.014, a_pos.height))
     cbar, n_bands = _draw_discrete_reduction_colorbar(
         fig, cbar_ax, shared_cmap, shared_norm, bin_edges, reduction_edges,
-        "E-bike - Oracle (t CO₂eq / yr)",
+        "E-bike - Optimal (t CO₂eq / yr)",
     )
     _annotate_unstudied(fig, cbar, cbar_ax, n_bands)
 
@@ -5792,7 +5808,7 @@ def _write_regions_map_oracle_reduction_rank_report(
                     cbar_ax,
                     bin_edges,
                     reduction_edges,
-                    "Oracle lifecycle emission reduction (%)",
+                    "Optimal lifecycle emission reduction (%)",
                     cmap,
                 )
                 if cbar_ax is not None
@@ -6080,9 +6096,9 @@ def plot_regions_map_oracle_reduction_rank(
     if plot_title:
         ax_map.set_title(
             (
-                "Regional Oracle Reduction Bubble Map and Top-City Rank"
+                "Regional Optimal Reduction Bubble Map and Top-City Rank"
                 if show_rank_inset
-                else "Regional Oracle Reduction Bubble Map"
+                else "Regional Optimal Reduction Bubble Map"
             ),
             fontsize=13,
             fontweight="bold",
@@ -6122,7 +6138,7 @@ def plot_regions_map_oracle_reduction_rank(
             norm,
             bin_edges,
             reduction_edges,
-            "Oracle lifecycle emission reduction (%)",
+            "Optimal lifecycle emission reduction (%)",
         )
         cbar.ax.yaxis.set_ticks_position("left")
         cbar.ax.yaxis.set_label_position("left")
@@ -7237,7 +7253,7 @@ def _write_regions_map_city_rank_and_drone_share_report(
                     cbar_a_ax,
                     reduction_bins,
                     reduction_edges,
-                    "E-bike - Oracle (t CO2eq / yr)",
+                    "E-bike - Optimal (t CO2eq / yr)",
                     reduction_cmap,
                 ),
             },
@@ -7252,13 +7268,13 @@ def _write_regions_map_city_rank_and_drone_share_report(
                     share_dist_ax,
                     bins=reduction_pct_hist_bins,
                     bar_width=float(np.diff(reduction_pct_hist_bins).min()) * 0.85,
-                    label="Oracle reduction vs e-bike (%)",
+                    label="Optimal reduction vs e-bike (%)",
                 ),
                 "colorbar": _colorbar_report(
                     cbar_b_ax,
                     reduction_pct_bins,
                     reduction_pct_edges,
-                    "Oracle reduction vs e-bike (%)",
+                    "Optimal reduction vs e-bike (%)",
                     reduction_pct_cmap,
                 ),
             },
@@ -7664,7 +7680,7 @@ def plot_regions_map_city_rank_and_drone_share(
         reduction_pct_col,
         ax=share_dist_ax,
         bins=reduction_pct_hist_bins,
-        xlabel="Oracle reduction (%)",
+        xlabel="Optimal reduction (%)",
     )
 
     ax_a.text(-0.03, 1.02, "a", transform=ax_a.transAxes,
@@ -7889,7 +7905,7 @@ def plot_regions_map_city_rank_and_drone_share(
 
     if plot_title:
         fig.suptitle(
-            "Regional Oracle Reduction, Drone Share, and Lifecycle Mechanisms",
+            "Regional Optimal Reduction, Drone Share, and Lifecycle Mechanisms",
             fontsize=14,
             fontweight="bold",
         )
@@ -7906,7 +7922,7 @@ def plot_regions_map_city_rank_and_drone_share(
         reduction_norm,
         reduction_bins,
         reduction_edges,
-        "E-bike - Oracle (t CO₂eq / yr)",
+        "E-bike - Optimal (t CO₂eq / yr)",
     )
     _annotate_unstudied(fig, cbar_a, cbar_a_ax, n_bands_a)
 
@@ -7919,7 +7935,7 @@ def plot_regions_map_city_rank_and_drone_share(
         reduction_pct_norm,
         reduction_pct_bins,
         reduction_pct_edges,
-        "Oracle reduction vs e-bike (%)",
+        "Optimal reduction vs e-bike (%)",
     )
     _annotate_unstudied(fig, cbar_b, cbar_b_ax, n_bands_b)
 
@@ -8111,9 +8127,9 @@ def _plot_city_oracle_reduction_rank(
     ax.set_yticks(y)
     ax.set_yticklabels(cities, fontsize=7 if compact else 10)
     xlabel = (
-        "Oracle reduction (%)"
+        "Optimal reduction (%)"
         if reduction_metric == "percentage"
-        else "E-bike - Oracle (t CO₂eq / yr)"
+        else "E-bike - Optimal (t CO₂eq / yr)"
     )
     ax.set_xlabel(xlabel, fontsize=7 if compact else 12)
     if compact:
@@ -8141,9 +8157,9 @@ def _plot_city_oracle_reduction_rank(
 
     if plot_title:
         title = (
-            f"Top {n} Cities by Oracle Reduction Percentage"
+            f"Top {n} Cities by Optimal Reduction Percentage"
             if reduction_metric == "percentage"
-            else f"Top {n} Cities by E-bike - Oracle Lifecycle Emission"
+            else f"Top {n} Cities by E-bike - Optimal Lifecycle Emission"
         )
         if _external_ax:
             ax.set_title(title, fontsize=12, fontweight="bold")
@@ -8247,7 +8263,7 @@ def _plot_city_ebike_rank(
         fig, ax = plt.subplots(figsize=figsize)
     # E-bike (orange) is the full baseline; oracle minimum (green) overlays the residual.
     ax.barh(y, ebike_t, height=bar_h, color=ebike_color, alpha=0.85, label="E-bike (total)", zorder=2)
-    ax.barh(y, oracle_t, height=bar_h, color=oracle_color, alpha=0.95, label="Oracle minimum", zorder=3)
+    ax.barh(y, oracle_t, height=bar_h, color=oracle_color, alpha=0.95, label="Optimal", zorder=3)
 
     ax.set_yticks(y)
     ax.set_yticklabels(cities, fontsize=7 if compact else 10)
@@ -8503,7 +8519,7 @@ def plot_city_reduction_rank_all_macro_region(
     )
 
     ax.set_xlabel("City rank", fontsize=7)
-    ax.set_ylabel("Oracle reduction vs e-bike (pp)", fontsize=7)
+    ax.set_ylabel("Optimal reduction vs e-bike (pp)", fontsize=7)
     ax.yaxis.grid(True, linestyle="--", alpha=0.35)
     ax.set_axisbelow(True)
     ax.set_xlim(0.5, len(plot_df) + 0.5)
@@ -8621,7 +8637,7 @@ def plot_city_reduction_rank_all_macro_region(
 
     if plot_title:
         fig.suptitle(
-            "All Cities Ranked by Oracle Reduction Percentage",
+            "All Cities Ranked by Optimal Reduction Percentage",
             fontsize=14,
             fontweight="bold",
         )
@@ -8851,7 +8867,7 @@ def plot_city_population_detour_oracle_reduction_bubble(
 
     if plot_title:
         fig.suptitle(
-            "Oracle Emission Reduction and Population",
+            "Optimal Emission Reduction and Population",
             fontsize=14,
             fontweight="bold",
         )
@@ -9104,8 +9120,8 @@ def _plot_reduction_detour_panel(
             "#9ecae1" if np.isfinite(v) else "#d9d9d9"
             for v in bar_values
         ]
-        bar_label = "Oracle drone share"
-        bar_ylabel = "Oracle Drone Share (%)"
+        bar_label = "Optimal drone share"
+        bar_ylabel = "Optimal Drone Share (%)"
         bar_tick_color = "#3182bd"
     else:
         bar_colors = [

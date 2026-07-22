@@ -53,6 +53,10 @@ URBAN_POPULATION_URL = (
 HONG_KONG_DEMOGRAPHICS_URL = "https://en.wikipedia.org/wiki/Demographics_of_Hong_Kong"
 MACAU_URL = "https://en.wikipedia.org/wiki/Macau"
 
+# Some upstream URLs and lookup tables retain legacy English spellings such as
+# "Tibet" and "Macau". They are compatibility keys only; paper-facing labels
+# are defined by analysis.constants.PROVINCE_NAME_EN.
+
 SOURCE_REFERENCES = {
     GDP_PREFECTURE_URL: {
         "source_id": "wiki_prefecture_gdp",
@@ -116,12 +120,12 @@ SOURCE_REFERENCES = {
     },
     MACAU_URL: {
         "source_id": "wiki_macau",
-        "title": "Macau",
+        "title": "Macao",
         "publisher": "Wikipedia contributors",
         "url": MACAU_URL,
-        "used_for": "Macau 2024 population and nominal GDP supplement.",
+        "used_for": "Macao 2024 population and nominal GDP supplement.",
         "paper_note": (
-            "Used only as an open-table supplement for Macau; prefer official "
+            "Used only as an open-table supplement for Macao; prefer official "
             "Statistics and Census Service data in manuscript."
         ),
     },
@@ -141,7 +145,7 @@ SAR_SUPPLEMENTS = {
         "population_source_year": 2024,
         "source_url_gdp": MACAU_URL,
         "source_url_population": MACAU_URL,
-        "notes": "Macau GDP converted from nominal USD using 2024 CNY/USD rate.",
+        "notes": "Macao GDP converted from nominal USD using 2024 CNY/USD rate.",
     },
 }
 

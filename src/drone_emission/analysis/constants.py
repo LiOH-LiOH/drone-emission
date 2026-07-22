@@ -3,8 +3,8 @@
 # Human-readable labels for variables
 VARIABLE_LABELS = {
     # Results
-    "oracle_min_reduction_vs_ebike_pct": "Oracle Lifecycle Reduction (%)",
-    "oracle_drone_order_ratio_pct": "Oracle Drone Order Ratio (%)",
+    "oracle_min_reduction_vs_ebike_pct": "Optimal Lifecycle Reduction (%)",
+    "oracle_drone_order_ratio_pct": "Optimal Drone Order Ratio (%)",
     "lifecycle_all_drone_reduction_pct": "All-Drone Lifecycle Reduction (%)",
     "drone_minus_ebike_lifecycle_kg": "Drone - E-bike Lifecycle (kg)",
     "total_ebike_lifecycle": "Annual E-bike Lifecycle (kg)",
@@ -62,7 +62,18 @@ VARIABLE_LABELS = {
     "sales_per_capita": "Sales per Capita",
 }
 
-# Chinese province name to English
+# Official English display names for China's provincial-level regions.
+# Source priority for policy-sensitive names:
+# - Xizang: State Council Information Office
+#   https://english.scio.gov.cn/pressroom/2023-11/10/content_116807768.htm
+# - Hong Kong: Hong Kong Basic Law
+#   https://www.basiclaw.gov.hk/en/basiclaw/chapter1.html
+# - Macao: Government of the Macao Special Administrative Region
+#   https://www.gov.mo/en/content/laws/constitutional-documents/
+# - Taiwan: United Nations M49 methodology
+#   https://unstats.un.org/unsd/methodology/m49/
+# Short names are intended for compact figure labels. Natural-geography terms
+# such as "Tibetan Plateau" are separate established names and are unaffected.
 PROVINCE_NAME_EN = {
     "北京": "Beijing",
     "天津": "Tianjin",
@@ -89,7 +100,8 @@ PROVINCE_NAME_EN = {
     "四川": "Sichuan",
     "贵州": "Guizhou",
     "云南": "Yunnan",
-    "西藏": "Tibet",
+    "西藏": "Xizang",
+    "西藏自治区": "Xizang",
     "陕西": "Shaanxi",
     "甘肃": "Gansu",
     "青海": "Qinghai",
@@ -97,10 +109,36 @@ PROVINCE_NAME_EN = {
     "新疆": "Xinjiang",
     "香港": "Hong Kong",
     "香港特别行政区": "Hong Kong",
-    "澳门": "Macau",
-    "澳门特别行政区": "Macau",
-    "台湾": "Taiwan",
+    "澳门": "Macao",
+    "澳门特别行政区": "Macao",
+    "台湾": "Taiwan, China",
+    "台湾省": "Taiwan, China",
     "宁夏回族": "Ningxia",
     "广西壮族": "Guangxi",
     "新疆维吾尔": "Xinjiang",
 }
+
+# Formal names for policy-sensitive regions. Other entries intentionally fall
+# back to their accepted short display names rather than expanding every
+# province, autonomous region, and municipality on space-constrained figures.
+PROVINCE_NAME_EN_FORMAL = {
+    "西藏": "Xizang Autonomous Region",
+    "西藏自治区": "Xizang Autonomous Region",
+    "香港": "Hong Kong Special Administrative Region",
+    "香港特别行政区": "Hong Kong Special Administrative Region",
+    "澳门": "Macao Special Administrative Region",
+    "澳门特别行政区": "Macao Special Administrative Region",
+    "台湾": "Taiwan Province of China",
+    "台湾省": "Taiwan Province of China",
+}
+
+
+def province_name_en(name: str, *, formal: bool = False) -> str:
+    """Return an English provincial-level-region name for display."""
+    key = str(name).strip()
+    if formal:
+        return PROVINCE_NAME_EN_FORMAL.get(
+            key,
+            PROVINCE_NAME_EN.get(key, key),
+        )
+    return PROVINCE_NAME_EN.get(key, key)

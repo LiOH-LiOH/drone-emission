@@ -489,7 +489,11 @@ def plot_province_gef_china_map(
 
     show_title = plot_title and not compact
     if show_title:
-        ax.set_title("Province Grid Emission Factor", fontsize=9, fontweight="bold")
+        ax.set_title(
+            "Grid Emission Factor by Provincial-Level Region",
+            fontsize=9,
+            fontweight="bold",
+        )
 
     if not compact:
         fig.tight_layout(pad=0.2)

@@ -17,7 +17,7 @@ import pandas as pd
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from analysis.constants import PROVINCE_NAME_EN, VARIABLE_LABELS
+from analysis.constants import VARIABLE_LABELS, province_name_en
 from analysis.correlation import (
     FEATURE_VARIABLES,
     RESULT_VARIABLES,
@@ -40,7 +40,7 @@ def _fmt(val, decimals=2):
 
 
 def _province_en(name):
-    return PROVINCE_NAME_EN.get(name, name)
+    return province_name_en(name)
 
 
 def _describe(series, label=None):
@@ -76,8 +76,11 @@ def generate_report(csv_path: str) -> str:
     w(f"\n- **Total cities analyzed**: {len(df)}")
     if "province" in df.columns:
         provinces = df["province"].dropna().unique()
-        w(f"- **Provinces covered**: {len(provinces)}")
-        w(f"- **Province list**: {', '.join(sorted(_province_en(p) for p in provinces))}")
+        w(f"- **Provincial-level regions covered**: {len(provinces)}")
+        w(
+            "- **Provincial-level region list**: "
+            f"{', '.join(sorted(_province_en(p) for p in provinces))}"
+        )
     if "region_area_km2" in df.columns:
         w(f"- **Total area**: {df['region_area_km2'].sum():,.0f} km²")
     if "odpair_count" in df.columns:
@@ -114,7 +117,7 @@ def generate_report(csv_path: str) -> str:
         sorted_df = df.sort_values("max_lifecycle_reduction_pct", ascending=False)
 
         w("\n### Top 15 Cities (Highest Emission Reduction)")
-        w("\n| Rank | City | Province | Reduction (%) | Opt. Threshold (km) | Drone Ratio (%) | Detour Ratio | Grid EF |")
+        w("\n| Rank | City | Provincial-level region | Reduction (%) | Opt. Threshold (km) | Drone Ratio (%) | Detour Ratio | Grid EF |")
         w("|------|------|----------|---------------|---------------------|-----------------|--------------|---------|")
         for i, (_, row) in enumerate(sorted_df.head(15).iterrows(), 1):
             w(f"| {i} | {row.get('region_name', 'N/A')} "
@@ -126,7 +129,7 @@ def generate_report(csv_path: str) -> str:
               f"| {_fmt(row.get('grid_emission_factor'))} |")
 
         w("\n### Bottom 15 Cities (Lowest Emission Reduction)")
-        w("\n| Rank | City | Province | Reduction (%) | Opt. Threshold (km) | Drone Ratio (%) | Detour Ratio | Grid EF |")
+        w("\n| Rank | City | Provincial-level region | Reduction (%) | Opt. Threshold (km) | Drone Ratio (%) | Detour Ratio | Grid EF |")
         w("|------|------|----------|---------------|---------------------|-----------------|--------------|---------|")
         for i, (_, row) in enumerate(sorted_df.tail(15).iterrows(), 1):
             w(f"| {i} | {row.get('region_name', 'N/A')} "
@@ -137,8 +140,8 @@ def generate_report(csv_path: str) -> str:
               f"| {_fmt(row.get('detour_ratio'))} "
               f"| {_fmt(row.get('grid_emission_factor'))} |")
 
-    # ── 4. Province Summary ──
-    w("\n## 4. Province-Level Summary")
+    # ── 4. Provincial-level region summary ──
+    w("\n## 4. Provincial-Level Region Summary")
 
     if "province" in df.columns and "max_lifecycle_reduction_pct" in df.columns:
         prov = df.groupby("province").agg(
@@ -150,7 +153,7 @@ def generate_report(csv_path: str) -> str:
             mean_gef=("grid_emission_factor", "mean") if "grid_emission_factor" in df.columns else ("max_lifecycle_reduction_pct", "count"),
         ).sort_values("mean_reduction", ascending=False)
 
-        w("\n| Province | Cities | Mean Reduction (%) | Median (%) | Std (%) | Mean Detour | Mean Grid EF |")
+        w("\n| Provincial-level region | Cities | Mean Reduction (%) | Median (%) | Std (%) | Mean Detour | Mean Grid EF |")
         w("|----------|--------|-------------------|------------|---------|-------------|--------------|")
         for prov_name, row in prov.iterrows():
             w(f"| {_province_en(prov_name)} | {row['n_cities']:.0f} "
@@ -235,7 +238,7 @@ def generate_report(csv_path: str) -> str:
         # Header
         header_labels = {
             "region_name": "City",
-            "province": "Province",
+            "province": "Provincial-level region",
             "max_lifecycle_reduction_pct": "Reduction (%)",
             "optimal_threshold_km": "Threshold (km)",
             "optimal_drone_ratio_pct": "Drone Ratio (%)",
