@@ -45,13 +45,13 @@ ORACLE_REDUCTION_LABEL_CITIES = (
     "Chengdu",
 )
 CITY_REDUCTION_RANK_LABEL_Y = {
-    "Chengdu": 37.0,
-    "Chongqing": 31.0,
-    "Guangzhou": 26.0,
-    "Wuhan": 21.0,
+    "Chengdu": 44.0,
+    "Chongqing": 37.0,
+    "Guangzhou": 30.0,
+    "Wuhan": 24.0,
     "Shenzhen": 26.0,
-    "Beijing": 21.0,
-    "Hangzhou": 16.0,
+    "Beijing": 33.0,
+    "Hangzhou": 19.0,
     "Shanghai": 13.0,
 }
 ORACLE_REDUCTION_LABEL_OFFSETS = {
