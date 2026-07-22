@@ -44,6 +44,16 @@ ORACLE_REDUCTION_LABEL_CITIES = (
     "Chongqing",
     "Chengdu",
 )
+CITY_REDUCTION_RANK_LABEL_Y = {
+    "Chengdu": 37.0,
+    "Chongqing": 31.0,
+    "Guangzhou": 26.0,
+    "Wuhan": 21.0,
+    "Shenzhen": 26.0,
+    "Beijing": 21.0,
+    "Hangzhou": 16.0,
+    "Shanghai": 13.0,
+}
 ORACLE_REDUCTION_LABEL_OFFSETS = {
     "Beijing": (8.0, 8.0),
     "Shanghai": (10.0, -14.0),
@@ -8491,7 +8501,6 @@ def plot_city_reduction_rank_all_macro_region(
     ax.set_xlim(0.5, len(plot_df) + 0.5)
     ymax = max(0.0, float(plot_df[reduction_col].max()))
     y_upper = max(10.0, float(np.ceil(ymax / 10.0) * 10.0))
-    y_span = y_upper
     ax.set_ylim(0.0, y_upper)
     ax.set_yticks(np.arange(0.0, y_upper + 1.0, 10.0))
     ax.tick_params(axis="x", labelsize=6.5)
@@ -8521,10 +8530,9 @@ def plot_city_reduction_rank_all_macro_region(
         labelspacing=0.25,
         columnspacing=0.65,
     )
+    fig.subplots_adjust(left=0.10, right=0.99, bottom=0.22, top=0.78)
 
     if not selected_cities.empty:
-        from adjustText import adjust_text
-
         selected_indices = set(selected_cities.index)
         for idx, bar in enumerate(bars):
             if idx not in selected_indices:
@@ -8538,38 +8546,70 @@ def plot_city_reduction_rank_all_macro_region(
             "boxstyle": "round,pad=0.18",
             "facecolor": "white",
             "edgecolor": "0.55",
-            "alpha": 0.9,
+            "alpha": 1.0,
         }
 
-        label_texts = []
+        label_records = []
         for _, row in selected_cities.iterrows():
-            label_texts.append(
-                ax.text(
-                    row["rank"],
-                    row[reduction_col] + y_span * 0.025,
-                    row["_label_city"],
-                    ha="center",
-                    va="bottom",
-                    fontsize=6.5,
-                    fontweight="bold",
-                    color="#111111",
-                    bbox=label_box_style,
-                    zorder=5,
-                )
+            city = row["_label_city"]
+            rank = float(row["rank"])
+            bar_top = float(row[reduction_col])
+            label_y = max(CITY_REDUCTION_RANK_LABEL_Y[city], bar_top + 2.0)
+            text = ax.text(
+                rank,
+                label_y,
+                city,
+                ha="center",
+                va="bottom",
+                fontsize=6.5,
+                fontweight="bold",
+                color="#111111",
+                bbox=label_box_style,
+                zorder=6,
             )
-        adjust_text(
-            label_texts,
-            ax=ax,
-            expand=(1.25, 1.4),
-            force_text=(0.2, 0.4),
-            force_static=(0.1, 0.2),
-            ensure_inside_axes=True,
-            arrowprops={
-                "arrowstyle": "-",
-                "color": "0.25",
-                "lw": 0.6,
-            },
-        )
+            label_records.append(
+                {
+                    "city": city,
+                    "rank": rank,
+                    "bar_top": bar_top,
+                    "label_y": label_y,
+                    "text": text,
+                }
+            )
+
+        # Keep labels centered on their bars and resolve any future data-driven
+        # collisions by moving only the later-ranked label upward.
+        fig.canvas.draw()
+        renderer = fig.canvas.get_renderer()
+        placed_boxes = []
+        for record in label_records:
+            text = record["text"]
+            while True:
+                patch = text.get_bbox_patch()
+                bbox = patch.get_window_extent(renderer)
+                axes_bbox = ax.get_window_extent(renderer)
+                if bbox.y1 > axes_bbox.y1:
+                    raise ValueError(
+                        "City rank label layout exceeds the y-axis for "
+                        f"{record['city']}; update CITY_REDUCTION_RANK_LABEL_Y"
+                    )
+                if not any(bbox.overlaps(other) for other in placed_boxes):
+                    placed_boxes.append(bbox)
+                    break
+                record["label_y"] += 1.0
+                text.set_y(record["label_y"])
+                fig.canvas.draw()
+                renderer = fig.canvas.get_renderer()
+
+        for record in label_records:
+            ax.vlines(
+                record["rank"],
+                record["bar_top"],
+                record["label_y"],
+                colors="0.25",
+                linewidth=0.6,
+                zorder=4,
+            )
 
     if plot_title:
         fig.suptitle(
@@ -8577,8 +8617,6 @@ def plot_city_reduction_rank_all_macro_region(
             fontsize=14,
             fontweight="bold",
         )
-
-    fig.subplots_adjust(left=0.10, right=0.99, bottom=0.22, top=0.78)
 
     if save_path:
         ext = ".pdf" if for_latex else ".png"
