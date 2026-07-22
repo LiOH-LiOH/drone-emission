@@ -3397,32 +3397,6 @@ def _add_city_detour_reduction_markers(
             zorder=35,
             clip_on=False,
         )
-        label_offsets = {
-            "chengdu": (-4, 7),
-            "beijing": (-8, -11),
-            "shanghai": (6, 7),
-            "guangzhou": (6, -11),
-        }
-        offset = label_offsets.get(region_key, (5, 5))
-        ax.annotate(
-            context["display_name"],
-            (x, y),
-            xytext=offset,
-            textcoords="offset points",
-            fontsize=7,
-            fontweight="bold",
-            color="#111111",
-            ha="right" if offset[0] < 0 else "left",
-            va="bottom" if offset[1] >= 0 else "top",
-            bbox=dict(
-                boxstyle="round,pad=0.12",
-                facecolor="white",
-                edgecolor="0.72",
-                linewidth=0.45,
-                alpha=0.88,
-            ),
-            zorder=36,
-        )
         display_point = ax.transData.transform((x, y))
         fig_point = fig.transFigure.inverted().transform(display_point)
         marker_records.append(
@@ -3435,7 +3409,6 @@ def _add_city_detour_reduction_markers(
                 "y_reduction_pct": _report_number(y),
                 "grid_emission_factor": _report_number(gef),
                 "marker": marker,
-                "label_offset_points": {"x": offset[0], "y": offset[1]},
                 "x_figure_fraction": _report_number(fig_point[0]),
                 "y_figure_fraction": _report_number(fig_point[1]),
             }
