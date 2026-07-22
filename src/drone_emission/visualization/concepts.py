@@ -11,7 +11,7 @@ import numpy as np
 from matplotlib import patheffects as pe
 from matplotlib.patches import Circle, FancyArrowPatch, FancyBboxPatch, Polygon, Rectangle
 
-from visualization._utils import _add_title_suffix
+from visualization._utils import _add_title_suffix, write_figure_report
 
 Point = tuple[float, float]
 
@@ -596,6 +596,43 @@ def plot_detour_ratio_concept(
             facecolor=fig.get_facecolor(),
             bbox_inches=None,
             pad_inches=0,
+        )
+        grid_x = [1.0, 2.8, 4.6, 6.4]
+        grid_y = list(_GRID_Y)
+        origin = (grid_x[0], grid_y[0])
+        destination = (grid_x[3], grid_y[2])
+        bike_route = [
+            origin,
+            (grid_x[1], grid_y[0]),
+            (grid_x[1], grid_y[1]),
+            (grid_x[2], grid_y[1]),
+            (grid_x[2], grid_y[2]),
+            destination,
+        ]
+        road_distance = _path_length(bike_route)
+        straight_distance = math.dist(origin, destination)
+        write_figure_report(
+            save_path.rsplit(".", 1)[0] + "_report.json",
+            {
+                "figure_name": "detour_ratio_concept",
+                "figure_path": save_path,
+                "panel_type": "conceptual_route_geometry",
+                "metric_definition": "road distance divided by straight-line distance",
+                "example_geometry": {
+                    "origin": list(origin),
+                    "destination": list(destination),
+                    "road_route": [list(point) for point in bike_route],
+                    "straight_route": [list(origin), list(destination)],
+                    "road_distance_world_units": road_distance,
+                    "straight_distance_world_units": straight_distance,
+                    "detour_ratio": road_distance / straight_distance,
+                },
+                "transport_modes": {
+                    "road_route": "E-bike",
+                    "straight_route": "Drone",
+                },
+                "interpretation_policy": "Concept geometry only; no empirical observations",
+            },
         )
         print(f"Detour ratio concept saved to {save_path}")
     else:

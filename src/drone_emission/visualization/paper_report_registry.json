@@ -1,0 +1,224 @@
+{
+  "schema_version": 1,
+  "figures": [
+    {
+      "figure_id": "figure5",
+      "figure_path": "figures/inkscape/figure5.svg",
+      "composition_type": "inkscape_composite",
+      "assembly_tool": "Inkscape",
+      "assembly_notes": "Panel labels and final layout adjustments were added in Inkscape.",
+      "panels": [
+        {
+          "panel_id": "a",
+          "title": "City-level annual emission reduction map",
+          "components": [
+            {
+              "role": "Annual reduction map and selected-city labels",
+              "source_path": "figures/paper/subfigure/regions_map_oracle_reduction_rank_map_only.pdf",
+              "report_path": "figures/paper/subfigure/regions_map_oracle_reduction_rank_map_only_report.json"
+            }
+          ]
+        },
+        {
+          "panel_id": "b",
+          "title": "Annual and lifecycle reduction relationship",
+          "components": [
+            {
+              "role": "Population-scaled city reduction scatter plot",
+              "source_path": "figures/paper/subfigure/city_population_detour_oracle_reduction_bubble.pdf",
+              "report_path": "figures/paper/subfigure/city_population_detour_oracle_reduction_bubble_report.json"
+            }
+          ]
+        },
+        {
+          "panel_id": "c",
+          "title": "City reduction ranking",
+          "components": [
+            {
+              "role": "Macro-region-colored city reduction ranking",
+              "source_path": "figures/paper/subfigure/city_reduction_rank_all_macro_region.pdf",
+              "report_path": "figures/paper/subfigure/city_reduction_rank_all_macro_region_report.json"
+            }
+          ]
+        }
+      ],
+      "components": []
+    },
+    {
+      "figure_id": "figure6",
+      "figure_path": "figures/inkscape/figure6.svg",
+      "composition_type": "inkscape_composite",
+      "assembly_tool": "Inkscape",
+      "assembly_notes": "Panel labels, the shared colorbar placement, and final layout adjustments were added in Inkscape.",
+      "panels": [
+        {
+          "panel_id": "a",
+          "title": "Current grid emission factor and bundling scenario",
+          "components": [
+            {
+              "role": "Current-condition pathway scenario map and province distributions",
+              "source_path": "figures/paper/subfigure/regions_map_pathway_scenarios_today.pdf",
+              "report_path": "figures/paper/subfigure/regions_map_pathway_scenarios_report.json",
+              "report_selector": ["panels", "today"]
+            }
+          ]
+        },
+        {
+          "panel_id": "b",
+          "title": "Halved grid emission factor scenario",
+          "components": [
+            {
+              "role": "Halved-GEF pathway scenario map and province distributions",
+              "source_path": "figures/paper/subfigure/regions_map_pathway_scenarios_halved_gef.pdf",
+              "report_path": "figures/paper/subfigure/regions_map_pathway_scenarios_report.json",
+              "report_selector": ["panels", "halved_gef"]
+            }
+          ]
+        },
+        {
+          "panel_id": "c",
+          "title": "Operator bundling scenario",
+          "components": [
+            {
+              "role": "Operator-bundling pathway scenario map and province distributions",
+              "source_path": "figures/paper/subfigure/regions_map_pathway_scenarios_operator_bundling.pdf",
+              "report_path": "figures/paper/subfigure/regions_map_pathway_scenarios_report.json",
+              "report_selector": ["panels", "operator_bundling"]
+            }
+          ]
+        },
+        {
+          "panel_id": "d",
+          "title": "Halved grid emission factor and operator bundling scenario",
+          "components": [
+            {
+              "role": "Combined halved-GEF and bundling scenario map and province distributions",
+              "source_path": "figures/paper/subfigure/regions_map_pathway_scenarios_halved_gef_bundling.pdf",
+              "report_path": "figures/paper/subfigure/regions_map_pathway_scenarios_report.json",
+              "report_selector": ["panels", "halved_gef_plus_bundling"]
+            }
+          ]
+        }
+      ],
+      "components": [
+        {
+          "role": "Shared reduction-versus-all-e-bike-baseline colorbar",
+          "source_path": "figures/paper/subfigure/regions_map_pathway_scenarios_colorbar.pdf",
+          "report_path": "figures/paper/subfigure/regions_map_pathway_scenarios_report.json",
+          "report_selector": ["global_encodings", "map_colorbar"]
+        }
+      ]
+    },
+    {
+      "figure_id": "figure7",
+      "figure_path": "figures/inkscape/figure7.svg",
+      "composition_type": "inkscape_composite",
+      "assembly_tool": "Inkscape",
+      "assembly_notes": "Panel labels, section headings, selected annotations, and final layout adjustments were added in Inkscape.",
+      "panels": [
+        {
+          "panel_id": "a",
+          "title": "Data inputs, demand generation, and route calculation",
+          "components": [
+            {
+              "role": "Merchant sales records",
+              "source_path": "figures/paper/subfigure/shanghai_merchant_monthly_sales.pdf",
+              "report_path": "figures/paper/subfigure/shanghai_merchant_monthly_sales_report.json"
+            },
+            {
+              "role": "Residential building footprints",
+              "source_path": "figures/paper/subfigure/shanghai_building_footprint_heatmap.pdf",
+              "report_path": "figures/paper/subfigure/shanghai_building_footprint_heatmap_report.json"
+            },
+            {
+              "role": "Provincial grid carbon intensity",
+              "source_path": "figures/paper/subfigure/province_gef_china_map.pdf",
+              "report_path": "figures/paper/subfigure/province_gef_china_map_report.json"
+            },
+            {
+              "role": "Urban road network",
+              "source_path": "figures/paper/subfigure/beijing_road_network_subfigure.pdf",
+              "report_path": "figures/paper/subfigure/beijing_road_network_subfigure_report.json"
+            },
+            {
+              "role": "Merchant-centered demand generation",
+              "source_path": "figures/paper/subfigure/shanghai_building_height_merchant.pdf",
+              "report_path": "figures/paper/subfigure/shanghai_building_height_merchant_report.json"
+            },
+            {
+              "role": "Road and straight-line route comparison",
+              "source_path": "figures/paper/subfigure/distance_comparison_single_panel.pdf",
+              "report_path": "figures/paper/subfigure/distance_comparison_single_panel_report.json"
+            },
+            {
+              "role": "Road-detour and straight-line-distance concept",
+              "source_path": "figures/paper/subfigure/detour_ratio_concept.pdf",
+              "report_path": "figures/paper/subfigure/detour_ratio_concept_report.json"
+            }
+          ]
+        },
+        {
+          "panel_id": "b",
+          "title": "Lifecycle emission model",
+          "components": [
+            {
+              "role": "Production-phase emissions",
+              "source_path": "figures/paper/subfigure/median_trip_production_emissions.pdf",
+              "report_path": "figures/paper/subfigure/median_trip_production_emissions_report.json"
+            },
+            {
+              "role": "Use-phase emissions",
+              "source_path": "figures/paper/subfigure/median_trip_use_phase_emissions.pdf",
+              "report_path": "figures/paper/subfigure/median_trip_use_phase_emissions_report.json"
+            },
+            {
+              "role": "End-of-life emissions",
+              "source_path": "figures/paper/subfigure/median_trip_eol_emissions.pdf",
+              "report_path": "figures/paper/subfigure/median_trip_eol_emissions_report.json"
+            }
+          ]
+        },
+        {
+          "panel_id": "c",
+          "title": "Provincial lifecycle emissions and city reductions",
+          "components": [
+            {
+              "role": "Province-level e-bike lifecycle emissions and city-level optimal reductions",
+              "source_path": "figures/paper/subfigure/province_total_ebike_lifecycle.pdf",
+              "report_path": "figures/paper/subfigure/province_total_ebike_lifecycle_report.json"
+            }
+          ]
+        }
+      ],
+      "components": []
+    },
+    {
+      "figure_id": "city_gef_context_detour_summary",
+      "figure_path": "figures/paper/subfigure/city_gef_context_detour_summary.pdf",
+      "composition_type": "standalone",
+      "assembly_tool": "Matplotlib",
+      "assembly_notes": "This is a direct Matplotlib output with no child figure sources.",
+      "generator": {
+        "module_path": "src/drone_emission/visualization/paper.py",
+        "function": "_render_city_gef_context_detour_summary"
+      },
+      "standalone_report_path": "figures/paper/subfigure/city_gef_context_detour_summary_report.json",
+      "panels": [],
+      "components": []
+    },
+    {
+      "figure_id": "contribution_decomposition_city_b",
+      "figure_path": "figures/paper/subfigure/contribution_decomposition_city_b.pdf",
+      "composition_type": "standalone",
+      "assembly_tool": "Matplotlib",
+      "assembly_notes": "This is a direct Matplotlib output with no child figure sources.",
+      "generator": {
+        "module_path": "src/drone_emission/visualization/emission.py",
+        "function": "plot_contribution_decomposition_city_b"
+      },
+      "standalone_report_path": "figures/paper/subfigure/contribution_decomposition_city_b_report.json",
+      "panels": [],
+      "components": []
+    }
+  ]
+}

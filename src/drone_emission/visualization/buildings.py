@@ -584,14 +584,14 @@ def plot_building_height_merchant_map(
                 "bbox_saved_tight_fraction": saved_fraction,
                 "labels": [text.get_text() for text in legend.get_texts()],
             }
-        write_figure_report(report_path, report)
-        print(f"Building height merchant map report saved to {report_path}")
         plt.savefig(
             save_path,
             dpi=300,
             bbox_inches="tight",
             pad_inches=0.02 if compact else None,
         )
+        write_figure_report(report_path, report)
+        print(f"Building height merchant map report saved to {report_path}")
         print(f"Building height merchant map saved to {save_path}")
     else:
         plt.show()
@@ -809,14 +809,14 @@ def plot_building_footprint_heatmap(
                 },
             },
         }
-        write_figure_report(report_path, report)
-        print(f"Building footprint heatmap report saved to {report_path}")
         plt.savefig(
             save_path,
             dpi=300,
             bbox_inches="tight",
             pad_inches=0.02 if compact else 0,
         )
+        write_figure_report(report_path, report)
+        print(f"Building footprint heatmap report saved to {report_path}")
         print(f"Building footprint heatmap saved to {save_path}")
     else:
         plt.show()

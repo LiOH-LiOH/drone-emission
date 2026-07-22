@@ -575,6 +575,7 @@ def plot_merchant_monthly_sales_map(
         tight_bbox = fig.get_tightbbox(renderer)
         report_path = save_path.rsplit(".", 1)[0] + "_report.json"
         sales_values = merchants_in_frame["month_sales"].to_numpy(dtype=float)
+        plt.savefig(save_path, dpi=300, bbox_inches="tight", pad_inches=0.02)
         write_figure_report(
             report_path,
             {
@@ -618,7 +619,6 @@ def plot_merchant_monthly_sales_map(
                 },
             },
         )
-        plt.savefig(save_path, dpi=300, bbox_inches="tight", pad_inches=0.02)
         print(f"Merchant monthly sales map saved to {save_path}")
         print(f"Merchant monthly sales map report saved to {report_path}")
     else:

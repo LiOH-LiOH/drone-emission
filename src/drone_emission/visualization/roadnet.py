@@ -504,8 +504,6 @@ def plot_road_network_subfigure(
             ),
             "map": map_report,
         }
-        write_figure_report(report_path, report)
-        print(f"Road network subfigure report saved to {report_path}")
         plt.savefig(
             save_path,
             dpi=300,
@@ -513,6 +511,8 @@ def plot_road_network_subfigure(
             pad_inches=0.02 if compact else 0,
             facecolor=background_color,
         )
+        write_figure_report(report_path, report)
+        print(f"Road network subfigure report saved to {report_path}")
         print(f"Road network subfigure saved to {save_path}")
     else:
         plt.show()
@@ -1705,6 +1705,51 @@ def plot_distance_comparison_single_panel(
             ax.set_rasterization_zorder(2)
         os.makedirs(os.path.dirname(save_path), exist_ok=True)
         fig.savefig(save_path, dpi=300, facecolor="white")
+        straight_distance = float(sample["straight_distance"])
+        road_distance = float(sample["road_distance"])
+        path_result = sample.get("path_result", {})
+        valid = od_df[
+            (od_df["road_distance_m"] > 100) & (od_df["distance_km"] > 0)
+        ].copy()
+        detour_values = (
+            valid["road_distance_m"] / (valid["distance_km"] * 1000)
+        )
+        write_figure_report(
+            save_path.rsplit(".", 1)[0] + "_report.json",
+            {
+                "figure_name": "distance_comparison_single_panel",
+                "figure_path": save_path,
+                "sample_selection": {
+                    "rule": "OD pair closest to the median detour ratio",
+                    "quantile": 0.5,
+                    "eligible_od_count": int(len(valid)),
+                    "eligible_detour_ratio": {
+                        "min": float(detour_values.min()),
+                        "median": float(detour_values.median()),
+                        "mean": float(detour_values.mean()),
+                        "max": float(detour_values.max()),
+                    },
+                },
+                "selected_trip": {
+                    "origin_lat_lng": [float(value) for value in sample["origin"]],
+                    "destination_lat_lng": [
+                        float(value) for value in sample["destination"]
+                    ],
+                    "straight_distance_m": straight_distance,
+                    "road_distance_m": road_distance,
+                    "detour_ratio": road_distance / straight_distance,
+                    "road_path_success": bool(path_result.get("success", False)),
+                    "road_path_message": path_result.get("message"),
+                    "road_path_coordinate_count": len(
+                        path_result.get("path_coordinates", [])
+                    ),
+                },
+                "route_definitions": {
+                    "E-bike": "shortest available road-network route",
+                    "Drone": "straight line between the same endpoints",
+                },
+            },
+        )
         print(f"Single-panel distance comparison saved to {save_path}")
     else:
         plt.show()

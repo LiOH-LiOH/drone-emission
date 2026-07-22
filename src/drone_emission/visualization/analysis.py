@@ -11,7 +11,11 @@ import numpy as np
 import pandas as pd
 from scipy import stats
 
-from visualization._utils import _add_title_suffix, saved_tight_axis_report
+from visualization._utils import (
+    _add_title_suffix,
+    saved_tight_axis_report,
+    write_figure_report,
+)
 from visualization.macro_regions import (
     CHINA_MACRO_REGION_SPECS,
     macro_region_for_province,
@@ -69,6 +73,23 @@ ORACLE_REDUCTION_LABEL_LAYOUT_PATH = os.path.join(
     "layouts",
     "regions_map_oracle_reduction_rank_map_only_labels.json",
 )
+
+
+def _writing_numeric_summary(values) -> dict:
+    """Return compact finite-value statistics for a writing-oriented report."""
+    series = pd.to_numeric(pd.Series(values), errors="coerce").dropna()
+    series = series[np.isfinite(series)]
+    if series.empty:
+        return {"count": 0}
+    return {
+        "count": int(len(series)),
+        "min": float(series.min()),
+        "q1": float(series.quantile(0.25)),
+        "median": float(series.median()),
+        "mean": float(series.mean()),
+        "q3": float(series.quantile(0.75)),
+        "max": float(series.max()),
+    }
 
 
 def _first_available_column(df: pd.DataFrame, candidates: tuple[str, ...], purpose: str) -> str:
@@ -5653,6 +5674,52 @@ def plot_province_total_ebike_lifecycle(
             out = _add_title_suffix(out)
         os.makedirs(os.path.dirname(out), exist_ok=True)
         plt.savefig(out, dpi=300, bbox_inches="tight")
+        province_records = []
+        for rank, province in enumerate(ordered, start=1):
+            province_rows = sub[sub["province_en"] == province]
+            province_records.append(
+                {
+                    "rank": rank,
+                    "province": province,
+                    "city_count": int(len(province_rows)),
+                    "annual_ebike_lifecycle_t_co2e": float(
+                        prov.loc[
+                            prov["province_en"] == province,
+                            "total_ebike",
+                        ].iloc[0]
+                        / 1e3
+                    ),
+                    "city_optimal_reduction": _writing_numeric_summary(
+                        province_rows[reduction_col]
+                    ),
+                }
+            )
+        write_figure_report(
+            out.rsplit(".", 1)[0] + "_report.json",
+            {
+                "figure_name": "province_total_ebike_lifecycle",
+                "figure_path": out,
+                "source_scope": "Successfully processed city-level study regions",
+                "province_count": int(len(ordered)),
+                "city_count": int(len(sub)),
+                "ranking_metric": {
+                    "field": "total_ebike_lifecycle",
+                    "definition": "annual-sales-weighted kappa-adjusted e-bike lifecycle emissions",
+                    "display_unit": "t CO2e per year",
+                    "sort_order": "descending",
+                },
+                "city_reduction_metric": {
+                    "field": reduction_col,
+                    "mode": reduction_metric,
+                    "display_unit": (
+                        "t CO2e per year"
+                        if reduction_metric == "absolute"
+                        else "percent versus e-bike"
+                    ),
+                },
+                "province_records": province_records,
+            },
+        )
         print(f"Province total ebike lifecycle saved to {out}")
     else:
         plt.show()
@@ -6173,6 +6240,7 @@ def plot_regions_map_oracle_reduction_rank(
             save_path = _add_title_suffix(save_path)
         os.makedirs(os.path.dirname(save_path), exist_ok=True)
         fig.canvas.draw()
+        plt.savefig(save_path, dpi=300, bbox_inches="tight")
         _write_regions_map_oracle_reduction_rank_report(
             save_path=save_path,
             figure_name=figure_name,
@@ -6195,7 +6263,6 @@ def plot_regions_map_oracle_reduction_rank(
             inset_bubble_area_scale=inset_bubble_area_scale,
             color_scale_style=color_scale_style,
         )
-        plt.savefig(save_path, dpi=300, bbox_inches="tight")
         print(f"Regions map oracle reduction rank saved to {save_path}")
     else:
         plt.show()
@@ -7454,6 +7521,48 @@ def _save_median_trip_lifecycle_subfigures(
         if plot_title:
             output_path = _add_title_suffix(output_path)
         fig.savefig(output_path, dpi=300, facecolor="white")
+        phase_name = "production" if "production" in figure_name else "end_of_life"
+        if phase_df is None:
+            phase_facts = {
+                "status": "unavailable",
+                "reason": "Required selected-trip lifecycle columns were unavailable",
+                "vehicle_components": [],
+            }
+        else:
+            vehicle_components = []
+            for _, row in phase_df.iterrows():
+                body_g = float(row["body_g"])
+                battery_g = float(row["battery_g"])
+                cached_total_g = float(row["cached_total_g"])
+                vehicle_components.append(
+                    {
+                        "vehicle": row["vehicle"],
+                        "distance_km": float(row["distance_km"]),
+                        "body_g_co2e_per_order": body_g,
+                        "battery_g_co2e_per_order": battery_g,
+                        "component_total_g_co2e_per_order": body_g + battery_g,
+                        "cached_total_g_co2e_per_order": cached_total_g,
+                        "component_sum_difference_g": (
+                            body_g + battery_g - cached_total_g
+                        ),
+                    }
+                )
+            phase_facts = {
+                "status": "ok",
+                "vehicle_components": vehicle_components,
+            }
+        write_figure_report(
+            output_path.rsplit(".", 1)[0] + "_report.json",
+            {
+                "figure_name": figure_name,
+                "figure_path": output_path,
+                "source_city": median_trip_city_label,
+                "sample_selection": "annual-sales-weighted median trip when annual_sales is available",
+                "lifecycle_phase": phase_name,
+                "unit": "g CO2e per order",
+                **phase_facts,
+            },
+        )
         plt.close(fig)
         print(f"Median-trip lifecycle subfigure saved to {output_path}")
 
@@ -7477,7 +7586,7 @@ def _save_median_trip_lifecycle_subfigures(
         for spine in ax.spines.values():
             spine.set_visible(False)
     else:
-        _draw_median_trip_emission_process(
+        use_phase_result = _draw_median_trip_emission_process(
             ax,
             median_trip_od_df,
             plot_title=plot_title,
@@ -7506,6 +7615,59 @@ def _save_median_trip_lifecycle_subfigures(
     if plot_title:
         output_path = _add_title_suffix(output_path)
     fig.savefig(output_path, dpi=300, facecolor="white")
+    if median_trip_od_df is None or use_phase_result is None:
+        use_phase_facts = {
+            "status": "unavailable",
+            "reason": "Median-trip use-phase data were unavailable",
+        }
+    else:
+        selected_sample = use_phase_result["sample"]
+        use_phase_facts = {
+            "status": "ok",
+            "eligible_od_count": int(
+                len(
+                    median_trip_od_df.dropna(
+                        subset=[
+                            "distance_km",
+                            "road_distance_m",
+                            "drone_emission_kg",
+                            "ebike_emission_kg",
+                        ]
+                    )
+                )
+            ),
+            "selected_trip": {
+                "source_row_index": _json_safe_scalar(
+                    use_phase_result["sample_index"]
+                ),
+                "air_distance_km": float(use_phase_result["air_km"]),
+                "road_distance_km": float(use_phase_result["road_km"]),
+                "detour_ratio": float(
+                    use_phase_result["road_km"] / use_phase_result["air_km"]
+                ),
+                "drone_delivery_leg_end_g_co2e": float(
+                    use_phase_result["drone_y"][-1]
+                ),
+                "ebike_delivery_leg_end_g_co2e": float(
+                    use_phase_result["ebike_y"][-1]
+                ),
+                "annual_sales": _json_safe_scalar(
+                    selected_sample.get("annual_sales")
+                ),
+            },
+        }
+    write_figure_report(
+        output_path.rsplit(".", 1)[0] + "_report.json",
+        {
+            "figure_name": "median_trip_use_phase_emissions",
+            "figure_path": output_path,
+            "source_city": median_trip_city_label,
+            "sample_selection": "annual-sales-weighted median trip when annual_sales is available",
+            "lifecycle_phase": "use",
+            "unit": "g CO2e per delivery leg",
+            **use_phase_facts,
+        },
+    )
     plt.close(fig)
     print(f"Median-trip use-phase subfigure saved to {output_path}")
 
@@ -8660,6 +8822,64 @@ def plot_city_reduction_rank_all_macro_region(
             out = _add_title_suffix(out)
         os.makedirs(os.path.dirname(out), exist_ok=True)
         plt.savefig(out, dpi=300, bbox_inches="tight")
+        record_columns = [
+            "rank",
+            "region_name_en",
+            "province",
+            "macro_region_key",
+            reduction_col,
+        ]
+
+        def rank_records(rows):
+            return [
+                {
+                    "rank": int(row["rank"]),
+                    "city": row["region_name_en"],
+                    "province": row["province"],
+                    "macro_region": row["macro_region_key"],
+                    "optimal_reduction_percentage_points": float(
+                        row[reduction_col]
+                    ),
+                }
+                for _, row in rows[record_columns].iterrows()
+            ]
+
+        labeled_rows = plot_df[selected_city_mask].sort_values("rank")
+        macro_region_records = []
+        for spec in CHINA_MACRO_REGION_SPECS:
+            rows = plot_df[plot_df["macro_region_key"] == spec["key"]]
+            if rows.empty:
+                continue
+            macro_region_records.append(
+                {
+                    "macro_region": spec["key"],
+                    "label": spec["label"],
+                    "city_count": int(len(rows)),
+                    "optimal_reduction_percentage_points": (
+                        _writing_numeric_summary(rows[reduction_col])
+                    ),
+                }
+            )
+        write_figure_report(
+            out.rsplit(".", 1)[0] + "_report.json",
+            {
+                "figure_name": "city_reduction_rank_all_macro_region",
+                "figure_path": out,
+                "source_scope": "Successfully processed city-level study regions with known macro-region",
+                "city_count": int(len(plot_df)),
+                "ranking_metric": {
+                    "field": reduction_col,
+                    "definition": "optimal lifecycle reduction versus the kappa-adjusted e-bike baseline",
+                    "unit": "percentage points",
+                    "sort_order": "descending",
+                },
+                "distribution": _writing_numeric_summary(plot_df[reduction_col]),
+                "top_10": rank_records(plot_df.head(10)),
+                "bottom_10": rank_records(plot_df.tail(10)),
+                "labeled_cities": rank_records(labeled_rows),
+                "macro_regions": macro_region_records,
+            },
+        )
         print(f"All-city reduction rank by macro-region saved to {out}")
     else:
         plt.show()
@@ -8892,6 +9112,83 @@ def plot_city_population_detour_oracle_reduction_bubble(
             save_path = _add_title_suffix(save_path)
         os.makedirs(os.path.dirname(save_path), exist_ok=True)
         plt.savefig(save_path, dpi=300, bbox_inches="tight")
+        macro_region_records = []
+        for spec in CHINA_MACRO_REGION_SPECS:
+            rows = plot_df[plot_df["_macro_region_key"] == spec["key"]]
+            if rows.empty:
+                continue
+            macro_region_records.append(
+                {
+                    "macro_region": spec["key"],
+                    "label": spec["label"],
+                    "city_count": int(len(rows)),
+                    "annual_reduction_t_co2e": _writing_numeric_summary(
+                        rows[reduction_t_col]
+                    ),
+                    "lifecycle_reduction_pct": _writing_numeric_summary(
+                        rows[reduction_pct_col]
+                    ),
+                    "population_million": _writing_numeric_summary(
+                        rows["population_million"]
+                    ),
+                }
+            )
+        named_city_records = []
+        if name_col:
+            named_rows = plot_df[
+                plot_df[name_col].isin(ORACLE_REDUCTION_LABEL_CITIES)
+            ].copy()
+            for _, row in named_rows.sort_values(name_col).iterrows():
+                named_city_records.append(
+                    {
+                        "city": row[name_col],
+                        "province": row["province"],
+                        "macro_region": row["_macro_region_key"],
+                        "population_million": float(row["population_million"]),
+                        "annual_reduction_t_co2e": float(row[reduction_t_col]),
+                        "lifecycle_reduction_pct": float(row[reduction_pct_col]),
+                    }
+                )
+        write_figure_report(
+            save_path.rsplit(".", 1)[0] + "_report.json",
+            {
+                "figure_name": "city_population_detour_oracle_reduction_bubble",
+                "figure_path": save_path,
+                "source_scope": "Eligible city-level study regions with positive population and optimal reductions",
+                "city_count": int(len(plot_df)),
+                "encodings": {
+                    "x": {
+                        "field": reduction_t_col,
+                        "label": "Annual reduction",
+                        "unit": "t CO2e per year",
+                        "scale": "logarithmic",
+                    },
+                    "y": {
+                        "field": reduction_pct_col,
+                        "label": "Lifecycle reduction",
+                        "unit": "percent versus e-bike",
+                    },
+                    "bubble_area": {
+                        "field": "population_10k",
+                        "display_unit": "million people",
+                    },
+                    "color": "China macro-region",
+                },
+                "overall": {
+                    "annual_reduction_t_co2e": _writing_numeric_summary(
+                        plot_df[reduction_t_col]
+                    ),
+                    "lifecycle_reduction_pct": _writing_numeric_summary(
+                        plot_df[reduction_pct_col]
+                    ),
+                    "population_million": _writing_numeric_summary(
+                        plot_df["population_million"]
+                    ),
+                },
+                "macro_regions": macro_region_records,
+                "labeled_cities": named_city_records,
+            },
+        )
         print(f"City population Oracle bubble saved to {save_path}")
     else:
         plt.show()
