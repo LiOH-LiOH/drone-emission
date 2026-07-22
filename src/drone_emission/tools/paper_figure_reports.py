@@ -22,7 +22,7 @@ from typing import Any
 
 
 MAX_REPORT_BYTES = 128 * 1024
-MAX_INLINE_LIST_ITEMS = 48
+MAX_INLINE_LIST_ITEMS = 20
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 REGISTRY_PATH = (
     Path(__file__).resolve().parents[1]
@@ -43,14 +43,28 @@ _DROP_EXACT = {
     "layout_mode",
     "native_size_inches",
     "palette",
+    "panel_anchor_points",
+    "panel_label",
+    "points",
+    "reduction_panel_label",
     "save_padding_inches",
+    "scatter_style",
 }
 _DROP_SUBSTRINGS = (
     "bbox_",
     "_figure_fraction",
     "label_offset",
+    "label_position",
     "pixel_",
 )
+_PRESERVE_LIST_KEYS = {
+    "bottom_10",
+    "labeled_cities",
+    "macro_regions",
+    "province_records",
+    "top_10",
+    "vehicle_components",
+}
 
 
 class ReportBuildError(RuntimeError):
@@ -157,22 +171,25 @@ def _normalise_string(value: str) -> str:
     return Path(value).name
 
 
-def _compact(value: Any) -> Any:
+def _compact(value: Any, parent_key: str | None = None) -> Any:
     """Recursively retain structured facts and remove layout-heavy detail."""
     if isinstance(value, dict):
         compacted = {
-            key: _compact(item)
+            key: _compact(item, parent_key=key)
             for key, item in value.items()
             if not _drop_key(key)
         }
         return {key: item for key, item in compacted.items() if item is not None}
     if isinstance(value, list):
-        if len(value) <= MAX_INLINE_LIST_ITEMS:
+        if (
+            parent_key in _PRESERVE_LIST_KEYS
+            or len(value) <= MAX_INLINE_LIST_ITEMS
+        ):
             return [_compact(item) for item in value]
         if all(_safe_number(item) is not None for item in value):
             return _numeric_summary(value)
         if all(isinstance(item, dict) for item in value):
-            return _compact(_record_list_summary(value))
+            return _compact(_record_list_summary(value), parent_key=parent_key)
         scalar_values = [
             item for item in value if isinstance(item, (str, bool, int, float))
         ]
