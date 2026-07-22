@@ -146,6 +146,8 @@ CITY_CONTEXT_MARKERS = {
 }
 CITY_GEF_COLOR_BIN_EDGES = tuple(value / 10.0 for value in range(1, 9))
 CITY_GEF_SUMMARY_ROW_HSPACE = 0.32
+CITY_GEF_BOTTOM_SCATTER_SIZE = 18
+CITY_GEF_BOTTOM_SCATTER_ALPHA = 0.45
 
 REDUCTION_DETOUR_CACHE_VERSION = 4
 BREAK_EVEN_PHASE_CACHE_VERSION = 9
@@ -3707,8 +3709,8 @@ def _detour_reduction_scatter_report(
                     "y_axes_fraction": 0.96,
                 },
                 "scatter_style": {
-                    "size": 12 if compact else 24,
-                    "alpha": 0.68,
+                    "size": CITY_GEF_BOTTOM_SCATTER_SIZE if compact else 24,
+                    "alpha": CITY_GEF_BOTTOM_SCATTER_ALPHA if compact else 0.68,
                     "edgecolors": "none",
                     "zorder": 10,
                 },
@@ -4114,6 +4116,8 @@ def _render_city_gef_context_detour_summary(
         external_colorbar_ax=legend_rail["colorbar"],
         colorbar_boundaries=CITY_GEF_COLOR_BIN_EDGES,
         colorbar_label="kg CO$_2$e/kWh",
+        scatter_size=CITY_GEF_BOTTOM_SCATTER_SIZE,
+        scatter_alpha=CITY_GEF_BOTTOM_SCATTER_ALPHA,
     )
     if bottom_axes is None:
         plt.close(fig)

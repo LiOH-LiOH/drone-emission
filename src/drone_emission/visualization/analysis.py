@@ -2375,6 +2375,8 @@ def _plot_grouped_scatter_split_panels_axes(
     external_colorbar_ax=None,
     colorbar_boundaries: tuple = None,
     colorbar_label: str = None,
+    scatter_size: float = None,
+    scatter_alpha: float = 0.68,
 ):
     """Draw threshold-split scatter panels into a parent subplot spec."""
     valid_mask = df[[feature_var, result_var, group_var]].notna().all(axis=1)
@@ -2471,8 +2473,12 @@ def _plot_grouped_scatter_split_panels_axes(
         ax.scatter(
             panel_df[feature_var].values,
             panel_df[result_var].values,
-            s=12 if compact else 24,
-            alpha=0.68,
+            s=(
+                scatter_size
+                if scatter_size is not None
+                else (12 if compact else 24)
+            ),
+            alpha=scatter_alpha,
             c=panel_df[group_var].values,
             cmap=cmap,
             norm=norm,
