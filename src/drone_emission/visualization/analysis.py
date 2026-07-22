@@ -8706,7 +8706,7 @@ def plot_city_population_detour_oracle_reduction_bubble(
     ax.set_ylim(top=50)
     ax.set_axisbelow(True)
 
-    legend_values = np.nanquantile(population_million, [0.25, 0.5, 0.9])
+    legend_values = np.nanquantile(population_million, [0.25, 0.5, 0.75])
     legend_values = np.unique(np.round(legend_values, 1))
     handles = []
     labels = []
