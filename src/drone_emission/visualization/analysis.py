@@ -495,13 +495,14 @@ def _draw_bubble_size_legend(
     ncol=1,
     columnspacing=1.0,
     title="E-bike - Oracle (t CO2eq / yr)",
+    quantiles=(0.25, 0.5, 0.9),
 ):
     """Draw an in-map legend for absolute reduction bubble sizes."""
     values = pd.to_numeric(pd.Series(values), errors="coerce")
     values = values[np.isfinite(values) & (values > 0)]
     if values.empty:
         return None
-    legend_values = np.nanquantile(values, [0.25, 0.5, 0.9])
+    legend_values = np.nanquantile(values, quantiles)
     legend_values = np.unique(np.round(legend_values, 1))
     handles = []
     labels = []
@@ -6001,6 +6002,7 @@ def plot_regions_map_oracle_reduction_rank(
             "ncol": 1,
             "columnspacing": 0.8,
             "title": "Annual reduction\n(t CO2e yr$^{-1}$)",
+            "quantiles": (0.25, 0.5, 0.75),
         }
         if is_map_only_figure
         else {}
