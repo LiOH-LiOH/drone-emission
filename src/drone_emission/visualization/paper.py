@@ -2359,11 +2359,9 @@ def _plot_compact_city_context_summary_panels(
     panel_start_letter="b",
     legend_ax=None,
     right_label_offset=0.055,
-    bottom_anchor_y=None,
 ):
     """Draw compact power-mix and distance panels for the city summary."""
     import numpy as np
-    from matplotlib.lines import Line2D
     from matplotlib.patches import Patch
 
     power_mix_handles = [
@@ -2503,7 +2501,6 @@ def _plot_compact_city_context_summary_panels(
         ax_power.set_axis_off()
 
         power_letter = chr(panel_start_ord + i)
-        marker = CITY_CONTEXT_MARKERS.get(region_key, "o")
         ax_power.text(
             0.0,
             1.18,
@@ -2546,12 +2543,14 @@ def _plot_compact_city_context_summary_panels(
         ax_distance.set_xticks([0.2, 2.5, 5.0])
         ax_distance.set_yticks([0, 50, 100])
         ax_distance.tick_params(axis="both", labelsize=7, length=2.5, pad=1.5)
+        ax_distance.yaxis.set_ticks_position("right")
         ax_distance.grid(True, axis="y", alpha=0.18, linewidth=0.45)
         ax_distance.set_axisbelow(True)
         ax_distance.spines["top"].set_visible(False)
-        if i != 0:
-            ax_distance.tick_params(axis="y", left=False, labelleft=False)
-            ax_distance.spines["left"].set_visible(False)
+        ax_distance.spines["left"].set_visible(False)
+        if i != len(contexts) - 1:
+            ax_distance.tick_params(axis="y", right=False, labelright=False)
+            ax_distance.spines["right"].set_visible(False)
 
         ax_absolute.scatter(
             centres[visible],
@@ -2584,37 +2583,12 @@ def _plot_compact_city_context_summary_panels(
             length=2.5,
             pad=1.5,
         )
+        ax_absolute.yaxis.set_ticks_position("left")
         ax_absolute.spines["top"].set_visible(False)
-        if i != len(contexts) - 1:
-            ax_absolute.tick_params(axis="y", right=False, labelright=False)
-            ax_absolute.spines["right"].set_visible(False)
-
-        panel_pos = outer[0, i].get_position(fig)
-        panel_x_center = (panel_pos.x0 + panel_pos.x1) / 2.0
-        resolved_bottom_anchor_y = (
-            bottom_anchor_y
-            if bottom_anchor_y is not None
-            else panel_pos.y0
-        )
-        panel_anchor_points = {
-            "top": None,
-            "bottom": (panel_x_center, resolved_bottom_anchor_y),
-        }
-        fig.add_artist(
-            Line2D(
-                [panel_anchor_points["bottom"][0]],
-                [panel_anchor_points["bottom"][1]],
-                marker=marker,
-                markersize=3.8,
-                markerfacecolor="white",
-                markeredgecolor="#111111",
-                markeredgewidth=0.75,
-                linestyle="None",
-                transform=fig.transFigure,
-                zorder=60,
-                clip_on=False,
-            )
-        )
+        ax_absolute.spines["right"].set_visible(False)
+        if i != 0:
+            ax_absolute.tick_params(axis="y", left=False, labelleft=False)
+            ax_absolute.spines["left"].set_visible(False)
 
         panel_records.append(
             {
@@ -2622,65 +2596,32 @@ def _plot_compact_city_context_summary_panels(
                 "panel_letter": power_letter,
                 "power_panel_letter": power_letter,
                 "reduction_panel_letter": None,
-                "panel_anchor_points": panel_anchor_points,
+                "panel_anchor_points": None,
                 "power_mix_ax": ax_power,
                 "power_legend_ax": legend_ax,
                 "reduction_ax": ax_distance,
                 "absolute_ax": ax_absolute,
                 "shared_absolute_ylim": shared_absolute_ylim,
                 "city_label_artist": city_label_artist,
-                "title_marker": marker,
             }
         )
 
     fig.canvas.draw()
     renderer = fig.canvas.get_renderer()
-    marker_gap_pixels = fig.dpi * 3.0 / 72.0
     for record in panel_records:
         label_bbox = record["city_label_artist"].get_window_extent(renderer)
-        marker_display = (
-            label_bbox.x1 + marker_gap_pixels,
-            (label_bbox.y0 + label_bbox.y1) / 2.0,
-        )
-        marker_point = fig.transFigure.inverted().transform(marker_display)
-        marker_point = (float(marker_point[0]), float(marker_point[1]))
+        label_center_y = (label_bbox.y0 + label_bbox.y1) / 2.0
         label_start_point = fig.transFigure.inverted().transform(
-            (label_bbox.x0, marker_display[1])
+            (label_bbox.x0, label_center_y)
         )
-        record["panel_anchor_points"]["top"] = marker_point
         record["city_label_position"] = (
             float(label_start_point[0]),
-            marker_point[1],
-        )
-        fig.add_artist(
-            Line2D(
-                [marker_point[0]],
-                [marker_point[1]],
-                marker=record["title_marker"],
-                markersize=4.3,
-                markerfacecolor="white",
-                markeredgecolor="#111111",
-                markeredgewidth=0.8,
-                linestyle="None",
-                transform=fig.transFigure,
-                zorder=60,
-                clip_on=False,
-            )
+            float(label_start_point[1]),
         )
 
     middle_pos = plot_spec.get_position(fig)
     fig.text(
         middle_pos.x0 - 0.055,
-        middle_pos.y0 + middle_pos.height * 0.32,
-        "Oracle drone share (%)",
-        rotation=90,
-        fontsize=7.5,
-        ha="center",
-        va="center",
-        color="#3182bd",
-    )
-    fig.text(
-        middle_pos.x1 + right_label_offset,
         middle_pos.y0 + middle_pos.height * 0.32,
         "E-bike - Drone (g CO$_2$e/order)",
         rotation=90,
@@ -2688,6 +2629,16 @@ def _plot_compact_city_context_summary_panels(
         ha="center",
         va="center",
         color="#555555",
+    )
+    fig.text(
+        middle_pos.x1 + right_label_offset,
+        middle_pos.y0 + middle_pos.height * 0.32,
+        "Oracle drone share (%)",
+        rotation=90,
+        fontsize=7.5,
+        ha="center",
+        va="center",
+        color="#3182bd",
     )
     fig.text(
         (middle_pos.x0 + middle_pos.x1) / 2.0,
@@ -2702,9 +2653,11 @@ def _plot_compact_city_context_summary_panels(
 
 def _create_city_gef_summary_legend_rail(
     fig,
+    contexts,
     row_hspace=CITY_GEF_SUMMARY_ROW_HSPACE,
 ):
     """Create three vertically aligned legend sections beside the summary."""
+    from matplotlib.lines import Line2D
     from matplotlib.patches import Patch
 
     rail = fig.add_gridspec(
@@ -2743,7 +2696,7 @@ def _create_city_gef_summary_legend_rail(
     vehicle_legend = ax_top.legend(
         handles=vehicle_handles,
         loc="upper left",
-        bbox_to_anchor=(0.0, 0.90),
+        bbox_to_anchor=(0.0, 0.98),
         frameon=False,
         fontsize=7,
         title="Vehicle",
@@ -2757,8 +2710,8 @@ def _create_city_gef_summary_legend_rail(
     ax_top.add_artist(vehicle_legend)
     component_legend = ax_top.legend(
         handles=component_handles,
-        loc="lower left",
-        bbox_to_anchor=(0.0, 0.10),
+        loc="upper left",
+        bbox_to_anchor=(0.0, 0.68),
         frameon=False,
         fontsize=7,
         title="Component",
@@ -2769,6 +2722,44 @@ def _create_city_gef_summary_legend_rail(
         borderaxespad=0.0,
     )
     component_legend.get_title().set_fontweight("bold")
+    ax_top.add_artist(component_legend)
+
+    city_entries = [
+        {
+            "region_key": context["region_key"],
+            "display_name": context["display_name"],
+            "marker": CITY_CONTEXT_MARKERS.get(context["region_key"], "o"),
+        }
+        for context in contexts
+    ]
+    city_handles = [
+        Line2D(
+            [0],
+            [0],
+            marker=entry["marker"],
+            markersize=4.8,
+            markerfacecolor="none",
+            markeredgecolor="#111111",
+            markeredgewidth=0.9,
+            linestyle="None",
+            label=entry["display_name"],
+        )
+        for entry in city_entries
+    ]
+    city_legend = ax_top.legend(
+        handles=city_handles,
+        loc="lower left",
+        bbox_to_anchor=(0.0, 0.02),
+        frameon=False,
+        fontsize=7,
+        title="City",
+        title_fontsize=7.5,
+        handlelength=1.05,
+        handletextpad=0.45,
+        labelspacing=0.45,
+        borderaxespad=0.0,
+    )
+    city_legend.get_title().set_fontweight("bold")
 
     ax_bottom.text(
         0.0,
@@ -2786,6 +2777,7 @@ def _create_city_gef_summary_legend_rail(
         "middle": ax_middle,
         "bottom": ax_bottom,
         "colorbar": cbar_ax,
+        "city_entries": city_entries,
     }
 
 
@@ -3642,89 +3634,6 @@ def _add_major_city_detour_reduction_labels(
     return label_records
 
 
-def _add_city_panel_connector_lines(
-    fig,
-    top_marker_records,
-    city_panel_records,
-    bottom_marker_records,
-):
-    """Connect selected city markers to their virtual city-panel anchors."""
-    from matplotlib.lines import Line2D
-
-    top_by_region = {
-        record["region_key"]: record for record in top_marker_records
-    }
-    bottom_by_region = {
-        record["region_key"]: record for record in bottom_marker_records
-    }
-    connector_records = []
-
-    for panel_record in city_panel_records:
-        context = panel_record["context"]
-        region_key = context["region_key"]
-        anchors = panel_record.get("panel_anchor_points")
-        if anchors is None:
-            continue
-
-        city_connectors = {
-            "region_key": region_key,
-            "display_name": context["display_name"],
-            "lines": [],
-        }
-        for line_type, marker_record, anchor_key in (
-            ("top_to_city_upper_center", top_by_region.get(region_key), "top"),
-            ("bottom_to_city_lower_center", bottom_by_region.get(region_key), "bottom"),
-        ):
-            if marker_record is None:
-                continue
-
-            start = (
-                marker_record["x_figure_fraction"],
-                marker_record["y_figure_fraction"],
-            )
-            end = anchors[anchor_key]
-            gutter_y = (start[1] + end[1]) / 2.0
-            route_x = [start[0], start[0], end[0], end[0]]
-            route_y = [start[1], gutter_y, gutter_y, end[1]]
-            fig.add_artist(
-                Line2D(
-                    route_x,
-                    route_y,
-                    color="#555555",
-                    linewidth=0.45,
-                    alpha=0.25,
-                    linestyle="-",
-                    transform=fig.transFigure,
-                    zorder=2,
-                    clip_on=False,
-                )
-            )
-            city_connectors["lines"].append(
-                {
-                    "type": line_type,
-                    "start": {
-                        "x_figure_fraction": _report_number(start[0]),
-                        "y_figure_fraction": _report_number(start[1]),
-                    },
-                    "end": {
-                        "x_figure_fraction": _report_number(end[0]),
-                        "y_figure_fraction": _report_number(end[1]),
-                    },
-                    "route": [
-                        {
-                            "x_figure_fraction": _report_number(x),
-                            "y_figure_fraction": _report_number(y),
-                        }
-                        for x, y in zip(route_x, route_y)
-                    ],
-                }
-            )
-
-        connector_records.append(city_connectors)
-
-    return connector_records
-
-
 def _detour_reduction_scatter_report(
     df,
     reduction_col,
@@ -3893,6 +3802,7 @@ def _write_city_gef_context_detour_report(
         f"- Connector line groups: {len(connector_lines)}",
         f"- Legend rail orientation: {(legend_rail or {}).get('orientation')}",
         f"- GEF bin edges: {(legend_rail or {}).get('gef_bin_edges')}",
+        f"- City marker entries: {(legend_rail or {}).get('city_markers')}",
         "",
         "## Top: city_gef_scatter_components",
         "",
@@ -4167,6 +4077,7 @@ def _render_city_gef_context_detour_summary(
     )
     legend_rail = _create_city_gef_summary_legend_rail(
         fig,
+        contexts=available_contexts,
         row_hspace=CITY_GEF_SUMMARY_ROW_HSPACE,
     )
 
@@ -4199,10 +4110,6 @@ def _render_city_gef_context_detour_summary(
         available_contexts,
     )
 
-    middle_row_pos = outer[1].get_position(fig)
-    bottom_row_pos = outer[2].get_position(fig)
-    row_gap = middle_row_pos.y0 - bottom_row_pos.y1
-    bottom_anchor_y = bottom_row_pos.y1 + row_gap * 0.30
     city_panel_records = _plot_compact_city_context_summary_panels(
         fig=fig,
         subplot_spec=outer[1],
@@ -4212,7 +4119,6 @@ def _render_city_gef_context_detour_summary(
         panel_start_letter="b",
         legend_ax=legend_rail["middle"],
         right_label_offset=0.035,
-        bottom_anchor_y=bottom_anchor_y,
     )
 
     bottom_start_ord = ord("b") + len(available_contexts)
@@ -4249,12 +4155,7 @@ def _render_city_gef_context_detour_summary(
         panel_letters=bottom_panel_letters,
     )
     bottom_major_city_labels = []
-    connector_lines = _add_city_panel_connector_lines(
-        fig,
-        top_city_gef_markers,
-        city_panel_records,
-        bottom_city_markers,
-    )
+    connector_lines = []
 
     if plot_title:
         fig.suptitle(
@@ -4298,6 +4199,7 @@ def _render_city_gef_context_detour_summary(
         },
         "gef_bin_edges": _report_array(CITY_GEF_COLOR_BIN_EDGES),
         "gef_bin_colors": [to_hex(gef_cmap(index)) for index in range(gef_cmap.N)],
+        "city_markers": legend_rail["city_entries"],
     }
     _write_city_gef_context_detour_report(
         save_path=save_path,
