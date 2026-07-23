@@ -2239,7 +2239,12 @@ def _write_contribution_decomposition_city_b_report(
             if region_key not in plotted_region_keys
         ],
         "overall": _json_safe(overall_row),
-        "overall_scope": "All successfully processed study cities",
+        "overall_scope": prepared.get("study_scope", {}).get(
+            "label",
+            "All successfully processed study cities",
+        ),
+        "study_scope": _json_safe(prepared.get("study_scope", {})),
+        "gef_coverage": _json_safe(prepared.get("gef_coverage", {})),
         "sort_order": (
             "All study regions first, followed by China macro-region order "
             "with four curated representative cities per region"
@@ -2298,6 +2303,7 @@ def _write_contribution_decomposition_city_b_report(
         "cities": _json_safe(city_rows),
         "sampling": _json_safe(prepared.get("sampling", {})),
         "runtime": _json_safe(prepared.get("runtime", {})),
+        "skipped_cities": _json_safe(prepared.get("skipped_cities", [])),
     }
     with open(report_path, "w", encoding="utf-8") as f:
         json.dump(payload, f, indent=2, ensure_ascii=False, allow_nan=False)

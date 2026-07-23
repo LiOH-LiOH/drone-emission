@@ -72,6 +72,15 @@ import time
 import pandas as pd
 
 
+CONTRIBUTION_STUDY_CITY_COUNT = 314
+CONTRIBUTION_EXPECTED_FALLBACK_GEF_REGION_KEYS = {
+    "aomentebiexingzhengqu",
+    "changdou",
+    "lasa",
+    "linzhi",
+    "shannan",
+    "xianggangtebiexingzhengqu",
+}
 TOP6_REDUCTION_DETOUR_FIGURES = {
     "top6_reduction_detour_grid",
     "top6_reduction_detour_grid_low_gef",
@@ -406,6 +415,8 @@ def _prepare_reduction_detour_city_stats(city_df):
 
 def _prepare_contribution_decomposition_city_stats(city_df, gef_df, exp_config):
     """Return Part-1-scope city stats for contribution decomposition."""
+    from visualization.macro_regions import normalize_province_name
+
     required = {
         "region_key",
         "region_name_en",
@@ -424,9 +435,25 @@ def _prepare_contribution_decomposition_city_stats(city_df, gef_df, exp_config):
     if "gef" in prepared.columns:
         prepared = prepared.drop(columns=["gef"])
     if gef_df is not None and not gef_df.empty:
-        prepared = prepared.merge(gef_df, on="province", how="left")
+        gef_lookup = gef_df.copy()
+        gef_lookup["_normalized_province"] = gef_lookup["province"].map(
+            normalize_province_name
+        )
+        gef_lookup = gef_lookup[
+            ["_normalized_province", "gef"]
+        ].drop_duplicates("_normalized_province")
+        prepared["_normalized_province"] = prepared["province"].map(
+            normalize_province_name
+        )
+        prepared = prepared.merge(
+            gef_lookup,
+            on="_normalized_province",
+            how="left",
+        ).drop(columns=["_normalized_province"])
     else:
-        prepared["gef"] = float((exp_config or {}).get("emission_params", {}).get("e_use", 0.5600))
+        prepared["gef"] = float(
+            (exp_config or {}).get("emission_params", {}).get("e_use", 0.5600)
+        )
 
     prepared["total_ebike_lifecycle"] = pd.to_numeric(
         prepared["total_ebike_lifecycle"],
@@ -434,13 +461,16 @@ def _prepare_contribution_decomposition_city_stats(city_df, gef_df, exp_config):
     )
     prepared["gef"] = pd.to_numeric(prepared["gef"], errors="coerce")
     fallback_gef = 0.5600
-    missing_gef = int(prepared["gef"].isna().sum())
+    prepared["gef_source"] = "province_table"
+    missing_gef_mask = prepared["gef"].isna()
+    missing_gef = int(missing_gef_mask.sum())
     if missing_gef:
         print(
             "break_even_contribution_decomposition: filling "
             f"{missing_gef} city rows with fallback GEF={fallback_gef:.4f}"
         )
-        prepared["gef"] = prepared["gef"].fillna(fallback_gef)
+        prepared.loc[missing_gef_mask, "gef"] = fallback_gef
+        prepared.loc[missing_gef_mask, "gef_source"] = "fallback_0.5600"
 
     prepared = prepared[
         prepared["total_ebike_lifecycle"].notna()
@@ -4517,6 +4547,23 @@ def _render_contribution_decomposition_city_b(
         prepare_contribution_decomposition_data,
     )
 
+    input_region_keys = city_df["region_key"].astype(str)
+    duplicate_input_keys = sorted(
+        input_region_keys[input_region_keys.duplicated()].unique()
+    )
+    study_region_keys = set(input_region_keys)
+    if (
+        len(city_df) != CONTRIBUTION_STUDY_CITY_COUNT
+        or len(study_region_keys) != CONTRIBUTION_STUDY_CITY_COUNT
+        or duplicate_input_keys
+    ):
+        raise RuntimeError(
+            "contribution_decomposition_city_b requires exactly "
+            f"{CONTRIBUTION_STUDY_CITY_COUNT} unique study cities; "
+            f"received rows={len(city_df)}, unique={len(study_region_keys)}, "
+            f"duplicate_keys={duplicate_input_keys}"
+        )
+
     named_path = os.path.join(data_dir, "all_sensitivity_named.csv")
     named_df = None
     if os.path.exists(named_path):
@@ -4529,11 +4576,10 @@ def _render_contribution_decomposition_city_b(
 
     enriched_path = os.path.join(data_dir, "all_region_stats_enriched.csv")
     if not os.path.exists(enriched_path):
-        print(
-            "contribution_decomposition_city_b skipped — missing "
+        raise RuntimeError(
+            "contribution_decomposition_city_b missing "
             f"{enriched_path}; run tools.enrich_stats first"
         )
-        return
 
     enriched_df = pd.read_csv(enriched_path)
     gdp_columns = (
@@ -4547,11 +4593,10 @@ def _render_contribution_decomposition_city_b(
         set(required_gdp_columns) - set(enriched_df.columns)
     )
     if missing_gdp_columns:
-        print(
-            "contribution_decomposition_city_b skipped — enriched city stats "
+        raise RuntimeError(
+            "contribution_decomposition_city_b enriched city stats "
             f"missing columns {missing_gdp_columns}"
         )
-        return
 
     gdp_df = enriched_df[list(gdp_columns)].drop_duplicates("region_key")
     gdp_df["gdp_100m"] = pd.to_numeric(gdp_df["gdp_100m"], errors="coerce")
@@ -4561,6 +4606,7 @@ def _render_contribution_decomposition_city_b(
     )
     all_study_gdp_df = enriched_df[
         enriched_df["region_level"].astype(str).eq("city")
+        & enriched_df["region_key"].astype(str).isin(study_region_keys)
     ][list(gdp_columns)].drop_duplicates("region_key")
     all_study_gdp_df["gdp_100m"] = pd.to_numeric(
         all_study_gdp_df["gdp_100m"],
@@ -4570,12 +4616,14 @@ def _render_contribution_decomposition_city_b(
         all_study_gdp_df["gdp_source_year"],
         errors="coerce",
     )
-    if all_study_gdp_df.empty:
-        print(
-            "contribution_decomposition_city_b skipped — no city-level "
-            "study regions found in enriched city stats"
+    gdp_region_keys = set(all_study_gdp_df["region_key"].astype(str))
+    if gdp_region_keys != study_region_keys:
+        raise RuntimeError(
+            "contribution_decomposition_city_b GDP coverage does not match "
+            f"the {CONTRIBUTION_STUDY_CITY_COUNT}-city study scope; "
+            f"missing={sorted(study_region_keys - gdp_region_keys)}, "
+            f"extra={sorted(gdp_region_keys - study_region_keys)}"
         )
-        return
     missing_all_study_gdp = all_study_gdp_df[
         all_study_gdp_df["gdp_100m"].isna()
         | (all_study_gdp_df["gdp_100m"] <= 0)
@@ -4583,18 +4631,17 @@ def _render_contribution_decomposition_city_b(
     ]
     if not missing_all_study_gdp.empty:
         missing_keys = missing_all_study_gdp["region_key"].astype(str).tolist()
-        print(
-            "contribution_decomposition_city_b skipped — GDP or source year "
-            f"missing for all-study city rows {missing_keys}"
+        raise RuntimeError(
+            "contribution_decomposition_city_b GDP or source year missing "
+            f"for study cities {missing_keys}"
         )
-        return
 
     gdp_min_idx = all_study_gdp_df["gdp_100m"].idxmin()
     gdp_max_idx = all_study_gdp_df["gdp_100m"].idxmax()
     gdp_min_row = all_study_gdp_df.loc[gdp_min_idx]
     gdp_max_row = all_study_gdp_df.loc[gdp_max_idx]
     all_study_gdp_range = {
-        "scope": "All city-level study regions",
+        "scope": f"All {CONTRIBUTION_STUDY_CITY_COUNT} study cities",
         "city_count": int(len(all_study_gdp_df)),
         "gdp_min_100m": float(gdp_min_row["gdp_100m"]),
         "gdp_max_100m": float(gdp_max_row["gdp_100m"]),
@@ -4603,24 +4650,6 @@ def _render_contribution_decomposition_city_b(
         "source_year_min": int(all_study_gdp_df["gdp_source_year"].min()),
         "source_year_max": int(all_study_gdp_df["gdp_source_year"].max()),
     }
-    valid_gdp = gdp_df[
-        gdp_df["gdp_100m"].notna()
-        & (gdp_df["gdp_100m"] > 0)
-        & gdp_df["gdp_source_year"].notna()
-    ]
-    valid_gdp_keys = set(valid_gdp["region_key"].astype(str))
-    missing_gdp_keys = [
-        region_key
-        for region_key in CONTRIBUTION_CITY_B_REGION_KEYS
-        if region_key not in valid_gdp_keys
-    ]
-    if missing_gdp_keys:
-        print(
-            "contribution_decomposition_city_b skipped — GDP missing for "
-            f"selected cities {missing_gdp_keys}"
-        )
-        return
-
     city_df = city_df.drop(
         columns=["gdp_100m", "gdp_source_year", "source_url_gdp"],
         errors="ignore",
@@ -4633,7 +4662,60 @@ def _render_contribution_decomposition_city_b(
         exp_config=exp_config,
     )
     if prepared is None:
-        return
+        raise RuntimeError(
+            "contribution_decomposition_city_b preparation returned no data"
+        )
+
+    processed_region_keys = {
+        str(city["region_key"]) for city in prepared.get("cities", [])
+    }
+    if processed_region_keys != study_region_keys:
+        raise RuntimeError(
+            "contribution_decomposition_city_b processed-city coverage does "
+            f"not match the {CONTRIBUTION_STUDY_CITY_COUNT}-city study scope; "
+            f"missing={sorted(study_region_keys - processed_region_keys)}, "
+            f"extra={sorted(processed_region_keys - study_region_keys)}, "
+            f"skipped={prepared.get('skipped_cities', [])}"
+        )
+    missing_selected_region_keys = sorted(
+        set(CONTRIBUTION_CITY_B_REGION_KEYS) - processed_region_keys
+    )
+    if missing_selected_region_keys:
+        raise RuntimeError(
+            "contribution_decomposition_city_b representative-city coverage "
+            f"is incomplete; missing={missing_selected_region_keys}"
+        )
+
+    fallback_region_keys = sorted(
+        city_df.loc[
+            city_df["gef_source"].eq("fallback_0.5600"),
+            "region_key",
+        ].astype(str)
+    )
+    if set(fallback_region_keys) != CONTRIBUTION_EXPECTED_FALLBACK_GEF_REGION_KEYS:
+        raise RuntimeError(
+            "contribution_decomposition_city_b fallback-GEF coverage changed; "
+            f"expected={sorted(CONTRIBUTION_EXPECTED_FALLBACK_GEF_REGION_KEYS)}, "
+            f"actual={fallback_region_keys}"
+        )
+    table_region_keys = sorted(
+        city_df.loc[
+            city_df["gef_source"].eq("province_table"),
+            "region_key",
+        ].astype(str)
+    )
+    prepared["study_scope"] = {
+        "label": f"All {CONTRIBUTION_STUDY_CITY_COUNT} study cities",
+        "expected_city_count": CONTRIBUTION_STUDY_CITY_COUNT,
+        "region_keys": sorted(study_region_keys),
+    }
+    prepared["gef_coverage"] = {
+        "province_table_city_count": len(table_region_keys),
+        "province_table_region_keys": table_region_keys,
+        "fallback_city_count": len(fallback_region_keys),
+        "fallback_region_keys": fallback_region_keys,
+        "fallback_gef_kg_co2e_per_kwh": 0.5600,
+    }
     prepared["all_study_city_gdp_range"] = all_study_gdp_range
 
     plot_contribution_decomposition_city_b(
@@ -5951,7 +6033,7 @@ def render_all(
                         out=out,
                         for_latex=for_latex,
                         plot_title=plot_title,
-                        city_df=city_df,
+                        city_df=contribution_city_df,
                         exp_config=exp_config,
                     )
 
