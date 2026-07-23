@@ -63,6 +63,7 @@ class KappaVrpSettings:
     random_seed: int = 42
     exact_batch_limit: int = 12
     solver_time_limit_ms: int = 250
+    geometric_solver_time_limit_ms: int = 250
     configured_kappa: float = 1 / math.sqrt(1.69)
 
     @classmethod
@@ -730,6 +731,15 @@ def solve_batch(
     settings: KappaVrpSettings,
 ) -> BatchSolution:
     """Dispatch to the exact or scalable solver according to batch size."""
+    if max_bundle == 1:
+        distance = _standalone_distance(orders, matrix)
+        return BatchSolution(
+            distance_m=distance,
+            routes=[[index] for index in range(len(orders))],
+            solver="capacity_one_control",
+            status="optimal",
+            solve_ms=0.0,
+        )
     if len(orders) <= settings.exact_batch_limit:
         return solve_batch_exact(
             orders=orders,
@@ -750,7 +760,11 @@ def solve_batch(
         pickup_service_min=settings.pickup_service_min,
         drop_service_min=scenario.drop_service_min,
         constrained=scenario.constrained,
-        time_limit_ms=settings.solver_time_limit_ms,
+        time_limit_ms=(
+            settings.solver_time_limit_ms
+            if scenario.constrained
+            else settings.geometric_solver_time_limit_ms
+        ),
     )
 
 

@@ -85,6 +85,7 @@ geometric_replicates = 5
 random_seed = 42
 exact_batch_limit = 8
 solver_time_limit_ms = 25
+geometric_solver_time_limit_ms = 250
 configured_kappa = 0.7692307692307692
 
 # ============ Local Environment ============
