@@ -9843,3 +9843,134 @@ def plot_reduction_detour_grid(
         grid_hspace=grid_hspace,
         grid_wspace=grid_wspace,
     )
+
+
+def plot_kappa_vrp_saturation(
+    df: pd.DataFrame,
+    plateau: dict = None,
+    configured_kappa: float = 1.0,
+    save_path: str = None,
+    figsize: tuple = (7.2, 4.8),
+    for_latex: bool = False,
+    plot_title: bool = False,
+):
+    """Plot kappa against maximum e-bike bundle size for VRP scenarios.
+
+    Args:
+        df: Capacity-summary data with scenario, capacity, kappa, and interval columns.
+        plateau: Plateau-detection result for the constrained best-case curve.
+        configured_kappa: Current configured baseline shown as a reference.
+        save_path: Path to save figure. Shows plot if None.
+        figsize: Figure size tuple.
+        for_latex: If True, save as PDF.
+        plot_title: If True, show title.
+    """
+    required = {"scenario", "capacity", "kappa"}
+    missing = required.difference(df.columns)
+    if missing:
+        raise ValueError(f"Kappa VRP summary missing columns: {sorted(missing)}")
+
+    styles = {
+        "geometric_lower_bound": {
+            "label": "Geometric lower bound",
+            "color": "#4C78A8",
+            "marker": "o",
+            "linestyle": "--",
+        },
+        "baseline_operational": {
+            "label": "Baseline operations",
+            "color": "#7A7A7A",
+            "marker": "s",
+            "linestyle": "-",
+        },
+        "constrained_best_case": {
+            "label": "Constrained best case",
+            "color": "#E45756",
+            "marker": "D",
+            "linestyle": "-",
+        },
+    }
+    fig, ax = plt.subplots(figsize=figsize)
+    for scenario, style in styles.items():
+        subset = df[df["scenario"] == scenario].sort_values("capacity")
+        if subset.empty:
+            continue
+        x = subset["capacity"].to_numpy(dtype=float)
+        y = subset["kappa"].to_numpy(dtype=float)
+        ax.plot(
+            x,
+            y,
+            label=style["label"],
+            color=style["color"],
+            marker=style["marker"],
+            linestyle=style["linestyle"],
+            linewidth=1.8,
+            markersize=4.5,
+        )
+        if {"kappa_ci_low", "kappa_ci_high"}.issubset(subset.columns):
+            low = subset["kappa_ci_low"].to_numpy(dtype=float)
+            high = subset["kappa_ci_high"].to_numpy(dtype=float)
+            finite = np.isfinite(x) & np.isfinite(low) & np.isfinite(high)
+            if finite.any():
+                ax.fill_between(
+                    x[finite],
+                    low[finite],
+                    high[finite],
+                    color=style["color"],
+                    alpha=0.12,
+                    linewidth=0,
+                )
+
+    ax.axhline(
+        configured_kappa,
+        color="#E08214",
+        linewidth=1.3,
+        linestyle=":",
+        label=rf"Configured baseline ($\kappa={configured_kappa:.3f}$)",
+    )
+    if plateau and plateau.get("reached"):
+        bundle_size = float(plateau["bundle_size_star"])
+        kappa_value = float(plateau["future_extreme_kappa"])
+        ax.scatter(
+            [bundle_size],
+            [kappa_value],
+            s=58,
+            facecolor="white",
+            edgecolor="#B22222",
+            linewidth=1.5,
+            zorder=8,
+        )
+        ax.annotate(
+            rf"$B^*={bundle_size:g}$, $\kappa={kappa_value:.3f}$",
+            xy=(bundle_size, kappa_value),
+            xytext=(8, -18),
+            textcoords="offset points",
+            fontsize=8.5,
+            color="#8B1A1A",
+        )
+
+    capacities = pd.to_numeric(df["capacity"], errors="coerce").dropna()
+    if not capacities.empty:
+        ax.set_xticks(
+            np.arange(int(capacities.min()), int(capacities.max()) + 1)
+        )
+    ax.set_xlabel("Maximum bundle size, $B$")
+    ax.set_ylabel(r"Effective per-order distance factor, $\kappa$")
+    ax.grid(axis="y", color="#D9D9D9", linewidth=0.6, alpha=0.8)
+    ax.spines[["top", "right"]].set_visible(False)
+    ax.legend(frameon=False, fontsize=8.5)
+    if plot_title:
+        ax.set_title("E-bike bundling saturation under route optimization")
+    fig.tight_layout()
+
+    if save_path:
+        if for_latex and not save_path.endswith(".pdf"):
+            save_path = save_path.rsplit(".", 1)[0] + ".pdf"
+        if plot_title:
+            save_path = _add_title_suffix(save_path)
+        os.makedirs(os.path.dirname(save_path), exist_ok=True)
+        plt.savefig(save_path, dpi=300, bbox_inches="tight")
+        print(f"Kappa VRP saturation curve saved to {save_path}")
+    else:
+        plt.show()
+    plt.close(fig)

@@ -58,6 +58,35 @@ velocity = 30             # Urban delivery speed (km/h)
 velocity = 30             # Urban delivery speed (km/h)
 engine_efficiency = 0.25  # Gasoline engine thermal efficiency
 
+# Standalone VRP experiment for the limiting e-bike bundling factor.
+# This section does not override emission_params.ebike.kappa.
+[kappa_vrp]
+region = "changsha"
+level = "city"
+window_km = 2.0
+n_restaurants = 15
+destination_clusters = 24
+horizon_hours = 2.0
+operating_days_per_year = 300
+lunch_order_share = 0.30
+controlled_rates_per_hour = [5, 10, 20, 40, 60]
+matching_windows_min = [3, 6, 12]
+preparation_time_min = 10
+sla_values_min = [30, 45]
+speed_values_kmh = [20, 30]
+pickup_service_min = 1
+drop_service_values_min = [1, 2, 3]
+max_bundle_size = 12
+plateau_improvement_pct = 1.0
+plateau_consecutive_steps = 2
+primary_replicates = 20
+sensitivity_replicates = 10
+geometric_replicates = 5
+random_seed = 42
+exact_batch_limit = 12
+solver_time_limit_ms = 250
+configured_kappa = 0.7692307692307692
+
 # ============ Local Environment ============
 [local]
 cache_dir = "/Users/linjingxian/Code/drone-emission/cache"
