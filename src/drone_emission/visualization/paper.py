@@ -161,7 +161,7 @@ CITY_GEF_BOTTOM_SCATTER_ALPHA = 0.45
 
 REDUCTION_DETOUR_CACHE_VERSION = 4
 BREAK_EVEN_PHASE_CACHE_VERSION = 9
-CONTRIBUTION_DECOMPOSITION_FULL_CACHE_VERSION = 5
+CONTRIBUTION_DECOMPOSITION_FULL_CACHE_VERSION = 6
 REDUCTION_DETOUR_SELECTION_METRIC = "total_ebike_lifecycle"
 RETIRED_THRESHOLD_METRIC_COLUMNS = {
     "max_lifecycle_reduction_pct",
@@ -4540,11 +4540,10 @@ def _render_contribution_decomposition_city_b(
     city_df,
     exp_config,
 ):
-    """Render the selected-city horizontal contribution-decomposition figure."""
+    """Render the full-data selected-city contribution-decomposition figure."""
     from visualization.emission import (
         CONTRIBUTION_CITY_B_REGION_KEYS,
         plot_contribution_decomposition_city_b,
-        prepare_contribution_decomposition_data,
     )
 
     input_region_keys = city_df["region_key"].astype(str)
@@ -4655,7 +4654,7 @@ def _render_contribution_decomposition_city_b(
         errors="ignore",
     ).merge(gdp_df, on="region_key", how="left")
 
-    prepared = prepare_contribution_decomposition_data(
+    prepared = _prepare_contribution_decomposition_full(
         city_df=city_df,
         data_dir=data_dir,
         named_df=named_df,
@@ -4664,6 +4663,15 @@ def _render_contribution_decomposition_city_b(
     if prepared is None:
         raise RuntimeError(
             "contribution_decomposition_city_b preparation returned no data"
+        )
+    sampling = prepared.get("sampling", {})
+    if (
+        sampling.get("max_sample_rows_per_city") is not None
+        or sampling.get("mode") != "full_real_data"
+    ):
+        raise RuntimeError(
+            "contribution_decomposition_city_b requires full OD data; "
+            f"sampling={sampling}"
         )
 
     processed_region_keys = {
@@ -4684,6 +4692,18 @@ def _render_contribution_decomposition_city_b(
         raise RuntimeError(
             "contribution_decomposition_city_b representative-city coverage "
             f"is incomplete; missing={missing_selected_region_keys}"
+        )
+
+    gdp_by_region_key = gdp_df.set_index("region_key").to_dict("index")
+    for city in prepared.get("cities", []):
+        region_key = str(city["region_key"])
+        gdp = gdp_by_region_key[region_key]
+        city["gdp_100m"] = float(gdp["gdp_100m"])
+        city["gdp_source_year"] = int(gdp["gdp_source_year"])
+        city["source_url_gdp"] = (
+            str(gdp["source_url_gdp"])
+            if pd.notna(gdp["source_url_gdp"])
+            else ""
         )
 
     fallback_region_keys = sorted(
@@ -4895,6 +4915,7 @@ def _prepare_contribution_decomposition_full(
     city_rows = city_df.copy()
     required_cols = {"region_key", "total_ebike_lifecycle", "gef"}
     od_files = {}
+    city_gef_values = []
     if required_cols.issubset(city_rows.columns):
         for col in ("total_ebike_lifecycle", "gef"):
             city_rows[col] = pd.to_numeric(city_rows[col], errors="coerce")
@@ -4903,6 +4924,12 @@ def _prepare_contribution_decomposition_full(
             & (city_rows["total_ebike_lifecycle"] > 0)
             & city_rows["gef"].notna()
         ].copy()
+        city_gef_values = [
+            (str(row.region_key), float(row.gef))
+            for row in city_rows.sort_values("region_key")[
+                ["region_key", "gef"]
+            ].itertuples(index=False)
+        ]
         for region_key in sorted(city_rows["region_key"].dropna().astype(str).unique()):
             od_path = _resolve_contribution_od_path(data_dir, region_key)
             if od_path:
@@ -4920,6 +4947,7 @@ def _prepare_contribution_decomposition_full(
         "gef_file": _optional_file_cache_signature(gef_path),
         "named_file": _optional_file_cache_signature(named_path),
         "od_files": od_files,
+        "city_gef_values": city_gef_values,
         "kappa": _get_ebike_kappa(exp_config),
         "gef_fallback": 0.5600,
         "max_sample_rows": None,
