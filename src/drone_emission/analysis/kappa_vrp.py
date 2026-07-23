@@ -881,7 +881,14 @@ def run_scenario_curve(
                     )
             result_rows.append(
                 {
-                    **asdict(scenario),
+                    "scenario": scenario.name,
+                    "rate_per_hour": scenario.rate_per_hour,
+                    "matching_window_min": scenario.matching_window_min,
+                    "sla_min": scenario.sla_min,
+                    "speed_kmh": scenario.speed_kmh,
+                    "drop_service_min": scenario.drop_service_min,
+                    "replicates": scenario.replicates,
+                    "constrained": scenario.constrained,
                     "replicate": replicate,
                     "capacity": int(capacity),
                     "route_distance_m": numerator,
@@ -1125,37 +1132,105 @@ def run_experiment(
     figure_dir.mkdir(parents=True, exist_ok=True)
 
     started = time.time()
-    print(f"Loading {od_path} with columns {OD_COLUMNS}")
-    od_df = pd.read_csv(od_path, usecols=list(OD_COLUMNS))
-    od_df = od_df[
-        np.isfinite(od_df["annual_sales"])
-        & (od_df["annual_sales"] > 0)
-        & np.isfinite(od_df["from_lat"])
-        & np.isfinite(od_df["from_lng"])
-        & np.isfinite(od_df["to_lat"])
-        & np.isfinite(od_df["to_lng"])
-    ].copy()
-    restaurants, window_meta = select_dense_restaurant_window(
-        od_df,
-        settings.window_km,
-        settings.n_restaurants,
+    cache_payload = {
+        "od_size": od_path.stat().st_size,
+        "od_mtime_ns": od_path.stat().st_mtime_ns,
+        "graph_size": graphml_path.stat().st_size,
+        "graph_mtime_ns": graphml_path.stat().st_mtime_ns,
+        "window_km": settings.window_km,
+        "n_restaurants": settings.n_restaurants,
+        "destination_clusters": settings.destination_clusters,
+        "seed": settings.random_seed,
+    }
+    cache_key = hashlib.sha256(
+        json.dumps(cache_payload, sort_keys=True).encode("utf-8")
+    ).hexdigest()[:16]
+    cache_dir = (
+        Path(exp_config["cache_dir"])
+        / "kappa_vrp"
+        / settings.region.lower()
+        / cache_key
     )
-    destinations, compression_meta = compress_destination_catchments(
-        od_df,
-        restaurants,
-        settings.destination_clusters,
-        settings.random_seed,
-    )
-    blocks, graph_meta = build_directed_distance_blocks(
-        graphml_path,
-        restaurants,
-        destinations,
-    )
-    destinations, blocks, reachable_meta = filter_unreachable_destinations(
-        restaurants,
-        destinations,
-        blocks,
-    )
+    restaurant_cache = cache_dir / "restaurants.csv"
+    destination_cache = cache_dir / "destinations.csv"
+    block_cache = cache_dir / "distance_blocks.npz"
+    metadata_cache = cache_dir / "preprocessing.json"
+    if all(
+        path.exists()
+        for path in (
+            restaurant_cache,
+            destination_cache,
+            block_cache,
+            metadata_cache,
+        )
+    ):
+        print(f"Loading kappa VRP preprocessing cache: {cache_dir}")
+        restaurants = pd.read_csv(restaurant_cache)
+        destinations = pd.read_csv(destination_cache)
+        archive = np.load(block_cache)
+        blocks = {
+            int(name.removeprefix("restaurant_")): archive[name]
+            for name in archive.files
+        }
+        with metadata_cache.open(encoding="utf-8") as handle:
+            preprocessing_meta = json.load(handle)
+        window_meta = preprocessing_meta["window"]
+        compression_meta = preprocessing_meta["compression"]
+        graph_meta = preprocessing_meta["road_graph"]
+        reachable_meta = preprocessing_meta["reachability"]
+    else:
+        print(f"Loading {od_path} with columns {OD_COLUMNS}")
+        od_df = pd.read_csv(od_path, usecols=list(OD_COLUMNS))
+        od_df = od_df[
+            np.isfinite(od_df["annual_sales"])
+            & (od_df["annual_sales"] > 0)
+            & np.isfinite(od_df["from_lat"])
+            & np.isfinite(od_df["from_lng"])
+            & np.isfinite(od_df["to_lat"])
+            & np.isfinite(od_df["to_lng"])
+        ].copy()
+        restaurants, window_meta = select_dense_restaurant_window(
+            od_df,
+            settings.window_km,
+            settings.n_restaurants,
+        )
+        destinations, compression_meta = compress_destination_catchments(
+            od_df,
+            restaurants,
+            settings.destination_clusters,
+            settings.random_seed,
+        )
+        blocks, graph_meta = build_directed_distance_blocks(
+            graphml_path,
+            restaurants,
+            destinations,
+        )
+        destinations, blocks, reachable_meta = filter_unreachable_destinations(
+            restaurants,
+            destinations,
+            blocks,
+        )
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        restaurants.to_csv(restaurant_cache, index=False)
+        destinations.to_csv(destination_cache, index=False)
+        np.savez_compressed(
+            block_cache,
+            **{
+                f"restaurant_{restaurant_id}": matrix
+                for restaurant_id, matrix in blocks.items()
+            },
+        )
+        preprocessing_meta = {
+            "cache_key": cache_key,
+            "cache_payload": cache_payload,
+            "window": window_meta,
+            "compression": compression_meta,
+            "road_graph": graph_meta,
+            "reachability": reachable_meta,
+        }
+        with metadata_cache.open("w", encoding="utf-8") as handle:
+            json.dump(preprocessing_meta, handle, indent=2)
+        print(f"Kappa VRP preprocessing cache saved to {cache_dir}")
 
     capacities = list(
         range(1, (4 if smoke else settings.max_bundle_size) + 1)
@@ -1260,6 +1335,10 @@ def run_experiment(
         "elapsed_seconds": time.time() - started,
         "smoke": smoke,
         "settings": asdict(settings),
+        "preprocessing_cache": {
+            "key": cache_key,
+            "path": str(cache_dir),
+        },
         "input": {
             "od": _file_fingerprint(od_path),
             "graphml": _file_fingerprint(graphml_path),
