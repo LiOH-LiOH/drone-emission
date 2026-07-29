@@ -10170,6 +10170,7 @@ def plot_r2_gef_detour_suitability_landscape(
         [f"{value:,.0f}" for value in bubble_legend_values],
         title="Annual reduction\n(t CO$_2$e yr$^{-1}$)",
         loc="upper left",
+        bbox_to_anchor=(0.17, 1.0),
         frameon=False,
         fontsize=7.2,
         title_fontsize=7.5,
