@@ -632,6 +632,63 @@ def _fit_interaction_model(df: pd.DataFrame) -> dict:
     }
 
 
+def _nonlinear_core_sensitivity(df: pd.DataFrame) -> dict:
+    """Test quadratic core terms after RESET flags additive-model misspecification."""
+    sample, standardized = _prepare_core_sample(df)
+    standardized["grid_emission_factor_sq"] = (
+        standardized["grid_emission_factor"] ** 2
+    )
+    standardized["detour_ratio_sq"] = standardized["detour_ratio"] ** 2
+    base = ["grid_emission_factor", "detour_ratio"]
+    nonlinear = ["grid_emission_factor_sq", "detour_ratio_sq", "gef_x_detour"]
+    full_features = [*base, *nonlinear]
+    y = standardized[R2_OUTCOME]
+    reduced = sm.OLS(
+        y, sm.add_constant(standardized[base], has_constant="add")
+    ).fit()
+    design = sm.add_constant(standardized[full_features], has_constant="add")
+    classic = sm.OLS(y, design).fit()
+    hc3 = sm.OLS(y, design).fit(cov_type="HC3", use_t=True)
+    cluster = sm.OLS(y, design).fit(
+        cov_type="cluster",
+        cov_kwds={
+            "groups": sample["province"],
+            "use_correction": True,
+            "df_correction": True,
+        },
+        use_t=True,
+    )
+    reset = linear_reset(classic, power=2, use_f=True)
+    return {
+        "formula": (
+            "reduction_z ~ gef_z + detour_z + gef_z^2 + detour_z^2 + "
+            "gef_z:detour_z"
+        ),
+        "n": int(len(sample)),
+        "r2": float(classic.rsquared),
+        "adjusted_r2": float(classic.rsquared_adj),
+        "incremental_r2_over_additive": float(classic.rsquared - reduced.rsquared),
+        "nonlinear_block_hc3_wald": _wald_block_test(hc3, nonlinear),
+        "hc3_coefficients": [
+            _coefficient_record(hc3, feature, include_tost=False)
+            for feature in full_features
+        ],
+        "province_cluster_coefficients": [
+            _coefficient_record(cluster, feature, include_tost=False)
+            for feature in full_features
+        ],
+        "ramsey_reset_after_quadratic": {
+            "f_statistic": float(np.asarray(reset.fvalue).squeeze()),
+            "p_value": float(np.asarray(reset.pvalue).squeeze()),
+            "power": 2,
+        },
+        "interpretation": (
+            "Specification sensitivity only; the prespecified additive M1-M4 "
+            "hierarchy remains the primary attribution model."
+        ),
+    }
+
+
 def _bootstrap_core_coefficients(
     df: pd.DataFrame,
     replicates: int = R2_BOOTSTRAP_REPLICATES,
@@ -1127,6 +1184,7 @@ def run_r2_city_attribution(df: pd.DataFrame, supplements: list[dict]) -> dict:
         ],
         "landscape_model": _fit_landscape_model(df),
         "interaction_model": interaction,
+        "nonlinear_core_sensitivity": _nonlinear_core_sensitivity(df),
         "screen_correlations": _screen_correlations(df),
         "correlation_matrices": {
             "pearson": _correlation_matrix(df, "pearson"),

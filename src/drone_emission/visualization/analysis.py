@@ -10194,13 +10194,18 @@ def plot_r2_gef_detour_suitability_landscape(
         "$P < 0.001$" if interaction_p < 0.001 else f"$P = {interaction_p:.3f}$"
     )
     orth_ci = orthogonal["ci95"]
-    equivalence = orthogonal["equivalence"]["equivalent_0_05"]
+    orth_equivalence = orthogonal["equivalence"]["equivalent_0_05"]
+    interaction_equivalence = interaction_record["equivalence"]["equivalent_0_05"]
+    interaction_ci = interaction_record["ci95"]
     ax.text(
         0.02, 0.98,
         f"GEF vs detour: r = {orthogonal['coefficient']:+.3f} "
-        f"[{orth_ci[0]:+.2f}, {orth_ci[1]:+.2f}]\n"
+        f"[{orth_ci[0]:+.2f}, {orth_ci[1]:+.2f}]; equivalence "
+        f"{'met' if orth_equivalence else 'not established'}\n"
         f"Interaction: $\\beta$ = {interaction_record['beta_standardized']:+.3f}, "
-        f"{interaction_p_label}; equivalence {'met' if equivalence else 'not met'}",
+        f"[{interaction_ci[0]:+.2f}, {interaction_ci[1]:+.2f}], "
+        f"{interaction_p_label}; equivalence "
+        f"{'met' if interaction_equivalence else 'not established'}",
         transform=ax.transAxes,
         va="top",
         ha="left",
