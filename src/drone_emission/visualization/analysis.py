@@ -10088,6 +10088,9 @@ def plot_r2_gef_detour_suitability_landscape(
 ):
     """Plot the two-lever city suitability landscape for manuscript R2.
 
+    Bubble area encodes annual absolute Oracle-vs-e-bike reduction on a
+    logarithmic scale, while colour retains the relative reduction outcome.
+
     Args:
         df: Prepared city-attribution DataFrame.
         analysis: Shared R2 analysis result dictionary.
@@ -10096,39 +10099,46 @@ def plot_r2_gef_detour_suitability_landscape(
         for_latex: If True, save as PDF.
         plot_title: If True, show title.
     """
-    required = ["grid_emission_factor", "detour_ratio", R2_OUTCOME]
+    required = [
+        "grid_emission_factor",
+        "detour_ratio",
+        R2_OUTCOME,
+        R2_ABSOLUTE_OUTCOME,
+    ]
     plot_df = df.dropna(subset=required).copy()
+    numeric_required = plot_df[required].apply(pd.to_numeric, errors="coerce")
+    finite = np.isfinite(numeric_required).all(axis=1)
+    positive_absolute = numeric_required[R2_ABSOLUTE_OUTCOME] > 0
+    plot_df = plot_df.loc[finite & positive_absolute].copy()
+    if plot_df.empty:
+        raise ValueError(
+            "R2 suitability landscape has no finite cities with positive "
+            "annual absolute reduction"
+        )
+
+    bubble_area_min = 18.0
+    bubble_area_max = 220.0
+    bubble_legend_values = (10.0, 100.0, 1000.0)
+    absolute_reduction = plot_df[R2_ABSOLUTE_OUTCOME].to_numpy(dtype=float)
+    log_absolute = np.log10(absolute_reduction)
+    log_min = float(log_absolute.min())
+    log_max = float(log_absolute.max())
+
+    def _bubble_area(values):
+        values = np.asarray(values, dtype=float)
+        logged = np.log10(values)
+        if np.isclose(log_min, log_max):
+            return np.full_like(
+                logged,
+                (bubble_area_min + bubble_area_max) / 2.0,
+                dtype=float,
+            )
+        fraction = (logged - log_min) / (log_max - log_min)
+        return bubble_area_min + fraction * (bubble_area_max - bubble_area_min)
+
+    plot_df["_bubble_area"] = _bubble_area(absolute_reduction)
     interaction = analysis["interaction_model"]
-    coefficients = {
-        record["variable"]: record["beta_standardized"]
-        for record in interaction["hc3_coefficients"]
-    }
-    standardization = interaction["standardization"]
-    x_min = float(plot_df["grid_emission_factor"].min())
-    x_max = float(plot_df["grid_emission_factor"].max())
-    y_min = float(plot_df["detour_ratio"].min())
-    y_max = float(plot_df["detour_ratio"].max())
-    x_pad = max((x_max - x_min) * 0.02, 1e-6)
-    y_pad = max((y_max - y_min) * 0.03, 1e-6)
-    x_values = np.linspace(x_min - x_pad, x_max + x_pad, 180)
-    y_values = np.linspace(y_min - y_pad, y_max + y_pad, 180)
-    xx, yy = np.meshgrid(x_values, y_values)
-    gef_z = (
-        xx - standardization["grid_emission_factor"]["mean"]
-    ) / standardization["grid_emission_factor"]["sd"]
-    detour_z = (
-        yy - standardization["detour_ratio"]["mean"]
-    ) / standardization["detour_ratio"]["sd"]
-    reduction_z = (
-        interaction["hc3_intercept"]
-        + coefficients["grid_emission_factor"] * gef_z
-        + coefficients["detour_ratio"] * detour_z
-        + coefficients["gef_x_detour"] * gef_z * detour_z
-    )
-    zz = (
-        standardization[R2_OUTCOME]["mean"]
-        + standardization[R2_OUTCOME]["sd"] * reduction_z
-    )
+    orthogonal = analysis["gef_detour_orthogonality"]
 
     fig, ax = plt.subplots(figsize=figsize)
     scatter = ax.scatter(
@@ -10138,22 +10148,35 @@ def plot_r2_gef_detour_suitability_landscape(
         cmap="YlGn",
         vmin=0,
         vmax=max(50.0, float(plot_df[R2_OUTCOME].max())),
-        s=25,
+        s=plot_df["_bubble_area"],
         alpha=0.82,
         edgecolor="white",
         linewidth=0.35,
         zorder=3,
     )
-    contour_levels = np.arange(5, 51, 5)
-    contours = ax.contour(
-        xx, yy, zz,
-        levels=contour_levels,
-        colors="#3E3E3E",
-        linewidths=0.65,
-        alpha=0.72,
-        zorder=2,
+    size_handles = [
+        ax.scatter(
+            [], [],
+            s=float(_bubble_area([value])[0]),
+            facecolor="#86C98A",
+            edgecolor="white",
+            linewidth=0.5,
+            alpha=0.82,
+        )
+        for value in bubble_legend_values
+    ]
+    ax.legend(
+        size_handles,
+        [f"{value:,.0f}" for value in bubble_legend_values],
+        title="Annual reduction\n(t CO$_2$e yr$^{-1}$)",
+        loc="upper left",
+        frameon=False,
+        fontsize=7.2,
+        title_fontsize=7.5,
+        handletextpad=1.1,
+        labelspacing=1.0,
+        borderaxespad=0.6,
     )
-    ax.clabel(contours, inline=True, fmt=lambda value: f"{value:.0f}%", fontsize=6.5)
 
     city_offsets = {
         "chengdu": (8, -17),
@@ -10164,9 +10187,14 @@ def plot_r2_gef_detour_suitability_landscape(
     city_records = []
     for _, row in _r2_city_rows(plot_df).iterrows():
         key = row["region_key"]
+        outline_area = (np.sqrt(float(row["_bubble_area"])) + 2.2) ** 2
         ax.scatter(
             row["grid_emission_factor"], row["detour_ratio"],
-            s=48, facecolor="none", edgecolor="#111111", linewidth=1.1, zorder=5,
+            s=outline_area,
+            facecolor="none",
+            edgecolor="#111111",
+            linewidth=1.1,
+            zorder=5,
         )
         ax.annotate(
             R2_FIGURE_CITY_LABELS[key],
@@ -10182,36 +10210,10 @@ def plot_r2_gef_detour_suitability_landscape(
             "grid_emission_factor": float(row["grid_emission_factor"]),
             "detour_ratio": float(row["detour_ratio"]),
             "relative_reduction_pct": float(row[R2_OUTCOME]),
+            "annual_absolute_reduction_t_co2e": float(
+                row[R2_ABSOLUTE_OUTCOME]
+            ),
         })
-
-    orthogonal = analysis["gef_detour_orthogonality"]
-    interaction_record = next(
-        record for record in interaction["hc3_coefficients"]
-        if record["variable"] == "gef_x_detour"
-    )
-    interaction_p = interaction_record["p_value"]
-    interaction_p_label = (
-        "$P < 0.001$" if interaction_p < 0.001 else f"$P = {interaction_p:.3f}$"
-    )
-    orth_ci = orthogonal["ci95"]
-    orth_equivalence = orthogonal["equivalence"]["equivalent_0_05"]
-    interaction_equivalence = interaction_record["equivalence"]["equivalent_0_05"]
-    interaction_ci = interaction_record["ci95"]
-    ax.text(
-        0.02, 0.98,
-        f"GEF vs detour: r = {orthogonal['coefficient']:+.3f} "
-        f"[{orth_ci[0]:+.2f}, {orth_ci[1]:+.2f}]; equivalence "
-        f"{'met' if orth_equivalence else 'not established'}\n"
-        f"Interaction: $\\beta$ = {interaction_record['beta_standardized']:+.3f}, "
-        f"[{interaction_ci[0]:+.2f}, {interaction_ci[1]:+.2f}], "
-        f"{interaction_p_label}; equivalence "
-        f"{'met' if interaction_equivalence else 'not established'}",
-        transform=ax.transAxes,
-        va="top",
-        ha="left",
-        fontsize=8,
-        bbox={"boxstyle": "round,pad=0.25", "fc": "white", "ec": "#BBBBBB", "alpha": 0.92},
-    )
     ax.set_xlabel("Grid emission factor (kg CO$_2$e kWh$^{-1}$)")
     ax.set_ylabel("Annual-sales-weighted detour ratio")
     ax.grid(color="#D9D9D9", linewidth=0.5, alpha=0.55)
@@ -10228,7 +10230,24 @@ def plot_r2_gef_detour_suitability_landscape(
             "plotted_city_count": int(len(plot_df)),
             "interaction_model": interaction,
             "gef_detour_orthogonality": orthogonal,
-            "contour_levels_pct": contour_levels.tolist(),
+            "bubble_size_encoding": {
+                "metric": R2_ABSOLUTE_OUTCOME,
+                "unit": "t CO2e yr^-1",
+                "transform": "log10(value) mapped linearly to marker area",
+                "area_range_points_squared": [
+                    bubble_area_min,
+                    bubble_area_max,
+                ],
+                "value_range": [
+                    float(absolute_reduction.min()),
+                    float(absolute_reduction.max()),
+                ],
+                "legend_values": list(bubble_legend_values),
+            },
+            "colour_encoding": {
+                "metric": R2_OUTCOME,
+                "unit": "percent",
+            },
             "selected_cities": city_records,
         },
     )
