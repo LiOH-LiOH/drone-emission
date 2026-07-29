@@ -10089,10 +10089,14 @@ def plot_r2_gef_detour_suitability_landscape(
     required = ["grid_emission_factor", "detour_ratio", R2_OUTCOME]
     plot_df = df.dropna(subset=required).copy()
     coefficients = analysis["landscape_model"]["coefficients"]
-    x_values = np.linspace(plot_df["grid_emission_factor"].min(),
-                           plot_df["grid_emission_factor"].max(), 180)
-    y_values = np.linspace(plot_df["detour_ratio"].min(),
-                           plot_df["detour_ratio"].max(), 180)
+    x_min = float(plot_df["grid_emission_factor"].min())
+    x_max = float(plot_df["grid_emission_factor"].max())
+    y_min = float(plot_df["detour_ratio"].min())
+    y_max = float(plot_df["detour_ratio"].max())
+    x_pad = max((x_max - x_min) * 0.02, 1e-6)
+    y_pad = max((y_max - y_min) * 0.03, 1e-6)
+    x_values = np.linspace(x_min - x_pad, x_max + x_pad, 180)
+    y_values = np.linspace(y_min - y_pad, y_max + y_pad, 180)
     xx, yy = np.meshgrid(x_values, y_values)
     zz = (
         coefficients["const"]
@@ -10316,10 +10320,17 @@ def plot_r2_attribute_correlation_screen(
                              ("Road/geographic", category_colors["road"]),
                              ("Scale/density", category_colors["scale"]))
     ]
-    axes[1].legend(handles=handles, frameon=False, fontsize=7.5, loc="lower right")
+    fig.legend(
+        handles=handles,
+        frameon=False,
+        fontsize=7.5,
+        loc="lower center",
+        bbox_to_anchor=(0.5, 0.005),
+        ncol=3,
+    )
     if plot_title:
         fig.suptitle("Attribute screening separates core levers, covariates, and null factors")
-    fig.tight_layout()
+    fig.tight_layout(rect=(0, 0.055, 1, 1))
     _r2_save_figure(
         fig, save_path, for_latex, plot_title,
         "r2_attribute_correlation_screen",
