@@ -11,6 +11,13 @@ import numpy as np
 import pandas as pd
 from scipy import stats
 
+plt.rcParams.update({
+    "font.family": "sans-serif",
+    "font.sans-serif": ["Arial", "Helvetica", "DejaVu Sans", "sans-serif"],
+    "svg.fonttype": "none",
+    "pdf.fonttype": 42,
+})
+
 from visualization._utils import (
     _add_title_suffix,
     saved_tight_axis_report,
@@ -10048,10 +10055,13 @@ def _r2_save_figure(
             out = _add_title_suffix(out)
         os.makedirs(os.path.dirname(out), exist_ok=True)
         fig.savefig(out, dpi=300, bbox_inches="tight")
+        svg_path = out.rsplit(".", 1)[0] + ".svg"
+        fig.savefig(svg_path, dpi=300, bbox_inches="tight")
         report_payload = {
-            "schema_version": 1,
+            "schema_version": 2,
             "figure_name": figure_name,
             "figure_path": out,
+            "editable_vector_path": svg_path,
             "shared_analysis_report": (
                 os.path.join(os.path.dirname(out), "r2_city_attribution_analysis_report.json")
             ),
@@ -10088,7 +10098,12 @@ def plot_r2_gef_detour_suitability_landscape(
     """
     required = ["grid_emission_factor", "detour_ratio", R2_OUTCOME]
     plot_df = df.dropna(subset=required).copy()
-    coefficients = analysis["landscape_model"]["coefficients"]
+    interaction = analysis["interaction_model"]
+    coefficients = {
+        record["variable"]: record["beta_standardized"]
+        for record in interaction["hc3_coefficients"]
+    }
+    standardization = interaction["standardization"]
     x_min = float(plot_df["grid_emission_factor"].min())
     x_max = float(plot_df["grid_emission_factor"].max())
     y_min = float(plot_df["detour_ratio"].min())
@@ -10098,10 +10113,21 @@ def plot_r2_gef_detour_suitability_landscape(
     x_values = np.linspace(x_min - x_pad, x_max + x_pad, 180)
     y_values = np.linspace(y_min - y_pad, y_max + y_pad, 180)
     xx, yy = np.meshgrid(x_values, y_values)
+    gef_z = (
+        xx - standardization["grid_emission_factor"]["mean"]
+    ) / standardization["grid_emission_factor"]["sd"]
+    detour_z = (
+        yy - standardization["detour_ratio"]["mean"]
+    ) / standardization["detour_ratio"]["sd"]
+    reduction_z = (
+        interaction["hc3_intercept"]
+        + coefficients["grid_emission_factor"] * gef_z
+        + coefficients["detour_ratio"] * detour_z
+        + coefficients["gef_x_detour"] * gef_z * detour_z
+    )
     zz = (
-        coefficients["const"]
-        + coefficients["grid_emission_factor"] * xx
-        + coefficients["detour_ratio"] * yy
+        standardization[R2_OUTCOME]["mean"]
+        + standardization[R2_OUTCOME]["sd"] * reduction_z
     )
 
     fig, ax = plt.subplots(figsize=figsize)
@@ -10159,11 +10185,22 @@ def plot_r2_gef_detour_suitability_landscape(
         })
 
     orthogonal = analysis["gef_detour_orthogonality"]
-    model = analysis["landscape_model"]
+    interaction_record = next(
+        record for record in interaction["hc3_coefficients"]
+        if record["variable"] == "gef_x_detour"
+    )
+    interaction_p = interaction_record["p_value"]
+    interaction_p_label = (
+        "$P < 0.001$" if interaction_p < 0.001 else f"$P = {interaction_p:.3f}$"
+    )
+    orth_ci = orthogonal["ci95"]
+    equivalence = orthogonal["equivalence"]["equivalent_0_05"]
     ax.text(
         0.02, 0.98,
-        f"GEF vs detour: r = {orthogonal['coefficient']:+.3f}\n"
-        f"Two-variable model: $R^2$ = {model['r2']:.3f}, n = {model['n']}",
+        f"GEF vs detour: r = {orthogonal['coefficient']:+.3f} "
+        f"[{orth_ci[0]:+.2f}, {orth_ci[1]:+.2f}]\n"
+        f"Interaction: $\\beta$ = {interaction_record['beta_standardized']:+.3f}, "
+        f"{interaction_p_label}; equivalence {'met' if equivalence else 'not met'}",
         transform=ax.transAxes,
         va="top",
         ha="left",
@@ -10177,14 +10214,14 @@ def plot_r2_gef_detour_suitability_landscape(
     colorbar = fig.colorbar(scatter, ax=ax, pad=0.025)
     colorbar.set_label("Optimal lifecycle reduction (%)")
     if plot_title:
-        ax.set_title("Independent grid and detour levers define city suitability")
+        ax.set_title("Grid intensity modifies the benefit of avoiding road detours")
     fig.tight_layout()
     _r2_save_figure(
         fig, save_path, for_latex, plot_title,
         "r2_gef_detour_suitability_landscape",
         {
             "plotted_city_count": int(len(plot_df)),
-            "landscape_model": model,
+            "interaction_model": interaction,
             "gef_detour_orthogonality": orthogonal,
             "contour_levels_pct": contour_levels.tolist(),
             "selected_cities": city_records,
@@ -10219,13 +10256,16 @@ def plot_r2_hierarchical_r2_steps(
     for index, (model, color) in enumerate(zip(models, colors)):
         previous = 0 if index == 0 else r2_values[index - 1]
         ax.vlines(index, previous, model["r2"], color=color, linewidth=11, alpha=0.9, zorder=2)
-        p_value = model["f_change_p"]
+        p_value = model["hc3_block_test"]["p_value"]
         p_label = "$P < 0.001$" if p_value < 0.001 else f"$P = {p_value:.3f}$"
+        delta_ci = model["delta_r2_ci95_percentile"]
         ax.text(
             index,
             model["r2"] + 0.025,
             f"$R^2$ = {model['r2']:.3f}\n"
-            f"$\\Delta R^2$ = {model['delta_r2']:.3f}\n{p_label}",
+            f"$\\Delta R^2$ = {model['delta_r2']:.3f} "
+            f"[{delta_ci[0]:.3f}, {delta_ci[1]:.3f}]\n"
+            f"HC3 {p_label}",
             ha="center", va="bottom", fontsize=8,
         )
     ax.set_xticks(x, labels)
@@ -10291,15 +10331,17 @@ def plot_r2_attribute_correlation_screen(
         (axes[1], gef_lookup, "Correlation with grid emission factor"),
     )
     for ax, lookup, x_label in column_specs:
+        ax.axvspan(-0.10, 0.10, color="#F2F2F2", zorder=0)
         ax.axvline(0, color="#666666", linewidth=0.7)
         for row_y, variable in zip(y, variables):
             record = lookup.get(variable)
             if record is None or record["coefficient"] is None:
                 continue
-            significant = record["significant_bonferroni_0_05"]
+            significant = record["significant_adjusted_0_05"]
             color = category_colors[category(variable)]
-            ax.plot([0, record["coefficient"]], [row_y, row_y], color=color,
-                    alpha=0.65 if significant else 0.18, linewidth=1.0)
+            ci_low, ci_high = record["ci95"]
+            ax.plot([ci_low, ci_high], [row_y, row_y], color=color,
+                    alpha=0.82 if significant else 0.30, linewidth=1.1)
             ax.scatter(record["coefficient"], row_y, s=34,
                        color=color, alpha=0.95 if significant else 0.24,
                        edgecolor="white", linewidth=0.35, zorder=3)
@@ -10320,13 +10362,16 @@ def plot_r2_attribute_correlation_screen(
                              ("Road/geographic", category_colors["road"]),
                              ("Scale/density", category_colors["scale"]))
     ]
+    handles.append(
+        Patch(facecolor="#F2F2F2", edgecolor="none", label="Equivalence region ±0.10")
+    )
     fig.legend(
         handles=handles,
         frameon=False,
         fontsize=7.5,
         loc="lower center",
         bbox_to_anchor=(0.5, 0.005),
-        ncol=3,
+        ncol=4,
     )
     if plot_title:
         fig.suptitle("Attribute screening separates core levers, covariates, and null factors")
@@ -10351,7 +10396,7 @@ def _plot_r2_correlation_matrix(
 
     variables = matrix["variables"]
     coefficients = np.asarray(matrix["coefficients"], dtype=float)
-    p_adjusted = np.asarray(matrix["p_bonferroni"], dtype=float)
+    p_adjusted = np.asarray(matrix["p_adjusted"], dtype=float)
     cmap = plt.get_cmap("RdBu_r")
     norm = Normalize(vmin=-1, vmax=1)
     rgba = cmap(norm(coefficients))
@@ -10368,7 +10413,7 @@ def _plot_r2_correlation_matrix(
             faded = bool(insignificant[row, col])
             ax.text(
                 col, row, f"{value:+.2f}" if row != col else "1",
-                ha="center", va="center", fontsize=4.7,
+                ha="center", va="center", fontsize=5.2,
                 color="#222222", alpha=0.30 if faded else 0.92,
             )
     labels = [R2_MATRIX_LABELS.get(variable, variable) for variable in variables]
@@ -10383,7 +10428,7 @@ def _plot_r2_correlation_matrix(
     colorbar.set_label(f"Correlation coefficient ({symbol})")
     ax.text(
         0.0, 1.015,
-        f"Bonferroni family: {matrix['family_size']} unique pairs; "
+        f"BH-FDR family: {matrix['family_size']} unique pairs; "
         "non-significant cells are faded",
         transform=ax.transAxes, fontsize=7, color="#555555", va="bottom",
     )
@@ -10397,7 +10442,8 @@ def _plot_r2_correlation_matrix(
             "variables": variables,
             "family_size": matrix["family_size"],
             "coefficients": matrix["coefficients"],
-            "p_bonferroni": matrix["p_bonferroni"],
+            "p_adjusted": matrix["p_adjusted"],
+            "adjustment_method": matrix["adjustment_method"],
             "sample_sizes": matrix["sample_sizes"],
         },
     )
@@ -10490,9 +10536,20 @@ def plot_r2_population_reduction_contrast(
             city_records.append({"region_key": row["region_key"], "x_population_million": x_value,
                                  "y": y_value})
         p_label = "$P < 0.001$" if record["p_value"] < 0.001 else f"$P = {record['p_value']:.3f}$"
+        ci_low, ci_high = record["ci95"]
+        equivalence = record["equivalence"]
+        equivalence_label = ""
+        if outcome == R2_OUTCOME:
+            equivalence_label = (
+                "\nequivalent within ±0.10"
+                if equivalence["equivalent_0_05"]
+                else "\nequivalence not established"
+            )
         ax.text(
             0.03, 0.96,
-            f"r = {record['coefficient']:+.3f}\n{p_label}, n = {record['n']}",
+            f"r = {record['coefficient']:+.3f} "
+            f"[{ci_low:+.2f}, {ci_high:+.2f}]\n"
+            f"{p_label}, n = {record['n']}{equivalence_label}",
             transform=ax.transAxes, va="top", fontsize=8,
             bbox={"boxstyle": "round,pad=0.22", "fc": "white", "ec": "#BBBBBB", "alpha": 0.9},
         )
@@ -10513,4 +10570,70 @@ def plot_r2_population_reduction_contrast(
         fig, save_path, for_latex, plot_title,
         "r2_population_reduction_contrast",
         {"panels": panel_records},
+    )
+
+
+def plot_r2_core_coefficient_robustness(
+    analysis: dict,
+    save_path: str = None,
+    figsize: tuple = (8.8, 3.5),
+    for_latex: bool = False,
+    plot_title: bool = False,
+):
+    """Compare core R2 coefficients across inference and sensitivity methods.
+
+    Args:
+        analysis: Shared R2 analysis result dictionary.
+        save_path: Path to save figure. Shows plot if None.
+        figsize: Figure size tuple.
+        for_latex: If True, save as PDF.
+        plot_title: If True, show title.
+    """
+    summary = analysis["robustness_forest"]
+    methods = [record["method"] for record in summary["terms"][0]["methods"]]
+    method_labels = {
+        "HC3": "HC3",
+        "Province cluster": "Province cluster",
+        "City bootstrap": "City bootstrap",
+        "Sales-weighted WLS": "Sales-weighted WLS",
+        "Leave one province out": "Leave-one-province-out",
+    }
+    colors = {
+        "HC3": "#1F4E79",
+        "Province cluster": "#4C78A8",
+        "City bootstrap": "#72A0C1",
+        "Sales-weighted WLS": "#D95F02",
+        "Leave one province out": "#777777",
+    }
+    fig, axes = plt.subplots(1, len(summary["terms"]), figsize=figsize, sharex=True)
+    all_limits = []
+    for ax, term in zip(axes, summary["terms"]):
+        y = np.arange(len(methods))[::-1]
+        ax.axvspan(-0.10, 0.10, color="#F2F2F2", zorder=0)
+        ax.axvline(0, color="#666666", linewidth=0.7, zorder=1)
+        for position, record in zip(y, term["methods"]):
+            low, high = record["interval"]
+            estimate = record["estimate"]
+            all_limits.extend([low, high])
+            ax.plot([low, high], [position, position], color=colors[record["method"]],
+                    linewidth=1.5, zorder=2)
+            ax.scatter(estimate, position, s=30, color=colors[record["method"]],
+                       edgecolor="white", linewidth=0.35, zorder=3)
+        ax.set_yticks(y, [method_labels[method] for method in methods], fontsize=7)
+        ax.set_title(term["label"], fontsize=9)
+        ax.grid(axis="x", color="#E0E0E0", linewidth=0.5)
+        ax.spines[["top", "right", "left"]].set_visible(False)
+        ax.tick_params(axis="y", length=0)
+    padding = max((max(all_limits) - min(all_limits)) * 0.08, 0.04)
+    axes[0].set_xlim(min(all_limits) - padding, max(all_limits) + padding)
+    axes[1].tick_params(axis="y", labelleft=False)
+    axes[2].tick_params(axis="y", labelleft=False)
+    fig.supxlabel("Standardized coefficient (95% CI; leave-one-out shows range)", fontsize=8)
+    if plot_title:
+        fig.suptitle("Core city-attribution coefficients are audited across specifications")
+    fig.tight_layout(rect=(0, 0.04, 1, 1))
+    _r2_save_figure(
+        fig, save_path, for_latex, plot_title,
+        "r2_core_coefficient_robustness",
+        {"robustness_forest": summary},
     )

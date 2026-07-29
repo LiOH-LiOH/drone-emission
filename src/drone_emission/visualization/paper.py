@@ -55,6 +55,7 @@ Available figures:
     r2_gef_detour_suitability_landscape, r2_hierarchical_r2_steps,
     r2_attribute_correlation_screen, r2_correlation_matrix_pearson,
     r2_correlation_matrix_spearman, r2_population_reduction_contrast,
+    r2_core_coefficient_robustness,
     regions_map_and_gef_scatter,
     regions_map_city_province_ranks,
     regions_map_city_rank_inset,
@@ -96,6 +97,7 @@ R2_ATTRIBUTION_FIGURES = {
     "r2_correlation_matrix_pearson",
     "r2_correlation_matrix_spearman",
     "r2_population_reduction_contrast",
+    "r2_core_coefficient_robustness",
 }
 CITY_CONTEXT_FIGURES = {
     "shanghai_city_context": {
@@ -5911,6 +5913,7 @@ def render_all(
                     plot_r2_attribute_correlation_screen,
                     plot_r2_correlation_matrix_pearson,
                     plot_r2_correlation_matrix_spearman,
+                    plot_r2_core_coefficient_robustness,
                     plot_r2_gef_detour_suitability_landscape,
                     plot_r2_hierarchical_r2_steps,
                     plot_r2_population_reduction_contrast,
@@ -6441,6 +6444,16 @@ def render_all(
                                 save_path=os.path.join(
                                     out,
                                     "r2_population_reduction_contrast.png",
+                                ),
+                                for_latex=for_latex,
+                                plot_title=plot_title,
+                            )
+                        if _want("r2_core_coefficient_robustness"):
+                            plot_r2_core_coefficient_robustness(
+                                r2_analysis,
+                                save_path=os.path.join(
+                                    out,
+                                    "r2_core_coefficient_robustness.png",
                                 ),
                                 for_latex=for_latex,
                                 plot_title=plot_title,

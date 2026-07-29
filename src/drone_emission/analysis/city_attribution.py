@@ -17,12 +17,18 @@ import numpy as np
 import pandas as pd
 import statsmodels.api as sm
 from scipy import stats
+from statsmodels.stats.diagnostic import het_breuschpagan, linear_reset
+from statsmodels.stats.multitest import multipletests
+from statsmodels.stats.outliers_influence import OLSInfluence
 
 from analysis.regression import compute_vif, run_hierarchical_regression
 
 
 R2_OUTCOME = "oracle_min_reduction_vs_ebike_pct"
 R2_ABSOLUTE_OUTCOME = "oracle_min_reduction_vs_ebike_t"
+R2_EQUIVALENCE_BOUND = 0.10
+R2_BOOTSTRAP_REPLICATES = 5000
+R2_RANDOM_SEED = 20260729
 
 R2_HIERARCHICAL_MODELS = {
     "M1: Grid": ["grid_emission_factor"],
@@ -208,6 +214,26 @@ def _pairwise_correlation(
         coefficient, p_value = stats.spearmanr(pair[x_var], pair[y_var])
     else:
         raise ValueError(f"Unsupported correlation method: {method}")
+    clipped = float(np.clip(coefficient, -0.999999, 0.999999))
+    standard_error = 1.0 / math.sqrt(len(pair) - 3)
+    fisher_value = np.arctanh(clipped)
+    ci95 = np.tanh(
+        [fisher_value - 1.96 * standard_error,
+         fisher_value + 1.96 * standard_error]
+    )
+    ci90 = np.tanh(
+        [fisher_value - stats.norm.ppf(0.95) * standard_error,
+         fisher_value + stats.norm.ppf(0.95) * standard_error]
+    )
+    lower_z = (
+        fisher_value - np.arctanh(-R2_EQUIVALENCE_BOUND)
+    ) / standard_error
+    upper_z = (
+        fisher_value - np.arctanh(R2_EQUIVALENCE_BOUND)
+    ) / standard_error
+    p_lower = float(stats.norm.sf(lower_z))
+    p_upper = float(stats.norm.cdf(upper_z))
+    tost_p = max(p_lower, p_upper)
     return {
         "x": x_var,
         "y": y_var,
@@ -215,24 +241,44 @@ def _pairwise_correlation(
         "n": int(len(pair)),
         "coefficient": float(coefficient),
         "p_value": float(p_value),
+        "ci95": [float(value) for value in ci95],
+        "equivalence": {
+            "bound_abs": R2_EQUIVALENCE_BOUND,
+            "ci90": [float(value) for value in ci90],
+            "p_lower": p_lower,
+            "p_upper": p_upper,
+            "p_tost": float(tost_p),
+            "equivalent_0_05": bool(tost_p < 0.05),
+            "method": "Fisher-z TOST",
+        },
     }
 
 
-def _bonferroni(records: list[dict]) -> list[dict]:
-    valid_count = sum(record.get("p_value") is not None for record in records)
+def _adjust_pvalues(records: list[dict], method: str) -> list[dict]:
+    """Adjust one declared family of p-values and retain its metadata."""
+    valid_indices = [
+        index for index, record in enumerate(records)
+        if record.get("p_value") is not None
+    ]
+    adjusted_values = []
+    if valid_indices:
+        adjusted_values = multipletests(
+            [records[index]["p_value"] for index in valid_indices],
+            alpha=0.05,
+            method=method,
+        )[1]
+    adjusted_lookup = dict(zip(valid_indices, adjusted_values))
     adjusted = []
-    for record in records:
+    for index, record in enumerate(records):
         item = dict(record)
-        p_value = item.get("p_value")
-        item["p_bonferroni"] = (
-            min(float(p_value) * valid_count, 1.0) if p_value is not None else None
+        item["p_adjusted"] = (
+            float(adjusted_lookup[index]) if index in adjusted_lookup else None
         )
-        item["significant_bonferroni_0_05"] = (
-            item["p_bonferroni"] < 0.05
-            if item["p_bonferroni"] is not None
-            else False
+        item["significant_adjusted_0_05"] = bool(
+            item["p_adjusted"] is not None and item["p_adjusted"] < 0.05
         )
-        item["family_size"] = valid_count
+        item["adjustment_method"] = method
+        item["family_size"] = len(valid_indices)
         adjusted.append(item)
     return adjusted
 
@@ -250,8 +296,9 @@ def _screen_correlations(df: pd.DataFrame) -> dict:
     ]
     return {
         "variables": available,
-        "outcome": _bonferroni(outcome),
-        "grid_emission_factor": _bonferroni(gef),
+        "outcome": _adjust_pvalues(outcome, "holm"),
+        "grid_emission_factor": _adjust_pvalues(gef, "holm"),
+        "adjustment_method": "holm",
     }
 
 
@@ -263,7 +310,7 @@ def _correlation_matrix(df: pd.DataFrame, method: str) -> dict:
         for second in variables[i + 1:]:
             record = _pairwise_correlation(df, first, second, method)
             pair_records.append(record)
-    pair_records = _bonferroni(pair_records)
+    pair_records = _adjust_pvalues(pair_records, "fdr_bh")
     for record in pair_records:
         pair_lookup[(record["x"], record["y"])] = record
         pair_lookup[(record["y"], record["x"])] = record
@@ -283,7 +330,7 @@ def _correlation_matrix(df: pd.DataFrame, method: str) -> dict:
                 continue
             record = pair_lookup[(first, second)]
             coefficient_row.append(record["coefficient"])
-            p_row.append(record["p_bonferroni"])
+            p_row.append(record["p_adjusted"])
             n_row.append(record["n"])
         coefficients.append(coefficient_row)
         adjusted_p.append(p_row)
@@ -292,11 +339,173 @@ def _correlation_matrix(df: pd.DataFrame, method: str) -> dict:
         "method": method,
         "variables": variables,
         "coefficients": coefficients,
-        "p_bonferroni": adjusted_p,
+        "p_adjusted": adjusted_p,
+        "adjustment_method": "fdr_bh",
         "sample_sizes": sample_sizes,
         "family_size": pair_records[0]["family_size"] if pair_records else 0,
         "pairs": pair_records,
     }
+
+
+def _result_value(result, attribute: str, name: str) -> float:
+    """Read one named model result value across statsmodels result wrappers."""
+    names = list(result.model.exog_names)
+    values = np.asarray(getattr(result, attribute), dtype=float)
+    return float(values[names.index(name)])
+
+
+def _beta_tost(beta: float, standard_error: float, df_resid: float) -> dict:
+    """Test whether a standardized coefficient lies within the preset bound."""
+    lower_stat = (beta + R2_EQUIVALENCE_BOUND) / standard_error
+    upper_stat = (beta - R2_EQUIVALENCE_BOUND) / standard_error
+    p_lower = float(stats.t.sf(lower_stat, df_resid))
+    p_upper = float(stats.t.cdf(upper_stat, df_resid))
+    critical = float(stats.t.ppf(0.95, df_resid))
+    p_tost = max(p_lower, p_upper)
+    return {
+        "bound_abs": R2_EQUIVALENCE_BOUND,
+        "ci90": [
+            float(beta - critical * standard_error),
+            float(beta + critical * standard_error),
+        ],
+        "p_lower": p_lower,
+        "p_upper": p_upper,
+        "p_tost": float(p_tost),
+        "equivalent_0_05": bool(p_tost < 0.05),
+        "method": "two-one-sided t tests on standardized beta",
+    }
+
+
+def _coefficient_record(result, variable: str, include_tost: bool = True) -> dict:
+    """Serialize one robust regression coefficient with its confidence interval."""
+    beta = _result_value(result, "params", variable)
+    standard_error = _result_value(result, "bse", variable)
+    names = list(result.model.exog_names)
+    interval = np.asarray(result.conf_int(alpha=0.05), dtype=float)[names.index(variable)]
+    record = {
+        "variable": variable,
+        "beta_standardized": beta,
+        "standard_error": standard_error,
+        "test_statistic": _result_value(result, "tvalues", variable),
+        "p_value": _result_value(result, "pvalues", variable),
+        "ci95": [float(interval[0]), float(interval[1])],
+    }
+    if include_tost:
+        record["equivalence"] = _beta_tost(
+            beta, standard_error, float(result.df_resid)
+        )
+    return record
+
+
+def _wald_block_test(result, variables: list[str]) -> dict:
+    """Run one joint Wald test for a declared predictor block."""
+    names = list(result.model.exog_names)
+    tested = [variable for variable in variables if variable in names]
+    restrictions = np.zeros((len(tested), len(names)))
+    for row, variable in enumerate(tested):
+        restrictions[row, names.index(variable)] = 1.0
+    test = result.wald_test(restrictions, scalar=True)
+    return {
+        "variables": tested,
+        "statistic": float(np.asarray(test.statistic).squeeze()),
+        "p_value": float(np.asarray(test.pvalue).squeeze()),
+        "df_num": int(len(tested)),
+        "method": "HC3 robust Wald test",
+    }
+
+
+def _r2_common_sample(df: pd.DataFrame) -> pd.DataFrame:
+    """Return the fixed complete-case sample used by every nested R2 model."""
+    final_features = list(R2_HIERARCHICAL_MODELS.values())[-1]
+    columns = [R2_OUTCOME, *final_features, "province", "region_key"]
+    available = [column for column in columns if column in df.columns]
+    sample = df[available].copy()
+    numeric = [R2_OUTCOME, *final_features]
+    sample[numeric] = sample[numeric].apply(pd.to_numeric, errors="coerce")
+    sample = sample.dropna(subset=numeric)
+    sample = sample[np.isfinite(sample[numeric]).all(axis=1)]
+    return sample.reset_index(drop=True)
+
+
+def _robust_hierarchical_models(df: pd.DataFrame) -> list[dict]:
+    """Fit HC3-primary and province-clustered versions of M1--M4."""
+    sample = _r2_common_sample(df)
+    numeric = [R2_OUTCOME, *list(R2_HIERARCHICAL_MODELS.values())[-1]]
+    standardized = (sample[numeric] - sample[numeric].mean()) / sample[numeric].std()
+    y = standardized[R2_OUTCOME]
+    previous_features: list[str] = []
+    records = []
+    for name, features in R2_HIERARCHICAL_MODELS.items():
+        x = sm.add_constant(standardized[features], has_constant="add")
+        hc3 = sm.OLS(y, x).fit(cov_type="HC3", use_t=True)
+        cluster = sm.OLS(y, x).fit(
+            cov_type="cluster",
+            cov_kwds={
+                "groups": sample["province"],
+                "use_correction": True,
+                "df_correction": True,
+            },
+            use_t=True,
+        )
+        added = [feature for feature in features if feature not in previous_features]
+        records.append({
+            "name": name,
+            "n": int(len(sample)),
+            "province_clusters": int(sample["province"].nunique()),
+            "added_block": added,
+            "hc3_block_test": _wald_block_test(hc3, added),
+            "hc3_coefficients": [
+                _coefficient_record(hc3, feature) for feature in features
+            ],
+            "province_cluster_coefficients": [
+                _coefficient_record(cluster, feature, include_tost=False)
+                for feature in features
+            ],
+        })
+        previous_features = list(features)
+    return records
+
+
+def _fit_r2_values(y: np.ndarray, x: np.ndarray) -> float:
+    """Fit least squares and return R-squared for bootstrap resamples."""
+    design = np.column_stack([np.ones(len(x)), x])
+    fitted = design @ np.linalg.lstsq(design, y, rcond=None)[0]
+    denominator = float(np.sum((y - np.mean(y)) ** 2))
+    if denominator <= 0:
+        return np.nan
+    return float(1.0 - np.sum((y - fitted) ** 2) / denominator)
+
+
+def _bootstrap_hierarchical_delta_r2(
+    df: pd.DataFrame,
+    replicates: int = R2_BOOTSTRAP_REPLICATES,
+) -> list[dict]:
+    """Bootstrap nested-model incremental R-squared on the common sample."""
+    sample = _r2_common_sample(df)
+    y = sample[R2_OUTCOME].to_numpy(dtype=float)
+    rng = np.random.default_rng(R2_RANDOM_SEED)
+    deltas = [[] for _ in R2_HIERARCHICAL_MODELS]
+    feature_sets = list(R2_HIERARCHICAL_MODELS.values())
+    for _ in range(replicates):
+        positions = rng.integers(0, len(sample), len(sample))
+        sampled_y = y[positions]
+        previous = 0.0
+        for index, features in enumerate(feature_sets):
+            sampled_x = sample[features].to_numpy(dtype=float)[positions]
+            r2_value = _fit_r2_values(sampled_y, sampled_x)
+            if np.isfinite(r2_value):
+                deltas[index].append(r2_value - previous)
+                previous = r2_value
+    records = []
+    for name, values in zip(R2_HIERARCHICAL_MODELS, deltas):
+        interval = np.percentile(values, [2.5, 97.5])
+        records.append({
+            "name": name,
+            "replicates_requested": replicates,
+            "replicates_valid": int(len(values)),
+            "delta_r2_ci95_percentile": [float(interval[0]), float(interval[1])],
+        })
+    return records
 
 
 def _serialize_hierarchical(results: list[dict]) -> list[dict]:
@@ -326,6 +535,472 @@ def _serialize_hierarchical(results: list[dict]) -> list[dict]:
             "coefficients": coefficients,
         })
     return serialized
+
+
+def _prepare_core_sample(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Prepare the complete city sample and z-scored core mechanism variables."""
+    columns = [
+        R2_OUTCOME,
+        "grid_emission_factor",
+        "detour_ratio",
+        "province",
+        "region_key",
+        "total_odpair_annual_sales",
+    ]
+    sample = df[[column for column in columns if column in df.columns]].copy()
+    numeric = [R2_OUTCOME, "grid_emission_factor", "detour_ratio"]
+    sample[numeric] = sample[numeric].apply(pd.to_numeric, errors="coerce")
+    sample = sample.dropna(subset=[*numeric, "province"])
+    sample = sample[np.isfinite(sample[numeric]).all(axis=1)].reset_index(drop=True)
+    standardized = (sample[numeric] - sample[numeric].mean()) / sample[numeric].std()
+    standardized["gef_x_detour"] = (
+        standardized["grid_emission_factor"] * standardized["detour_ratio"]
+    )
+    return sample, standardized
+
+
+def _fit_interaction_model(df: pd.DataFrame) -> dict:
+    """Fit the continuous grid-by-detour mechanism model with robust inference."""
+    sample, standardized = _prepare_core_sample(df)
+    features = ["grid_emission_factor", "detour_ratio", "gef_x_detour"]
+    x = sm.add_constant(standardized[features], has_constant="add")
+    y = standardized[R2_OUTCOME]
+    classic = sm.OLS(y, x).fit()
+    hc3 = sm.OLS(y, x).fit(cov_type="HC3", use_t=True)
+    cluster = sm.OLS(y, x).fit(
+        cov_type="cluster",
+        cov_kwds={
+            "groups": sample["province"],
+            "use_correction": True,
+            "df_correction": True,
+        },
+        use_t=True,
+    )
+    names = list(hc3.model.exog_names)
+    covariance = np.asarray(hc3.cov_params(), dtype=float)
+    detour_index = names.index("detour_ratio")
+    interaction_index = names.index("gef_x_detour")
+    simple_slopes = []
+    for gef_z, label in ((-1.0, "GEF -1 SD"), (0.0, "Mean GEF"), (1.0, "GEF +1 SD")):
+        beta = (
+            _result_value(hc3, "params", "detour_ratio")
+            + gef_z * _result_value(hc3, "params", "gef_x_detour")
+        )
+        variance = (
+            covariance[detour_index, detour_index]
+            + gef_z ** 2 * covariance[interaction_index, interaction_index]
+            + 2.0 * gef_z * covariance[detour_index, interaction_index]
+        )
+        standard_error = math.sqrt(max(float(variance), 0.0))
+        critical = float(stats.t.ppf(0.975, hc3.df_resid))
+        statistic = beta / standard_error
+        simple_slopes.append({
+            "label": label,
+            "gef_z": gef_z,
+            "beta_standardized": float(beta),
+            "standard_error": float(standard_error),
+            "ci95": [
+                float(beta - critical * standard_error),
+                float(beta + critical * standard_error),
+            ],
+            "p_value": float(2.0 * stats.t.sf(abs(statistic), hc3.df_resid)),
+        })
+    numeric = [R2_OUTCOME, "grid_emission_factor", "detour_ratio"]
+    return {
+        "formula": "reduction_z ~ gef_z + detour_z + gef_z:detour_z",
+        "role": "separate continuous mechanism model; not an M1-M4 layer",
+        "n": int(len(sample)),
+        "province_clusters": int(sample["province"].nunique()),
+        "r2": float(classic.rsquared),
+        "adjusted_r2": float(classic.rsquared_adj),
+        "standardization": {
+            column: {
+                "mean": float(sample[column].mean()),
+                "sd": float(sample[column].std()),
+            }
+            for column in numeric
+        },
+        "hc3_intercept": _result_value(hc3, "params", "const"),
+        "hc3_coefficients": [
+            _coefficient_record(hc3, feature) for feature in features
+        ],
+        "province_cluster_coefficients": [
+            _coefficient_record(cluster, feature, include_tost=False)
+            for feature in features
+        ],
+        "simple_detour_slopes": simple_slopes,
+    }
+
+
+def _bootstrap_core_coefficients(
+    df: pd.DataFrame,
+    replicates: int = R2_BOOTSTRAP_REPLICATES,
+) -> dict:
+    """Bootstrap additive and interaction-model standardized coefficients."""
+    sample, _ = _prepare_core_sample(df)
+    rng = np.random.default_rng(R2_RANDOM_SEED + 1)
+    stored = {
+        "additive": {"grid_emission_factor": [], "detour_ratio": []},
+        "interaction": {
+            "grid_emission_factor": [],
+            "detour_ratio": [],
+            "gef_x_detour": [],
+        },
+    }
+    numeric = [R2_OUTCOME, "grid_emission_factor", "detour_ratio"]
+    for _ in range(replicates):
+        positions = rng.integers(0, len(sample), len(sample))
+        sampled = sample.iloc[positions][numeric]
+        scales = sampled.std()
+        if (scales <= 0).any():
+            continue
+        z = (sampled - sampled.mean()) / scales
+        interaction = z["grid_emission_factor"] * z["detour_ratio"]
+        designs = {
+            "additive": np.column_stack([
+                np.ones(len(z)),
+                z["grid_emission_factor"],
+                z["detour_ratio"],
+            ]),
+            "interaction": np.column_stack([
+                np.ones(len(z)),
+                z["grid_emission_factor"],
+                z["detour_ratio"],
+                interaction,
+            ]),
+        }
+        names = {
+            "additive": ["const", "grid_emission_factor", "detour_ratio"],
+            "interaction": [
+                "const", "grid_emission_factor", "detour_ratio", "gef_x_detour"
+            ],
+        }
+        for model_name, design in designs.items():
+            coefficients = np.linalg.lstsq(
+                design, z[R2_OUTCOME].to_numpy(dtype=float), rcond=None
+            )[0]
+            for variable, coefficient in zip(names[model_name], coefficients):
+                if variable != "const":
+                    stored[model_name][variable].append(float(coefficient))
+    return {
+        "replicates_requested": replicates,
+        "random_seed": R2_RANDOM_SEED + 1,
+        **{
+            model_name: {
+                variable: {
+                    "replicates_valid": int(len(values)),
+                    "median": float(np.median(values)),
+                    "ci95_percentile": [
+                        float(value) for value in np.percentile(values, [2.5, 97.5])
+                    ],
+                }
+                for variable, values in variables.items()
+            }
+            for model_name, variables in stored.items()
+        },
+    }
+
+
+def _weighted_core_sensitivity(df: pd.DataFrame) -> dict:
+    """Fit annual-order-weighted additive and interaction sensitivity models."""
+    sample, standardized = _prepare_core_sample(df)
+    if "total_odpair_annual_sales" not in sample.columns:
+        return {"available": False, "reason": "missing total_odpair_annual_sales"}
+    weights = pd.to_numeric(
+        sample["total_odpair_annual_sales"], errors="coerce"
+    ).to_numpy(dtype=float)
+    valid = np.isfinite(weights) & (weights > 0)
+    weights = weights[valid] / np.mean(weights[valid])
+    y = standardized.loc[valid, R2_OUTCOME]
+    records = {}
+    for model_name, features in {
+        "additive": ["grid_emission_factor", "detour_ratio"],
+        "interaction": ["grid_emission_factor", "detour_ratio", "gef_x_detour"],
+    }.items():
+        x = sm.add_constant(standardized.loc[valid, features], has_constant="add")
+        result = sm.WLS(y, x, weights=weights).fit(cov_type="HC3", use_t=True)
+        records[model_name] = {
+            "n": int(valid.sum()),
+            "coefficients": [
+                _coefficient_record(result, feature, include_tost=False)
+                for feature in features
+            ],
+        }
+    return {
+        "available": True,
+        "estimand": "annual-order-weighted cross-city sensitivity",
+        "weight": "total_odpair_annual_sales normalized to mean one",
+        "models": records,
+    }
+
+
+def _leave_one_province_out(df: pd.DataFrame) -> dict:
+    """Summarize coefficient stability after omitting each province in turn."""
+    sample, _ = _prepare_core_sample(df)
+    stored = {
+        "additive": {"grid_emission_factor": [], "detour_ratio": []},
+        "interaction": {
+            "grid_emission_factor": [],
+            "detour_ratio": [],
+            "gef_x_detour": [],
+        },
+    }
+    for province in sorted(sample["province"].unique()):
+        reduced = sample[sample["province"] != province].copy()
+        numeric = [R2_OUTCOME, "grid_emission_factor", "detour_ratio"]
+        z = (reduced[numeric] - reduced[numeric].mean()) / reduced[numeric].std()
+        z["gef_x_detour"] = z["grid_emission_factor"] * z["detour_ratio"]
+        for model_name, features in {
+            "additive": ["grid_emission_factor", "detour_ratio"],
+            "interaction": ["grid_emission_factor", "detour_ratio", "gef_x_detour"],
+        }.items():
+            design = sm.add_constant(z[features], has_constant="add")
+            result = sm.OLS(z[R2_OUTCOME], design).fit()
+            for variable in features:
+                stored[model_name][variable].append({
+                    "omitted_province": str(province),
+                    "beta_standardized": float(result.params[variable]),
+                })
+    return {
+        model_name: {
+            variable: {
+                "minimum": float(min(item["beta_standardized"] for item in values)),
+                "maximum": float(max(item["beta_standardized"] for item in values)),
+                "sign_consistent": bool(
+                    all(item["beta_standardized"] > 0 for item in values)
+                    or all(item["beta_standardized"] < 0 for item in values)
+                ),
+                "estimates": values,
+            }
+            for variable, values in variables.items()
+        }
+        for model_name, variables in stored.items()
+    }
+
+
+def _socioeconomic_alternative_models(df: pd.DataFrame) -> dict:
+    """Test socioeconomic predictors separately after the M3 road-form block."""
+    baseline = list(R2_HIERARCHICAL_MODELS["M3: + Other road form"])
+    socioeconomic = ["population_10k", "pop_density", "gdp_per_capita", "store_density"]
+    records = []
+    for variable in socioeconomic:
+        numeric = [R2_OUTCOME, *baseline, variable]
+        sample = df[[*numeric, "province"]].copy()
+        sample[numeric] = sample[numeric].apply(pd.to_numeric, errors="coerce")
+        sample = sample.dropna(subset=[*numeric, "province"])
+        sample = sample[np.isfinite(sample[numeric]).all(axis=1)]
+        z = (sample[numeric] - sample[numeric].mean()) / sample[numeric].std()
+        x = sm.add_constant(z[[*baseline, variable]], has_constant="add")
+        hc3 = sm.OLS(z[R2_OUTCOME], x).fit(cov_type="HC3", use_t=True)
+        records.append({
+            "variable": variable,
+            "n": int(len(sample)),
+            "coefficient": _coefficient_record(hc3, variable),
+        })
+    return {
+        "baseline": "M3: Grid + detour + other road form",
+        "models": records,
+    }
+
+
+def _geographic_sensitivity(df: pd.DataFrame) -> dict:
+    """Test residual road-form associations after a quadratic geographic surface."""
+    core = ["grid_emission_factor", "detour_ratio"]
+    road = [
+        "avg_street_length",
+        "dead_end_proportion",
+        "orientation_entropy",
+        "four_way_proportion",
+    ]
+    numeric = [R2_OUTCOME, *core, *road, "latitude", "longitude"]
+    sample = df[numeric].apply(pd.to_numeric, errors="coerce").dropna()
+    sample = sample[np.isfinite(sample).all(axis=1)]
+    z = (sample - sample.mean()) / sample.std()
+    z["latitude_sq"] = z["latitude"] ** 2
+    z["longitude_sq"] = z["longitude"] ** 2
+    z["latitude_x_longitude"] = z["latitude"] * z["longitude"]
+    geography = [
+        "latitude", "longitude", "latitude_sq", "longitude_sq",
+        "latitude_x_longitude",
+    ]
+    reduced_features = [*core, *geography]
+    full_features = [*reduced_features, *road]
+    reduced = sm.OLS(
+        z[R2_OUTCOME], sm.add_constant(z[reduced_features], has_constant="add")
+    ).fit()
+    full = sm.OLS(
+        z[R2_OUTCOME], sm.add_constant(z[full_features], has_constant="add")
+    ).fit(cov_type="HC3", use_t=True)
+    return {
+        "n": int(len(sample)),
+        "geographic_terms": geography,
+        "road_block_partial_r2": float(full.rsquared - reduced.rsquared),
+        "road_block_hc3_wald": _wald_block_test(full, road),
+        "road_coefficients_hc3": [
+            _coefficient_record(full, variable) for variable in road
+        ],
+        "interpretation_rule": (
+            "Report attenuation and residual association; do not assign a binary proxy label."
+        ),
+    }
+
+
+def _model_diagnostics(df: pd.DataFrame) -> dict:
+    """Audit heteroskedasticity, functional form, and influential cities for M4."""
+    sample = _r2_common_sample(df)
+    features = list(R2_HIERARCHICAL_MODELS.values())[-1]
+    numeric = [R2_OUTCOME, *features]
+    z = (sample[numeric] - sample[numeric].mean()) / sample[numeric].std()
+    result = sm.OLS(
+        z[R2_OUTCOME], sm.add_constant(z[features], has_constant="add")
+    ).fit()
+    bp_lm, bp_lm_p, bp_f, bp_f_p = het_breuschpagan(result.resid, result.model.exog)
+    reset = linear_reset(result, power=2, use_f=True)
+    influence = OLSInfluence(result)
+    cooks = np.asarray(influence.cooks_distance[0], dtype=float)
+    threshold = 4.0 / len(sample)
+    top_positions = np.argsort(cooks)[-5:][::-1]
+    jb_stat, jb_p, skew, kurtosis = sm.stats.jarque_bera(result.resid)
+    return {
+        "model": "M4",
+        "n": int(len(sample)),
+        "breusch_pagan": {
+            "lm_statistic": float(bp_lm),
+            "lm_p_value": float(bp_lm_p),
+            "f_statistic": float(bp_f),
+            "f_p_value": float(bp_f_p),
+        },
+        "ramsey_reset": {
+            "f_statistic": float(np.asarray(reset.fvalue).squeeze()),
+            "p_value": float(np.asarray(reset.pvalue).squeeze()),
+            "power": 2,
+        },
+        "jarque_bera": {
+            "statistic": float(jb_stat),
+            "p_value": float(jb_p),
+            "skew": float(skew),
+            "kurtosis": float(kurtosis),
+        },
+        "influence": {
+            "cook_threshold_4_over_n": float(threshold),
+            "count_above_threshold": int((cooks > threshold).sum()),
+            "top_cities": [
+                {
+                    "region_key": str(sample.iloc[position]["region_key"]),
+                    "cooks_distance": float(cooks[position]),
+                }
+                for position in top_positions
+            ],
+        },
+    }
+
+
+def _missingness_audit(df: pd.DataFrame) -> dict:
+    """Compare observable attributes for cities included and excluded from core R2."""
+    required = [R2_OUTCOME, "grid_emission_factor", "detour_ratio"]
+    numeric_required = df[required].apply(pd.to_numeric, errors="coerce")
+    included = numeric_required.notna().all(axis=1) & np.isfinite(numeric_required).all(axis=1)
+    comparison_variables = [
+        "population_10k", "pop_density", "gdp_per_capita", "store_density",
+        "latitude", "longitude", "region_area_km2",
+    ]
+    comparisons = []
+    for variable in comparison_variables:
+        values = pd.to_numeric(df[variable], errors="coerce")
+        retained = values[included].dropna()
+        excluded = values[~included].dropna()
+        pooled_sd = math.sqrt((retained.var() + excluded.var()) / 2.0)
+        comparisons.append({
+            "variable": variable,
+            "included_n": int(len(retained)),
+            "excluded_n": int(len(excluded)),
+            "included_mean": float(retained.mean()),
+            "excluded_mean": float(excluded.mean()),
+            "standardized_mean_difference": (
+                float((retained.mean() - excluded.mean()) / pooled_sd)
+                if pooled_sd > 0 else None
+            ),
+        })
+    return {
+        "required_for_core": required,
+        "included_city_count": int(included.sum()),
+        "excluded_city_count": int((~included).sum()),
+        "imputation": "none; grid emission factor is not imputed",
+        "included_province_count": int(df.loc[included, "province"].nunique()),
+        "excluded_province_count": int(df.loc[~included, "province"].nunique()),
+        "observable_comparisons": comparisons,
+    }
+
+
+def _coefficient_lookup(records: list[dict], variable: str) -> dict:
+    """Return a serialized coefficient record by variable name."""
+    return next(record for record in records if record["variable"] == variable)
+
+
+def _robustness_forest_summary(
+    robust_models: list[dict],
+    interaction: dict,
+    bootstrap: dict,
+    weighted: dict,
+    leave_one_out: dict,
+) -> dict:
+    """Assemble comparable intervals for the R2 robustness forest plot."""
+    additive = next(model for model in robust_models if model["name"] == "M2: + Detour")
+    terms = []
+    specs = (
+        ("additive", "grid_emission_factor", "Grid factor"),
+        ("additive", "detour_ratio", "Detour ratio"),
+        ("interaction", "gef_x_detour", "GEF × detour"),
+    )
+    for model_name, variable, label in specs:
+        source = additive if model_name == "additive" else interaction
+        hc3 = _coefficient_lookup(source["hc3_coefficients"], variable)
+        cluster = _coefficient_lookup(
+            source["province_cluster_coefficients"], variable
+        )
+        weighted_record = _coefficient_lookup(
+            weighted["models"][model_name]["coefficients"], variable
+        )
+        bootstrap_record = bootstrap[model_name][variable]
+        loo_record = leave_one_out[model_name][variable]
+        terms.append({
+            "model": model_name,
+            "variable": variable,
+            "label": label,
+            "methods": [
+                {
+                    "method": "HC3",
+                    "estimate": hc3["beta_standardized"],
+                    "interval": hc3["ci95"],
+                    "interval_kind": "95% confidence interval",
+                },
+                {
+                    "method": "Province cluster",
+                    "estimate": cluster["beta_standardized"],
+                    "interval": cluster["ci95"],
+                    "interval_kind": "95% confidence interval",
+                },
+                {
+                    "method": "City bootstrap",
+                    "estimate": bootstrap_record["median"],
+                    "interval": bootstrap_record["ci95_percentile"],
+                    "interval_kind": "95% percentile interval",
+                },
+                {
+                    "method": "Sales-weighted WLS",
+                    "estimate": weighted_record["beta_standardized"],
+                    "interval": weighted_record["ci95"],
+                    "interval_kind": "HC3 95% confidence interval",
+                },
+                {
+                    "method": "Leave one province out",
+                    "estimate": hc3["beta_standardized"],
+                    "interval": [loo_record["minimum"], loo_record["maximum"]],
+                    "interval_kind": "range across omitted provinces",
+                },
+            ],
+        })
+    return {"terms": terms}
 
 
 def _fit_landscape_model(df: pd.DataFrame) -> dict:
@@ -393,15 +1068,48 @@ def run_r2_city_attribution(df: pd.DataFrame, supplements: list[dict]) -> dict:
         R2_OUTCOME,
         models=R2_HIERARCHICAL_MODELS,
     )
+    hierarchical = _serialize_hierarchical(hierarchical_raw)
+    robust_hierarchical = _robust_hierarchical_models(df)
+    bootstrap_delta = _bootstrap_hierarchical_delta_r2(df)
+    for model, robust, bootstrap in zip(
+        hierarchical, robust_hierarchical, bootstrap_delta
+    ):
+        model["hc3_block_test"] = robust["hc3_block_test"]
+        model["hc3_coefficients"] = robust["hc3_coefficients"]
+        model["province_cluster_coefficients"] = robust[
+            "province_cluster_coefficients"
+        ]
+        model["province_clusters"] = robust["province_clusters"]
+        model.update(bootstrap)
+
     final_features = list(R2_HIERARCHICAL_MODELS.values())[-1]
     vif = compute_vif(df, final_features)
+    interaction = _fit_interaction_model(df)
+    bootstrap_core = _bootstrap_core_coefficients(df)
+    weighted = _weighted_core_sensitivity(df)
+    leave_one_out = _leave_one_province_out(df)
     return {
-        "schema_version": 1,
+        "schema_version": 2,
         "analysis_id": "r2_city_attribution",
         "interpretation": (
             "Within-model mechanism attribution and cross-city association; "
             "not a causal identification design."
         ),
+        "decision_rules": {
+            "alpha": 0.05,
+            "equivalence_bound_abs": R2_EQUIVALENCE_BOUND,
+            "primary_covariance": "HC3",
+            "sensitivity_covariance": "province-clustered with small-sample correction",
+            "conflict_rule": (
+                "Primary HC3 inference decides significance; qualify conclusions when "
+                "direction or interval is unstable in sensitivity analyses."
+            ),
+        },
+        "multiplicity": {
+            "prespecified_core_and_model_blocks": "no multiplicity adjustment",
+            "manuscript_attribute_screen": "Holm within each declared screen family",
+            "full_correlation_matrices": "Benjamini-Hochberg FDR within each method",
+        },
         "outcomes": {
             "relative": R2_OUTCOME,
             "absolute": R2_ABSOLUTE_OUTCOME,
@@ -412,12 +1120,13 @@ def run_r2_city_attribution(df: pd.DataFrame, supplements: list[dict]) -> dict:
             "hierarchical_common_sample": True,
         },
         "detour_supplements": supplements,
-        "hierarchical_models": _serialize_hierarchical(hierarchical_raw),
+        "hierarchical_models": hierarchical,
         "final_model_vif": [
             {"variable": str(row.feature), "vif": float(row.VIF)}
             for row in vif.itertuples(index=False)
         ],
         "landscape_model": _fit_landscape_model(df),
+        "interaction_model": interaction,
         "screen_correlations": _screen_correlations(df),
         "correlation_matrices": {
             "pearson": _correlation_matrix(df, "pearson"),
@@ -428,6 +1137,20 @@ def run_r2_city_attribution(df: pd.DataFrame, supplements: list[dict]) -> dict:
         ),
         "gef_group_detour_difference": _fisher_group_difference(df),
         "population_contrast": _population_contrast(df),
+        "socioeconomic_alternative_models": _socioeconomic_alternative_models(df),
+        "geographic_sensitivity": _geographic_sensitivity(df),
+        "model_diagnostics": _model_diagnostics(df),
+        "bootstrap_core_models": bootstrap_core,
+        "weighted_sensitivity": weighted,
+        "leave_one_province_out": leave_one_out,
+        "missingness_audit": _missingness_audit(df),
+        "robustness_forest": _robustness_forest_summary(
+            robust_hierarchical,
+            interaction,
+            bootstrap_core,
+            weighted,
+            leave_one_out,
+        ),
     }
 
 
