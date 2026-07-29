@@ -52,6 +52,9 @@ Available figures:
     median_trip_production_emissions, median_trip_use_phase_emissions,
     median_trip_eol_emissions,
     scatter_detour_ratio_vs_reduction_by_gef,
+    r2_gef_detour_suitability_landscape, r2_hierarchical_r2_steps,
+    r2_attribute_correlation_screen, r2_correlation_matrix_pearson,
+    r2_correlation_matrix_spearman, r2_population_reduction_contrast,
     regions_map_and_gef_scatter,
     regions_map_city_province_ranks,
     regions_map_city_rank_inset,
@@ -85,6 +88,14 @@ TOP6_REDUCTION_DETOUR_FIGURES = {
     "top6_reduction_detour_grid",
     "top6_reduction_detour_grid_low_gef",
     "top6_reduction_detour_grid_random",
+}
+R2_ATTRIBUTION_FIGURES = {
+    "r2_gef_detour_suitability_landscape",
+    "r2_hierarchical_r2_steps",
+    "r2_attribute_correlation_screen",
+    "r2_correlation_matrix_pearson",
+    "r2_correlation_matrix_spearman",
+    "r2_population_reduction_contrast",
 }
 CITY_CONTEXT_FIGURES = {
     "shanghai_city_context": {
@@ -5808,6 +5819,7 @@ def render_all(
         "contribution_decomposition_city_b",
         "scatter_detour_ratio_vs_reduction_by_gef",
         "regions_map_and_gef_scatter",
+        *R2_ATTRIBUTION_FIGURES,
         *future_gef_figures,
     }
     stats_figures = {
@@ -5896,6 +5908,12 @@ def render_all(
                     plot_regions_map_optimal_drone_share,
                     plot_regions_map_pathway_scenario_maps,
                     plot_regions_map_pathway_scenarios,
+                    plot_r2_attribute_correlation_screen,
+                    plot_r2_correlation_matrix_pearson,
+                    plot_r2_correlation_matrix_spearman,
+                    plot_r2_gef_detour_suitability_landscape,
+                    plot_r2_hierarchical_r2_steps,
+                    plot_r2_population_reduction_contrast,
                 )
 
             if _want("province_orders_emission"):
@@ -6343,6 +6361,90 @@ def render_all(
                 else:
                     df_enriched = pd.read_csv(enriched_path)
                     df_enriched = _attach_enrichment_columns(df, df_enriched)
+                    if only is None or only & R2_ATTRIBUTION_FIGURES:
+                        from analysis.city_attribution import (
+                            build_r2_city_attribution,
+                            write_r2_city_attribution_report,
+                        )
+
+                        r2_df, r2_analysis = build_r2_city_attribution(
+                            enriched_csv_path=enriched_path,
+                            data_dir=data_dir,
+                        )
+                        shared_report_path = os.path.join(
+                            out,
+                            "r2_city_attribution_analysis_report.json",
+                        )
+                        write_r2_city_attribution_report(
+                            r2_analysis,
+                            shared_report_path,
+                        )
+                        print(
+                            "R2 city attribution analysis report saved to "
+                            f"{shared_report_path}"
+                        )
+                        if _want("r2_gef_detour_suitability_landscape"):
+                            plot_r2_gef_detour_suitability_landscape(
+                                r2_df,
+                                r2_analysis,
+                                save_path=os.path.join(
+                                    out,
+                                    "r2_gef_detour_suitability_landscape.png",
+                                ),
+                                for_latex=for_latex,
+                                plot_title=plot_title,
+                            )
+                        if _want("r2_hierarchical_r2_steps"):
+                            plot_r2_hierarchical_r2_steps(
+                                r2_analysis,
+                                save_path=os.path.join(
+                                    out,
+                                    "r2_hierarchical_r2_steps.png",
+                                ),
+                                for_latex=for_latex,
+                                plot_title=plot_title,
+                            )
+                        if _want("r2_attribute_correlation_screen"):
+                            plot_r2_attribute_correlation_screen(
+                                r2_analysis,
+                                save_path=os.path.join(
+                                    out,
+                                    "r2_attribute_correlation_screen.png",
+                                ),
+                                for_latex=for_latex,
+                                plot_title=plot_title,
+                            )
+                        if _want("r2_correlation_matrix_pearson"):
+                            plot_r2_correlation_matrix_pearson(
+                                r2_analysis,
+                                save_path=os.path.join(
+                                    out,
+                                    "r2_correlation_matrix_pearson.png",
+                                ),
+                                for_latex=for_latex,
+                                plot_title=plot_title,
+                            )
+                        if _want("r2_correlation_matrix_spearman"):
+                            plot_r2_correlation_matrix_spearman(
+                                r2_analysis,
+                                save_path=os.path.join(
+                                    out,
+                                    "r2_correlation_matrix_spearman.png",
+                                ),
+                                for_latex=for_latex,
+                                plot_title=plot_title,
+                            )
+                        if _want("r2_population_reduction_contrast"):
+                            plot_r2_population_reduction_contrast(
+                                r2_df,
+                                r2_analysis,
+                                save_path=os.path.join(
+                                    out,
+                                    "r2_population_reduction_contrast.png",
+                                ),
+                                for_latex=for_latex,
+                                plot_title=plot_title,
+                            )
                     if _want("city_gef_distribution"):
                         plot_city_gef_distribution(
                             df_enriched,

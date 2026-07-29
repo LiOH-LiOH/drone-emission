@@ -219,6 +219,84 @@
       "standalone_report_path": "figures/paper/subfigure/contribution_decomposition_city_b_report.json",
       "panels": [],
       "components": []
+    },
+    {
+      "figure_id": "r2_gef_detour_suitability_landscape",
+      "figure_path": "figures/paper/subfigure/r2_gef_detour_suitability_landscape.pdf",
+      "composition_type": "standalone",
+      "assembly_tool": "Matplotlib",
+      "generator": {
+        "module_path": "src/drone_emission/visualization/analysis.py",
+        "function": "plot_r2_gef_detour_suitability_landscape"
+      },
+      "standalone_report_path": "figures/paper/subfigure/r2_gef_detour_suitability_landscape_report.json",
+      "panels": [],
+      "components": []
+    },
+    {
+      "figure_id": "r2_hierarchical_r2_steps",
+      "figure_path": "figures/paper/subfigure/r2_hierarchical_r2_steps.pdf",
+      "composition_type": "standalone",
+      "assembly_tool": "Matplotlib",
+      "generator": {
+        "module_path": "src/drone_emission/visualization/analysis.py",
+        "function": "plot_r2_hierarchical_r2_steps"
+      },
+      "standalone_report_path": "figures/paper/subfigure/r2_hierarchical_r2_steps_report.json",
+      "panels": [],
+      "components": []
+    },
+    {
+      "figure_id": "r2_attribute_correlation_screen",
+      "figure_path": "figures/paper/subfigure/r2_attribute_correlation_screen.pdf",
+      "composition_type": "standalone",
+      "assembly_tool": "Matplotlib",
+      "generator": {
+        "module_path": "src/drone_emission/visualization/analysis.py",
+        "function": "plot_r2_attribute_correlation_screen"
+      },
+      "standalone_report_path": "figures/paper/subfigure/r2_attribute_correlation_screen_report.json",
+      "panels": [],
+      "components": []
+    },
+    {
+      "figure_id": "r2_correlation_matrix_pearson",
+      "figure_path": "figures/paper/subfigure/r2_correlation_matrix_pearson.pdf",
+      "composition_type": "standalone",
+      "assembly_tool": "Matplotlib",
+      "generator": {
+        "module_path": "src/drone_emission/visualization/analysis.py",
+        "function": "plot_r2_correlation_matrix_pearson"
+      },
+      "standalone_report_path": "figures/paper/subfigure/r2_correlation_matrix_pearson_report.json",
+      "panels": [],
+      "components": []
+    },
+    {
+      "figure_id": "r2_correlation_matrix_spearman",
+      "figure_path": "figures/paper/subfigure/r2_correlation_matrix_spearman.pdf",
+      "composition_type": "standalone",
+      "assembly_tool": "Matplotlib",
+      "generator": {
+        "module_path": "src/drone_emission/visualization/analysis.py",
+        "function": "plot_r2_correlation_matrix_spearman"
+      },
+      "standalone_report_path": "figures/paper/subfigure/r2_correlation_matrix_spearman_report.json",
+      "panels": [],
+      "components": []
+    },
+    {
+      "figure_id": "r2_population_reduction_contrast",
+      "figure_path": "figures/paper/subfigure/r2_population_reduction_contrast.pdf",
+      "composition_type": "standalone",
+      "assembly_tool": "Matplotlib",
+      "generator": {
+        "module_path": "src/drone_emission/visualization/analysis.py",
+        "function": "plot_r2_population_reduction_contrast"
+      },
+      "standalone_report_path": "figures/paper/subfigure/r2_population_reduction_contrast_report.json",
+      "panels": [],
+      "components": []
     }
   ]
 }

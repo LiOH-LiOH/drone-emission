@@ -23,6 +23,7 @@ from visualization.macro_regions import (
 
 # Import from constants module (no circular dependency)
 from analysis.constants import PROVINCE_NAME_EN, VARIABLE_LABELS
+from analysis.city_attribution import R2_ABSOLUTE_OUTCOME, R2_OUTCOME
 
 
 WEIGHTED_REDUCTION_COLUMNS = (
@@ -9974,3 +9975,531 @@ def plot_kappa_vrp_saturation(
     else:
         plt.show()
     plt.close(fig)
+
+
+# ---------------------------------------------------------------------------
+# Manuscript R2 city-attribution subfigures
+
+R2_FIGURE_CITY_KEYS = ("chengdu", "guangzhou", "beijing", "shanghai")
+R2_FIGURE_CITY_LABELS = {
+    "chengdu": "Chengdu",
+    "guangzhou": "Guangzhou",
+    "beijing": "Beijing",
+    "shanghai": "Shanghai",
+}
+R2_SCREEN_LABELS = {
+    "grid_emission_factor": "Grid emission factor",
+    "detour_ratio": "Detour ratio",
+    "avg_street_length": "Mean street length",
+    "dead_end_proportion": "Dead-end proportion",
+    "four_way_proportion": "Four-way intersection proportion",
+    "orientation_entropy": "Orientation entropy",
+    "latitude": "Latitude",
+    "population_10k": "Population",
+    "store_density": "Store density",
+    "pop_density": "Population density",
+    "gdp_per_capita": "GDP per capita",
+    "building_density": "Building density",
+    "building_count": "Building count",
+    "road_density": "Road density",
+}
+R2_MATRIX_LABELS = {
+    R2_OUTCOME: "Relative reduction",
+    "grid_emission_factor": "Grid factor",
+    "detour_ratio": "Detour ratio",
+    "avg_street_length": "Street length",
+    "avg_block_length": "Block length",
+    "dead_end_proportion": "Dead ends",
+    "four_way_proportion": "Four-way",
+    "orientation_entropy": "Orientation entropy",
+    "intersection_density": "Intersection density",
+    "avg_road_distance_m": "Road distance",
+    "avg_straight_distance_m": "Air distance",
+    "road_density": "Road density",
+    "roadnet_length_total": "Road length",
+    "population_10k": "Population",
+    "pop_density": "Population density",
+    "gdp_per_capita": "GDP per capita",
+    "building_density": "Building density",
+    "building_count": "Building count",
+    "building_volume_total": "Building volume",
+    "store_density": "Store density",
+    "sales_intensity": "Sales intensity",
+    "region_area_km2": "Region area",
+    "latitude": "Latitude",
+    "longitude": "Longitude",
+}
+
+
+def _r2_save_figure(
+    fig,
+    save_path: str,
+    for_latex: bool,
+    plot_title: bool,
+    figure_name: str,
+    report: dict,
+):
+    """Save an R2 figure and its structured sidecar report."""
+    out = save_path
+    if out:
+        if for_latex and not out.endswith(".pdf"):
+            out = out.rsplit(".", 1)[0] + ".pdf"
+        if plot_title:
+            out = _add_title_suffix(out)
+        os.makedirs(os.path.dirname(out), exist_ok=True)
+        fig.savefig(out, dpi=300, bbox_inches="tight")
+        report_payload = {
+            "schema_version": 1,
+            "figure_name": figure_name,
+            "figure_path": out,
+            "shared_analysis_report": (
+                os.path.join(os.path.dirname(out), "r2_city_attribution_analysis_report.json")
+            ),
+            **report,
+        }
+        write_figure_report(out.rsplit(".", 1)[0] + "_report.json", report_payload)
+        print(f"{figure_name} saved to {out}")
+    else:
+        plt.show()
+    plt.close(fig)
+
+
+def _r2_city_rows(df: pd.DataFrame) -> pd.DataFrame:
+    return df[df["region_key"].isin(R2_FIGURE_CITY_KEYS)].copy()
+
+
+def plot_r2_gef_detour_suitability_landscape(
+    df: pd.DataFrame,
+    analysis: dict,
+    save_path: str = None,
+    figsize: tuple = (6.8, 5.2),
+    for_latex: bool = False,
+    plot_title: bool = False,
+):
+    """Plot the two-lever city suitability landscape for manuscript R2.
+
+    Args:
+        df: Prepared city-attribution DataFrame.
+        analysis: Shared R2 analysis result dictionary.
+        save_path: Path to save figure. Shows plot if None.
+        figsize: Figure size tuple.
+        for_latex: If True, save as PDF.
+        plot_title: If True, show title.
+    """
+    required = ["grid_emission_factor", "detour_ratio", R2_OUTCOME]
+    plot_df = df.dropna(subset=required).copy()
+    coefficients = analysis["landscape_model"]["coefficients"]
+    x_values = np.linspace(plot_df["grid_emission_factor"].min(),
+                           plot_df["grid_emission_factor"].max(), 180)
+    y_values = np.linspace(plot_df["detour_ratio"].min(),
+                           plot_df["detour_ratio"].max(), 180)
+    xx, yy = np.meshgrid(x_values, y_values)
+    zz = (
+        coefficients["const"]
+        + coefficients["grid_emission_factor"] * xx
+        + coefficients["detour_ratio"] * yy
+    )
+
+    fig, ax = plt.subplots(figsize=figsize)
+    scatter = ax.scatter(
+        plot_df["grid_emission_factor"],
+        plot_df["detour_ratio"],
+        c=plot_df[R2_OUTCOME],
+        cmap="YlGn",
+        vmin=0,
+        vmax=max(50.0, float(plot_df[R2_OUTCOME].max())),
+        s=25,
+        alpha=0.82,
+        edgecolor="white",
+        linewidth=0.35,
+        zorder=3,
+    )
+    contour_levels = np.arange(5, 51, 5)
+    contours = ax.contour(
+        xx, yy, zz,
+        levels=contour_levels,
+        colors="#3E3E3E",
+        linewidths=0.65,
+        alpha=0.72,
+        zorder=2,
+    )
+    ax.clabel(contours, inline=True, fmt=lambda value: f"{value:.0f}%", fontsize=6.5)
+
+    city_offsets = {
+        "chengdu": (8, -17),
+        "guangzhou": (8, 10),
+        "beijing": (-48, 10),
+        "shanghai": (8, -16),
+    }
+    city_records = []
+    for _, row in _r2_city_rows(plot_df).iterrows():
+        key = row["region_key"]
+        ax.scatter(
+            row["grid_emission_factor"], row["detour_ratio"],
+            s=48, facecolor="none", edgecolor="#111111", linewidth=1.1, zorder=5,
+        )
+        ax.annotate(
+            R2_FIGURE_CITY_LABELS[key],
+            xy=(row["grid_emission_factor"], row["detour_ratio"]),
+            xytext=city_offsets[key],
+            textcoords="offset points",
+            fontsize=8,
+            arrowprops={"arrowstyle": "-", "color": "#777777", "lw": 0.6},
+            zorder=6,
+        )
+        city_records.append({
+            "region_key": key,
+            "grid_emission_factor": float(row["grid_emission_factor"]),
+            "detour_ratio": float(row["detour_ratio"]),
+            "relative_reduction_pct": float(row[R2_OUTCOME]),
+        })
+
+    orthogonal = analysis["gef_detour_orthogonality"]
+    model = analysis["landscape_model"]
+    ax.text(
+        0.02, 0.98,
+        f"GEF vs detour: r = {orthogonal['coefficient']:+.3f}\n"
+        f"Two-variable model: $R^2$ = {model['r2']:.3f}, n = {model['n']}",
+        transform=ax.transAxes,
+        va="top",
+        ha="left",
+        fontsize=8,
+        bbox={"boxstyle": "round,pad=0.25", "fc": "white", "ec": "#BBBBBB", "alpha": 0.92},
+    )
+    ax.set_xlabel("Grid emission factor (kg CO$_2$e kWh$^{-1}$)")
+    ax.set_ylabel("Annual-sales-weighted detour ratio")
+    ax.grid(color="#D9D9D9", linewidth=0.5, alpha=0.55)
+    ax.spines[["top", "right"]].set_visible(False)
+    colorbar = fig.colorbar(scatter, ax=ax, pad=0.025)
+    colorbar.set_label("Optimal lifecycle reduction (%)")
+    if plot_title:
+        ax.set_title("Independent grid and detour levers define city suitability")
+    fig.tight_layout()
+    _r2_save_figure(
+        fig, save_path, for_latex, plot_title,
+        "r2_gef_detour_suitability_landscape",
+        {
+            "plotted_city_count": int(len(plot_df)),
+            "landscape_model": model,
+            "gef_detour_orthogonality": orthogonal,
+            "contour_levels_pct": contour_levels.tolist(),
+            "selected_cities": city_records,
+        },
+    )
+
+
+def plot_r2_hierarchical_r2_steps(
+    analysis: dict,
+    save_path: str = None,
+    figsize: tuple = (6.6, 4.4),
+    for_latex: bool = False,
+    plot_title: bool = False,
+):
+    """Plot cumulative R-squared steps for the nested R2 models.
+
+    Args:
+        analysis: Shared R2 analysis result dictionary.
+        save_path: Path to save figure. Shows plot if None.
+        figsize: Figure size tuple.
+        for_latex: If True, save as PDF.
+        plot_title: If True, show title.
+    """
+    models = analysis["hierarchical_models"]
+    x = np.arange(len(models))
+    r2_values = np.asarray([model["r2"] for model in models])
+    labels = ["Grid", "+ Detour", "+ Other road form", "+ Socioeconomic"]
+    colors = ["#4C78A8", "#F28E2B", "#9C9C9C", "#C7C7C7"]
+
+    fig, ax = plt.subplots(figsize=figsize)
+    ax.step(x, r2_values, where="mid", color="#1F1F1F", linewidth=1.5, zorder=3)
+    for index, (model, color) in enumerate(zip(models, colors)):
+        previous = 0 if index == 0 else r2_values[index - 1]
+        ax.vlines(index, previous, model["r2"], color=color, linewidth=11, alpha=0.9, zorder=2)
+        p_value = model["f_change_p"]
+        p_label = "$P < 0.001$" if p_value < 0.001 else f"$P = {p_value:.3f}$"
+        ax.text(
+            index,
+            model["r2"] + 0.025,
+            f"$R^2$ = {model['r2']:.3f}\n"
+            f"$\\Delta R^2$ = {model['delta_r2']:.3f}\n{p_label}",
+            ha="center", va="bottom", fontsize=8,
+        )
+    ax.set_xticks(x, labels)
+    ax.set_ylabel("Cumulative explained variance ($R^2$)")
+    ax.set_ylim(0, min(1.02, float(r2_values.max()) + 0.16))
+    ax.set_xlim(-0.5, len(models) - 0.5)
+    ax.grid(axis="y", color="#D9D9D9", linewidth=0.6, alpha=0.8)
+    ax.spines[["top", "right"]].set_visible(False)
+    ax.text(
+        0.98, 0.04, f"Common sample: n = {models[-1]['n']}",
+        transform=ax.transAxes, ha="right", va="bottom", fontsize=8, color="#555555",
+    )
+    if plot_title:
+        ax.set_title("Grid intensity and detour explain most cross-city variation")
+    fig.tight_layout()
+    _r2_save_figure(
+        fig, save_path, for_latex, plot_title,
+        "r2_hierarchical_r2_steps",
+        {"models": models},
+    )
+
+
+def plot_r2_attribute_correlation_screen(
+    analysis: dict,
+    save_path: str = None,
+    figsize: tuple = (7.4, 6.0),
+    for_latex: bool = False,
+    plot_title: bool = False,
+):
+    """Plot a two-column correlation screen for R2 candidate attributes.
+
+    Args:
+        analysis: Shared R2 analysis result dictionary.
+        save_path: Path to save figure. Shows plot if None.
+        figsize: Figure size tuple.
+        for_latex: If True, save as PDF.
+        plot_title: If True, show title.
+    """
+    screen = analysis["screen_correlations"]
+    outcome_lookup = {item["x"]: item for item in screen["outcome"]}
+    gef_lookup = {item["x"]: item for item in screen["grid_emission_factor"]}
+    variables = screen["variables"]
+    y = np.arange(len(variables))[::-1]
+    category_colors = {
+        "core": "#D95F02",
+        "road": "#1B9E77",
+        "scale": "#7570B3",
+    }
+
+    def category(variable):
+        if variable in {"grid_emission_factor", "detour_ratio"}:
+            return "core"
+        if variable in {
+            "avg_street_length", "dead_end_proportion", "four_way_proportion",
+            "orientation_entropy", "latitude",
+        }:
+            return "road"
+        return "scale"
+
+    fig, axes = plt.subplots(1, 2, figsize=figsize, sharey=True)
+    column_specs = (
+        (axes[0], outcome_lookup, "Correlation with relative reduction"),
+        (axes[1], gef_lookup, "Correlation with grid emission factor"),
+    )
+    for ax, lookup, x_label in column_specs:
+        ax.axvline(0, color="#666666", linewidth=0.7)
+        for row_y, variable in zip(y, variables):
+            record = lookup.get(variable)
+            if record is None or record["coefficient"] is None:
+                continue
+            significant = record["significant_bonferroni_0_05"]
+            color = category_colors[category(variable)]
+            ax.plot([0, record["coefficient"]], [row_y, row_y], color=color,
+                    alpha=0.65 if significant else 0.18, linewidth=1.0)
+            ax.scatter(record["coefficient"], row_y, s=34,
+                       color=color, alpha=0.95 if significant else 0.24,
+                       edgecolor="white", linewidth=0.35, zorder=3)
+            ax.text(record["coefficient"] + (0.025 if record["coefficient"] >= 0 else -0.025),
+                    row_y, f"{record['coefficient']:+.2f}",
+                    ha="left" if record["coefficient"] >= 0 else "right",
+                    va="center", fontsize=6.7,
+                    alpha=1.0 if significant else 0.38)
+        ax.set_xlim(-1.0, 1.0)
+        ax.set_xlabel(x_label)
+        ax.grid(axis="x", color="#E1E1E1", linewidth=0.5)
+        ax.spines[["top", "right", "left"]].set_visible(False)
+        ax.tick_params(axis="y", length=0)
+    axes[0].set_yticks(y, [R2_SCREEN_LABELS.get(var, var) for var in variables])
+    handles = [
+        plt.Line2D([], [], marker="o", linestyle="none", color=color, label=label)
+        for label, color in (("Core levers", category_colors["core"]),
+                             ("Road/geographic", category_colors["road"]),
+                             ("Scale/density", category_colors["scale"]))
+    ]
+    axes[1].legend(handles=handles, frameon=False, fontsize=7.5, loc="lower right")
+    if plot_title:
+        fig.suptitle("Attribute screening separates core levers, covariates, and null factors")
+    fig.tight_layout()
+    _r2_save_figure(
+        fig, save_path, for_latex, plot_title,
+        "r2_attribute_correlation_screen",
+        {"screen_correlations": screen},
+    )
+
+
+def _plot_r2_correlation_matrix(
+    matrix: dict,
+    save_path: str,
+    figsize: tuple,
+    for_latex: bool,
+    plot_title: bool,
+    figure_name: str,
+):
+    """Render one full R2 correlation matrix with significance fading."""
+    from matplotlib.colors import Normalize
+
+    variables = matrix["variables"]
+    coefficients = np.asarray(matrix["coefficients"], dtype=float)
+    p_adjusted = np.asarray(matrix["p_bonferroni"], dtype=float)
+    cmap = plt.get_cmap("RdBu_r")
+    norm = Normalize(vmin=-1, vmax=1)
+    rgba = cmap(norm(coefficients))
+    insignificant = (p_adjusted >= 0.05) & (~np.eye(len(variables), dtype=bool))
+    rgba[..., 3] = np.where(insignificant, 0.20, 0.95)
+
+    fig, ax = plt.subplots(figsize=figsize)
+    ax.imshow(rgba, interpolation="nearest", aspect="equal")
+    for row in range(len(variables)):
+        for col in range(len(variables)):
+            value = coefficients[row, col]
+            if not np.isfinite(value):
+                continue
+            faded = bool(insignificant[row, col])
+            ax.text(
+                col, row, f"{value:+.2f}" if row != col else "1",
+                ha="center", va="center", fontsize=4.7,
+                color="#222222", alpha=0.30 if faded else 0.92,
+            )
+    labels = [R2_MATRIX_LABELS.get(variable, variable) for variable in variables]
+    ax.set_xticks(np.arange(len(labels)), labels, rotation=55, ha="right", fontsize=6.5)
+    ax.set_yticks(np.arange(len(labels)), labels, fontsize=6.5)
+    ax.tick_params(length=0)
+    for spine in ax.spines.values():
+        spine.set_visible(False)
+    scalar = plt.cm.ScalarMappable(norm=norm, cmap=cmap)
+    colorbar = fig.colorbar(scalar, ax=ax, fraction=0.035, pad=0.025)
+    symbol = "$r$" if matrix["method"] == "pearson" else "$\\rho$"
+    colorbar.set_label(f"Correlation coefficient ({symbol})")
+    ax.text(
+        0.0, 1.015,
+        f"Bonferroni family: {matrix['family_size']} unique pairs; "
+        "non-significant cells are faded",
+        transform=ax.transAxes, fontsize=7, color="#555555", va="bottom",
+    )
+    if plot_title:
+        ax.set_title(f"{matrix['method'].title()} correlation audit")
+    fig.tight_layout()
+    _r2_save_figure(
+        fig, save_path, for_latex, plot_title, figure_name,
+        {
+            "method": matrix["method"],
+            "variables": variables,
+            "family_size": matrix["family_size"],
+            "coefficients": matrix["coefficients"],
+            "p_bonferroni": matrix["p_bonferroni"],
+            "sample_sizes": matrix["sample_sizes"],
+        },
+    )
+
+
+def plot_r2_correlation_matrix_pearson(
+    analysis: dict,
+    save_path: str = None,
+    figsize: tuple = (10.2, 9.5),
+    for_latex: bool = False,
+    plot_title: bool = False,
+):
+    """Plot the complete Pearson correlation audit for R2.
+
+    Args:
+        analysis: Shared R2 analysis result dictionary.
+        save_path: Path to save figure. Shows plot if None.
+        figsize: Figure size tuple.
+        for_latex: If True, save as PDF.
+        plot_title: If True, show title.
+    """
+    _plot_r2_correlation_matrix(
+        analysis["correlation_matrices"]["pearson"], save_path, figsize,
+        for_latex, plot_title, "r2_correlation_matrix_pearson",
+    )
+
+
+def plot_r2_correlation_matrix_spearman(
+    analysis: dict,
+    save_path: str = None,
+    figsize: tuple = (10.2, 9.5),
+    for_latex: bool = False,
+    plot_title: bool = False,
+):
+    """Plot the complete Spearman correlation audit for R2.
+
+    Args:
+        analysis: Shared R2 analysis result dictionary.
+        save_path: Path to save figure. Shows plot if None.
+        figsize: Figure size tuple.
+        for_latex: If True, save as PDF.
+        plot_title: If True, show title.
+    """
+    _plot_r2_correlation_matrix(
+        analysis["correlation_matrices"]["spearman"], save_path, figsize,
+        for_latex, plot_title, "r2_correlation_matrix_spearman",
+    )
+
+
+def plot_r2_population_reduction_contrast(
+    df: pd.DataFrame,
+    analysis: dict,
+    save_path: str = None,
+    figsize: tuple = (8.4, 3.8),
+    for_latex: bool = False,
+    plot_title: bool = False,
+):
+    """Contrast population correlations with absolute and relative reduction.
+
+    Args:
+        df: Prepared city-attribution DataFrame.
+        analysis: Shared R2 analysis result dictionary.
+        save_path: Path to save figure. Shows plot if None.
+        figsize: Figure size tuple.
+        for_latex: If True, save as PDF.
+        plot_title: If True, show title.
+    """
+    specs = (
+        (R2_ABSOLUTE_OUTCOME, "Annual optimal reduction (t CO$_2$e yr$^{-1}$)",
+         analysis["population_contrast"]["absolute_reduction"]),
+        (R2_OUTCOME, "Optimal lifecycle reduction (%)",
+         analysis["population_contrast"]["relative_reduction"]),
+    )
+    fig, axes = plt.subplots(1, 2, figsize=figsize)
+    panel_records = []
+    for ax, (outcome, y_label, record) in zip(axes, specs):
+        plot_df = df[["region_key", "population_10k", outcome]].dropna().copy()
+        population_million = plot_df["population_10k"] / 100.0
+        ax.scatter(population_million, plot_df[outcome], s=20, color="#4C78A8",
+                   alpha=0.52, edgecolor="white", linewidth=0.3)
+        slope, intercept = np.polyfit(population_million, plot_df[outcome], 1)
+        x_line = np.linspace(population_million.min(), population_million.max(), 120)
+        ax.plot(x_line, slope * x_line + intercept, color="#D95F02", linewidth=1.5)
+        city_records = []
+        for idx, row in plot_df[plot_df["region_key"].isin(R2_FIGURE_CITY_KEYS)].iterrows():
+            x_value = float(row["population_10k"] / 100.0)
+            y_value = float(row[outcome])
+            ax.scatter(x_value, y_value, s=38, facecolor="white", edgecolor="#222222",
+                       linewidth=0.9, zorder=4)
+            city_records.append({"region_key": row["region_key"], "x_population_million": x_value,
+                                 "y": y_value})
+        p_label = "$P < 0.001$" if record["p_value"] < 0.001 else f"$P = {record['p_value']:.3f}$"
+        ax.text(
+            0.03, 0.96,
+            f"r = {record['coefficient']:+.3f}\n{p_label}, n = {record['n']}",
+            transform=ax.transAxes, va="top", fontsize=8,
+            bbox={"boxstyle": "round,pad=0.22", "fc": "white", "ec": "#BBBBBB", "alpha": 0.9},
+        )
+        ax.set_xlabel("Population (million)")
+        ax.set_ylabel(y_label)
+        ax.grid(color="#E0E0E0", linewidth=0.5, alpha=0.7)
+        ax.spines[["top", "right"]].set_visible(False)
+        panel_records.append({
+            "outcome": outcome,
+            "correlation": record,
+            "linear_fit": {"slope": float(slope), "intercept": float(intercept)},
+            "selected_cities": city_records,
+        })
+    if plot_title:
+        fig.suptitle("City size predicts the reduction pool, not relative suitability")
+    fig.tight_layout()
+    _r2_save_figure(
+        fig, save_path, for_latex, plot_title,
+        "r2_population_reduction_contrast",
+        {"panels": panel_records},
+    )

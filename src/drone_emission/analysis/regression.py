@@ -25,7 +25,7 @@ from analysis.constants import VARIABLE_LABELS
 
 # Regression focuses on the primary outcome used in the paper narrative.
 REGRESSION_RESULT_VARIABLES = [
-    "max_lifecycle_reduction_pct",
+    "oracle_min_reduction_vs_ebike_pct",
 ]
 
 EXCLUDED_REGRESSION_FEATURES = {
@@ -97,10 +97,13 @@ def compute_vif(df: pd.DataFrame, feature_vars: list) -> pd.DataFrame:
         print(f"Warning: only {len(subset)} observations for {len(available)} features")
         return pd.DataFrame(columns=["feature", "VIF"])
 
-    X = subset.values
+    X = sm.add_constant(subset, has_constant="add").values
     vif_data = []
     for i, feat in enumerate(available):
-        vif_val = variance_inflation_factor(X, i)
+        # Column 0 is the intercept added above. VIFs must be calculated with
+        # an intercept; omitting it severely inflates variables whose means are
+        # large relative to their standard deviations.
+        vif_val = variance_inflation_factor(X, i + 1)
         vif_data.append({"feature": feat, "VIF": vif_val})
 
     vif_df = pd.DataFrame(vif_data).sort_values("VIF", ascending=False)
