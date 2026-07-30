@@ -10074,22 +10074,18 @@ def _r2_save_figure(
     plt.close(fig)
 
 
-def _r2_city_rows(df: pd.DataFrame) -> pd.DataFrame:
-    return df[df["region_key"].isin(R2_FIGURE_CITY_KEYS)].copy()
-
-
 def plot_r2_gef_detour_suitability_landscape(
     df: pd.DataFrame,
     analysis: dict,
     save_path: str = None,
-    figsize: tuple = (6.8, 5.2),
+    figsize: tuple = (2.31, 3.39),
     for_latex: bool = False,
     plot_title: bool = False,
 ):
     """Plot the two-lever city suitability landscape for manuscript R2.
 
     Bubble area encodes annual absolute Oracle-vs-e-bike reduction on a
-    logarithmic scale, while colour retains the relative reduction outcome.
+    square-root scale, while colour retains the relative reduction outcome.
 
     Args:
         df: Prepared city-attribution DataFrame.
@@ -10116,25 +10112,16 @@ def plot_r2_gef_detour_suitability_landscape(
             "annual absolute reduction"
         )
 
-    bubble_area_min = 18.0
-    bubble_area_max = 220.0
+    bubble_area_min = 4.0
+    bubble_area_max = 50.0
     bubble_legend_values = (10.0, 100.0, 1000.0)
     absolute_reduction = plot_df[R2_ABSOLUTE_OUTCOME].to_numpy(dtype=float)
-    log_absolute = np.log10(absolute_reduction)
-    log_min = float(log_absolute.min())
-    log_max = float(log_absolute.max())
+    absolute_reduction_max = float(absolute_reduction.max())
 
     def _bubble_area(values):
         values = np.asarray(values, dtype=float)
-        logged = np.log10(values)
-        if np.isclose(log_min, log_max):
-            return np.full_like(
-                logged,
-                (bubble_area_min + bubble_area_max) / 2.0,
-                dtype=float,
-            )
-        fraction = (logged - log_min) / (log_max - log_min)
-        return bubble_area_min + fraction * (bubble_area_max - bubble_area_min)
+        scaled = np.sqrt(values / absolute_reduction_max)
+        return bubble_area_min + scaled * (bubble_area_max - bubble_area_min)
 
     plot_df["_bubble_area"] = _bubble_area(absolute_reduction)
     interaction = analysis["interaction_model"]
@@ -10147,7 +10134,7 @@ def plot_r2_gef_detour_suitability_landscape(
         c=plot_df[R2_OUTCOME],
         cmap="YlGn",
         vmin=0,
-        vmax=max(50.0, float(plot_df[R2_OUTCOME].max())),
+        vmax=50.0,
         s=plot_df["_bubble_area"],
         alpha=0.82,
         edgecolor="white",
@@ -10170,44 +10157,67 @@ def plot_r2_gef_detour_suitability_landscape(
         [f"{value:,.0f}" for value in bubble_legend_values],
         title="Annual reduction\n(t CO$_2$e yr$^{-1}$)",
         loc="upper left",
-        bbox_to_anchor=(0.17, 1.0),
-        frameon=False,
-        fontsize=7.2,
-        title_fontsize=7.5,
-        handletextpad=1.1,
-        labelspacing=1.0,
-        borderaxespad=0.6,
+        frameon=True,
+        framealpha=0.92,
+        fontsize=6.5,
+        title_fontsize=6.5,
+        borderaxespad=0.3,
+        borderpad=0.25,
+        labelspacing=0.1,
+        handletextpad=0.35,
     )
 
-    city_offsets = {
-        "chengdu": (8, -17),
-        "guangzhou": (8, 10),
-        "beijing": (-48, 10),
-        "shanghai": (8, -16),
-    }
+    name_col = (
+        "region_name_en" if "region_name_en" in plot_df.columns else "region_key"
+    )
+    plot_df["_label_city"] = plot_df[name_col].astype(str)
+    if name_col == "region_key":
+        plot_df["_label_city"] = plot_df["_label_city"].str.title()
+    labeled = plot_df[
+        plot_df["_label_city"].isin(ORACLE_REDUCTION_LABEL_CITIES)
+    ].copy()
+    labeled["_label_order"] = pd.Categorical(
+        labeled["_label_city"],
+        categories=ORACLE_REDUCTION_LABEL_CITIES,
+        ordered=True,
+    )
+    labeled = labeled.sort_values("_label_order")
+
+    from adjustText import adjust_text
+
+    ax.scatter(
+        labeled["grid_emission_factor"],
+        labeled["detour_ratio"],
+        s=labeled["_bubble_area"],
+        facecolors="none",
+        edgecolors="#202020",
+        linewidth=0.7,
+        zorder=4,
+    )
+    label_texts = []
     city_records = []
-    for _, row in _r2_city_rows(plot_df).iterrows():
-        key = row["region_key"]
-        outline_area = (np.sqrt(float(row["_bubble_area"])) + 2.2) ** 2
-        ax.scatter(
-            row["grid_emission_factor"], row["detour_ratio"],
-            s=outline_area,
-            facecolor="none",
-            edgecolor="#111111",
-            linewidth=1.1,
-            zorder=5,
-        )
-        ax.annotate(
-            R2_FIGURE_CITY_LABELS[key],
-            xy=(row["grid_emission_factor"], row["detour_ratio"]),
-            xytext=city_offsets[key],
-            textcoords="offset points",
-            fontsize=8,
-            arrowprops={"arrowstyle": "-", "color": "#777777", "lw": 0.6},
-            zorder=6,
+    for _, row in labeled.iterrows():
+        label_texts.append(
+            ax.text(
+                row["grid_emission_factor"],
+                row["detour_ratio"],
+                row["_label_city"],
+                ha="center",
+                va="center",
+                fontsize=6.5,
+                color="#303030",
+                zorder=5,
+                bbox={
+                    "boxstyle": "round,pad=0.15",
+                    "facecolor": "white",
+                    "edgecolor": "none",
+                    "alpha": 0.68,
+                },
+            )
         )
         city_records.append({
-            "region_key": key,
+            "city": row["_label_city"],
+            "region_key": row["region_key"],
             "grid_emission_factor": float(row["grid_emission_factor"]),
             "detour_ratio": float(row["detour_ratio"]),
             "relative_reduction_pct": float(row[R2_OUTCOME]),
@@ -10215,15 +10225,43 @@ def plot_r2_gef_detour_suitability_landscape(
                 row[R2_ABSOLUTE_OUTCOME]
             ),
         })
-    ax.set_xlabel("Grid emission factor (kg CO$_2$e kWh$^{-1}$)")
-    ax.set_ylabel("Annual-sales-weighted detour ratio")
-    ax.grid(color="#D9D9D9", linewidth=0.5, alpha=0.55)
+    adjust_text(
+        label_texts,
+        x=labeled["grid_emission_factor"].to_numpy(dtype=float),
+        y=labeled["detour_ratio"].to_numpy(dtype=float),
+        ax=ax,
+        expand=(1.15, 1.25),
+        force_text=(0.2, 0.3),
+        force_static=(0.1, 0.2),
+        ensure_inside_axes=True,
+        arrowprops={
+            "arrowstyle": "-",
+            "color": "0.35",
+            "lw": 0.5,
+        },
+    )
+
+    ax.set_xlabel(
+        "Grid emission factor (kg CO$_2$e kWh$^{-1}$)",
+        fontsize=7,
+    )
+    ax.set_ylabel("Annual-sales-weighted detour ratio", fontsize=7)
+    ax.tick_params(axis="both", labelsize=6.5)
     ax.spines[["top", "right"]].set_visible(False)
-    colorbar = fig.colorbar(scatter, ax=ax, pad=0.025)
-    colorbar.set_label("Optimal lifecycle reduction (%)")
+    colorbar = fig.colorbar(
+        scatter,
+        ax=ax,
+        orientation="horizontal",
+        pad=0.18,
+        fraction=0.06,
+        aspect=25,
+        ticks=np.arange(0, 51, 10),
+    )
+    colorbar.set_label("Optimal lifecycle reduction (%)", fontsize=7)
+    colorbar.ax.tick_params(labelsize=6.5)
     if plot_title:
         ax.set_title("Grid intensity modifies the benefit of avoiding road detours")
-    fig.tight_layout()
+    fig.subplots_adjust(left=0.22, right=0.97, top=0.97, bottom=0.17)
     _r2_save_figure(
         fig, save_path, for_latex, plot_title,
         "r2_gef_detour_suitability_landscape",
@@ -10234,7 +10272,9 @@ def plot_r2_gef_detour_suitability_landscape(
             "bubble_size_encoding": {
                 "metric": R2_ABSOLUTE_OUTCOME,
                 "unit": "t CO2e yr^-1",
-                "transform": "log10(value) mapped linearly to marker area",
+                "transform": (
+                    "sqrt(value / sample maximum) mapped linearly to marker area"
+                ),
                 "area_range_points_squared": [
                     bubble_area_min,
                     bubble_area_max,
