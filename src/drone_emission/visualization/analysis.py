@@ -10702,3 +10702,579 @@ def plot_r2_core_coefficient_robustness(
         "r2_core_coefficient_robustness",
         {"robustness_forest": summary},
     )
+
+
+DISTANCE_THRESHOLD_TYPICAL_CITIES = (
+    "beijing",
+    "shanghai",
+    "guangzhou",
+    "kunming",
+    "chizhou",
+    "zhongwei",
+)
+DISTANCE_THRESHOLD_CITY_LABELS = {
+    "beijing": "Beijing",
+    "shanghai": "Shanghai",
+    "guangzhou": "Guangzhou",
+    "kunming": "Kunming",
+    "chizhou": "Chizhou",
+    "zhongwei": "Zhongwei",
+}
+DISTANCE_THRESHOLD_BASIS_COLORS = {
+    "road": "#32688E",
+    "straight": "#D9822B",
+}
+DISTANCE_THRESHOLD_LABEL_OFFSETS = {
+    "beijing": (6, 7),
+    "shanghai": (6, -11),
+    "guangzhou": (6, 7),
+    "kunming": (6, -11),
+    "chizhou": (6, 7),
+    "zhongwei": (6, -11),
+}
+DISTANCE_THRESHOLD_COMPARISON_LABEL_OFFSETS = {
+    1: {
+        "beijing": (-7, 9),
+        "shanghai": (7, -14),
+    },
+    2: {
+        "kunming": (-7, -13),
+    },
+}
+
+
+def _save_distance_threshold_figure(
+    fig,
+    save_path: str,
+    for_latex: bool,
+    plot_title: bool,
+    description: str,
+    report_payload: dict,
+):
+    """Save one threshold figure and its compact JSON report."""
+    if not save_path:
+        plt.show()
+        plt.close(fig)
+        return None
+    if for_latex and not save_path.endswith(".pdf"):
+        save_path = save_path.rsplit(".", 1)[0] + ".pdf"
+    if plot_title:
+        save_path = _add_title_suffix(save_path)
+    os.makedirs(os.path.dirname(save_path), exist_ok=True)
+    fig.savefig(save_path, dpi=300, bbox_inches="tight", facecolor="white")
+    report_payload = {
+        "figure_path": os.path.relpath(save_path, start=os.getcwd()),
+        **report_payload,
+    }
+    write_figure_report(
+        save_path.rsplit(".", 1)[0] + "_report.json",
+        report_payload,
+    )
+    print(f"{description} saved to {save_path}")
+    plt.close(fig)
+    return save_path
+
+
+def _threshold_summary_records(summary_df: pd.DataFrame) -> list[dict]:
+    """Return JSON-safe policy records for figure reports."""
+    columns = (
+        "region_key",
+        "region_name_en",
+        "distance_basis",
+        "policy_case",
+        "optimal_threshold_km",
+        "annual_reduction_pct",
+        "drone_order_ratio_pct",
+        "n_od_pairs_optimized",
+        "n_od_pairs_unreachable",
+        "unreachable_annual_orders",
+    )
+    records = []
+    for _, row in summary_df.loc[:, list(columns)].iterrows():
+        records.append(
+            {
+                "region_key": row["region_key"],
+                "city": row["region_name_en"],
+                "distance_basis": row["distance_basis"],
+                "policy_case": row["policy_case"],
+                "optimal_threshold_km": float(row["optimal_threshold_km"]),
+                "annual_reduction_pct": float(row["annual_reduction_pct"]),
+                "drone_order_ratio_pct": float(row["drone_order_ratio_pct"]),
+                "n_od_pairs_optimized": int(row["n_od_pairs_optimized"]),
+                "n_od_pairs_unreachable": int(row["n_od_pairs_unreachable"]),
+                "unreachable_annual_orders": float(
+                    row["unreachable_annual_orders"]
+                ),
+            }
+        )
+    return records
+
+
+def _style_distance_threshold_axis(ax):
+    """Apply restrained exploratory-analysis styling."""
+    ax.grid(color="#D9D9D9", linewidth=0.55, alpha=0.65)
+    ax.spines[["top", "right"]].set_visible(False)
+    ax.tick_params(labelsize=8)
+
+
+def plot_distance_threshold_typical_city_curves(
+    curve_df: pd.DataFrame,
+    summary_df: pd.DataFrame,
+    save_path: str = None,
+    figsize: tuple = (14.2, 8.2),
+    for_latex: bool = False,
+    plot_title: bool = False,
+):
+    """Plot threshold-response curves for six representative cities.
+
+    Args:
+        curve_df: Long-form compact threshold-response curves.
+        summary_df: Long-form exact optimum records for the same cities.
+        save_path: Path to save figure. Shows plot if None.
+        figsize: Figure size tuple.
+        for_latex: If True, save as PDF.
+        plot_title: If True, show title.
+    """
+    required_curve = {
+        "region_key",
+        "distance_basis",
+        "threshold_km",
+        "annual_reduction_pct",
+        "is_exact_optimum",
+    }
+    required_summary = {
+        "region_key",
+        "region_name_en",
+        "distance_basis",
+        "optimal_threshold_km",
+        "annual_reduction_pct",
+        "drone_order_ratio_pct",
+    }
+    missing_curve = required_curve.difference(curve_df.columns)
+    missing_summary = required_summary.difference(summary_df.columns)
+    if missing_curve or missing_summary:
+        raise KeyError(
+            "Missing threshold figure columns: "
+            f"curve={sorted(missing_curve)}, summary={sorted(missing_summary)}"
+        )
+
+    cities = list(DISTANCE_THRESHOLD_TYPICAL_CITIES)
+    curve_plot = curve_df[curve_df["region_key"].isin(cities)].copy()
+    summary_plot = summary_df[summary_df["region_key"].isin(cities)].copy()
+    if set(curve_plot["region_key"]) != set(cities):
+        missing = sorted(set(cities).difference(curve_plot["region_key"]))
+        raise ValueError(f"Missing typical-city curves: {', '.join(missing)}")
+
+    x_values = pd.to_numeric(curve_plot["threshold_km"], errors="coerce")
+    y_values = pd.to_numeric(curve_plot["annual_reduction_pct"], errors="coerce")
+    if not np.isfinite(x_values).all() or not np.isfinite(y_values).all():
+        raise ValueError("Typical-city curve coordinates must be finite")
+    x_max = float(x_values.max())
+    y_min = min(0.0, float(y_values.min()))
+    y_max = max(0.0, float(y_values.max()))
+    x_pad = max(x_max * 0.025, 0.1)
+    y_pad = max((y_max - y_min) * 0.07, 1.0)
+
+    fig, axes = plt.subplots(
+        2,
+        3,
+        figsize=figsize,
+        sharex=True,
+        sharey=True,
+    )
+    axes = axes.ravel()
+    panel_letters = "abcdef"
+    for panel_idx, (ax, city) in enumerate(zip(axes, cities)):
+        city_curve = curve_plot[curve_plot["region_key"] == city]
+        city_summary = summary_plot[summary_plot["region_key"] == city]
+        for basis in ("road", "straight"):
+            color = DISTANCE_THRESHOLD_BASIS_COLORS[basis]
+            basis_curve = city_curve[
+                city_curve["distance_basis"] == basis
+            ].sort_values("threshold_km")
+            exact = basis_curve[basis_curve["is_exact_optimum"]]
+            if len(exact) != 1:
+                raise ValueError(
+                    f"{city}/{basis} must have exactly one exact optimum"
+                )
+            ax.plot(
+                basis_curve["threshold_km"],
+                basis_curve["annual_reduction_pct"],
+                color=color,
+                linewidth=1.7,
+                alpha=0.96,
+                label=basis.title(),
+            )
+            ax.scatter(
+                exact["threshold_km"],
+                exact["annual_reduction_pct"],
+                s=42,
+                color=color,
+                edgecolor="white",
+                linewidth=0.8,
+                zorder=4,
+            )
+
+            optimum = city_summary[city_summary["distance_basis"] == basis]
+            if len(optimum) != 1:
+                raise ValueError(f"{city}/{basis} summary must have one row")
+            optimum = optimum.iloc[0]
+            text_y = 0.89 if basis == "road" else 0.74
+            ax.text(
+                0.03,
+                text_y,
+                (
+                    f"{basis.title()}: d*={optimum['optimal_threshold_km']:.2f} km\n"
+                    f"{optimum['annual_reduction_pct']:.1f}% reduction; "
+                    f"{optimum['drone_order_ratio_pct']:.1f}% drone"
+                ),
+                transform=ax.transAxes,
+                fontsize=7.2,
+                color=color,
+                va="top",
+                bbox={
+                    "boxstyle": "round,pad=0.22",
+                    "facecolor": "white",
+                    "edgecolor": color,
+                    "linewidth": 0.6,
+                    "alpha": 0.88,
+                },
+            )
+
+        ax.axhline(0, color="#666666", linewidth=0.8, linestyle="--")
+        ax.set_xlim(-x_pad, x_max + x_pad)
+        ax.set_ylim(y_min - y_pad, y_max + y_pad)
+        _style_distance_threshold_axis(ax)
+        ax.text(
+            0.01,
+            1.02,
+            f"{panel_letters[panel_idx]}  {DISTANCE_THRESHOLD_CITY_LABELS[city]}",
+            transform=ax.transAxes,
+            fontsize=10,
+            fontweight="bold",
+            va="bottom",
+        )
+
+    fig.supxlabel("Policy threshold, d (km)", fontsize=10)
+    fig.supylabel("Annual lifecycle reduction vs all e-bike (%)", fontsize=10)
+    handles, labels = axes[0].get_legend_handles_labels()
+    fig.legend(
+        handles[:2],
+        labels[:2],
+        loc="upper center",
+        bbox_to_anchor=(0.5, 0.947),
+        ncol=2,
+        frameon=False,
+        fontsize=9,
+    )
+    if plot_title:
+        fig.suptitle(
+            "City-specific carbon benefits emerge from distinct threshold responses",
+            fontsize=14,
+            fontweight="bold",
+            y=0.995,
+        )
+    fig.tight_layout(rect=(0.025, 0.045, 1, 0.91), h_pad=1.7, w_pad=1.1)
+
+    return _save_distance_threshold_figure(
+        fig,
+        save_path,
+        for_latex,
+        plot_title,
+        "Typical-city distance-threshold curves",
+        {
+            "figure_name": "distance_threshold_typical_city_curves",
+            "core_conclusion": (
+                "Cities exhibit distinct threshold-response shapes, optimal cutoffs, "
+                "and drone adoption levels."
+            ),
+            "city_count": len(cities),
+            "cities": cities,
+            "distance_bases": ["road", "straight"],
+            "shared_axes": True,
+            "summary_records": _threshold_summary_records(summary_plot),
+        },
+    )
+
+
+def plot_distance_threshold_all_city_overview(
+    summary_df: pd.DataFrame,
+    save_path: str = None,
+    figsize: tuple = (15.6, 4.9),
+    for_latex: bool = False,
+    plot_title: bool = False,
+):
+    """Plot the all-city threshold policy landscape and basis comparisons.
+
+    Args:
+        summary_df: Long-form exact optimum records for all complete cities.
+        save_path: Path to save figure. Shows plot if None.
+        figsize: Figure size tuple.
+        for_latex: If True, save as PDF.
+        plot_title: If True, show title.
+    """
+    required = {
+        "region_key",
+        "region_name_en",
+        "distance_basis",
+        "optimal_threshold_km",
+        "annual_reduction_pct",
+        "drone_order_ratio_pct",
+        "n_od_pairs_total",
+        "n_od_pairs_unreachable",
+        "unreachable_annual_orders",
+        "total_annual_orders",
+    }
+    missing = required.difference(summary_df.columns)
+    if missing:
+        raise KeyError(f"Missing all-city threshold columns: {sorted(missing)}")
+
+    duplicates = summary_df.duplicated(["region_key", "distance_basis"])
+    if duplicates.any():
+        raise ValueError("Duplicate city/distance-basis rows in threshold summary")
+    basis_sets = summary_df.groupby("region_key")["distance_basis"].agg(set)
+    incomplete = basis_sets[basis_sets != {"road", "straight"}]
+    if not incomplete.empty:
+        raise ValueError(
+            "Cities without both distance bases: "
+            + ", ".join(incomplete.index.astype(str))
+        )
+
+    identity = summary_df[
+        ["region_key", "region_name_en"]
+    ].drop_duplicates("region_key")
+    metric_columns = (
+        "optimal_threshold_km",
+        "annual_reduction_pct",
+        "drone_order_ratio_pct",
+    )
+    wide = identity.set_index("region_key")
+    for basis in ("road", "straight"):
+        basis_df = summary_df[summary_df["distance_basis"] == basis].set_index(
+            "region_key"
+        )
+        for column in metric_columns:
+            wide[f"{basis}_{column}"] = pd.to_numeric(
+                basis_df[column], errors="coerce"
+            )
+    wide = wide.reset_index()
+    numeric = [
+        f"{basis}_{column}"
+        for basis in ("road", "straight")
+        for column in metric_columns
+    ]
+    if not np.isfinite(wide[numeric].to_numpy(dtype=float)).all():
+        raise ValueError("All-city threshold metrics must be finite")
+
+    from matplotlib.colors import Normalize
+
+    cmap = plt.get_cmap("Blues")
+    norm = Normalize(vmin=0, vmax=100)
+    fig, axes = plt.subplots(1, 3, figsize=figsize)
+    highlight = wide["region_key"].isin(DISTANCE_THRESHOLD_TYPICAL_CITIES)
+    color_values = wide["road_drone_order_ratio_pct"]
+
+    panel_specs = (
+        (
+            "road_optimal_threshold_km",
+            "road_annual_reduction_pct",
+            "Road threshold, d* (km)",
+            "Maximum annual lifecycle reduction (%)",
+            "a  Road-policy landscape",
+            False,
+        ),
+        (
+            "straight_optimal_threshold_km",
+            "road_optimal_threshold_km",
+            "Straight-distance threshold, d* (km)",
+            "Road-distance threshold, d* (km)",
+            "b  Threshold heterogeneity",
+            True,
+        ),
+        (
+            "straight_annual_reduction_pct",
+            "road_annual_reduction_pct",
+            "Straight-policy reduction (%)",
+            "Road-policy reduction (%)",
+            "c  Carbon-benefit heterogeneity",
+            True,
+        ),
+    )
+
+    for panel_idx, (
+        ax,
+        (x_col, y_col, x_label, y_label, panel_label, diagonal),
+    ) in enumerate(zip(axes, panel_specs)):
+        ax.scatter(
+            wide.loc[~highlight, x_col],
+            wide.loc[~highlight, y_col],
+            c=color_values[~highlight],
+            cmap=cmap,
+            norm=norm,
+            s=25,
+            alpha=0.62,
+            edgecolor="white",
+            linewidth=0.35,
+        )
+        ax.scatter(
+            wide.loc[highlight, x_col],
+            wide.loc[highlight, y_col],
+            c=color_values[highlight],
+            cmap=cmap,
+            norm=norm,
+            s=66,
+            alpha=1.0,
+            edgecolor="#151515",
+            linewidth=0.9,
+            zorder=4,
+        )
+        if diagonal:
+            lower = min(float(wide[x_col].min()), float(wide[y_col].min()))
+            upper = max(float(wide[x_col].max()), float(wide[y_col].max()))
+            padding = max((upper - lower) * 0.04, 0.1)
+            lower -= padding
+            upper += padding
+            ax.plot(
+                [lower, upper],
+                [lower, upper],
+                color="#666666",
+                linewidth=1.0,
+                linestyle="--",
+                zorder=0,
+            )
+            ax.set_xlim(lower, upper)
+            ax.set_ylim(lower, upper)
+        else:
+            ax.axvline(
+                wide[x_col].median(),
+                color="#888888",
+                linewidth=0.8,
+                linestyle="--",
+            )
+            ax.axhline(
+                wide[y_col].median(),
+                color="#888888",
+                linewidth=0.8,
+                linestyle="--",
+            )
+
+        for _, row in wide[highlight].iterrows():
+            offset = DISTANCE_THRESHOLD_COMPARISON_LABEL_OFFSETS.get(
+                panel_idx, {}
+            ).get(
+                row["region_key"],
+                DISTANCE_THRESHOLD_LABEL_OFFSETS[row["region_key"]],
+            )
+            ax.annotate(
+                DISTANCE_THRESHOLD_CITY_LABELS[row["region_key"]],
+                (row[x_col], row[y_col]),
+                xytext=offset,
+                textcoords="offset points",
+                fontsize=7.3,
+                fontweight="semibold",
+                color="#222222",
+                ha="right" if offset[0] < 0 else "left",
+                arrowprops={
+                    "arrowstyle": "-",
+                    "color": "#777777",
+                    "linewidth": 0.55,
+                },
+                zorder=5,
+            )
+        ax.set_xlabel(x_label, fontsize=9)
+        ax.set_ylabel(y_label, fontsize=9)
+        _style_distance_threshold_axis(ax)
+        ax.text(
+            0.01,
+            1.02,
+            panel_label,
+            transform=ax.transAxes,
+            fontsize=10,
+            fontweight="bold",
+            va="bottom",
+        )
+
+    city_count = int(wide["region_key"].nunique())
+    configured_count = int(
+        summary_df.attrs.get("configured_city_count", city_count)
+    )
+    axes[0].text(
+        0.98,
+        0.03,
+        f"n = {city_count}/{configured_count} cities",
+        transform=axes[0].transAxes,
+        ha="right",
+        va="bottom",
+        fontsize=7.5,
+        color="#555555",
+    )
+    scalar = plt.cm.ScalarMappable(norm=norm, cmap=cmap)
+    scalar.set_array([])
+    fig.subplots_adjust(
+        left=0.055,
+        right=0.88,
+        bottom=0.17,
+        top=0.86 if plot_title else 0.91,
+        wspace=0.30,
+    )
+    colorbar_ax = fig.add_axes([0.91, 0.17, 0.014, 0.69])
+    colorbar = fig.colorbar(
+        scalar,
+        cax=colorbar_ax,
+    )
+    colorbar.set_label("Road-policy drone order share (%)", fontsize=9)
+    colorbar.ax.tick_params(labelsize=8)
+    if plot_title:
+        fig.suptitle(
+            "Optimal delivery thresholds reveal strong city-level heterogeneity",
+            fontsize=14,
+            fontweight="bold",
+            y=0.995,
+        )
+    road = summary_df[summary_df["distance_basis"] == "road"]
+    unreachable_rows = int(road["n_od_pairs_unreachable"].sum())
+    total_rows = int(road["n_od_pairs_total"].sum())
+    unreachable_orders = float(road["unreachable_annual_orders"].sum())
+    reachable_orders = float(road["total_annual_orders"].sum())
+    return _save_distance_threshold_figure(
+        fig,
+        save_path,
+        for_latex,
+        plot_title,
+        "All-city distance-threshold overview",
+        {
+            "figure_name": "distance_threshold_all_city_overview",
+            "core_conclusion": (
+                "Optimal thresholds, lifecycle reductions, and drone shares vary "
+                "substantially across cities."
+            ),
+            "city_count": city_count,
+            "configured_city_count": configured_count,
+            "highlighted_cities": list(DISTANCE_THRESHOLD_TYPICAL_CITIES),
+            "road_threshold_km": _writing_numeric_summary(
+                wide["road_optimal_threshold_km"]
+            ),
+            "straight_threshold_km": _writing_numeric_summary(
+                wide["straight_optimal_threshold_km"]
+            ),
+            "road_reduction_pct": _writing_numeric_summary(
+                wide["road_annual_reduction_pct"]
+            ),
+            "straight_reduction_pct": _writing_numeric_summary(
+                wide["straight_annual_reduction_pct"]
+            ),
+            "road_drone_order_share_pct": _writing_numeric_summary(
+                wide["road_drone_order_ratio_pct"]
+            ),
+            "excluded_unreachable_routes": {
+                "od_pair_count": unreachable_rows,
+                "od_pair_pct": unreachable_rows / total_rows * 100.0,
+                "annual_orders": unreachable_orders,
+                "annual_order_pct": (
+                    unreachable_orders
+                    / (unreachable_orders + reachable_orders)
+                    * 100.0
+                ),
+            },
+        },
+    )
