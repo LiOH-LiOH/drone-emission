@@ -11747,7 +11747,7 @@ def plot_city_reduction_concentration_scatter(
     df: pd.DataFrame,
     configured_city_count: int,
     save_path: str = None,
-    figsize: tuple = (6.6, 5.2),
+    figsize: tuple = (9, 5.2),
     for_latex: bool = False,
     plot_title: bool = False,
 ):
@@ -11770,26 +11770,36 @@ def plot_city_reduction_concentration_scatter(
     missing = [column for column in required if column not in df]
     if missing:
         raise ValueError(f"City reduction scatter missing columns: {missing}")
-    plot_df = df.copy()
+    source_df = df.copy()
     for column in (
         "pilot_concentration_score_pct",
         PILOT_ABSOLUTE_REDUCTION_COL,
         PILOT_RELATIVE_REDUCTION_COL,
     ):
-        plot_df[column] = pd.to_numeric(plot_df[column], errors="coerce")
-    plot_df = plot_df[
-        np.isfinite(plot_df["pilot_concentration_score_pct"])
-        & np.isfinite(plot_df[PILOT_ABSOLUTE_REDUCTION_COL])
-        & (plot_df[PILOT_ABSOLUTE_REDUCTION_COL] > 0)
-        & np.isfinite(plot_df[PILOT_RELATIVE_REDUCTION_COL])
+        source_df[column] = pd.to_numeric(source_df[column], errors="coerce")
+    distribution_df = source_df[
+        np.isfinite(source_df["pilot_concentration_score_pct"])
+        & source_df["concentration_class"].isin(("Low", "Medium", "High"))
     ].copy()
+    plot_df = distribution_df[
+        np.isfinite(distribution_df[PILOT_ABSOLUTE_REDUCTION_COL])
+        & (distribution_df[PILOT_ABSOLUTE_REDUCTION_COL] > 0)
+        & np.isfinite(distribution_df[PILOT_RELATIVE_REDUCTION_COL])
+    ].copy()
+    if distribution_df.empty:
+        raise ValueError("No finite city concentration results to plot")
     if plot_df.empty:
         raise ValueError("No finite positive city reduction results to plot")
     absolute_median = float(plot_df[PILOT_ABSOLUTE_REDUCTION_COL].median())
     relative_median = float(plot_df[PILOT_RELATIVE_REDUCTION_COL].median())
     class_colors = {"Low": "#D95F0E", "Medium": "#7570B3", "High": "#1B9E77"}
 
-    fig, ax = plt.subplots(figsize=figsize)
+    fig, (ax, ax_distribution) = plt.subplots(
+        1,
+        2,
+        figsize=figsize,
+        gridspec_kw={"width_ratios": (3, 1), "wspace": 0.25},
+    )
     for concentration_class in ("Low", "Medium", "High"):
         group = plot_df[plot_df["concentration_class"].eq(concentration_class)]
         if group.empty:
@@ -11867,8 +11877,55 @@ def plot_city_reduction_concentration_scatter(
     ax.legend(handles, labels, loc="upper left", frameon=False, fontsize=8)
     ax.spines[["top", "right"]].set_visible(False)
     ax.grid(axis="both", color="#E5E5E5", linewidth=0.55, zorder=0)
+
+    score = distribution_df["pilot_concentration_score_pct"]
+    lower, upper = score.quantile([1 / 3, 2 / 3])
+    histogram_values = [
+        distribution_df.loc[
+            distribution_df["concentration_class"].eq(concentration_class),
+            "pilot_concentration_score_pct",
+        ].to_numpy(dtype=float)
+        for concentration_class in ("Low", "Medium", "High")
+    ]
+    ax_distribution.hist(
+        histogram_values,
+        bins=np.arange(0.0, 105.0, 5.0),
+        stacked=True,
+        color=[class_colors[category] for category in ("Low", "Medium", "High")],
+        edgecolor="white",
+        linewidth=0.6,
+    )
+    for value, label, alignment in (
+        (lower, "Low / Medium", "right"),
+        (upper, "Medium / High", "left"),
+    ):
+        ax_distribution.axvline(
+            value,
+            color="#444444",
+            linestyle="--",
+            linewidth=1.0,
+            zorder=4,
+        )
+        ax_distribution.text(
+            value,
+            0.98,
+            f"{label}\n{value:.1f}%",
+            transform=ax_distribution.get_xaxis_transform(),
+            rotation=90,
+            ha=alignment,
+            va="top",
+            fontsize=7,
+            color="#333333",
+            zorder=5,
+        )
+    ax_distribution.set_xlim(0, 100)
+    ax_distribution.set_xticks([0, 25, 50, 75, 100])
+    ax_distribution.set_xlabel("Multi-scale Pilot\nCapture Score (%)")
+    ax_distribution.set_ylabel("Number of cities")
+    ax_distribution.spines[["top", "right"]].set_visible(False)
+    ax_distribution.grid(axis="y", color="#E5E5E5", linewidth=0.55, zorder=0)
     if plot_title:
-        ax.set_title(
+        fig.suptitle(
             "City emission-reduction potential and drone-order concentration",
             fontsize=12,
             fontweight="bold",
