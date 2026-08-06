@@ -11849,15 +11849,6 @@ def plot_city_reduction_concentration_scatter(
             arrowprops={"arrowstyle": "-", "color": "0.4", "lw": 0.5},
         )
 
-    ax.text(
-        0.02,
-        0.98,
-        f"{len(plot_df)} plotted of {configured_city_count} configured cities",
-        transform=ax.transAxes,
-        ha="left",
-        va="top",
-        fontsize=8,
-    )
     from matplotlib.lines import Line2D
 
     handles, labels = ax.get_legend_handles_labels()
@@ -11873,7 +11864,7 @@ def plot_city_reduction_concentration_scatter(
     ax.set_xscale("log")
     ax.set_xlabel("Annual absolute emission reduction (t CO$_2$e yr$^{-1}$)")
     ax.set_ylabel("Relative lifecycle emission reduction (%)")
-    ax.legend(handles, labels, loc="lower right", frameon=False, fontsize=8)
+    ax.legend(handles, labels, loc="upper left", frameon=False, fontsize=8)
     ax.spines[["top", "right"]].set_visible(False)
     ax.grid(axis="both", color="#E5E5E5", linewidth=0.55, zorder=0)
     if plot_title:
