@@ -11497,3 +11497,372 @@ def plot_distance_threshold_all_city_overview(
             },
         },
     )
+
+
+def _pilot_projected_density(od_df, point_prefix, resolution_m=500.0):
+    """Return a physically scaled density raster for eligible OD endpoints."""
+    from pyproj import Transformer
+    from scipy.ndimage import gaussian_filter
+    from utils.tools import get_epsg_from_bounds
+
+    all_lat = np.concatenate(
+        [od_df["from_lat"].to_numpy(), od_df["to_lat"].to_numpy()]
+    )
+    all_lng = np.concatenate(
+        [od_df["from_lng"].to_numpy(), od_df["to_lng"].to_numpy()]
+    )
+    bounds = {
+        "min_lat": float(np.nanmin(all_lat)),
+        "max_lat": float(np.nanmax(all_lat)),
+        "min_lng": float(np.nanmin(all_lng)),
+        "max_lng": float(np.nanmax(all_lng)),
+    }
+    epsg = get_epsg_from_bounds(bounds)
+    transformer = Transformer.from_crs(
+        "EPSG:4326", f"EPSG:{epsg}", always_xy=True
+    )
+    origin_x, origin_y = transformer.transform(
+        od_df["from_lng"].to_numpy(dtype=float),
+        od_df["from_lat"].to_numpy(dtype=float),
+    )
+    destination_x, destination_y = transformer.transform(
+        od_df["to_lng"].to_numpy(dtype=float),
+        od_df["to_lat"].to_numpy(dtype=float),
+    )
+    all_x = np.concatenate([origin_x, destination_x])
+    all_y = np.concatenate([origin_y, destination_y])
+    padding = 1000.0
+    x_min = np.floor((all_x.min() - padding) / resolution_m) * resolution_m
+    x_max = np.ceil((all_x.max() + padding) / resolution_m) * resolution_m
+    y_min = np.floor((all_y.min() - padding) / resolution_m) * resolution_m
+    y_max = np.ceil((all_y.max() + padding) / resolution_m) * resolution_m
+    x_edges = np.arange(x_min, x_max + resolution_m, resolution_m)
+    y_edges = np.arange(y_min, y_max + resolution_m, resolution_m)
+    if point_prefix == "from":
+        x, y = origin_x, origin_y
+    else:
+        x, y = destination_x, destination_y
+    weights = od_df["annual_sales"].to_numpy(dtype=float)
+    histogram, _, _ = np.histogram2d(
+        x, y, bins=(x_edges, y_edges), weights=weights
+    )
+    smooth = gaussian_filter(histogram, sigma=1000.0 / resolution_m)
+    total_weight = float(weights.sum())
+    cell_area_km2 = (resolution_m / 1000.0) ** 2
+    density = smooth / total_weight * 100.0 / cell_area_km2
+    return {
+        "density": density.T,
+        "extent_km": np.array([x_min, x_max, y_min, y_max]) / 1000.0,
+        "x_centers_km": (x_edges[:-1] + x_edges[1:]) / 2000.0,
+        "y_centers_km": (y_edges[:-1] + y_edges[1:]) / 2000.0,
+    }
+
+
+def _pilot_mass_contour_levels(density, fractions=(0.8, 0.5)):
+    """Return density thresholds enclosing the requested probability masses."""
+    values = np.asarray(density, dtype=float).ravel()
+    values = values[np.isfinite(values) & (values > 0)]
+    if values.size < 2 or values.sum() <= 0:
+        return []
+    descending = np.sort(values)[::-1]
+    cumulative = np.cumsum(descending) / descending.sum()
+    levels = []
+    for fraction in fractions:
+        index = min(int(np.searchsorted(cumulative, fraction)), len(descending) - 1)
+        levels.append(float(descending[index]))
+    return sorted(set(levels))
+
+
+def plot_representative_city_drone_heatmaps(
+    city_payloads,
+    save_path: str = None,
+    figsize: tuple = (12, 10),
+    for_latex: bool = False,
+    plot_title: bool = False,
+):
+    """Plot normalized eligible-order heatmaps for representative city types.
+
+    Args:
+        city_payloads: Dictionaries containing city metrics and eligible OD data.
+        save_path: Path to save figure. Shows plot if None.
+        figsize: Figure size tuple.
+        for_latex: If True, save as PDF.
+        plot_title: If True, show title.
+    """
+    from matplotlib.lines import Line2D
+    from matplotlib.patches import Circle
+    from matplotlib.colors import Normalize
+
+    ordered_typologies = (
+        "High concentration / High volume",
+        "High concentration / Low volume",
+        "Low concentration / High volume",
+        "Low concentration / Low volume",
+    )
+    payloads = sorted(
+        city_payloads,
+        key=lambda payload: ordered_typologies.index(
+            payload["metrics"].get("representative_typology")
+            or payload["metrics"]["pilot_typology"]
+        ) if (
+            payload["metrics"].get("representative_typology")
+            or payload["metrics"]["pilot_typology"]
+        ) in ordered_typologies else 99,
+    )
+    prepared = []
+    for payload in payloads:
+        destination = _pilot_projected_density(payload["od_df"], "to")
+        origin = _pilot_projected_density(payload["od_df"], "from")
+        prepared.append((payload, destination, origin))
+    positive_values = np.concatenate(
+        [item[1]["density"][item[1]["density"] > 0] for item in prepared]
+    )
+    vmax = float(np.nanpercentile(positive_values, 99.5))
+    norm = Normalize(vmin=0.0, vmax=max(vmax, 1e-12))
+
+    fig, axes = plt.subplots(2, 2, figsize=figsize, constrained_layout=True)
+    axes_flat = axes.ravel()
+    image_artist = None
+    for panel_index, (ax, item) in enumerate(zip(axes_flat, prepared)):
+        payload, destination, origin = item
+        metrics = payload["metrics"]
+        density = destination["density"]
+        image_artist = ax.imshow(
+            np.ma.masked_where(density <= 0, density),
+            extent=destination["extent_km"],
+            origin="lower",
+            cmap="YlOrRd",
+            norm=norm,
+            interpolation="bilinear",
+            zorder=2,
+        )
+        contour_levels = _pilot_mass_contour_levels(origin["density"])
+        if contour_levels:
+            ax.contour(
+                origin["x_centers_km"],
+                origin["y_centers_km"],
+                origin["density"],
+                levels=contour_levels,
+                colors="#2457A7",
+                linewidths=(1.0, 1.7)[: len(contour_levels)],
+                zorder=4,
+            )
+        center_x = metrics.get("capture_3km_center_x_m", np.nan)
+        center_y = metrics.get("capture_3km_center_y_m", np.nan)
+        if np.isfinite(center_x) and np.isfinite(center_y):
+            ax.add_patch(
+                Circle(
+                    (center_x / 1000.0, center_y / 1000.0),
+                    radius=3.0,
+                    fill=False,
+                    color="#1B7837",
+                    linewidth=1.8,
+                    linestyle="--",
+                    zorder=5,
+                )
+            )
+        city_name = metrics.get("region_name_en") or metrics["region_key"]
+        display_typology = (
+            metrics.get("representative_typology") or metrics["pilot_typology"]
+        )
+        ax.text(
+            0.02,
+            0.98,
+            f"{chr(97 + panel_index)}  {city_name}\n{display_typology}",
+            transform=ax.transAxes,
+            ha="left",
+            va="top",
+            fontsize=10,
+            fontweight="bold",
+            bbox=dict(facecolor="white", edgecolor="none", alpha=0.82, pad=2.5),
+            zorder=8,
+        )
+        ax.text(
+            0.02,
+            0.02,
+            f"MPCS {metrics['pilot_concentration_score_pct']:.1f}%\n"
+            f"Eligible {metrics['eligible_annual_orders']:,.0f} orders yr$^{{-1}}$ "
+            f"({metrics['eligible_order_share_pct']:.1f}%)",
+            transform=ax.transAxes,
+            ha="left",
+            va="bottom",
+            fontsize=8.5,
+            bbox=dict(facecolor="white", edgecolor="#BBBBBB", alpha=0.86, pad=2.5),
+            zorder=8,
+        )
+        ax.set_xlabel("Easting (km)")
+        ax.set_ylabel("Northing (km)")
+        ax.set_aspect("equal")
+        ax.grid(False)
+    for ax in axes_flat[len(prepared):]:
+        ax.axis("off")
+    if image_artist is not None:
+        colorbar = fig.colorbar(
+            image_artist, ax=axes_flat.tolist(), shrink=0.82, pad=0.02
+        )
+        colorbar.set_label("Eligible destination orders (% of city total km$^{-2}$)")
+    legend_handles = [
+        Line2D([0], [0], color="#2457A7", linewidth=1.5, label="Origin density contours"),
+        Line2D([0], [0], color="#1B7837", linewidth=1.8, linestyle="--", label="Optimal 3-km pilot area"),
+    ]
+    fig.legend(
+        handles=legend_handles,
+        loc="lower center",
+        ncol=2,
+        bbox_to_anchor=(0.5, -0.015),
+        frameon=False,
+    )
+    if plot_title:
+        fig.suptitle(
+            "Representative spatial patterns of drone-favorable orders",
+            fontsize=14,
+            fontweight="bold",
+        )
+    if save_path:
+        if for_latex and not save_path.endswith(".pdf"):
+            save_path = save_path.rsplit(".", 1)[0] + ".pdf"
+        if plot_title:
+            save_path = _add_title_suffix(save_path)
+        os.makedirs(os.path.dirname(save_path), exist_ok=True)
+        plt.savefig(save_path, dpi=300, bbox_inches="tight")
+        print(f"Representative drone-order heatmaps saved to {save_path}")
+    else:
+        plt.show()
+    plt.close(fig)
+    return save_path
+
+
+def plot_city_pilot_concentration_distribution(
+    df: pd.DataFrame,
+    configured_city_count: int,
+    save_path: str = None,
+    figsize: tuple = (12, 5),
+    for_latex: bool = False,
+    plot_title: bool = False,
+):
+    """Plot the city MPCS distribution and concentration-volume typology.
+
+    Args:
+        df: Successful city-level concentration results.
+        configured_city_count: Total configured city count before missing-data skips.
+        save_path: Path to save figure. Shows plot if None.
+        figsize: Figure size tuple.
+        for_latex: If True, save as PDF.
+        plot_title: If True, show title.
+    """
+    plot_df = df.dropna(
+        subset=["pilot_concentration_score_pct", "eligible_annual_orders"]
+    ).copy()
+    if plot_df.empty:
+        raise ValueError("No finite city concentration results to plot")
+    score = plot_df["pilot_concentration_score_pct"]
+    lower, upper = score.quantile([1 / 3, 2 / 3])
+    score_median = float(score.median())
+    volume_median = float(plot_df["eligible_annual_orders"].median())
+    class_colors = {"Low": "#D95F0E", "Medium": "#7570B3", "High": "#1B9E77"}
+
+    fig, (ax_distribution, ax_typology) = plt.subplots(1, 2, figsize=figsize)
+    bin_min = max(0.0, float(score.min()) - 1.0)
+    bin_max = min(100.0, float(score.max()) + 1.0)
+    if bin_max <= bin_min:
+        bin_min = max(0.0, bin_min - 1.0)
+        bin_max = min(100.0, bin_max + 1.0)
+    bins = np.linspace(bin_min, bin_max, 22)
+    ax_distribution.hist(
+        score,
+        bins=bins,
+        color="#6BAED6",
+        edgecolor="white",
+        linewidth=0.8,
+    )
+    for value, label in ((lower, "33rd"), (upper, "67th")):
+        ax_distribution.axvline(value, color="#444444", linestyle="--", linewidth=1.2)
+        ax_distribution.text(
+            value,
+            ax_distribution.get_ylim()[1] * 0.95,
+            label,
+            rotation=90,
+            va="top",
+            ha="right",
+            fontsize=8,
+            color="#444444",
+        )
+    ax_distribution.plot(score, np.full(len(score), -0.35), "|", color="#333333", markersize=5)
+    ax_distribution.text(
+        0.02,
+        0.98,
+        f"a  Distribution\n{len(plot_df)} of {configured_city_count} cities",
+        transform=ax_distribution.transAxes,
+        ha="left",
+        va="top",
+        fontweight="bold",
+    )
+    ax_distribution.set_xlabel("Multi-scale Pilot Capture Score (%)")
+    ax_distribution.set_ylabel("Number of cities")
+    ax_distribution.spines[["top", "right"]].set_visible(False)
+
+    for concentration_class, group in plot_df.groupby("concentration_class"):
+        ax_typology.scatter(
+            group["eligible_annual_orders"],
+            group["pilot_concentration_score_pct"],
+            s=24,
+            alpha=0.68,
+            color=class_colors.get(concentration_class, "#777777"),
+            edgecolor="white",
+            linewidth=0.35,
+            label=f"{concentration_class} concentration",
+        )
+    ax_typology.axhline(score_median, color="#666666", linestyle="--", linewidth=1)
+    ax_typology.axvline(volume_median, color="#666666", linestyle="--", linewidth=1)
+    representatives = plot_df[plot_df["is_representative"].eq(True)]
+    for _, row in representatives.iterrows():
+        ax_typology.scatter(
+            row["eligible_annual_orders"],
+            row["pilot_concentration_score_pct"],
+            s=68,
+            facecolor="none",
+            edgecolor="#111111",
+            linewidth=1.4,
+            zorder=5,
+        )
+        ax_typology.annotate(
+            row.get("region_name_en") or row["region_key"],
+            (row["eligible_annual_orders"], row["pilot_concentration_score_pct"]),
+            xytext=(5, 5),
+            textcoords="offset points",
+            fontsize=8,
+            zorder=6,
+        )
+    ax_typology.text(
+        0.02,
+        0.98,
+        "b  Pilot typology",
+        transform=ax_typology.transAxes,
+        ha="left",
+        va="top",
+        fontweight="bold",
+    )
+    ax_typology.set_xscale("log")
+    ax_typology.set_xlabel("Drone-favorable annual orders")
+    ax_typology.set_ylabel("Multi-scale Pilot Capture Score (%)")
+    ax_typology.legend(loc="lower right", frameon=False, fontsize=8)
+    ax_typology.spines[["top", "right"]].set_visible(False)
+    if plot_title:
+        fig.suptitle(
+            "Spatial concentration and demand scale define city pilot types",
+            fontsize=14,
+            fontweight="bold",
+        )
+    fig.tight_layout()
+    if save_path:
+        if for_latex and not save_path.endswith(".pdf"):
+            save_path = save_path.rsplit(".", 1)[0] + ".pdf"
+        if plot_title:
+            save_path = _add_title_suffix(save_path)
+        os.makedirs(os.path.dirname(save_path), exist_ok=True)
+        plt.savefig(save_path, dpi=300, bbox_inches="tight")
+        print(f"City pilot concentration distribution saved to {save_path}")
+    else:
+        plt.show()
+    plt.close(fig)
+    return save_path
