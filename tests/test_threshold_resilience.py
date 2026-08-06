@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import os
+import json
 import sys
+import tempfile
 from dataclasses import replace
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -39,6 +42,7 @@ from sensitivity.vectorized_lca import (  # noqa: E402
     compute_ebike_per_order_parts_g,
 )
 from utils import load_config  # noqa: E402
+from tools import run_threshold_resilience as runner  # noqa: E402
 
 
 def _specs() -> dict[str, TriangularSpec]:
@@ -195,6 +199,101 @@ def test_wilson_interval_extremes() -> None:
     assert high_all == 1.0 and 0.95 < low_all < 1.0
 
 
+def test_runner_inventory_classifies_and_orders_cities() -> None:
+    with tempfile.TemporaryDirectory() as temporary:
+        root = Path(temporary)
+        data_dir = root / "data"
+        regions_path = root / "regions.json"
+        regions_path.write_text(
+            json.dumps(
+                {
+                    "large": {
+                        "region_name_cn": "大城",
+                        "region_name_en": "Large",
+                        "region_level": "city",
+                    },
+                    "stale": {
+                        "region_name_cn": "旧城",
+                        "region_name_en": "Stale",
+                        "region_level": "city",
+                    },
+                    "missing": {
+                        "region_name_cn": "缺城",
+                        "region_name_en": "Missing",
+                        "region_level": "city",
+                    },
+                }
+            ),
+            encoding="utf-8",
+        )
+        gef_path = root / "gef.csv"
+        gef_path.write_text("province,factor\n测试,0.5\n", encoding="utf-8")
+        config = {
+            "data_dir": str(data_dir),
+            "gef_path": str(gef_path),
+            "threshold_resilience": {"distance_basis": "road"},
+            "emission_params": {},
+        }
+
+        for name, rows in (("large", 3), ("stale", 1)):
+            city_dir = data_dir / "city" / name
+            city_dir.mkdir(parents=True)
+            od_path = city_dir / f"{name}_od_pairs.csv"
+            pd.DataFrame(
+                {
+                    "distance_km": np.arange(rows, dtype=float) + 1.0,
+                    "road_distance_m": np.arange(rows, dtype=float) + 1000.0,
+                    "annual_sales": np.ones(rows),
+                }
+            ).to_csv(od_path, index=False)
+            stat = od_path.stat()
+            threshold_dir = city_dir / "analysis" / "distance_threshold"
+            threshold_dir.mkdir(parents=True)
+            pd.DataFrame(
+                {
+                    "distance_basis": ["road"],
+                    "optimal_threshold_km": [1.0],
+                    "annual_reduction_pct": [2.0],
+                    "input_size_bytes": [stat.st_size],
+                    "input_mtime_ns": [stat.st_mtime_ns if name == "large" else 0],
+                }
+            ).to_csv(threshold_dir / "summary.csv", index=False)
+
+        old_regions_json = runner.REGIONS_JSON
+        runner.REGIONS_JSON = regions_path
+        try:
+            inventory = runner.inventory_regions(
+                config, require_samples=True, force=False
+            )
+        finally:
+            runner.REGIONS_JSON = old_regions_json
+
+        assert inventory["region_key"].tolist() == ["large", "stale", "missing"]
+        statuses = inventory.set_index("region_key")["status"].to_dict()
+        assert statuses == {
+            "large": "ready",
+            "stale": "stale_threshold",
+            "missing": "missing_od",
+        }
+
+
+def test_analysis_fingerprint_tracks_gef_and_emission_inputs() -> None:
+    with tempfile.TemporaryDirectory() as temporary:
+        gef_path = Path(temporary) / "gef.csv"
+        gef_path.write_text("province,factor\n测试,0.5\n", encoding="utf-8")
+        config = {
+            "gef_path": str(gef_path),
+            "threshold_resilience": {"n_samples": 10},
+            "emission_params": {"payload_kg": 1.0},
+        }
+        baseline = runner._analysis_config_digest(config)
+        config["emission_params"]["payload_kg"] = 1.1
+        assert runner._analysis_config_digest(config) != baseline
+        config["emission_params"]["payload_kg"] = 1.0
+        gef_path.write_text("province,factor\n测试,0.6\n", encoding="utf-8")
+        assert runner._analysis_config_digest(config) != baseline
+
+
 def main() -> int:
     tests = (
         test_sampling_reproducible_and_bounded,
@@ -204,6 +303,8 @@ def main() -> int:
         test_affine_aggregation_matches_direct_od_evaluation,
         test_ebike_utilization_only_scales_embodied_parts,
         test_wilson_interval_extremes,
+        test_runner_inventory_classifies_and_orders_cities,
+        test_analysis_fingerprint_tracks_gef_and_emission_inputs,
     )
     for test in tests:
         test()

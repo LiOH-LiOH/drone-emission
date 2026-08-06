@@ -165,6 +165,181 @@ def _config_digest(section: dict) -> str:
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
+def _file_digest(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _analysis_config_digest(config: dict) -> str:
+    """Fingerprint effective model inputs that are not city-specific."""
+    gef_path = Path(config["gef_path"])
+    payload = {
+        "threshold_resilience": config.get("threshold_resilience", {}) or {},
+        "emission_params": config.get("emission_params", {}) or {},
+        "gef_sha256": _file_digest(gef_path),
+    }
+    return _config_digest(payload)
+
+
+def _cache_is_fresh(
+    config: dict,
+    region: RegionConfig,
+    *,
+    require_samples: bool,
+    config_digest: str | None = None,
+) -> tuple[bool, str]:
+    """Validate every input needed to reuse or consolidate one city result."""
+    od_path = _od_path(config, region)
+    if not od_path.exists():
+        return False, "OD CSV missing"
+    threshold_path = _threshold_path(config, region)
+    try:
+        _read_current_threshold(
+            threshold_path,
+            od_path,
+            str((config.get("threshold_resilience", {}) or {}).get("distance_basis", "road")),
+        )
+    except (FileNotFoundError, ValueError) as exc:
+        return False, str(exc)
+
+    output_dir = _output_dir(config, region)
+    required_paths = [
+        output_dir / SUMMARY_FILENAME,
+        output_dir / DRIVERS_FILENAME,
+        output_dir / METADATA_FILENAME,
+    ]
+    if require_samples:
+        required_paths.append(output_dir / SAMPLES_FILENAME)
+    missing = [path.name for path in required_paths if not path.exists()]
+    if missing:
+        return False, f"output missing: {', '.join(missing)}"
+
+    try:
+        with (output_dir / METADATA_FILENAME).open(encoding="utf-8") as handle:
+            metadata = json.load(handle)
+    except (OSError, json.JSONDecodeError) as exc:
+        return False, f"invalid metadata: {exc}"
+
+    stat = od_path.stat()
+    expected_config_digest = config_digest or _analysis_config_digest(config)
+    checks = (
+        (metadata.get("analysis_version") == ANALYSIS_VERSION, "analysis version changed"),
+        (metadata.get("config_sha256") == expected_config_digest, "analysis configuration changed"),
+        (metadata.get("od_input_size_bytes") == stat.st_size, "OD size changed"),
+        (metadata.get("od_input_mtime_ns") == stat.st_mtime_ns, "OD timestamp changed"),
+        (
+            metadata.get("threshold_summary_sha256") == _file_digest(threshold_path),
+            "distance-threshold summary changed",
+        ),
+    )
+    for valid, message in checks:
+        if not valid:
+            return False, message
+    return True, "current result is reusable"
+
+
+def inventory_regions(
+    config: dict, *, require_samples: bool, force: bool
+) -> pd.DataFrame:
+    """Classify all registered cities and order runnable work largest-first."""
+    rows = []
+    config_digest = _analysis_config_digest(config)
+    distance_basis = str(
+        (config.get("threshold_resilience", {}) or {}).get("distance_basis", "road")
+    )
+    for region_key, region in _city_regions(config).items():
+        od_path = _od_path(config, region)
+        threshold_path = _threshold_path(config, region)
+        size = od_path.stat().st_size if od_path.exists() else 0
+        status = "ready"
+        message = "prerequisites current"
+        if not od_path.exists():
+            status, message = "missing_od", f"OD CSV missing: {od_path}"
+        elif not threshold_path.exists():
+            status, message = (
+                "missing_threshold",
+                f"distance-threshold summary missing: {threshold_path}",
+            )
+        else:
+            try:
+                _read_current_threshold(threshold_path, od_path, distance_basis)
+            except ValueError as exc:
+                status = (
+                    "stale_threshold"
+                    if "stale relative" in str(exc)
+                    else "invalid_threshold"
+                )
+                message = str(exc)
+            if status == "ready" and not force:
+                fresh, cache_message = _cache_is_fresh(
+                    config,
+                    region,
+                    require_samples=require_samples,
+                    config_digest=config_digest,
+                )
+                if fresh:
+                    status, message = "cached", cache_message
+                else:
+                    message = cache_message
+        rows.append(
+            {
+                "region_key": region_key,
+                "status": status,
+                "od_size_bytes": size,
+                "region_name_cn": region.region_name_cn,
+                "region_name_en": region.region_name_en,
+                "message": message,
+            }
+        )
+    frame = pd.DataFrame(rows)
+    frame["_runnable"] = frame["status"].isin(("ready", "cached")).astype(int)
+    frame = frame.sort_values(
+        ["_runnable", "od_size_bytes", "region_key"],
+        ascending=[False, False, True],
+    ).drop(columns="_runnable")
+    return frame.reset_index(drop=True)
+
+
+def build_status_report(
+    config: dict, preflight_path: Path, *, require_samples: bool
+) -> pd.DataFrame:
+    """Combine preflight exclusions with worker status for one batch run."""
+    preflight = pd.read_csv(preflight_path)
+    regions = _city_regions(config)
+    config_digest = _analysis_config_digest(config)
+    rows = []
+    for row in preflight.to_dict("records"):
+        region_key = str(row["region_key"])
+        initial_status = str(row["status"])
+        final_status = initial_status
+        message = str(row["message"])
+        if initial_status in ("ready", "cached"):
+            status_path = _output_dir(config, regions[region_key]) / STATUS_FILENAME
+            try:
+                with status_path.open(encoding="utf-8") as handle:
+                    worker_status = json.load(handle)
+                final_status = str(worker_status.get("status", "error"))
+                message = str(worker_status.get("message", "worker status missing message"))
+            except (OSError, json.JSONDecodeError) as exc:
+                final_status, message = "error", f"invalid worker status: {exc}"
+            fresh, cache_message = _cache_is_fresh(
+                config,
+                regions[region_key],
+                require_samples=require_samples,
+                config_digest=config_digest,
+            )
+            if final_status in ("ok", "cached") and not fresh:
+                final_status, message = "error", cache_message
+        row["initial_status"] = initial_status
+        row["status"] = final_status
+        row["message"] = message
+        rows.append(row)
+    return pd.DataFrame(rows)
+
+
 def analyze_region(
     region_key: str,
     region: RegionConfig,
@@ -202,20 +377,18 @@ def analyze_region(
 
         summary_path = output_dir / SUMMARY_FILENAME
         metadata_path = output_dir / METADATA_FILENAME
-        config_digest = _config_digest(cfg)
-        if not force and summary_path.exists() and metadata_path.exists():
-            with metadata_path.open(encoding="utf-8") as handle:
-                old_metadata = json.load(handle)
-            if (
-                old_metadata.get("analysis_version") == ANALYSIS_VERSION
-                and old_metadata.get("config_sha256") == config_digest
-                and old_metadata.get("od_input_size_bytes") == od_path.stat().st_size
-                and old_metadata.get("od_input_mtime_ns") == od_path.stat().st_mtime_ns
-                and (not save_samples or (output_dir / SAMPLES_FILENAME).exists())
-            ):
+        config_digest = _analysis_config_digest(config)
+        if not force:
+            fresh, _ = _cache_is_fresh(
+                config,
+                region,
+                require_samples=save_samples,
+                config_digest=config_digest,
+            )
+            if fresh:
                 result = {
                     "region_key": region_key,
-                    "status": "skipped",
+                    "status": "cached",
                     "elapsed_seconds": round(time.monotonic() - started, 3),
                     "message": str(summary_path),
                     "updated_at_utc": datetime.now(timezone.utc).isoformat(),
@@ -334,6 +507,7 @@ def analyze_region(
             "od_input_size_bytes": stat.st_size,
             "od_input_mtime_ns": stat.st_mtime_ns,
             "threshold_summary_path": str(_threshold_path(config, region)),
+            "threshold_summary_sha256": _file_digest(_threshold_path(config, region)),
             "distance_basis": distance_basis,
             "fixed_threshold_km": threshold_km,
             "province_gef_kg_per_kwh": province_gef,
@@ -377,14 +551,21 @@ def analyze_region(
     return result
 
 
-def consolidate(config: dict) -> tuple[Path, Path]:
+def consolidate(config: dict, *, require_samples: bool = False) -> tuple[Path, Path]:
     summaries = []
     drivers = []
+    config_digest = _analysis_config_digest(config)
     for _, region in _city_regions(config).items():
         output_dir = _output_dir(config, region)
         summary_path = output_dir / SUMMARY_FILENAME
         drivers_path = output_dir / DRIVERS_FILENAME
-        if summary_path.exists() and drivers_path.exists():
+        fresh, _ = _cache_is_fresh(
+            config,
+            region,
+            require_samples=require_samples,
+            config_digest=config_digest,
+        )
+        if fresh:
             summaries.append(pd.read_csv(summary_path))
             drivers.append(pd.read_csv(drivers_path))
     if not summaries:
@@ -407,6 +588,9 @@ def main() -> None:
     parser.add_argument("--force", action="store_true")
     parser.add_argument("--consolidate", action="store_true")
     parser.add_argument("--list-regions", action="store_true")
+    parser.add_argument("--inventory-out", type=Path)
+    parser.add_argument("--status-report-out", type=Path)
+    parser.add_argument("--preflight-file", type=Path)
     args = parser.parse_args()
 
     config = load_config(PROJECT_ROOT / "experiment.toml", env=args.env)
@@ -415,8 +599,24 @@ def main() -> None:
         for region_key in sorted(regions):
             print(region_key)
         return
+    if args.inventory_out:
+        inventory = inventory_regions(
+            config, require_samples=args.save_samples, force=args.force
+        )
+        _atomic_csv(inventory, args.inventory_out)
+        print(f"Wrote {args.inventory_out}")
+        return
+    if args.status_report_out:
+        if not args.preflight_file:
+            parser.error("--status-report-out requires --preflight-file")
+        report = build_status_report(
+            config, args.preflight_file, require_samples=args.save_samples
+        )
+        _atomic_csv(report, args.status_report_out)
+        print(f"Wrote {args.status_report_out}")
+        return
     if args.consolidate:
-        summary, drivers = consolidate(config)
+        summary, drivers = consolidate(config, require_samples=args.save_samples)
         print(f"Wrote {summary}")
         print(f"Wrote {drivers}")
         return

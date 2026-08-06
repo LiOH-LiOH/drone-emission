@@ -25,7 +25,7 @@ from .vectorized_lca import (
 )
 
 
-ANALYSIS_VERSION = "1.0.0"
+ANALYSIS_VERSION = "1.1.0"
 PARAMETER_ORDER = (
     "kappa",
     "payload_kg",
