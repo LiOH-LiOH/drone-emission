@@ -11892,15 +11892,16 @@ def plot_city_reduction_concentration_scatter(
         histogram_values,
         bins=np.arange(0.0, 105.0, 5.0),
         stacked=True,
+        orientation="horizontal",
         color=[class_colors[category] for category in ("Low", "Medium", "High")],
         edgecolor="white",
         linewidth=0.6,
     )
-    for value, label, alignment in (
-        (lower, "Low / Medium", "right"),
-        (upper, "Medium / High", "left"),
+    for value, label, vertical_alignment in (
+        (lower, "Low / Medium", "top"),
+        (upper, "Medium / High", "bottom"),
     ):
-        ax_distribution.axvline(
+        ax_distribution.axhline(
             value,
             color="#444444",
             linestyle="--",
@@ -11908,12 +11909,12 @@ def plot_city_reduction_concentration_scatter(
             zorder=4,
         )
         ax_distribution.text(
-            value,
             0.98,
+            value,
             f"{label}\n{value:.1f}%",
-            transform=ax_distribution.get_xaxis_transform(),
-            ha=alignment,
-            va="top",
+            transform=ax_distribution.get_yaxis_transform(),
+            ha="right",
+            va=vertical_alignment,
             fontsize=6.5,
             color="#333333",
             zorder=5,
@@ -11924,12 +11925,12 @@ def plot_city_reduction_concentration_scatter(
                 "pad": 0.8,
             },
         )
-    ax_distribution.set_xlim(0, 100)
-    ax_distribution.set_xticks([0, 25, 50, 75, 100])
-    ax_distribution.set_xlabel("Multi-scale Pilot\nCapture Score (%)")
-    ax_distribution.set_ylabel("Number of cities")
+    ax_distribution.set_ylim(0, 100)
+    ax_distribution.set_yticks([0, 25, 50, 75, 100])
+    ax_distribution.set_xlabel("Number of cities")
+    ax_distribution.set_ylabel("Multi-scale Pilot\nCapture Score (%)")
     ax_distribution.spines[["top", "right"]].set_visible(False)
-    ax_distribution.grid(axis="y", color="#E5E5E5", linewidth=0.55, zorder=0)
+    ax_distribution.grid(axis="x", color="#E5E5E5", linewidth=0.55, zorder=0)
     if plot_title:
         fig.suptitle(
             "City emission-reduction potential and drone-order concentration",
