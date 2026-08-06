@@ -15,7 +15,7 @@ import numpy as np
 import pandas as pd
 from patsy import build_design_matrices, dmatrix
 from scipy.stats import spearmanr
-from statsmodels.regression.quantile_regression import QuantReg
+from sklearn.linear_model import QuantileRegressor
 
 from .threshold_resilience import THRESHOLD_RESILIENCE_SCENARIOS
 
@@ -78,10 +78,14 @@ def _fit_quantile_spline(
     matrix = np.asarray(design, dtype=np.float64)
     models = {}
     for quantile in (0.25, 0.50, 0.75):
-        models[quantile] = QuantReg(downside, matrix).fit(
-            q=quantile,
-            max_iter=5000,
-            p_tol=1e-8,
+        models[quantile] = QuantileRegressor(
+            quantile=quantile,
+            alpha=0.0,
+            fit_intercept=False,
+            solver="highs",
+        ).fit(
+            matrix,
+            downside,
         )
     return _QuantileSpline(design.design_info, models)
 

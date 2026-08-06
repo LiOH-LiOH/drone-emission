@@ -1921,7 +1921,7 @@ def plot_threshold_adjusted_resistance_diagnostic(
                bbox_to_anchor=(0.5, 0.005), fontsize=6.7, frameon=False)
     if plot_title:
         fig.suptitle("Conditional resistance separates perturbation response from baseline")
-    fig.tight_layout(rect=(0, 0.16, 1, 1))
+    fig.subplots_adjust(left=0.08, right=0.98, top=0.91, bottom=0.25, wspace=0.24)
     return _finalize(save_path, 300, for_latex, plot_title)
 
 
@@ -2054,7 +2054,7 @@ def plot_threshold_adjusted_resistance_national(
     )
     if plot_title:
         fig.suptitle("Baseline-adjusted perturbation resistance across cities")
-    fig.tight_layout(rect=(0, 0.11, 1, 1))
+    fig.subplots_adjust(left=0.02, right=0.98, top=0.91, bottom=0.20, wspace=0.18)
     return _finalize(save_path, 300, for_latex, plot_title)
 
 
