@@ -11798,7 +11798,8 @@ def plot_city_reduction_concentration_scatter(
         1,
         2,
         figsize=figsize,
-        gridspec_kw={"width_ratios": (3, 1), "wspace": 0.25},
+        layout="constrained",
+        gridspec_kw={"width_ratios": (3, 1)},
     )
     for concentration_class in ("Low", "Medium", "High"):
         group = plot_df[plot_df["concentration_class"].eq(concentration_class)]
@@ -11911,12 +11912,17 @@ def plot_city_reduction_concentration_scatter(
             0.98,
             f"{label}\n{value:.1f}%",
             transform=ax_distribution.get_xaxis_transform(),
-            rotation=90,
             ha=alignment,
             va="top",
-            fontsize=7,
+            fontsize=6.5,
             color="#333333",
             zorder=5,
+            bbox={
+                "facecolor": "white",
+                "edgecolor": "none",
+                "alpha": 0.78,
+                "pad": 0.8,
+            },
         )
     ax_distribution.set_xlim(0, 100)
     ax_distribution.set_xticks([0, 25, 50, 75, 100])
@@ -11930,7 +11936,6 @@ def plot_city_reduction_concentration_scatter(
             fontsize=12,
             fontweight="bold",
         )
-    fig.tight_layout()
     if save_path:
         if for_latex and not save_path.endswith(".pdf"):
             save_path = save_path.rsplit(".", 1)[0] + ".pdf"
