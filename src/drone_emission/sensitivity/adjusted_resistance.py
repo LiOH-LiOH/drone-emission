@@ -255,11 +255,13 @@ def derive_adjusted_resistance(
     }
     rng = np.random.default_rng(bootstrap_seed)
     successful = 0
+    rearranged = 0
     for _ in range(bootstrap_replicates):
         sampled_keys = rng.choice(city_keys, size=len(city_keys), replace=True)
         replicate_ok = True
         replicate_scores = {}
         replicate_classes = {}
+        replicate_rearranged = False
         for scenario in THRESHOLD_RESILIENCE_SCENARIOS:
             source = eligible[eligible["scenario"] == scenario].set_index("region_key")
             sampled = source.loc[sampled_keys]
@@ -275,7 +277,22 @@ def derive_adjusted_resistance(
                 predicted = model.predict(
                     target["baseline_fixed_threshold_reduction_pct"].to_numpy(float)
                 )
-                _validate_predictions(predicted, f"bootstrap/{scenario}")
+                try:
+                    _validate_predictions(predicted, f"bootstrap/{scenario}")
+                except ValueError as error:
+                    if "crossing conditional quantiles" not in str(error):
+                        raise
+                    ordered = np.sort(
+                        np.vstack([predicted[0.25], predicted[0.50], predicted[0.75]]),
+                        axis=0,
+                    )
+                    predicted = {
+                        0.25: ordered[0], 0.50: ordered[1], 0.75: ordered[2]
+                    }
+                    _validate_predictions(
+                        predicted, f"rearranged bootstrap/{scenario}"
+                    )
+                    replicate_rearranged = True
             except (ValueError, np.linalg.LinAlgError):
                 replicate_ok = False
                 break
@@ -289,6 +306,7 @@ def derive_adjusted_resistance(
         if not replicate_ok:
             continue
         successful += 1
+        rearranged += int(replicate_rearranged)
         for scenario in THRESHOLD_RESILIENCE_SCENARIOS:
             bootstrap_scores[scenario].append(replicate_scores[scenario])
             bootstrap_classes[scenario].append(replicate_classes[scenario])
@@ -382,5 +400,6 @@ def derive_adjusted_resistance(
     diagnostics_frame = pd.DataFrame(diagnostics)
     diagnostics_frame["bootstrap_replicates_requested"] = bootstrap_replicates
     diagnostics_frame["bootstrap_replicates_successful"] = successful
+    diagnostics_frame["bootstrap_replicates_rearranged"] = rearranged
     diagnostics_frame["stability_threshold"] = stability_threshold
     return frame, class_summary, diagnostics_frame, amplification
