@@ -10854,7 +10854,7 @@ def plot_demand_distance_feature_correlations(
             plt.Line2D([], [], marker="o", linestyle="none", color=colors[False],
                        label="Not FDR-significant", markersize=5),
         ],
-        loc="lower left", frameon=False, fontsize=7,
+        loc="upper left", frameon=False, fontsize=7,
     )
     if plot_title:
         fig.suptitle("City features associated with modeled demand distance")
