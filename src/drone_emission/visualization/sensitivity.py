@@ -1635,7 +1635,11 @@ def plot_threshold_resilience_typical_city_distributions(
         ax.grid(axis="x", color="#E7E7E7", linewidth=0.45)
         ax.spines[["top", "right", "left"]].set_visible(False)
     axes[-1, 0].set_xlim(bins[0], bins[-1])
-    fig.supxlabel("Lifecycle-emission reduction relative to all e-bike (%)", fontsize=9)
+    fig.supxlabel(
+        "Lifecycle-emission reduction relative to all e-bike (%)",
+        fontsize=9,
+        y=0.06,
+    )
     fig.supylabel("Probability density", fontsize=9)
     handles = [
         Line2D([0], [0], color=THRESHOLD_RESILIENCE_SCENARIO_COLORS["independent"],
@@ -1647,10 +1651,10 @@ def plot_threshold_resilience_typical_city_distributions(
         Line2D([0], [0], color="#222222", linewidth=0.8, label="Zero reduction"),
     ]
     fig.legend(handles=handles, loc="lower center", ncol=4,
-               bbox_to_anchor=(0.5, -0.005), fontsize=7, frameon=False)
+               bbox_to_anchor=(0.5, 0.005), fontsize=7, frameon=False)
     if plot_title:
         fig.suptitle("Fixed-threshold reduction distributions in six typical cities")
-    fig.tight_layout(rect=(0.025, 0.075, 1, 1))
+    fig.tight_layout(rect=(0.025, 0.105, 1, 1))
     return _finalize(save_path, 300, for_latex, plot_title)
 
 
