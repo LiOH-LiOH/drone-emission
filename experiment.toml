@@ -28,6 +28,37 @@ sobol_n = 64             # Draft Saltelli sample size (yields N*(d+2) per-city L
 sobol_seed = 42          # Seed for reproducible Saltelli draws
 sobol_num_resamples = 50 # Draft bootstrap resamples for Sobol confidence intervals
 
+# Fixed-threshold probabilistic robustness analysis. This is independent of
+# the legacy Sobol stage and consumes analysis/distance_threshold/summary.csv.
+[threshold_resilience]
+n_samples = 10000
+seed = 42
+distance_basis = "road"
+positive_tolerance_pct = 1e-9
+correlated_stress = true
+stress_spearman_rho = 0.5
+
+# Triangular distributions are [minimum, mode, maximum]. Modes are checked
+# against the effective runtime vehicle configuration before sampling.
+[threshold_resilience.distributions]
+kappa = [0.60, 0.7692307692307692, 0.90]
+payload_kg = [0.70, 1.00, 1.30]
+drone_hover_s = [10.0, 10.0, 60.0]
+headwind_mps = [0.0, 0.0, 7.0]
+drone_cruise_kmh = [50.0, 60.0, 70.0]
+drone_energy_mult = [0.90, 1.00, 1.10]
+ebike_energy_mult = [0.90, 1.00, 1.10]
+drone_lifespan_yr = [2.0, 4.0, 6.0]
+drone_battery_lifespan_yr = [1.0, 2.0, 3.0]
+ebike_lifespan_yr = [3.0, 4.0, 5.0]
+ebike_battery_lifespan_yr = [1.5, 2.0, 2.5]
+drone_utilization_rate = [0.50, 1.00, 1.20]
+ebike_utilization_rate = [0.75, 1.00, 1.25]
+drone_production_co2_per_kg = [7.0, 9.3, 11.6]
+drone_battery_co2_per_kwh = [100.0, 141.0, 180.0]
+ebike_production_co2_per_kg = [4.2375, 5.65, 7.0625]
+ebike_battery_co2_per_kwh = [80.25, 107.0, 133.75]
+
 # Equity analysis parameters
 [equity_params]
 unit_lat = 0.02          # ~2.2 km grid cell height

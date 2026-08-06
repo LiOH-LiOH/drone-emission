@@ -1,4 +1,9 @@
-"""Global Sobol sensitivity (first + total order) and Monte Carlo bounds.
+"""Legacy global Sobol sensitivity and Saltelli-sample bounds.
+
+This module is retained for compatibility with historical outputs and figures.
+Its Saltelli design must not be interpreted as the fixed-threshold probability
+of retaining a positive reduction.  New probabilistic policy-robustness work
+uses :mod:`sensitivity.threshold_resilience`.
 
 Replaces the 4-mechanism Shapley decomposition as the main-text §4 robustness
 artifact. Where ``shapley.py`` runs a 2^4 coalition enumeration of binary

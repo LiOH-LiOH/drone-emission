@@ -52,6 +52,8 @@ class EbikeScenario:
         n_orders_per_delivery: Orders amortized per delivery trip.
         include_production: If False, zero out production amortization.
         include_use: If False, zero out use-phase emissions.
+        utilization_mult: Multiplier on annual deliveries used to amortize
+            production and end-of-life emissions.
     """
 
     kappa: float = 1.0
@@ -64,6 +66,7 @@ class EbikeScenario:
     n_orders_per_delivery: int = 1
     include_production: bool = True
     include_use: bool = True
+    utilization_mult: float = 1.0
 
 
 @dataclass
@@ -167,12 +170,17 @@ def compute_ebike_per_order_parts_g(
     production_annual_kg, eol_annual_kg = _ebike_lifecycle_annual_parts_kg(
         p, lifespan, battery_lifespan
     )
+    if s.utilization_mult <= 0:
+        raise ValueError("utilization_mult must be positive")
+    denominator = (
+        deliveries_per_day * p.working_days_per_year * s.utilization_mult
+    )
     prod_g = (
         production_annual_kg
-        / (deliveries_per_day * p.working_days_per_year)
+        / denominator
         * 1000.0
     )
-    eol_g = eol_annual_kg / (deliveries_per_day * p.working_days_per_year) * 1000.0
+    eol_g = eol_annual_kg / denominator * 1000.0
     if not s.include_production:
         prod_g = np.zeros_like(d_eff)
         eol_g = np.zeros_like(d_eff)
@@ -257,6 +265,8 @@ def compute_drone_per_order_parts_g(
         p, lifespan, battery_lifespan
     )
     denominator = deliveries_per_day * p.working_days_per_year * s.utilization_mult
+    if s.utilization_mult <= 0:
+        raise ValueError("utilization_mult must be positive")
     prod_g = production_annual_kg / denominator * 1000.0
     eol_g = eol_annual_kg / denominator * 1000.0
     if not s.include_production:
