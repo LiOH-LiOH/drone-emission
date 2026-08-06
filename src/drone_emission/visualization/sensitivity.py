@@ -29,6 +29,7 @@ import pandas as pd
 from matplotlib.colors import BoundaryNorm, ListedColormap
 from matplotlib.lines import Line2D
 from matplotlib.patches import Patch
+from matplotlib.ticker import FuncFormatter
 
 from ._utils import _add_title_suffix
 
@@ -1735,6 +1736,473 @@ def plot_threshold_resilience_driver_forest(
     if plot_title:
         ax.set_title("Cross-city drivers of fixed-threshold resilience")
     fig.tight_layout()
+    return _finalize(save_path, 300, for_latex, plot_title)
+
+
+# ---------------------------------------------------------------------------
+# Baseline-relative threshold-retention plots
+# ---------------------------------------------------------------------------
+
+THRESHOLD_RETENTION_CLASS_COLORS = (
+    "#C95A53",
+    "#E6B85C",
+    "#7DB7B2",
+    "#247A73",
+)
+THRESHOLD_RETENTION_CLASS_LABELS = (
+    "<0: adverse tail reverses reduction",
+    "0–<50%: retains less than half",
+    "50–<100%: retains half to full baseline",
+    "≥100%: meets or exceeds baseline",
+)
+THRESHOLD_RETENTION_CITY_COLORS = {
+    "beijing": "#3775BA",
+    "shanghai": "#D9822B",
+    "guangzhou": "#735DA5",
+    "kunming": "#3D8C86",
+    "chizhou": "#B05757",
+    "zhongwei": "#707070",
+}
+
+
+def classify_threshold_baseline_retention(values) -> np.ndarray:
+    """Classify signed P05 baseline-retention ratios into four semantic bins."""
+    array = np.asarray(values, dtype=float)
+    result = np.full(array.shape, np.nan)
+    finite = np.isfinite(array)
+    result[finite] = np.select(
+        (
+            array[finite] < 0.0,
+            array[finite] < 0.5,
+            array[finite] < 1.0,
+        ),
+        (0, 1, 2),
+        default=3,
+    )
+    return result
+
+
+def validate_threshold_baseline_retention_summary(
+    summary: pd.DataFrame,
+    expected_cities: int | None = None,
+) -> pd.DataFrame:
+    """Validate and pivot the two-scenario baseline-retention summary."""
+    required = {
+        "region_key",
+        "region_name_cn",
+        "region_name_en",
+        "scenario",
+        "n_samples",
+        "baseline_fixed_threshold_reduction_pct",
+        "retention_eligible",
+        "baseline_retention_p05",
+        "baseline_retention_p50",
+        "baseline_retention_p95",
+    }
+    missing = sorted(required - set(summary.columns))
+    if missing:
+        raise KeyError(f"baseline-retention summary missing columns: {missing}")
+    frame = summary[summary["scenario"].isin(THRESHOLD_RESILIENCE_SCENARIOS)].copy()
+    if frame.duplicated(["region_key", "scenario"]).any():
+        raise ValueError("baseline-retention summary contains duplicate city/scenario rows")
+    counts = frame.groupby("region_key")["scenario"].nunique()
+    incomplete = sorted(counts[counts != 2].index)
+    if incomplete:
+        raise ValueError(f"cities missing one baseline-retention scenario: {incomplete}")
+    n_cities = frame["region_key"].nunique()
+    if expected_cities is not None and n_cities != expected_cities:
+        raise ValueError(f"expected {expected_cities} cities, found {n_cities}")
+    frame["retention_eligible"] = frame["retention_eligible"].astype(bool)
+    eligible = frame["retention_eligible"]
+    for column in (
+        "baseline_retention_p05",
+        "baseline_retention_p50",
+        "baseline_retention_p95",
+    ):
+        frame[column] = pd.to_numeric(frame[column], errors="coerce")
+        if not np.isfinite(frame.loc[eligible, column]).all():
+            raise ValueError(f"eligible rows contain non-finite {column}")
+        if frame.loc[~eligible, column].notna().any():
+            raise ValueError(f"ineligible rows must not contain {column}")
+    identifiers = frame[
+        ["region_key", "region_name_cn", "region_name_en"]
+    ].drop_duplicates("region_key")
+    baseline = frame[frame["scenario"] == "independent"][[
+        "region_key", "baseline_fixed_threshold_reduction_pct", "retention_eligible"
+    ]]
+    p05 = frame.pivot(
+        index="region_key", columns="scenario", values="baseline_retention_p05"
+    ).reset_index()
+    wide = identifiers.merge(baseline, on="region_key", validate="one_to_one")
+    return wide.merge(p05, on="region_key", validate="one_to_one")
+
+
+def validate_threshold_baseline_retention_curve(curve: pd.DataFrame) -> pd.DataFrame:
+    """Validate monotone city retention curves and return eligible rows."""
+    required = {
+        "region_key",
+        "scenario",
+        "retention_eligible",
+        "retention_target_fraction",
+        "prob_retain_target",
+    }
+    missing = sorted(required - set(curve.columns))
+    if missing:
+        raise KeyError(f"baseline-retention curve missing columns: {missing}")
+    frame = curve[curve["scenario"].isin(THRESHOLD_RESILIENCE_SCENARIOS)].copy()
+    frame["retention_eligible"] = frame["retention_eligible"].astype(bool)
+    eligible = frame[frame["retention_eligible"]].copy()
+    eligible["retention_target_fraction"] = pd.to_numeric(
+        eligible["retention_target_fraction"], errors="coerce"
+    )
+    eligible["prob_retain_target"] = pd.to_numeric(
+        eligible["prob_retain_target"], errors="coerce"
+    )
+    if not np.isfinite(
+        eligible[["retention_target_fraction", "prob_retain_target"]]
+    ).all().all():
+        raise ValueError("eligible retention curves contain non-finite values")
+    if not eligible["prob_retain_target"].between(0, 1).all():
+        raise ValueError("retention probabilities must lie within [0, 1]")
+    duplicates = eligible.duplicated(
+        ["region_key", "scenario", "retention_target_fraction"]
+    )
+    if duplicates.any():
+        raise ValueError("retention curves contain duplicate target rows")
+    expected_targets = tuple(np.round(np.linspace(0.0, 1.0, 21), 2))
+    target_sets = eligible.groupby(["region_key", "scenario"])[
+        "retention_target_fraction"
+    ].apply(lambda values: tuple(np.round(np.sort(values), 2)))
+    if not target_sets.map(lambda values: values == expected_targets).all():
+        raise ValueError("eligible retention curves must contain the 0.05 target grid")
+    ordered = eligible.sort_values(
+        ["region_key", "scenario", "retention_target_fraction"]
+    )
+    increases = ordered.groupby(["region_key", "scenario"])[
+        "prob_retain_target"
+    ].diff() > 1e-12
+    if increases.any():
+        raise ValueError("retention curves must be non-increasing")
+    return eligible
+
+
+def _format_signed_retention(value, _position=None) -> str:
+    return f"{value * 100:g}%"
+
+
+def _apply_retention_symlog(ax, axis: str = "both") -> None:
+    if axis in {"x", "both"}:
+        ax.set_xscale("symlog", linthresh=0.25, linscale=0.8)
+        ax.xaxis.set_major_formatter(FuncFormatter(_format_signed_retention))
+    if axis in {"y", "both"}:
+        ax.set_yscale("symlog", linthresh=0.25, linscale=0.8)
+        ax.yaxis.set_major_formatter(FuncFormatter(_format_signed_retention))
+
+
+def plot_threshold_baseline_retention_national(
+    summary: pd.DataFrame,
+    save_path: str = None,
+    figsize: tuple = (14.5, 5.2),
+    for_latex: bool = False,
+    plot_title: bool = False,
+):
+    """Map signed P05 baseline retention and compare both scenarios.
+
+    Args:
+        summary: Consolidated two-scenario baseline-retention summary.
+        save_path: Path to save figure. Shows plot if None.
+        figsize: Figure size tuple.
+        for_latex: If True, save as PDF.
+        plot_title: If True, show title.
+    """
+    from visualization.regions import _batch_city_to_adcode, plot_regions_on_china_map
+
+    wide = validate_threshold_baseline_retention_summary(summary, expected_cities=314)
+    unresolved = sorted(
+        set(wide["region_name_cn"])
+        - set(_batch_city_to_adcode(wide["region_name_cn"].tolist()))
+    )
+    if unresolved:
+        raise ValueError(f"valid retention cities unresolved for mapping: {unresolved}")
+    cmap = ListedColormap(THRESHOLD_RETENTION_CLASS_COLORS)
+    norm = BoundaryNorm((-0.5, 0.5, 1.5, 2.5, 3.5), cmap.N)
+    fig, axes = plt.subplots(
+        1, 3, figsize=figsize, gridspec_kw={"width_ratios": [1.08, 1.08, 1.0]}
+    )
+    scenario_specs = (
+        ("independent", "Independent perturbations"),
+        ("correlated_adverse_stress", "Correlated adverse stress"),
+    )
+    for panel, (scenario, label) in enumerate(scenario_specs):
+        map_df = wide[["region_key", "region_name_cn", scenario]].copy()
+        map_df["retention_class"] = classify_threshold_baseline_retention(
+            map_df[scenario]
+        )
+        plot_regions_on_china_map(
+            df=map_df,
+            color_by="retention_class",
+            ax=axes[panel],
+            plot_title=False,
+            cmap=cmap,
+            norm=norm,
+            draw_colorbar=False,
+            draw_legend=False,
+        )
+        _style_resilience_map_axis(axes[panel])
+        counts = map_df["retention_class"].value_counts().reindex(range(4), fill_value=0)
+        axes[panel].text(
+            0.5, 1.01, label, transform=axes[panel].transAxes,
+            ha="center", va="bottom", fontsize=9, fontweight="bold",
+        )
+        axes[panel].text(
+            0.02, 0.02,
+            f"<0: {counts[0]}   0–<50%: {counts[1]}   "
+            f"50–<100%: {counts[2]}   ≥100%: {counts[3]}",
+            transform=axes[panel].transAxes, fontsize=6.1, ha="left", va="bottom",
+            bbox=dict(facecolor="white", edgecolor="none", alpha=0.86, pad=1.5),
+        )
+        axes[panel].text(
+            -0.03, 1.01, chr(ord("a") + panel), transform=axes[panel].transAxes,
+            fontsize=11, fontweight="bold", ha="right", va="bottom",
+        )
+
+    eligible = wide[wide["retention_eligible"]].copy()
+    ax = axes[2]
+    x = eligible["independent"].to_numpy(dtype=float)
+    y = eligible["correlated_adverse_stress"].to_numpy(dtype=float)
+    classes = classify_threshold_baseline_retention(y).astype(int)
+    for class_id, color, label in zip(
+        range(4), THRESHOLD_RETENTION_CLASS_COLORS, THRESHOLD_RETENTION_CLASS_LABELS
+    ):
+        mask = classes == class_id
+        ax.scatter(
+            x[mask], y[mask], s=18, alpha=0.68, color=color,
+            edgecolor="white", linewidth=0.25, label=label, zorder=3,
+        )
+    data_min = float(min(x.min(), y.min()))
+    data_max = float(max(x.max(), y.max()))
+    ax.plot((data_min, data_max), (data_min, data_max), linestyle="--",
+            color="#555555", linewidth=0.8, zorder=1)
+    for threshold in (0.0, 0.5, 1.0):
+        ax.axvline(threshold, color="#999999", linewidth=0.5, linestyle=":")
+        ax.axhline(threshold, color="#999999", linewidth=0.5, linestyle=":")
+    for region_key, offset in {
+        "beijing": (5, 6), "shanghai": (5, -11), "guangzhou": (5, 6),
+        "kunming": (5, 6), "chizhou": (-32, 6), "zhongwei": (5, 6),
+    }.items():
+        row = eligible[eligible["region_key"] == region_key]
+        if row.empty:
+            continue
+        item = row.iloc[0]
+        ax.annotate(
+            item["region_name_en"],
+            (item["independent"], item["correlated_adverse_stress"]),
+            xytext=offset, textcoords="offset points", fontsize=6.3,
+            arrowprops=dict(arrowstyle="-", color="#777777", linewidth=0.45),
+        )
+    _apply_retention_symlog(ax)
+    ax.set_xlabel("Independent P05 baseline retention")
+    ax.set_ylabel("Stress P05 baseline retention")
+    ax.grid(color="#E7E7E7", linewidth=0.45, zorder=0)
+    ax.text(-0.12, 1.01, "c", transform=ax.transAxes, fontsize=11,
+            fontweight="bold", ha="right", va="bottom")
+
+    handles = [
+        Patch(facecolor=color, edgecolor="none", label=label)
+        for color, label in zip(
+            THRESHOLD_RETENTION_CLASS_COLORS, THRESHOLD_RETENTION_CLASS_LABELS
+        )
+    ]
+    handles.append(Patch(facecolor="#CCCCCC", edgecolor="none", label="Undefined"))
+    fig.legend(handles=handles, loc="lower center", ncol=5,
+               bbox_to_anchor=(0.5, 0.025), fontsize=6.6, frameon=False)
+    fig.text(
+        0.01, 0.005,
+        "P05 is the signed 5th percentile of R/R$_0$; 313/314 valid-result cities "
+        "have a positive baseline.",
+        fontsize=6.3, ha="left", va="bottom", color="#555555",
+    )
+    if plot_title:
+        fig.suptitle("Conservative retention of each city's deterministic reduction")
+    fig.tight_layout(rect=(0, 0.11, 1, 1))
+    return _finalize(save_path, 300, for_latex, plot_title)
+
+
+def plot_threshold_baseline_retention_curves(
+    curve: pd.DataFrame,
+    save_path: str = None,
+    figsize: tuple = (11.0, 4.8),
+    for_latex: bool = False,
+    plot_title: bool = False,
+):
+    """Show national and representative-city baseline-retention curves.
+
+    Args:
+        curve: Long-form baseline-retention probability curves.
+        save_path: Path to save figure. Shows plot if None.
+        figsize: Figure size tuple.
+        for_latex: If True, save as PDF.
+        plot_title: If True, show title.
+    """
+    eligible = validate_threshold_baseline_retention_curve(curve)
+    missing_cities = sorted(
+        set(THRESHOLD_RESILIENCE_TYPICAL_CITIES) - set(eligible["region_key"])
+    )
+    if missing_cities:
+        raise ValueError(f"representative cities missing from retention curves: {missing_cities}")
+    fig, axes = plt.subplots(1, 2, figsize=figsize, sharex=True, sharey=True)
+    scenario_specs = (
+        ("independent", "Independent perturbations"),
+        ("correlated_adverse_stress", "Correlated adverse stress"),
+    )
+    for panel, (ax, (scenario, label)) in enumerate(zip(axes, scenario_specs)):
+        subset = eligible[eligible["scenario"] == scenario]
+        national = subset.groupby("retention_target_fraction")[
+            "prob_retain_target"
+        ].quantile([0.25, 0.5, 0.75]).unstack()
+        target = national.index.to_numpy(dtype=float)
+        ax.fill_between(target, national[0.25], national[0.75],
+                        color="#BFC5CC", alpha=0.45, linewidth=0)
+        ax.plot(target, national[0.5], color="#222222", linewidth=2.0,
+                label="National city median", zorder=4)
+        for city in THRESHOLD_RESILIENCE_TYPICAL_CITIES:
+            city_curve = subset[subset["region_key"] == city].sort_values(
+                "retention_target_fraction"
+            )
+            ax.plot(
+                city_curve["retention_target_fraction"],
+                city_curve["prob_retain_target"],
+                color=THRESHOLD_RETENTION_CITY_COLORS[city], linewidth=1.1,
+                alpha=0.9, label=THRESHOLD_RESILIENCE_CITY_LABELS[city],
+            )
+        for threshold in (0.25, 0.5, 0.75, 1.0):
+            ax.axvline(threshold, color="#DDDDDD", linewidth=0.5, zorder=0)
+        ax.set_xlim(0, 1)
+        ax.set_ylim(0, 1.01)
+        ax.xaxis.set_major_formatter(FuncFormatter(
+            lambda value, _position: f"{value:.0%}"
+        ))
+        ax.yaxis.set_major_formatter(FuncFormatter(
+            lambda value, _position: f"{value:.0%}"
+        ))
+        ax.grid(axis="y", color="#E7E7E7", linewidth=0.45)
+        ax.spines[["top", "right"]].set_visible(False)
+        ax.text(0.5, 1.02, label, transform=ax.transAxes, ha="center",
+                va="bottom", fontsize=9, fontweight="bold")
+        ax.text(-0.06, 1.02, chr(ord("a") + panel), transform=ax.transAxes,
+                fontsize=11, fontweight="bold", ha="right", va="bottom")
+    axes[0].set_ylabel("Probability of retaining target baseline fraction")
+    fig.supxlabel("Target fraction of deterministic reduction baseline", y=0.125,
+                  fontsize=9)
+    handles, labels = axes[0].get_legend_handles_labels()
+    fig.legend(handles, labels, loc="lower center", ncol=4,
+               bbox_to_anchor=(0.5, 0.025), fontsize=7, frameon=False)
+    fig.text(0.01, 0.005, "Shading: national interquartile range across 313 cities.",
+             fontsize=6.3, color="#555555", ha="left", va="bottom")
+    if plot_title:
+        fig.suptitle("Probability of retaining each city's current reduction estimate")
+    fig.tight_layout(rect=(0, 0.18, 1, 1))
+    return _finalize(save_path, 300, for_latex, plot_title)
+
+
+def plot_threshold_baseline_retention_typology(
+    summary: pd.DataFrame,
+    save_path: str = None,
+    figsize: tuple = (11.0, 5.0),
+    for_latex: bool = False,
+    plot_title: bool = False,
+):
+    """Relate deterministic reduction magnitude to conservative retention.
+
+    Args:
+        summary: Consolidated two-scenario baseline-retention summary.
+        save_path: Path to save figure. Shows plot if None.
+        figsize: Figure size tuple.
+        for_latex: If True, save as PDF.
+        plot_title: If True, show title.
+    """
+    from scipy.stats import spearmanr
+
+    frame = summary[summary["scenario"].isin(THRESHOLD_RESILIENCE_SCENARIOS)].copy()
+    validate_threshold_baseline_retention_summary(frame)
+    frame = frame[frame["retention_eligible"].astype(bool)].copy()
+    baseline_median = float(frame["baseline_fixed_threshold_reduction_pct"].median())
+    quadrant_colors = ("#D6D6D6", "#E6B85C", "#7DB7B2", "#3775BA")
+    quadrant_labels = (
+        "Below-median baseline / retention",
+        "Above-median baseline / below-median retention",
+        "Below-median baseline / above-median retention",
+        "Above-median baseline / retention",
+    )
+    fig, axes = plt.subplots(1, 2, figsize=figsize, sharex=True, sharey=False)
+    scenario_specs = (
+        ("independent", "Independent perturbations"),
+        ("correlated_adverse_stress", "Correlated adverse stress"),
+    )
+    for panel, (ax, (scenario, label)) in enumerate(zip(axes, scenario_specs)):
+        subset = frame[frame["scenario"] == scenario].copy()
+        retention_median = float(subset["baseline_retention_p05"].median())
+        high_baseline = (
+            subset["baseline_fixed_threshold_reduction_pct"] >= baseline_median
+        )
+        high_retention = subset["baseline_retention_p05"] >= retention_median
+        subset["quadrant"] = high_baseline.astype(int) + 2 * high_retention.astype(int)
+        for quadrant, color, quadrant_label in zip(
+            range(4), quadrant_colors, quadrant_labels
+        ):
+            rows = subset[subset["quadrant"] == quadrant]
+            ax.scatter(
+                rows["baseline_fixed_threshold_reduction_pct"],
+                rows["baseline_retention_p05"],
+                s=20, alpha=0.68, color=color, edgecolor="white", linewidth=0.3,
+                label=f"{quadrant_label} (n={len(rows)})",
+            )
+        ax.axvline(baseline_median, color="#666666", linewidth=0.7, linestyle="--")
+        ax.axhline(retention_median, color="#666666", linewidth=0.7, linestyle="--")
+        ax.axhline(0, color="#222222", linewidth=0.7)
+        for region_key, offset in {
+            "beijing": (5, 6), "shanghai": (5, -11), "guangzhou": (5, 6),
+            "kunming": (5, 6), "chizhou": (-34, 6), "zhongwei": (5, 6),
+        }.items():
+            row = subset[subset["region_key"] == region_key]
+            if row.empty:
+                continue
+            item = row.iloc[0]
+            ax.annotate(
+                item["region_name_en"],
+                (item["baseline_fixed_threshold_reduction_pct"],
+                 item["baseline_retention_p05"]),
+                xytext=offset, textcoords="offset points", fontsize=6.3,
+                arrowprops=dict(arrowstyle="-", color="#777777", linewidth=0.45),
+            )
+        rho, pvalue = spearmanr(
+            subset["baseline_fixed_threshold_reduction_pct"],
+            subset["baseline_retention_p05"],
+        )
+        ax.text(
+            0.02, 0.02, f"Spearman ρ={rho:.2f}; p={pvalue:.2g}",
+            transform=ax.transAxes, fontsize=7, ha="left", va="bottom",
+        )
+        _apply_retention_symlog(ax, axis="y")
+        ax.set_xlabel("Deterministic reduction baseline (%)")
+        ax.set_ylabel("P05 baseline retention")
+        ax.grid(color="#E7E7E7", linewidth=0.45, zorder=0)
+        ax.spines[["top", "right"]].set_visible(False)
+        ax.text(0.5, 1.02, label, transform=ax.transAxes, ha="center",
+                va="bottom", fontsize=9, fontweight="bold")
+        ax.text(-0.06, 1.02, chr(ord("a") + panel), transform=ax.transAxes,
+                fontsize=11, fontweight="bold", ha="right", va="bottom")
+    handles, labels = axes[0].get_legend_handles_labels()
+    fig.legend(handles, labels, loc="lower center", ncol=2,
+               bbox_to_anchor=(0.5, 0.025), fontsize=6.8, frameon=False)
+    fig.text(
+        0.01, 0.005,
+        "Quadrants are relative typologies split at national medians, not policy thresholds.",
+        fontsize=6.3, color="#555555", ha="left", va="bottom",
+    )
+    if plot_title:
+        fig.suptitle("High deterministic reduction does not necessarily imply high retention")
+    fig.tight_layout(rect=(0, 0.16, 1, 1))
     return _finalize(save_path, 300, for_latex, plot_title)
 
 
