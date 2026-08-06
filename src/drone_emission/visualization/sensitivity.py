@@ -1630,13 +1630,24 @@ def plot_threshold_resilience_typology(
         ),
     )
     annotation_offsets = {
-        "beijing": (5, 7),
-        "shanghai": (-35, -13),
-        "shenzhen": (5, -13),
-        "chongqing": (5, 7),
-        "guangzhou": (5, -13),
-        "chengdu": (5, 7),
-        "tianjin": (-29, 8),
+        "independent": {
+            "beijing": (-8, 17),
+            "shanghai": (-45, 13),
+            "shenzhen": (10, -18),
+            "chongqing": (5, 8),
+            "guangzhou": (5, -15),
+            "chengdu": (5, 8),
+            "tianjin": (-43, -17),
+        },
+        "correlated_adverse_stress": {
+            "beijing": (-5, 17),
+            "shanghai": (-45, -17),
+            "shenzhen": (12, -19),
+            "chongqing": (5, 8),
+            "guangzhou": (5, -17),
+            "chengdu": (5, 8),
+            "tianjin": (-45, 13),
+        },
     }
     fig, axes = plt.subplots(1, 2, figsize=figsize, sharex=True, sharey=True)
     for panel, (ax, (scenario, label)) in enumerate(zip(axes, scenario_specs)):
@@ -1708,7 +1719,7 @@ def plot_threshold_resilience_typology(
                     item["baseline_fixed_threshold_reduction_pct"],
                     item["prob_reduction_positive"],
                 ),
-                xytext=annotation_offsets[region_key],
+                xytext=annotation_offsets[scenario][region_key],
                 textcoords="offset points",
                 fontsize=6.2,
                 arrowprops=dict(arrowstyle="-", color="#777777", linewidth=0.45),
