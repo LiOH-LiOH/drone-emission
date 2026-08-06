@@ -2155,14 +2155,14 @@ def plot_threshold_baseline_retention_typology(
                 rows["baseline_fixed_threshold_reduction_pct"],
                 rows["baseline_retention_p05"],
                 s=20, alpha=0.68, color=color, edgecolor="white", linewidth=0.3,
-                label=f"{quadrant_label} (n={len(rows)})",
+                label=quadrant_label,
             )
         ax.axvline(baseline_median, color="#666666", linewidth=0.7, linestyle="--")
         ax.axhline(retention_median, color="#666666", linewidth=0.7, linestyle="--")
         ax.axhline(0, color="#222222", linewidth=0.7)
         for region_key, offset in {
             "beijing": (5, 6), "shanghai": (5, -11), "guangzhou": (5, 6),
-            "kunming": (5, 6), "chizhou": (-34, 6), "zhongwei": (5, 6),
+            "kunming": (5, 6), "chizhou": (-34, 6), "zhongwei": (5, 15),
         }.items():
             row = subset[subset["region_key"] == region_key]
             if row.empty:
@@ -2180,10 +2180,12 @@ def plot_threshold_baseline_retention_typology(
             subset["baseline_retention_p05"],
         )
         ax.text(
-            0.02, 0.02, f"Spearman ρ={rho:.2f}; p={pvalue:.2g}",
-            transform=ax.transAxes, fontsize=7, ha="left", va="bottom",
+            0.02, 0.98, f"Spearman ρ={rho:.2f}; p={pvalue:.2g}",
+            transform=ax.transAxes, fontsize=7, ha="left", va="top",
+            bbox=dict(facecolor="white", edgecolor="none", alpha=0.82, pad=1.5),
         )
         _apply_retention_symlog(ax, axis="y")
+        ax.margins(y=0.08)
         ax.set_xlabel("Deterministic reduction baseline (%)")
         ax.set_ylabel("P05 baseline retention")
         ax.grid(color="#E7E7E7", linewidth=0.45, zorder=0)
