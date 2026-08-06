@@ -430,6 +430,18 @@ def _analyze_city(task: tuple[dict, str]) -> dict:
             for margin in SENSITIVITY_MARGINS_PCT
         }
         primary = scenario_results[0.0]
+        if not np.isfinite(primary["pilot_concentration_score_pct"]):
+            return {
+                **base,
+                "status": "skipped",
+                "skip_reason": "no_drone_favorable_orders",
+                "eligible_od_count": primary["eligible_od_count"],
+                "eligible_annual_orders": primary["eligible_annual_orders"],
+                "total_annual_orders": primary["total_annual_orders"],
+                "eligible_order_share_pct": primary["eligible_order_share_pct"],
+                "od_file_size_bytes": od_path.stat().st_size,
+                "runtime_seconds": time.perf_counter() - started,
+            }
         result = {
             **base,
             "status": "ok",

@@ -11791,7 +11791,7 @@ def plot_city_pilot_concentration_distribution(
     ax_distribution.text(
         0.02,
         0.98,
-        f"a  Distribution\n{len(plot_df)} of {configured_city_count} cities",
+        f"a  Distribution\n{len(plot_df)} scored of {configured_city_count} cities",
         transform=ax_distribution.transAxes,
         ha="left",
         va="top",
