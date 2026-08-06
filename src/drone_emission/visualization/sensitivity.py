@@ -1907,9 +1907,13 @@ def plot_threshold_adjusted_resistance_diagnostic(
         ax.text(-0.06, 1.02, chr(ord("a") + panel), transform=ax.transAxes,
                 fontsize=11, fontweight="bold", ha="right", va="bottom")
     if scatter is not None:
-        cbar = fig.colorbar(scatter, ax=axes, orientation="horizontal", fraction=0.045,
-                            pad=0.13, aspect=35, extend="both")
-        cbar.set_label("Baseline-adjusted perturbation resistance score")
+        colorbar_ax = fig.add_axes((0.25, 0.13, 0.50, 0.035))
+        cbar = fig.colorbar(
+            scatter, cax=colorbar_ax, orientation="horizontal", extend="both"
+        )
+        cbar.set_label(
+            "Baseline-adjusted perturbation resistance score", labelpad=2
+        )
     handles = [
         Line2D([0], [0], color="#333333", linewidth=1.0, label="Conditional median"),
         Patch(facecolor="#B8B8B8", alpha=0.25, edgecolor="none",
@@ -1918,10 +1922,10 @@ def plot_threshold_adjusted_resistance_diagnostic(
                markeredgecolor="#111111", label="Classification unstable"),
     ]
     fig.legend(handles=handles, loc="lower center", ncol=3,
-               bbox_to_anchor=(0.5, 0.005), fontsize=6.7, frameon=False)
+               bbox_to_anchor=(0.5, 0.002), fontsize=6.7, frameon=False)
     if plot_title:
         fig.suptitle("Conditional resistance separates perturbation response from baseline")
-    fig.subplots_adjust(left=0.08, right=0.98, top=0.91, bottom=0.25, wspace=0.24)
+    fig.subplots_adjust(left=0.08, right=0.98, top=0.91, bottom=0.29, wspace=0.24)
     return _finalize(save_path, 300, for_latex, plot_title)
 
 
