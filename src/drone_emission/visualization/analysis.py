@@ -10717,40 +10717,31 @@ def plot_r2_core_coefficient_robustness(
 
 
 DISTANCE_THRESHOLD_TYPICAL_CITIES = (
+    "chengdu",
+    "guangzhou",
     "beijing",
     "shanghai",
-    "guangzhou",
-    "kunming",
-    "chizhou",
-    "zhongwei",
 )
 DISTANCE_THRESHOLD_CITY_LABELS = {
+    "chengdu": "Chengdu",
+    "guangzhou": "Guangzhou",
     "beijing": "Beijing",
     "shanghai": "Shanghai",
-    "guangzhou": "Guangzhou",
-    "kunming": "Kunming",
-    "chizhou": "Chizhou",
-    "zhongwei": "Zhongwei",
 }
 DISTANCE_THRESHOLD_BASIS_COLORS = {
     "road": "#32688E",
     "straight": "#D9822B",
 }
 DISTANCE_THRESHOLD_LABEL_OFFSETS = {
+    "chengdu": (6, 7),
+    "guangzhou": (6, 7),
     "beijing": (6, 7),
     "shanghai": (6, -11),
-    "guangzhou": (6, 7),
-    "kunming": (6, -11),
-    "chizhou": (6, 7),
-    "zhongwei": (6, -11),
 }
 DISTANCE_THRESHOLD_COMPARISON_LABEL_OFFSETS = {
     1: {
         "beijing": (-7, 9),
         "shanghai": (7, -14),
-    },
-    2: {
-        "kunming": (-7, -13),
     },
 }
 
@@ -11051,11 +11042,11 @@ def plot_distance_threshold_typical_city_curves(
     curve_df: pd.DataFrame,
     summary_df: pd.DataFrame,
     save_path: str = None,
-    figsize: tuple = (14.2, 8.2),
+    figsize: tuple = (10.2, 8.2),
     for_latex: bool = False,
     plot_title: bool = False,
 ):
-    """Plot threshold-response curves for six representative cities.
+    """Plot threshold-response curves for four representative cities.
 
     Args:
         curve_df: Long-form compact threshold-response curves.
@@ -11107,7 +11098,7 @@ def plot_distance_threshold_typical_city_curves(
 
     fig, axes = plt.subplots(
         2,
-        3,
+        2,
         figsize=figsize,
         sharex=True,
         sharey=True,
