@@ -2020,12 +2020,6 @@ def plot_threshold_adjusted_resistance_diagnostic(
             x, subset["conditional_p05_q50_pp"], color="#333333",
             linewidth=1.0, label="Conditional median", zorder=2,
         )
-        uncertain = subset[subset["classification_uncertain"].astype(bool)]
-        ax.scatter(
-            uncertain["baseline_fixed_threshold_reduction_pct"],
-            uncertain["downside_p05_pp"], s=42, facecolors="none",
-            edgecolors="#111111", linewidths=0.75, zorder=4,
-        )
         for region_key in THRESHOLD_RESILIENCE_MEGACITIES:
             row = subset[subset["region_key"] == region_key]
             if row.empty:
@@ -2066,10 +2060,8 @@ def plot_threshold_adjusted_resistance_diagnostic(
         Line2D([0], [0], color="#333333", linewidth=1.0, label="Conditional median"),
         Patch(facecolor="#B8B8B8", alpha=0.25, edgecolor="none",
               label="Conditional Q25–Q75"),
-        Line2D([0], [0], marker="o", linestyle="none", markerfacecolor="none",
-               markeredgecolor="#111111", label="Classification unstable"),
     ]
-    fig.legend(handles=handles, loc="lower center", ncol=3,
+    fig.legend(handles=handles, loc="lower center", ncol=2,
                bbox_to_anchor=(0.5, 0.002), fontsize=6.7, frameon=False)
     if plot_title:
         fig.suptitle("Conditional resistance separates perturbation response from baseline")
@@ -2096,9 +2088,6 @@ def plot_threshold_adjusted_resistance_national(
         plot_title: If True, show title.
     """
     from visualization.regions import (
-        _batch_city_to_adcode,
-        _ensure_all_china_city_areas,
-        _plot_geometry_outline,
         plot_regions_on_china_map,
     )
 
@@ -2118,7 +2107,6 @@ def plot_threshold_adjusted_resistance_national(
         ("independent", "Independent perturbations"),
         ("correlated_adverse_stress", "Correlated adverse joint perturbations"),
     )
-    areas = None
     for panel, (scenario, label) in enumerate(scenario_specs):
         subset = frame[frame["scenario"] == scenario].copy()
         plot_regions_on_china_map(
@@ -2130,14 +2118,6 @@ def plot_threshold_adjusted_resistance_national(
         uncertain_names = subset.loc[
             subset["classification_uncertain"].astype(bool), "region_name_cn"
         ].tolist()
-        uncertain_adcodes = set(_batch_city_to_adcode(uncertain_names).values())
-        if uncertain_adcodes:
-            areas = areas or _ensure_all_china_city_areas()
-            for adcode, _name, geometry in areas:
-                if adcode in uncertain_adcodes:
-                    _plot_geometry_outline(
-                        axes[panel], geometry, color="#111111", linewidth=0.8, zorder=5
-                    )
         counts = subset.loc[subset["resistance_eligible"]].groupby(
             "resistance_class"
         ).size()
@@ -2200,8 +2180,7 @@ def plot_threshold_adjusted_resistance_national(
     fig.text(
         0.01, 0.005,
         "Positive scores indicate less P05 downside than cities with a comparable "
-        "baseline; black outlines mark unstable classifications; gray denotes no "
-        "eligible policy effect.",
+        "baseline; gray denotes no eligible policy effect.",
         fontsize=6.2, color="#555555", ha="left", va="bottom",
     )
     if plot_title:
