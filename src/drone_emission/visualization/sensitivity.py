@@ -1905,8 +1905,8 @@ def plot_threshold_absolute_downside_city_distributions(
             fontweight="bold",
         )
         ax.text(
-            0.98, 0.96, "\n".join(annotation_lines),
-            transform=ax.transAxes, ha="right", va="top", fontsize=6.4,
+            0.02, 0.50, "\n".join(annotation_lines),
+            transform=ax.transAxes, ha="left", va="center", fontsize=6.4,
             linespacing=1.35,
             bbox=dict(facecolor="white", edgecolor="none", alpha=0.82, pad=1.5),
         )
