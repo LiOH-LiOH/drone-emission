@@ -8,7 +8,10 @@ customer destination are inside the circle.
 Usage:
     cd src/drone_emission
     ../../.venv/bin/python -m analysis.drone_spatial_concentration \
-        --env remote --workers 8 --for-latex
+        --env remote --workers 8
+
+This module only computes and persists the city-level concentration cache.
+Render figures from that cache with ``tools.plot_drone_spatial_concentration``.
 """
 
 from __future__ import annotations
@@ -593,14 +596,36 @@ def _json_safe(value):
     return value
 
 
-def _load_representative_payloads(results: pd.DataFrame) -> list[dict]:
+def load_representative_payloads(
+    results: pd.DataFrame,
+    data_dir: str | Path,
+) -> list[dict]:
+    """Load eligible OD rows for cached representative-city metrics."""
+    data_dir = Path(data_dir)
     payloads = []
     representatives = results[results["is_representative"].eq(True)]
     for _, row in representatives.iterrows():
-        od_df = pd.read_csv(row["od_path"], usecols=list(REQUIRED_OD_COLUMNS))
+        od_path = _city_od_path(data_dir, row.to_dict())
+        od_df = pd.read_csv(od_path, usecols=list(REQUIRED_OD_COLUMNS))
         eligible = _eligible_mask(od_df, 0.0)
         payloads.append({"metrics": row.to_dict(), "od_df": od_df.loc[eligible].copy()})
     return payloads
+
+
+def _write_csv_atomic(frame: pd.DataFrame, path: Path) -> None:
+    """Write a CSV without exposing a partial concentration cache."""
+    temporary = path.with_name(f".{path.name}.tmp")
+    frame.to_csv(temporary, index=False)
+    temporary.replace(path)
+
+
+def _write_json_atomic(payload: dict, path: Path) -> None:
+    """Write JSON without exposing a partial analysis report."""
+    temporary = path.with_name(f".{path.name}.tmp")
+    with temporary.open("w", encoding="utf-8") as file_obj:
+        json.dump(_json_safe(payload), file_obj, ensure_ascii=False, indent=2)
+        file_obj.write("\n")
+    temporary.replace(path)
 
 
 def _attach_oracle_reduction_metrics(
@@ -634,17 +659,23 @@ def _attach_oracle_reduction_metrics(
 def run_drone_spatial_concentration(
     stats_path: str | Path,
     data_dir: str | Path,
-    output_dir: str | Path,
+    results_dir: str | Path,
     workers: int | None = None,
-    for_latex: bool = False,
-    plot_title: bool = False,
+    force: bool = False,
 ) -> dict:
-    """Run the complete all-city drone spatial concentration analysis."""
+    """Compute and persist the all-city spatial concentration cache."""
     started = time.perf_counter()
     stats_path = Path(stats_path).resolve()
     data_dir = Path(data_dir).resolve()
-    output_dir = Path(output_dir).resolve()
-    output_dir.mkdir(parents=True, exist_ok=True)
+    results_dir = Path(results_dir).resolve()
+    csv_path = results_dir / "city_drone_spatial_concentration.csv"
+    report_path = results_dir / "drone_spatial_concentration_report.json"
+    if csv_path.exists() and not force:
+        raise FileExistsError(
+            f"Concentration cache already exists: {csv_path}. "
+            "Use --force to recompute it."
+        )
+    results_dir.mkdir(parents=True, exist_ok=True)
     stats = pd.read_csv(stats_path)
     city_stats = stats[stats["region_level"].eq("city")].copy()
     city_stats = city_stats.sort_values("region_key").reset_index(drop=True)
@@ -666,39 +697,9 @@ def run_drone_spatial_concentration(
     results = _assign_classes_and_representatives(results)
     results = _attach_oracle_reduction_metrics(results, city_stats)
 
-    csv_path = output_dir / "city_drone_spatial_concentration.csv"
-    results.to_csv(csv_path, index=False)
+    _write_csv_atomic(results, csv_path)
     successful = results[results["status"].eq("ok")].copy()
     skipped = results[~results["status"].eq("ok")].copy()
-
-    from visualization.analysis import (
-        plot_city_reduction_concentration_scatter,
-        plot_representative_city_drone_heatmaps,
-    )
-
-    scatter_path = output_dir / "city_reduction_concentration_scatter.png"
-    heatmap_path = output_dir / "representative_city_drone_heatmaps.png"
-    if not successful.empty:
-        plot_city_reduction_concentration_scatter(
-            successful,
-            configured_city_count=len(city_stats),
-            save_path=str(scatter_path),
-            for_latex=for_latex,
-            plot_title=plot_title,
-        )
-        representative_payloads = _load_representative_payloads(results)
-        if representative_payloads:
-            plot_representative_city_drone_heatmaps(
-                representative_payloads,
-                save_path=str(heatmap_path),
-                for_latex=for_latex,
-                plot_title=plot_title,
-            )
-
-    for suffix in (".png", ".pdf"):
-        stale_path = output_dir / f"city_pilot_concentration_distribution{suffix}"
-        if stale_path.exists():
-            stale_path.unlink()
 
     correlations = {}
     for margin in (5, 10):
@@ -816,17 +817,10 @@ def run_drone_spatial_concentration(
         },
         "outputs": {
             "metrics_csv": str(csv_path),
-            "reduction_concentration_scatter": str(
-                scatter_path.with_suffix(".pdf") if for_latex else scatter_path
-            ),
-            "representative_heatmaps": str(
-                heatmap_path.with_suffix(".pdf") if for_latex else heatmap_path
-            ),
+            "report_json": str(report_path),
         },
     }
-    report_path = output_dir / "drone_spatial_concentration_report.json"
-    with report_path.open("w", encoding="utf-8") as file_obj:
-        json.dump(_json_safe(report), file_obj, ensure_ascii=False, indent=2)
+    _write_json_atomic(report, report_path)
     print(
         "Drone spatial concentration cities: "
         f"{len(successful)}/{len(city_stats)} successful; "
@@ -842,27 +836,35 @@ def main() -> None:
     )
     parser.add_argument("--env", default=None, help="Configuration environment")
     parser.add_argument("--stats", default=None, help="Region statistics CSV")
-    parser.add_argument("--output-dir", default=None, help="Analysis output directory")
+    parser.add_argument(
+        "--results-dir",
+        "--output-dir",
+        dest="results_dir",
+        default=None,
+        help="Persistent concentration-cache directory",
+    )
     parser.add_argument("--workers", type=int, default=None, help="Parallel city workers")
-    parser.add_argument("--for-latex", action="store_true", help="Save figures as PDF")
-    parser.add_argument("--plot-title", action="store_true", help="Show optional titles")
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Recompute and replace an existing concentration cache",
+    )
     args = parser.parse_args()
 
     config = load_config(PROJECT_ROOT / "experiment.toml", env=args.env)
     data_dir = Path(config["data_dir"])
     stats_path = Path(args.stats) if args.stats else data_dir / "all_region_stats.csv"
-    output_dir = (
-        Path(args.output_dir)
-        if args.output_dir
-        else Path(config["figures_dir"]) / "analysis" / "drone_spatial_concentration"
+    results_dir = (
+        Path(args.results_dir)
+        if args.results_dir
+        else data_dir / "analysis" / "drone_spatial_concentration"
     )
     run_drone_spatial_concentration(
         stats_path=stats_path,
         data_dir=data_dir,
-        output_dir=output_dir,
+        results_dir=results_dir,
         workers=args.workers,
-        for_latex=args.for_latex,
-        plot_title=args.plot_title,
+        force=args.force,
     )
 
 
