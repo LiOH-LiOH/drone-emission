@@ -26,9 +26,18 @@ from typing import Dict, Iterable
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from matplotlib.colors import BoundaryNorm, ListedColormap
+from matplotlib.lines import Line2D
 from matplotlib.patches import Patch
 
 from ._utils import _add_title_suffix
+
+plt.rcParams.update({
+    "font.family": "sans-serif",
+    "font.sans-serif": ["Arial", "DejaVu Sans", "Liberation Sans"],
+    "svg.fonttype": "none",
+    "pdf.fonttype": 42,
+})
 
 OAT_FEATURES = (
     "drone_energy_mult", "payload_kg", "drone_lifespan_yr",
@@ -1237,6 +1246,492 @@ def plot_mc_anchor_scatter(
         ax.set_title("MC median vs baseline drone tech per city")
     fig.tight_layout()
     return _finalize(save_path, dpi, for_latex, plot_title)
+
+
+# ---------------------------------------------------------------------------
+# Fixed-threshold Monte Carlo resilience plots
+# ---------------------------------------------------------------------------
+
+THRESHOLD_RESILIENCE_SCENARIOS = (
+    "independent",
+    "correlated_adverse_stress",
+)
+THRESHOLD_RESILIENCE_TYPICAL_CITIES = (
+    "beijing",
+    "shanghai",
+    "guangzhou",
+    "kunming",
+    "chizhou",
+    "zhongwei",
+)
+THRESHOLD_RESILIENCE_CITY_LABELS = {
+    "beijing": "Beijing",
+    "shanghai": "Shanghai",
+    "guangzhou": "Guangzhou",
+    "kunming": "Kunming",
+    "chizhou": "Chizhou",
+    "zhongwei": "Zhongwei",
+}
+THRESHOLD_RESILIENCE_SCENARIO_COLORS = {
+    "independent": "#3775BA",
+    "correlated_adverse_stress": "#D9822B",
+}
+THRESHOLD_RESILIENCE_CLASS_COLORS = (
+    "#C95A53",
+    "#E6B85C",
+    "#3D8C86",
+)
+THRESHOLD_RESILIENCE_CLASS_LABELS = (
+    "<50%: no majority support",
+    "50–<90%: conditional resilience",
+    "≥90%: high resilience",
+)
+THRESHOLD_RESILIENCE_PARAMETER_LABELS = {
+    "kappa": "E-bike bundling factor (κ)",
+    "payload_kg": "Payload mass",
+    "drone_hover_s": "Drone hover time",
+    "headwind_mps": "Headwind speed",
+    "drone_cruise_kmh": "Drone cruise speed",
+    "drone_energy_mult": "Drone energy use",
+    "ebike_energy_mult": "E-bike energy use",
+    "drone_lifespan_yr": "Drone frame lifespan",
+    "drone_battery_lifespan_yr": "Drone battery lifespan",
+    "ebike_lifespan_yr": "E-bike lifespan",
+    "ebike_battery_lifespan_yr": "E-bike battery lifespan",
+    "drone_utilization_rate": "Drone utilization",
+    "ebike_utilization_rate": "E-bike utilization",
+    "drone_production_co2_per_kg": "Drone body production CO$_2$/kg",
+    "drone_battery_co2_per_kwh": "Drone battery production CO$_2$/kWh",
+    "ebike_production_co2_per_kg": "E-bike body production CO$_2$/kg",
+    "ebike_battery_co2_per_kwh": "E-bike battery production CO$_2$/kWh",
+}
+
+
+def classify_threshold_resilience(probability) -> np.ndarray:
+    """Classify probabilities into <50%, 50–<90%, and ≥90% bins."""
+    values = np.asarray(probability, dtype=float)
+    if not np.isfinite(values).all() or ((values < 0) | (values > 1)).any():
+        raise ValueError("resilience probabilities must be finite and within [0, 1]")
+    return np.where(values < 0.5, 0, np.where(values < 0.9, 1, 2))
+
+
+def validate_threshold_resilience_summary(
+    summary: pd.DataFrame,
+    expected_cities: int | None = None,
+) -> pd.DataFrame:
+    """Validate and pivot the two-scenario city resilience summary."""
+    required = {
+        "region_key",
+        "region_name_cn",
+        "region_name_en",
+        "scenario",
+        "n_samples",
+        "prob_reduction_positive",
+        "baseline_fixed_threshold_reduction_pct",
+    }
+    missing = sorted(required - set(summary.columns))
+    if missing:
+        raise KeyError(f"threshold-resilience summary missing columns: {missing}")
+    frame = summary[summary["scenario"].isin(THRESHOLD_RESILIENCE_SCENARIOS)].copy()
+    duplicates = frame.duplicated(["region_key", "scenario"], keep=False)
+    if duplicates.any():
+        keys = sorted(frame.loc[duplicates, "region_key"].unique())
+        raise ValueError(f"duplicate city/scenario rows: {keys}")
+    counts = frame.groupby("region_key")["scenario"].nunique()
+    incomplete = sorted(counts[counts != len(THRESHOLD_RESILIENCE_SCENARIOS)].index)
+    if incomplete:
+        raise ValueError(f"cities missing one resilience scenario: {incomplete}")
+    n_cities = frame["region_key"].nunique()
+    if expected_cities is not None and n_cities != expected_cities:
+        raise ValueError(f"expected {expected_cities} cities, found {n_cities}")
+    if not (pd.to_numeric(frame["n_samples"], errors="coerce") == 10000).all():
+        raise ValueError("every city/scenario must contain 10,000 Monte Carlo draws")
+    classify_threshold_resilience(frame["prob_reduction_positive"])
+
+    identifiers = frame[
+        ["region_key", "region_name_cn", "region_name_en"]
+    ].drop_duplicates("region_key")
+    probability = frame.pivot(
+        index="region_key", columns="scenario", values="prob_reduction_positive"
+    ).reset_index()
+    baseline = frame[frame["scenario"] == "independent"][[
+        "region_key", "baseline_fixed_threshold_reduction_pct"
+    ]]
+    wide = identifiers.merge(probability, on="region_key", validate="one_to_one")
+    return wide.merge(baseline, on="region_key", validate="one_to_one")
+
+
+def validate_threshold_resilience_samples(
+    samples_by_city: Dict[str, pd.DataFrame],
+    expected_per_scenario: int = 10000,
+) -> None:
+    """Validate representative-city Monte Carlo samples."""
+    missing_cities = sorted(
+        set(THRESHOLD_RESILIENCE_TYPICAL_CITIES) - set(samples_by_city)
+    )
+    if missing_cities:
+        raise KeyError(f"missing representative-city samples: {missing_cities}")
+    for city in THRESHOLD_RESILIENCE_TYPICAL_CITIES:
+        frame = samples_by_city[city]
+        missing = sorted({"scenario", "reduction_pct"} - set(frame.columns))
+        if missing:
+            raise KeyError(f"{city} samples missing columns: {missing}")
+        counts = frame["scenario"].value_counts()
+        for scenario in THRESHOLD_RESILIENCE_SCENARIOS:
+            if int(counts.get(scenario, 0)) != expected_per_scenario:
+                raise ValueError(
+                    f"{city}/{scenario} expected {expected_per_scenario} samples, "
+                    f"found {int(counts.get(scenario, 0))}"
+                )
+        values = pd.to_numeric(frame["reduction_pct"], errors="coerce")
+        if not np.isfinite(values).all():
+            raise ValueError(f"{city} contains non-finite reduction samples")
+
+
+def prepare_threshold_resilience_drivers(
+    drivers: pd.DataFrame,
+) -> tuple[pd.DataFrame, pd.DataFrame, int]:
+    """Prepare finite driver values and recompute within-city first ranks."""
+    required = {"region_key", "parameter", "spearman_rho"}
+    missing = sorted(required - set(drivers.columns))
+    if missing:
+        raise KeyError(f"threshold-resilience drivers missing columns: {missing}")
+    finite = drivers.copy()
+    finite["spearman_rho"] = pd.to_numeric(finite["spearman_rho"], errors="coerce")
+    finite = finite[np.isfinite(finite["spearman_rho"])].copy()
+    parameter_counts = finite.groupby("region_key")["parameter"].nunique()
+    complete_cities = parameter_counts[parameter_counts == 17].index
+    finite = finite[finite["region_key"].isin(complete_cities)].copy()
+    if finite.empty:
+        raise ValueError("no cities have 17 finite Spearman driver values")
+    finite["abs_rho"] = finite["spearman_rho"].abs()
+    finite["finite_rank"] = finite.groupby("region_key")["abs_rho"].rank(
+        method="first", ascending=False
+    )
+    rank_one = (
+        finite[finite["finite_rank"] == 1]
+        .groupby("parameter")
+        .size()
+        .rename("rank_one_count")
+        .reset_index()
+        .sort_values(["rank_one_count", "parameter"], ascending=[False, True])
+    )
+    return finite, rank_one, len(complete_cities)
+
+
+def _style_resilience_map_axis(ax) -> None:
+    ax.set_xlabel("")
+    ax.set_ylabel("")
+    ax.set_xticks([])
+    ax.set_yticks([])
+    ax.grid(False)
+    for spine in ax.spines.values():
+        spine.set_visible(False)
+
+
+def plot_threshold_resilience_national_overview(
+    summary: pd.DataFrame,
+    save_path: str = None,
+    figsize: tuple = (14.5, 5.2),
+    for_latex: bool = False,
+    plot_title: bool = False,
+):
+    """Map and compare city probabilities of retaining positive reduction.
+
+    Args:
+        summary: Consolidated two-scenario city resilience summary.
+        save_path: Path to save figure. Shows plot if None.
+        figsize: Figure size tuple.
+        for_latex: If True, save as PDF.
+        plot_title: If True, show title.
+    """
+    from visualization.regions import _batch_city_to_adcode, plot_regions_on_china_map
+
+    wide = validate_threshold_resilience_summary(summary, expected_cities=314)
+    unresolved = sorted(
+        set(wide["region_name_cn"])
+        - set(_batch_city_to_adcode(wide["region_name_cn"].tolist()))
+    )
+    if unresolved:
+        raise ValueError(f"valid resilience cities unresolved for mapping: {unresolved}")
+
+    cmap = ListedColormap(THRESHOLD_RESILIENCE_CLASS_COLORS)
+    norm = BoundaryNorm((-0.5, 0.5, 1.5, 2.5), cmap.N)
+    fig, axes = plt.subplots(
+        1, 3, figsize=figsize, gridspec_kw={"width_ratios": [1.08, 1.08, 1.0]}
+    )
+    scenario_specs = (
+        ("independent", "Independent perturbations"),
+        ("correlated_adverse_stress", "Correlated adverse stress"),
+    )
+    for panel, (scenario, label) in enumerate(scenario_specs):
+        map_df = wide[["region_key", "region_name_cn", scenario]].copy()
+        map_df["resilience_class"] = classify_threshold_resilience(map_df[scenario])
+        plot_regions_on_china_map(
+            df=map_df,
+            color_by="resilience_class",
+            ax=axes[panel],
+            plot_title=False,
+            cmap=cmap,
+            norm=norm,
+            draw_colorbar=False,
+            draw_legend=False,
+        )
+        _style_resilience_map_axis(axes[panel])
+        counts = map_df["resilience_class"].value_counts().reindex(range(3), fill_value=0)
+        axes[panel].text(
+            0.5, 1.01, label, transform=axes[panel].transAxes,
+            ha="center", va="bottom", fontsize=9, fontweight="bold",
+        )
+        axes[panel].text(
+            0.02, 0.02,
+            f"<50%: {counts[0]}   50–<90%: {counts[1]}   ≥90%: {counts[2]}",
+            transform=axes[panel].transAxes, fontsize=6.5, ha="left", va="bottom",
+            bbox=dict(facecolor="white", edgecolor="none", alpha=0.86, pad=1.5),
+        )
+        axes[panel].text(
+            -0.03, 1.01, chr(ord("a") + panel), transform=axes[panel].transAxes,
+            fontsize=11, fontweight="bold", ha="right", va="bottom",
+        )
+
+    ax = axes[2]
+    x = wide["independent"].to_numpy(dtype=float)
+    y = wide["correlated_adverse_stress"].to_numpy(dtype=float)
+    stress_class = classify_threshold_resilience(y)
+    for class_id, color, label in zip(
+        range(3), THRESHOLD_RESILIENCE_CLASS_COLORS,
+        THRESHOLD_RESILIENCE_CLASS_LABELS,
+    ):
+        mask = stress_class == class_id
+        ax.scatter(
+            x[mask], y[mask], s=18, alpha=0.68, color=color,
+            edgecolor="white", linewidth=0.25, label=label, zorder=3,
+        )
+    ax.plot((0, 1), (0, 1), linestyle="--", color="#555555", linewidth=0.8, zorder=1)
+    for threshold in (0.5, 0.9):
+        ax.axvline(threshold, color="#888888", linewidth=0.55, linestyle=":")
+        ax.axhline(threshold, color="#888888", linewidth=0.55, linestyle=":")
+    annotation_keys = {
+        "beijing": (6, -12),
+        "linzhi": (5, 6),
+        "changdou": (-35, 7),
+        "panzhihua": (5, -13),
+        "zhaotong": (5, 6),
+    }
+    for region_key, offset in annotation_keys.items():
+        row = wide[wide["region_key"] == region_key]
+        if row.empty:
+            continue
+        item = row.iloc[0]
+        ax.annotate(
+            item["region_name_en"],
+            (item["independent"], item["correlated_adverse_stress"]),
+            xytext=offset, textcoords="offset points", fontsize=6.5,
+            arrowprops=dict(arrowstyle="-", color="#777777", linewidth=0.5),
+        )
+    ax.set_xlim(-0.02, 1.02)
+    ax.set_ylim(-0.02, 1.02)
+    ax.set_aspect("equal", adjustable="box")
+    ax.set_xlabel("Independent probability of positive reduction")
+    ax.set_ylabel("Stress probability of positive reduction")
+    ax.text(-0.12, 1.01, "c", transform=ax.transAxes, fontsize=11,
+            fontweight="bold", ha="right", va="bottom")
+    ax.grid(color="#E7E7E7", linewidth=0.45, zorder=0)
+
+    legend_handles = [
+        Patch(facecolor=color, edgecolor="none", label=label)
+        for color, label in zip(
+            THRESHOLD_RESILIENCE_CLASS_COLORS,
+            THRESHOLD_RESILIENCE_CLASS_LABELS,
+        )
+    ]
+    legend_handles.append(Patch(facecolor="#CCCCCC", edgecolor="none", label="No valid result"))
+    fig.legend(
+        handles=legend_handles, loc="lower center", ncol=4,
+        bbox_to_anchor=(0.36, -0.01), fontsize=7, frameon=False,
+    )
+    fig.text(
+        0.01, -0.01,
+        "314/328 cities; Tibet, Hong Kong and Macao use the national fallback GEF.",
+        fontsize=6.3, ha="left", va="top", color="#555555",
+    )
+    if plot_title:
+        fig.suptitle("Emission-reduction resilience varies widely across cities")
+    fig.tight_layout(rect=(0, 0.07, 1, 1))
+    return _finalize(save_path, 300, for_latex, plot_title)
+
+
+def _draw_resilience_histogram(ax, values, bins, color, label) -> None:
+    density, edges = np.histogram(values, bins=bins, density=True)
+    centres = (edges[:-1] + edges[1:]) / 2.0
+    ax.fill_between(centres, density, step="mid", color=color, alpha=0.20)
+    ax.step(centres, density, where="mid", color=color, linewidth=1.2, label=label)
+
+
+def plot_threshold_resilience_typical_city_distributions(
+    summary: pd.DataFrame,
+    samples_by_city: Dict[str, pd.DataFrame],
+    save_path: str = None,
+    figsize: tuple = (10.5, 7.2),
+    for_latex: bool = False,
+    plot_title: bool = False,
+):
+    """Compare Monte Carlo reduction distributions for six typical cities.
+
+    Args:
+        summary: Consolidated two-scenario city resilience summary.
+        samples_by_city: Mapping from city key to its complete sample DataFrame.
+        save_path: Path to save figure. Shows plot if None.
+        figsize: Figure size tuple.
+        for_latex: If True, save as PDF.
+        plot_title: If True, show title.
+    """
+    wide = validate_threshold_resilience_summary(summary)
+    validate_threshold_resilience_samples(samples_by_city)
+    all_values = np.concatenate([
+        samples_by_city[city]["reduction_pct"].to_numpy(dtype=float)
+        for city in THRESHOLD_RESILIENCE_TYPICAL_CITIES
+    ])
+    data_min, data_max = float(all_values.min()), float(all_values.max())
+    padding = max((data_max - data_min) * 0.02, 0.5)
+    bins = np.linspace(data_min - padding, data_max + padding, 121)
+
+    fig, axes = plt.subplots(3, 2, figsize=figsize, sharex=True)
+    for panel, (ax, city) in enumerate(
+        zip(axes.flat, THRESHOLD_RESILIENCE_TYPICAL_CITIES)
+    ):
+        samples = samples_by_city[city]
+        for scenario, label in (
+            ("independent", "Independent"),
+            ("correlated_adverse_stress", "Correlated stress"),
+        ):
+            values = samples.loc[
+                samples["scenario"] == scenario, "reduction_pct"
+            ].to_numpy(dtype=float)
+            _draw_resilience_histogram(
+                ax, values, bins,
+                THRESHOLD_RESILIENCE_SCENARIO_COLORS[scenario], label,
+            )
+        city_row = wide[wide["region_key"] == city]
+        if city_row.empty:
+            raise KeyError(f"representative city missing from summary: {city}")
+        city_row = city_row.iloc[0]
+        baseline = float(city_row["baseline_fixed_threshold_reduction_pct"])
+        ax.axvline(0, color="#222222", linewidth=0.75)
+        ax.axvline(baseline, color="#3D8C86", linewidth=1.0, linestyle="--")
+        ax.text(
+            0.02, 0.95,
+            f"{chr(ord('a') + panel)}  {THRESHOLD_RESILIENCE_CITY_LABELS[city]}",
+            transform=ax.transAxes, ha="left", va="top", fontsize=8.5,
+            fontweight="bold",
+        )
+        ax.text(
+            0.98, 0.95,
+            f"P+ independent  {city_row['independent']:.1%}\n"
+            f"P+ stress          {city_row['correlated_adverse_stress']:.1%}",
+            transform=ax.transAxes, ha="right", va="top", fontsize=7,
+        )
+        ax.set_yticks([])
+        ax.grid(axis="x", color="#E7E7E7", linewidth=0.45)
+        ax.spines[["top", "right", "left"]].set_visible(False)
+    axes[-1, 0].set_xlim(bins[0], bins[-1])
+    fig.supxlabel("Lifecycle-emission reduction relative to all e-bike (%)", fontsize=9)
+    fig.supylabel("Probability density", fontsize=9)
+    handles = [
+        Line2D([0], [0], color=THRESHOLD_RESILIENCE_SCENARIO_COLORS["independent"],
+               linewidth=1.5, label="Independent"),
+        Line2D([0], [0], color=THRESHOLD_RESILIENCE_SCENARIO_COLORS["correlated_adverse_stress"],
+               linewidth=1.5, label="Correlated adverse stress"),
+        Line2D([0], [0], color="#3D8C86", linewidth=1.2, linestyle="--",
+               label="Deterministic baseline"),
+        Line2D([0], [0], color="#222222", linewidth=0.8, label="Zero reduction"),
+    ]
+    fig.legend(handles=handles, loc="lower center", ncol=4,
+               bbox_to_anchor=(0.5, -0.005), fontsize=7, frameon=False)
+    if plot_title:
+        fig.suptitle("Fixed-threshold reduction distributions in six typical cities")
+    fig.tight_layout(rect=(0.025, 0.075, 1, 1))
+    return _finalize(save_path, 300, for_latex, plot_title)
+
+
+def plot_threshold_resilience_driver_forest(
+    drivers: pd.DataFrame,
+    save_path: str = None,
+    figsize: tuple = (9.2, 6.8),
+    for_latex: bool = False,
+    plot_title: bool = False,
+):
+    """Summarize cross-city Spearman drivers of independent reductions.
+
+    Args:
+        drivers: Consolidated independent-scenario Spearman driver table.
+        save_path: Path to save figure. Shows plot if None.
+        figsize: Figure size tuple.
+        for_latex: If True, save as PDF.
+        plot_title: If True, show title.
+    """
+    finite, rank_one, n_cities = prepare_threshold_resilience_drivers(drivers)
+    grouped = finite.groupby("parameter")["spearman_rho"]
+    stats = grouped.quantile([0.05, 0.25, 0.5, 0.75, 0.95]).unstack()
+    stats.columns = ["q05", "q25", "median", "q75", "q95"]
+    stats["abs_median"] = stats["median"].abs()
+    stats = stats.sort_values("abs_median", ascending=True)
+
+    fig, ax = plt.subplots(figsize=figsize)
+    rng = np.random.default_rng(42)
+    for y, parameter in enumerate(stats.index):
+        values = finite.loc[
+            finite["parameter"] == parameter, "spearman_rho"
+        ].to_numpy(dtype=float)
+        jitter = rng.uniform(-0.16, 0.16, size=len(values))
+        ax.scatter(values, np.full(len(values), y) + jitter,
+                   s=7, alpha=0.18, color="#777777", edgecolor="none", zorder=1)
+        row = stats.loc[parameter]
+        ax.plot((row.q05, row.q95), (y, y), color="#8A8A8A", linewidth=0.8, zorder=2)
+        ax.plot((row.q25, row.q75), (y, y), color="#3775BA", linewidth=3.2,
+                solid_capstyle="round", zorder=3)
+        median_color = "#3D8C86" if row["median"] >= 0 else "#D9822B"
+        ax.scatter(row["median"], y, marker="D", s=25, color=median_color,
+                   edgecolor="white", linewidth=0.4, zorder=4)
+    ax.axvline(0, color="#222222", linewidth=0.75)
+    ax.set_yticks(np.arange(len(stats)))
+    ax.set_yticklabels([
+        THRESHOLD_RESILIENCE_PARAMETER_LABELS.get(parameter, parameter)
+        for parameter in stats.index
+    ], fontsize=7.2)
+    limit = max(abs(float(stats["q05"].min())), abs(float(stats["q95"].max())))
+    ax.set_xlim(-limit * 1.08, limit * 1.08)
+    ax.set_xlabel("Spearman ρ with lifecycle-emission reduction")
+    ax.grid(axis="x", color="#E7E7E7", linewidth=0.45)
+    ax.spines[["top", "right", "left"]].set_visible(False)
+    ax.tick_params(axis="y", length=0)
+    ax.text(0.0, 1.015, f"n={n_cities} cities with finite coefficients",
+            transform=ax.transAxes, fontsize=7, ha="left", va="bottom")
+    ax.text(0.23, -0.085, "Associated with lower reduction", transform=ax.transAxes,
+            fontsize=7, ha="center", color="#D9822B")
+    ax.text(0.77, -0.085, "Associated with higher reduction", transform=ax.transAxes,
+            fontsize=7, ha="center", color="#3D8C86")
+
+    inset = ax.inset_axes((0.68, 0.07, 0.29, 0.24))
+    shown = rank_one[rank_one["rank_one_count"] > 0].head(4).iloc[::-1]
+    inset.barh(
+        np.arange(len(shown)), shown["rank_one_count"],
+        color="#B7C9E2", edgecolor="#3775BA", linewidth=0.6,
+    )
+    inset.set_yticks(np.arange(len(shown)))
+    inset.set_yticklabels([
+        THRESHOLD_RESILIENCE_PARAMETER_LABELS.get(value, value)
+        for value in shown["parameter"]
+    ], fontsize=5.7)
+    inset.set_xlabel("Cities ranked first", fontsize=6)
+    inset.tick_params(axis="x", labelsize=5.5)
+    inset.spines[["top", "right"]].set_visible(False)
+    for y, count in enumerate(shown["rank_one_count"]):
+        inset.text(count, y, f" {int(count)}", va="center", fontsize=5.8)
+    if plot_title:
+        ax.set_title("Cross-city drivers of fixed-threshold resilience")
+    fig.tight_layout()
+    return _finalize(save_path, 300, for_latex, plot_title)
 
 
 # ---------------------------------------------------------------------------
