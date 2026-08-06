@@ -26,6 +26,31 @@ from .vectorized_lca import (
 
 
 ANALYSIS_VERSION = "1.1.0"
+THRESHOLD_RESILIENCE_SCENARIOS = (
+    "independent",
+    "correlated_adverse_stress",
+)
+THRESHOLD_RESILIENCE_MEGACITIES = (
+    "beijing",
+    "shanghai",
+    "shenzhen",
+    "chongqing",
+    "guangzhou",
+    "chengdu",
+    "tianjin",
+)
+THRESHOLD_RESILIENCE_QUADRANT_IDS = (
+    "low_baseline_low_resilience",
+    "high_baseline_low_resilience",
+    "low_baseline_high_resilience",
+    "high_baseline_high_resilience",
+)
+THRESHOLD_RESILIENCE_QUADRANT_LABELS = {
+    "low_baseline_low_resilience": "Low baseline / low resilience",
+    "high_baseline_low_resilience": "High baseline / low resilience",
+    "low_baseline_high_resilience": "Low baseline / high resilience",
+    "high_baseline_high_resilience": "High baseline / high resilience",
+}
 PARAMETER_ORDER = (
     "kappa",
     "payload_kg",
@@ -361,6 +386,139 @@ def wilson_interval(
     low = 0.0 if successes == 0 else max(0.0, centre - half)
     high = 1.0 if successes == total else min(1.0, centre + half)
     return low, high
+
+
+def derive_threshold_resilience_typology(
+    summary: pd.DataFrame,
+    expected_cities: int | None = None,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Derive separate four-quadrant city typologies for both scenarios."""
+    required = {
+        "region_key",
+        "region_name_cn",
+        "region_name_en",
+        "scenario",
+        "n_samples",
+        "baseline_fixed_threshold_reduction_pct",
+        "prob_reduction_positive",
+        "prob_positive_ci95_low",
+        "prob_positive_ci95_high",
+    }
+    missing = sorted(required - set(summary.columns))
+    if missing:
+        raise KeyError(f"threshold-resilience summary missing columns: {missing}")
+
+    frame = summary[
+        summary["scenario"].isin(THRESHOLD_RESILIENCE_SCENARIOS)
+    ].copy()
+    duplicates = frame.duplicated(["region_key", "scenario"], keep=False)
+    if duplicates.any():
+        keys = sorted(frame.loc[duplicates, "region_key"].unique())
+        raise ValueError(f"duplicate city/scenario rows: {keys}")
+    scenario_counts = frame.groupby("region_key")["scenario"].nunique()
+    incomplete = sorted(
+        scenario_counts[
+            scenario_counts != len(THRESHOLD_RESILIENCE_SCENARIOS)
+        ].index
+    )
+    if incomplete:
+        raise ValueError(f"cities missing one resilience scenario: {incomplete}")
+    n_cities = frame["region_key"].nunique()
+    if expected_cities is not None and n_cities != expected_cities:
+        raise ValueError(f"expected {expected_cities} cities, found {n_cities}")
+
+    numeric_columns = (
+        "n_samples",
+        "baseline_fixed_threshold_reduction_pct",
+        "prob_reduction_positive",
+        "prob_positive_ci95_low",
+        "prob_positive_ci95_high",
+    )
+    for column in numeric_columns:
+        frame[column] = pd.to_numeric(frame[column], errors="coerce")
+    if not np.isfinite(frame[list(numeric_columns)].to_numpy(dtype=float)).all():
+        raise ValueError("typology inputs must be finite")
+    if (frame["n_samples"] <= 0).any():
+        raise ValueError("n_samples must be positive")
+    for column in (
+        "prob_reduction_positive",
+        "prob_positive_ci95_low",
+        "prob_positive_ci95_high",
+    ):
+        if ((frame[column] < 0) | (frame[column] > 1)).any():
+            raise ValueError(f"{column} must lie within [0, 1]")
+    invalid_intervals = (
+        (frame["prob_positive_ci95_low"] > frame["prob_reduction_positive"])
+        | (frame["prob_reduction_positive"] > frame["prob_positive_ci95_high"])
+    )
+    if invalid_intervals.any():
+        raise ValueError("probability point estimates must lie within their intervals")
+
+    baseline_spread = frame.groupby("region_key")[
+        "baseline_fixed_threshold_reduction_pct"
+    ].agg(lambda values: float(values.max() - values.min()))
+    inconsistent = sorted(baseline_spread[baseline_spread > 1e-12].index)
+    if inconsistent:
+        raise ValueError(f"city baselines differ between scenarios: {inconsistent}")
+
+    city_baselines = frame.drop_duplicates("region_key")[
+        "baseline_fixed_threshold_reduction_pct"
+    ]
+    baseline_median = float(city_baselines.median())
+    scenario_medians = frame.groupby("scenario")[
+        "prob_reduction_positive"
+    ].median()
+    frame["baseline_median"] = baseline_median
+    frame["resilience_probability_median"] = frame["scenario"].map(
+        scenario_medians
+    )
+    high_baseline = (
+        frame["baseline_fixed_threshold_reduction_pct"] >= baseline_median
+    )
+    high_resilience = (
+        frame["prob_reduction_positive"]
+        >= frame["resilience_probability_median"]
+    )
+    quadrant_index = high_baseline.astype(int) + 2 * high_resilience.astype(int)
+    frame["quadrant_id"] = [
+        THRESHOLD_RESILIENCE_QUADRANT_IDS[index] for index in quadrant_index
+    ]
+    frame["quadrant_label"] = frame["quadrant_id"].map(
+        THRESHOLD_RESILIENCE_QUADRANT_LABELS
+    )
+    frame["boundary_uncertain"] = (
+        (frame["prob_positive_ci95_low"] <= frame["resilience_probability_median"])
+        & (frame["prob_positive_ci95_high"] >= frame["resilience_probability_median"])
+    )
+    frame["is_census_megacity"] = frame["region_key"].isin(
+        THRESHOLD_RESILIENCE_MEGACITIES
+    )
+    frame["scenario"] = pd.Categorical(
+        frame["scenario"], categories=THRESHOLD_RESILIENCE_SCENARIOS, ordered=True
+    )
+    frame = frame.sort_values(["scenario", "region_key"]).reset_index(drop=True)
+    frame["scenario"] = frame["scenario"].astype(str)
+
+    full_index = pd.MultiIndex.from_product(
+        [THRESHOLD_RESILIENCE_SCENARIOS, THRESHOLD_RESILIENCE_QUADRANT_IDS],
+        names=["scenario", "quadrant_id"],
+    )
+    grouped = frame.groupby(
+        ["scenario", "quadrant_id"], observed=False
+    ).size().reindex(full_index, fill_value=0)
+    typology_summary = grouped.rename("city_count").reset_index()
+    typology_summary["city_share"] = (
+        typology_summary["city_count"]
+        / typology_summary.groupby("scenario")["city_count"].transform("sum")
+    )
+    typology_summary["quadrant_label"] = typology_summary["quadrant_id"].map(
+        THRESHOLD_RESILIENCE_QUADRANT_LABELS
+    )
+    typology_summary["baseline_median"] = baseline_median
+    typology_summary["resilience_probability_median"] = typology_summary[
+        "scenario"
+    ].map(scenario_medians)
+    return frame, typology_summary
 
 
 def summarize_samples(
