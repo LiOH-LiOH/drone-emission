@@ -1292,8 +1292,8 @@ THRESHOLD_RESILIENCE_CLASS_COLORS = (
 )
 THRESHOLD_RESILIENCE_CLASS_LABELS = (
     "<50%: no majority support",
-    "50–<90%: conditional resilience",
-    "≥90%: high resilience",
+    "50–<90%: moderate safety probability",
+    "≥90%: high safety probability",
 )
 THRESHOLD_RESILIENCE_TYPOLOGY_COLORS = {
     "low_baseline_low_resilience": "#D6D6D6",
@@ -1580,7 +1580,7 @@ def plot_threshold_resilience_national_overview(
         fontsize=6.3, ha="left", va="top", color="#555555",
     )
     if plot_title:
-        fig.suptitle("Emission-reduction resilience varies widely across cities")
+        fig.suptitle("Probability of retaining positive reduction varies across cities")
     fig.tight_layout(rect=(0, 0.07, 1, 1))
     return _finalize(save_path, 300, for_latex, plot_title)
 
@@ -1770,11 +1770,11 @@ def plot_threshold_resilience_typology(
     fig.text(
         0.01, 0.005,
         "Quadrants use the national baseline median and each scenario's own "
-        "resilience median; high/low denotes relative typology.",
+        "positive-reduction probability median; high/low denotes relative typology.",
         fontsize=6.3, color="#555555", ha="left", va="bottom",
     )
     if plot_title:
-        fig.suptitle("City threshold resilience forms four relative types per scenario")
+        fig.suptitle("Baseline and positive-reduction safety form four relative types")
     fig.tight_layout(rect=(0, 0.16, 1, 1))
     return _finalize(save_path, 300, for_latex, plot_title)
 

@@ -46,10 +46,10 @@ THRESHOLD_RESILIENCE_QUADRANT_IDS = (
     "high_baseline_high_resilience",
 )
 THRESHOLD_RESILIENCE_QUADRANT_LABELS = {
-    "low_baseline_low_resilience": "Low baseline / low resilience",
-    "high_baseline_low_resilience": "High baseline / low resilience",
-    "low_baseline_high_resilience": "Low baseline / high resilience",
-    "high_baseline_high_resilience": "High baseline / high resilience",
+    "low_baseline_low_resilience": "Low baseline / low safety probability",
+    "high_baseline_low_resilience": "High baseline / low safety probability",
+    "low_baseline_high_resilience": "Low baseline / high safety probability",
+    "high_baseline_high_resilience": "High baseline / high safety probability",
 }
 PARAMETER_ORDER = (
     "kappa",
