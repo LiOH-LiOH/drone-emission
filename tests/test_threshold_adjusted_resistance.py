@@ -19,11 +19,14 @@ if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
 from sensitivity.adjusted_resistance import (  # noqa: E402
+    ABSOLUTE_DOWNSIDE_EXAMPLE_CITIES,
+    derive_absolute_downside_city_examples,
     derive_adjusted_resistance,
     summarize_city_downside,
     validate_downside_table,
 )
 from visualization.sensitivity import (  # noqa: E402
+    plot_threshold_absolute_downside_city_distributions,
     plot_threshold_adjusted_resistance_diagnostic,
 )
 
@@ -56,11 +59,87 @@ def _downside_table(n_cities: int = 48) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
+def _city_example_inputs() -> tuple[pd.DataFrame, dict[str, pd.DataFrame]]:
+    baselines = {
+        "shanghai": 8.8,
+        "beijing": 11.9,
+        "guangzhou": 19.5,
+        "chengdu": 35.2,
+    }
+    detail_rows = []
+    samples_by_city = {}
+    for city_index, city in enumerate(ABSOLUTE_DOWNSIDE_EXAMPLE_CITIES):
+        baseline = baselines[city]
+        sample_frames = []
+        for scenario_index, scenario in enumerate(
+            ("independent", "correlated_adverse_stress")
+        ):
+            reduction = (
+                np.linspace(-25.0, 35.0, 101)
+                + city_index * 5.0
+                - scenario_index * 12.0
+            )
+            p05 = float(np.quantile(reduction, 0.05))
+            detail_rows.append({
+                "region_key": city,
+                "region_name_cn": city,
+                "region_name_en": city.title(),
+                "province": "test",
+                "scenario": scenario,
+                "n_samples": len(reduction),
+                "baseline_fixed_threshold_reduction_pct": baseline,
+                "reduction_p05_pct": p05,
+                "downside_p05_pp": baseline - p05,
+                "resistance_eligible": True,
+            })
+            sample_frames.append(pd.DataFrame({
+                "scenario": scenario,
+                "reduction_pct": reduction,
+            }))
+        samples_by_city[city] = pd.concat(sample_frames, ignore_index=True)
+    return pd.DataFrame(detail_rows), samples_by_city
+
+
 def test_absolute_downside_is_translation_invariant() -> None:
     original = summarize_city_downside([-4.0, 2.0, 8.0, 14.0], 10.0)
     shifted = summarize_city_downside([6.0, 12.0, 18.0, 24.0], 20.0)
     assert original["downside_p05_pp"] == shifted["downside_p05_pp"]
     assert original["downside_p10_pp"] == shifted["downside_p10_pp"]
+
+
+def test_four_city_examples_are_complete_and_auditable() -> None:
+    detail, samples = _city_example_inputs()
+    examples = derive_absolute_downside_city_examples(detail, samples)
+    assert len(examples) == 8
+    assert tuple(examples.drop_duplicates("region_key")["region_key"]) == (
+        ABSOLUTE_DOWNSIDE_EXAMPLE_CITIES
+    )
+    assert (examples.groupby("region_key")["scenario"].nunique() == 2).all()
+    np.testing.assert_allclose(
+        examples["downside_p05_pp"],
+        examples["baseline_fixed_threshold_reduction_pct"]
+        - examples["reduction_p05_pct"],
+    )
+    for row in examples.itertuples(index=False):
+        values = samples[row.region_key].loc[
+            samples[row.region_key]["scenario"] == row.scenario,
+            "reduction_pct",
+        ]
+        assert row.prob_reduction_positive == float(np.mean(values > 1e-9))
+
+
+def test_four_city_examples_reject_missing_scenario() -> None:
+    detail, samples = _city_example_inputs()
+    broken = samples.copy()
+    broken["beijing"] = broken["beijing"][
+        broken["beijing"]["scenario"] == "independent"
+    ]
+    try:
+        derive_absolute_downside_city_examples(detail, broken)
+    except ValueError as error:
+        assert "expected" in str(error)
+    else:
+        raise AssertionError("missing city scenario was not rejected")
 
 
 def test_derivation_produces_three_plus_three_classes() -> None:
@@ -133,6 +212,18 @@ def test_diagnostic_figure_renders() -> None:
     with tempfile.TemporaryDirectory() as temporary_dir:
         path = Path(temporary_dir) / "adjusted_resistance.png"
         plot_threshold_adjusted_resistance_diagnostic(detail, save_path=str(path))
+        assert path.exists()
+        assert path.stat().st_size > 10000
+
+
+def test_four_city_distribution_figure_renders() -> None:
+    detail, samples = _city_example_inputs()
+    examples = derive_absolute_downside_city_examples(detail, samples)
+    with tempfile.TemporaryDirectory() as temporary_dir:
+        path = Path(temporary_dir) / "absolute_downside_cities.png"
+        plot_threshold_absolute_downside_city_distributions(
+            examples, samples, save_path=str(path)
+        )
         assert path.exists()
         assert path.stat().st_size > 10000
 

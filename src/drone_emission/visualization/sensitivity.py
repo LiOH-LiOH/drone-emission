@@ -36,6 +36,7 @@ from matplotlib.lines import Line2D
 from matplotlib.patches import Patch
 from matplotlib.ticker import FuncFormatter
 
+from sensitivity.adjusted_resistance import ABSOLUTE_DOWNSIDE_EXAMPLE_CITIES
 from sensitivity.threshold_resilience import (
     THRESHOLD_RESILIENCE_MEGACITIES,
     THRESHOLD_RESILIENCE_QUADRANT_IDS,
@@ -1787,6 +1788,153 @@ ADJUSTED_RESISTANCE_CLASS_LABELS = {
     "typical": "Typical for baseline",
     "low": "Low resistance",
 }
+
+
+def plot_threshold_absolute_downside_city_distributions(
+    examples: pd.DataFrame,
+    samples_by_city: Dict[str, pd.DataFrame],
+    save_path: str = None,
+    figsize: tuple = (11.0, 7.0),
+    for_latex: bool = False,
+    plot_title: bool = False,
+):
+    """Compare complete Monte Carlo distributions and P05 downside in four cities.
+
+    Args:
+        examples: Eight-row city-scenario absolute-downside table.
+        samples_by_city: Mapping from city key to complete sample DataFrames.
+        save_path: Path to save figure. Shows plot if None.
+        figsize: Figure size tuple.
+        for_latex: If True, save as PDF.
+        plot_title: If True, show title.
+    """
+    required = {
+        "panel_order", "region_key", "region_name_en", "scenario", "n_samples",
+        "baseline_fixed_threshold_reduction_pct", "reduction_p05_pct",
+        "downside_p05_pp", "prob_reduction_positive", "minimum_reduction_pct",
+        "maximum_reduction_pct",
+    }
+    missing = sorted(required - set(examples.columns))
+    if missing:
+        raise KeyError(f"absolute-downside city examples missing columns: {missing}")
+    frame = examples[
+        examples["region_key"].isin(ABSOLUTE_DOWNSIDE_EXAMPLE_CITIES)
+        & examples["scenario"].isin(THRESHOLD_RESILIENCE_SCENARIOS)
+    ].copy()
+    if frame.duplicated(["region_key", "scenario"]).any() or len(frame) != 8:
+        raise ValueError("absolute-downside city examples must contain exactly 8 rows")
+    observed_order = tuple(
+        frame.sort_values("panel_order").drop_duplicates("region_key")["region_key"]
+    )
+    if observed_order != ABSOLUTE_DOWNSIDE_EXAMPLE_CITIES:
+        raise ValueError(
+            "absolute-downside city order must be Shanghai, Beijing, Guangzhou, Chengdu"
+        )
+    missing_samples = sorted(set(ABSOLUTE_DOWNSIDE_EXAMPLE_CITIES) - set(samples_by_city))
+    if missing_samples:
+        raise KeyError(f"absolute-downside plot missing samples: {missing_samples}")
+
+    values_by_city_scenario = {}
+    all_values = []
+    for city in ABSOLUTE_DOWNSIDE_EXAMPLE_CITIES:
+        samples = samples_by_city[city]
+        missing_columns = sorted({"scenario", "reduction_pct"} - set(samples.columns))
+        if missing_columns:
+            raise KeyError(f"{city} samples missing columns: {missing_columns}")
+        for scenario in THRESHOLD_RESILIENCE_SCENARIOS:
+            row = frame[
+                (frame["region_key"] == city) & (frame["scenario"] == scenario)
+            ].iloc[0]
+            values = pd.to_numeric(
+                samples.loc[samples["scenario"] == scenario, "reduction_pct"],
+                errors="coerce",
+            ).to_numpy(dtype=float)
+            if len(values) != int(row["n_samples"]) or not np.isfinite(values).all():
+                raise ValueError(f"{city}/{scenario} plot samples are incomplete or non-finite")
+            values_by_city_scenario[(city, scenario)] = values
+            all_values.append(values)
+    pooled = np.concatenate(all_values)
+    data_min, data_max = float(pooled.min()), float(pooled.max())
+    padding = max((data_max - data_min) * 0.02, 0.5)
+    bins = np.linspace(data_min - padding, data_max + padding, 121)
+
+    fig, axes = plt.subplots(2, 2, figsize=figsize, sharex=True)
+    scenario_specs = (
+        ("independent", "Independent", 0.10),
+        ("correlated_adverse_stress", "Correlated", 0.19),
+    )
+    for panel, (ax, city) in enumerate(zip(axes.flat, ABSOLUTE_DOWNSIDE_EXAMPLE_CITIES)):
+        city_rows = frame[frame["region_key"] == city]
+        baseline_values = city_rows["baseline_fixed_threshold_reduction_pct"].to_numpy(float)
+        if not np.allclose(baseline_values, baseline_values[0], atol=1e-12):
+            raise ValueError(f"{city} scenarios do not share one deterministic baseline")
+        baseline = float(baseline_values[0])
+        transform = ax.get_xaxis_transform()
+        annotation_lines = [f"R$_0$ = {baseline:.1f}%"]
+        for scenario, short_label, arrow_y in scenario_specs:
+            row = city_rows[city_rows["scenario"] == scenario].iloc[0]
+            values = values_by_city_scenario[(city, scenario)]
+            color = THRESHOLD_RESILIENCE_SCENARIO_COLORS[scenario]
+            _draw_resilience_histogram(ax, values, bins, color, short_label)
+            p05 = float(row["reduction_p05_pct"])
+            downside = float(row["downside_p05_pp"])
+            ax.axvline(p05, color=color, linewidth=0.9, linestyle=":", zorder=4)
+            ax.annotate(
+                "", xy=(baseline, arrow_y), xytext=(p05, arrow_y),
+                xycoords=transform,
+                arrowprops=dict(arrowstyle="<->", color=color, linewidth=0.8),
+                zorder=5,
+            )
+            ax.text(
+                (baseline + p05) / 2.0, arrow_y + 0.018,
+                f"D$_{{05}}$ {downside:.1f} pp", transform=transform,
+                color=color, fontsize=6.1, ha="center", va="bottom", zorder=6,
+            )
+            annotation_lines.append(
+                f"{short_label}: P05 {p05:.1f}%  |  D05 {downside:.1f} pp  |  "
+                f"P+ {float(row['prob_reduction_positive']):.1%}"
+            )
+        ax.axvline(0, color="#222222", linewidth=0.75, zorder=3)
+        ax.axvline(
+            baseline, color="#3D8C86", linewidth=1.0, linestyle="--", zorder=4
+        )
+        city_name = str(city_rows["region_name_en"].iloc[0])
+        ax.text(
+            0.02, 0.96, f"{chr(ord('a') + panel)}  {city_name}",
+            transform=ax.transAxes, ha="left", va="top", fontsize=8.5,
+            fontweight="bold",
+        )
+        ax.text(
+            0.98, 0.96, "\n".join(annotation_lines),
+            transform=ax.transAxes, ha="right", va="top", fontsize=6.4,
+            linespacing=1.35,
+            bbox=dict(facecolor="white", edgecolor="none", alpha=0.82, pad=1.5),
+        )
+        ax.set_yticks([])
+        ax.grid(axis="x", color="#E7E7E7", linewidth=0.45, zorder=0)
+        ax.spines[["top", "right", "left"]].set_visible(False)
+    axes[-1, 0].set_xlim(bins[0], bins[-1])
+    fig.supxlabel(
+        "Lifecycle-emission reduction relative to all e-bike (%)", fontsize=9, y=0.075
+    )
+    fig.supylabel("Probability density", fontsize=9, x=0.015)
+    handles = [
+        Line2D([0], [0], color=THRESHOLD_RESILIENCE_SCENARIO_COLORS["independent"],
+               linewidth=1.5, label="Independent distribution / P05"),
+        Line2D([0], [0], color=THRESHOLD_RESILIENCE_SCENARIO_COLORS[
+            "correlated_adverse_stress"], linewidth=1.5,
+            label="Correlated distribution / P05"),
+        Line2D([0], [0], color="#3D8C86", linewidth=1.1, linestyle="--",
+               label="Deterministic baseline"),
+        Line2D([0], [0], color="#222222", linewidth=0.8, label="Zero reduction"),
+    ]
+    fig.legend(handles=handles, loc="lower center", ncol=4,
+               bbox_to_anchor=(0.5, 0.005), fontsize=6.8, frameon=False)
+    if plot_title:
+        fig.suptitle("Absolute P05 downside in four city Monte Carlo distributions")
+    fig.subplots_adjust(left=0.055, right=0.985, top=0.97, bottom=0.15,
+                        hspace=0.18, wspace=0.10)
+    return _finalize(save_path, 300, for_latex, plot_title)
 
 
 def _validate_adjusted_resistance_frame(frame: pd.DataFrame) -> pd.DataFrame:

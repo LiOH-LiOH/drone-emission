@@ -24,7 +24,9 @@ PROJECT_ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(PROJECT_ROOT / "src" / "drone_emission"))
 
 from sensitivity.adjusted_resistance import (  # noqa: E402
+    ABSOLUTE_DOWNSIDE_EXAMPLE_CITIES,
     ADJUSTED_RESISTANCE_BOOTSTRAP_REPLICATES,
+    derive_absolute_downside_city_examples,
     derive_adjusted_resistance,
     summarize_city_downside,
 )
@@ -33,6 +35,7 @@ from sensitivity.threshold_resilience import (  # noqa: E402
 )
 from utils import load_config  # noqa: E402
 from visualization.sensitivity import (  # noqa: E402
+    plot_threshold_absolute_downside_city_distributions,
     plot_threshold_adjusted_resistance_diagnostic,
     plot_threshold_adjusted_resistance_national,
 )
@@ -42,9 +45,11 @@ DETAIL_FILENAME = "all_threshold_adjusted_resistance.csv"
 SUMMARY_FILENAME = "all_threshold_adjusted_resistance_summary.csv"
 AMPLIFICATION_FILENAME = "all_threshold_stress_amplification.csv"
 DIAGNOSTICS_FILENAME = "threshold_adjusted_resistance_diagnostics.csv"
+CITY_EXAMPLES_FILENAME = "threshold_absolute_downside_city_examples.csv"
 FIGURE_FILENAMES = {
     "diagnostic": "threshold_adjusted_resistance_diagnostic.png",
     "national": "threshold_adjusted_resistance_national.png",
+    "city_examples": "threshold_absolute_downside_city_distributions.png",
 }
 
 
@@ -64,6 +69,31 @@ def _sample_path(data_dir: Path, region_key: str) -> Path:
         data_dir / "city" / region_key / "analysis"
         / "threshold_resilience" / "samples.csv.gz"
     )
+
+
+def _load_example_samples(data_dir: Path) -> dict[str, pd.DataFrame]:
+    """Load complete saved samples for the four absolute-downside examples."""
+    samples = {}
+    for city in ABSOLUTE_DOWNSIDE_EXAMPLE_CITIES:
+        path = _sample_path(data_dir, city)
+        if not path.exists():
+            raise FileNotFoundError(f"saved Monte Carlo samples missing: {path}")
+        samples[city] = pd.read_csv(path, usecols=["scenario", "reduction_pct"])
+    return samples
+
+
+def _derive_city_examples(
+    detail: pd.DataFrame,
+    data_dir: Path,
+    output_path: Path,
+) -> tuple[pd.DataFrame, dict[str, pd.DataFrame]]:
+    """Derive and atomically write the strict eight-row city example table."""
+    samples = _load_example_samples(data_dir)
+    examples = derive_absolute_downside_city_examples(detail, samples)
+    if len(examples) != 8:
+        raise AssertionError(f"expected 8 city-example rows, found {len(examples)}")
+    _atomic_csv(examples, output_path)
+    return examples, samples
 
 
 def derive_all_threshold_adjusted_resistance(
@@ -147,25 +177,37 @@ def derive_all_threshold_adjusted_resistance(
 def render_threshold_adjusted_resistance(
     detail_path: Path,
     amplification_path: Path,
+    city_examples_path: Path,
+    data_dir: Path,
     output_dir: Path,
 ) -> list[Path]:
-    """Render the diagnostic and national adjusted-resistance figures."""
+    """Render adjusted-resistance and absolute-downside example figures."""
     if not detail_path.exists():
         raise FileNotFoundError(f"adjusted-resistance detail missing: {detail_path}")
     if not amplification_path.exists():
         raise FileNotFoundError(
             f"stress-amplification output missing: {amplification_path}"
         )
+    if not city_examples_path.exists():
+        raise FileNotFoundError(
+            f"absolute-downside city examples missing: {city_examples_path}"
+        )
     detail = pd.read_csv(detail_path)
     amplification = pd.read_csv(amplification_path)
+    city_examples = pd.read_csv(city_examples_path)
+    example_samples = _load_example_samples(data_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     diagnostic = output_dir / FIGURE_FILENAMES["diagnostic"]
     national = output_dir / FIGURE_FILENAMES["national"]
+    city_figure = output_dir / FIGURE_FILENAMES["city_examples"]
     plot_threshold_adjusted_resistance_diagnostic(detail, save_path=str(diagnostic))
     plot_threshold_adjusted_resistance_national(
         detail, amplification, save_path=str(national)
     )
-    outputs = [diagnostic, national]
+    plot_threshold_absolute_downside_city_distributions(
+        city_examples, example_samples, save_path=str(city_figure)
+    )
+    outputs = [diagnostic, national, city_figure]
     for output in outputs:
         if not output.exists() or output.stat().st_size == 0:
             raise RuntimeError(f"adjusted-resistance figure was not written: {output}")
@@ -196,6 +238,7 @@ def main() -> None:
     summary_path = data_dir / SUMMARY_FILENAME
     amplification_path = data_dir / AMPLIFICATION_FILENAME
     diagnostics_path = data_dir / DIAGNOSTICS_FILENAME
+    city_examples_path = data_dir / CITY_EXAMPLES_FILENAME
     output_dir = (
         args.output_dir
         or figures_dir / "analysis" / "threshold_adjusted_resistance"
@@ -213,6 +256,9 @@ def main() -> None:
         _atomic_csv(summary, summary_path)
         _atomic_csv(amplification, amplification_path)
         _atomic_csv(diagnostics, diagnostics_path)
+        city_examples, _ = _derive_city_examples(
+            detail, data_dir, city_examples_path
+        )
         print(
             f"Verified adjusted resistance: {detail_path} ({len(detail)} rows; "
             f"{int(detail['resistance_eligible'].sum())} eligible)"
@@ -223,9 +269,22 @@ def main() -> None:
             f"({len(amplification)} rows)"
         )
         print(f"Verified model diagnostics: {diagnostics_path} ({len(diagnostics)} rows)")
+        print(
+            f"Verified absolute-downside city examples: {city_examples_path} "
+            f"({len(city_examples)} rows)"
+        )
+    elif args.plot_only:
+        detail = pd.read_csv(detail_path)
+        city_examples, _ = _derive_city_examples(
+            detail, data_dir, city_examples_path
+        )
+        print(
+            f"Verified absolute-downside city examples: {city_examples_path} "
+            f"({len(city_examples)} rows)"
+        )
     if not args.derive_only:
         outputs = render_threshold_adjusted_resistance(
-            detail_path, amplification_path, output_dir
+            detail_path, amplification_path, city_examples_path, data_dir, output_dir
         )
         for output in outputs:
             print(f"Verified output: {output} ({output.stat().st_size} bytes)")

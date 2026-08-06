@@ -27,6 +27,12 @@ ADJUSTED_RESISTANCE_BOOTSTRAP_SEED = 20260806
 ADJUSTED_RESISTANCE_STABILITY_THRESHOLD = 0.80
 ADJUSTED_RESISTANCE_TAIL_LEVELS = (0.05, 0.10)
 ADJUSTED_RESISTANCE_CLASSES = ("high", "typical", "low")
+ABSOLUTE_DOWNSIDE_EXAMPLE_CITIES = (
+    "shanghai",
+    "beijing",
+    "guangzhou",
+    "chengdu",
+)
 
 
 @dataclass(frozen=True)
@@ -120,6 +126,103 @@ def summarize_city_downside(
         quantile = float(np.quantile(reduction, tail))
         result[f"reduction_{suffix}_pct"] = quantile
         result[f"downside_{suffix}_pp"] = baseline - quantile
+    return result
+
+
+def derive_absolute_downside_city_examples(
+    resistance: pd.DataFrame,
+    samples_by_city: dict[str, pd.DataFrame],
+    *,
+    city_order: Iterable[str] = ABSOLUTE_DOWNSIDE_EXAMPLE_CITIES,
+    positive_tolerance_pct: float = 1e-9,
+) -> pd.DataFrame:
+    """Build an auditable four-city table from complete Monte Carlo samples."""
+    cities = tuple(city_order)
+    if not cities or len(set(cities)) != len(cities):
+        raise ValueError("city_order must contain unique city keys")
+    missing_cities = sorted(set(cities) - set(samples_by_city))
+    if missing_cities:
+        raise KeyError(f"absolute-downside samples missing cities: {missing_cities}")
+    required_detail = {
+        "region_key", "region_name_cn", "region_name_en", "province",
+        "scenario", "n_samples", "baseline_fixed_threshold_reduction_pct",
+        "reduction_p05_pct", "downside_p05_pp", "resistance_eligible",
+    }
+    missing = sorted(required_detail - set(resistance.columns))
+    if missing:
+        raise KeyError(f"absolute-downside detail missing columns: {missing}")
+    detail = resistance[
+        resistance["region_key"].isin(cities)
+        & resistance["scenario"].isin(THRESHOLD_RESILIENCE_SCENARIOS)
+    ].copy()
+    if detail.duplicated(["region_key", "scenario"]).any():
+        raise ValueError("absolute-downside detail contains duplicate city/scenario rows")
+    counts = detail.groupby("region_key")["scenario"].nunique()
+    incomplete = sorted(set(cities) - set(counts[counts == 2].index))
+    if incomplete:
+        raise ValueError(f"absolute-downside cities missing one scenario: {incomplete}")
+    if not detail["resistance_eligible"].astype(bool).all():
+        excluded = sorted(detail.loc[
+            ~detail["resistance_eligible"].astype(bool), "region_key"
+        ].unique())
+        raise ValueError(f"absolute-downside example cities are ineligible: {excluded}")
+
+    rows = []
+    for panel_order, city in enumerate(cities):
+        samples = samples_by_city[city]
+        missing_sample_columns = sorted({"scenario", "reduction_pct"} - set(samples.columns))
+        if missing_sample_columns:
+            raise KeyError(f"{city} samples missing columns: {missing_sample_columns}")
+        unexpected = sorted(
+            set(samples["scenario"].dropna()) - set(THRESHOLD_RESILIENCE_SCENARIOS)
+        )
+        if unexpected:
+            raise ValueError(f"{city} samples contain unknown scenarios: {unexpected}")
+        for scenario_order, scenario in enumerate(THRESHOLD_RESILIENCE_SCENARIOS):
+            source = detail[
+                (detail["region_key"] == city) & (detail["scenario"] == scenario)
+            ].iloc[0]
+            reduction = pd.to_numeric(
+                samples.loc[samples["scenario"] == scenario, "reduction_pct"],
+                errors="coerce",
+            ).to_numpy(dtype=np.float64)
+            expected_n = int(source["n_samples"])
+            if len(reduction) != expected_n:
+                raise ValueError(
+                    f"{city}/{scenario} expected {expected_n} samples, found {len(reduction)}"
+                )
+            if not np.isfinite(reduction).all():
+                raise ValueError(f"{city}/{scenario} samples contain non-finite values")
+            baseline = float(source["baseline_fixed_threshold_reduction_pct"])
+            p05 = float(np.quantile(reduction, 0.05))
+            downside = baseline - p05
+            if not np.isclose(p05, float(source["reduction_p05_pct"]), atol=1e-10):
+                raise ValueError(f"{city}/{scenario} P05 differs from adjusted detail")
+            if not np.isclose(downside, float(source["downside_p05_pp"]), atol=1e-10):
+                raise ValueError(f"{city}/{scenario} D05 differs from adjusted detail")
+            rows.append({
+                "panel_order": panel_order,
+                "scenario_order": scenario_order,
+                "region_key": city,
+                "region_name_cn": source["region_name_cn"],
+                "region_name_en": source["region_name_en"],
+                "province": source["province"],
+                "scenario": scenario,
+                "n_samples": expected_n,
+                "baseline_fixed_threshold_reduction_pct": baseline,
+                "reduction_p05_pct": p05,
+                "downside_p05_pp": downside,
+                "prob_reduction_positive": float(
+                    np.mean(reduction > positive_tolerance_pct)
+                ),
+                "minimum_reduction_pct": float(np.min(reduction)),
+                "maximum_reduction_pct": float(np.max(reduction)),
+            })
+    result = pd.DataFrame(rows).sort_values(
+        ["panel_order", "scenario_order"]
+    ).reset_index(drop=True)
+    if len(result) != len(cities) * len(THRESHOLD_RESILIENCE_SCENARIOS):
+        raise AssertionError("absolute-downside example output has an invalid row count")
     return result
 
 
