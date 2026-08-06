@@ -43,6 +43,17 @@ DEFAULT_HOTSPOTS = 32
 EXPANDED_HOTSPOTS = 128
 CONVERGENCE_TOLERANCE_PCT = 0.5
 MAX_SCREENING_CELLS = 4_000_000
+ABSOLUTE_REDUCTION_COLUMN = "oracle_absolute_reduction_t_co2e"
+RELATIVE_REDUCTION_COLUMN = "oracle_relative_reduction_pct"
+SUPER_LARGE_CITIES = (
+    "Beijing",
+    "Shanghai",
+    "Shenzhen",
+    "Chongqing",
+    "Guangzhou",
+    "Chengdu",
+    "Tianjin",
+)
 
 REQUIRED_OD_COLUMNS = (
     "from_lat",
@@ -592,6 +603,34 @@ def _load_representative_payloads(results: pd.DataFrame) -> list[dict]:
     return payloads
 
 
+def _attach_oracle_reduction_metrics(
+    results: pd.DataFrame,
+    city_stats: pd.DataFrame,
+) -> pd.DataFrame:
+    """Attach comparable absolute and relative Oracle reductions to results."""
+    required = {
+        "region_key",
+        "total_ebike_lifecycle",
+        "oracle_min_lifecycle_kg",
+        "oracle_min_reduction_vs_ebike_pct",
+    }
+    missing = sorted(required.difference(city_stats.columns))
+    if missing:
+        raise ValueError(f"City statistics missing reduction columns: {missing}")
+
+    metrics = city_stats[list(required)].copy()
+    ebike_kg = pd.to_numeric(metrics["total_ebike_lifecycle"], errors="coerce")
+    oracle_kg = pd.to_numeric(metrics["oracle_min_lifecycle_kg"], errors="coerce")
+    metrics[ABSOLUTE_REDUCTION_COLUMN] = (ebike_kg - oracle_kg) / 1_000.0
+    metrics[RELATIVE_REDUCTION_COLUMN] = pd.to_numeric(
+        metrics["oracle_min_reduction_vs_ebike_pct"], errors="coerce"
+    )
+    metrics = metrics[
+        ["region_key", ABSOLUTE_REDUCTION_COLUMN, RELATIVE_REDUCTION_COLUMN]
+    ]
+    return results.merge(metrics, on="region_key", how="left", validate="one_to_one")
+
+
 def run_drone_spatial_concentration(
     stats_path: str | Path,
     data_dir: str | Path,
@@ -625,6 +664,7 @@ def run_drone_spatial_concentration(
                 rows.append(future.result())
     results = pd.DataFrame(rows).sort_values("region_key").reset_index(drop=True)
     results = _assign_classes_and_representatives(results)
+    results = _attach_oracle_reduction_metrics(results, city_stats)
 
     csv_path = output_dir / "city_drone_spatial_concentration.csv"
     results.to_csv(csv_path, index=False)
@@ -632,17 +672,17 @@ def run_drone_spatial_concentration(
     skipped = results[~results["status"].eq("ok")].copy()
 
     from visualization.analysis import (
-        plot_city_pilot_concentration_distribution,
+        plot_city_reduction_concentration_scatter,
         plot_representative_city_drone_heatmaps,
     )
 
-    distribution_path = output_dir / "city_pilot_concentration_distribution.png"
+    scatter_path = output_dir / "city_reduction_concentration_scatter.png"
     heatmap_path = output_dir / "representative_city_drone_heatmaps.png"
     if not successful.empty:
-        plot_city_pilot_concentration_distribution(
+        plot_city_reduction_concentration_scatter(
             successful,
             configured_city_count=len(city_stats),
-            save_path=str(distribution_path),
+            save_path=str(scatter_path),
             for_latex=for_latex,
             plot_title=plot_title,
         )
@@ -655,6 +695,11 @@ def run_drone_spatial_concentration(
                 plot_title=plot_title,
             )
 
+    for suffix in (".png", ".pdf"):
+        stale_path = output_dir / f"city_pilot_concentration_distribution{suffix}"
+        if stale_path.exists():
+            stale_path.unlink()
+
     correlations = {}
     for margin in (5, 10):
         column = f"pilot_concentration_score_margin_{margin}pct"
@@ -665,8 +710,25 @@ def run_drone_spatial_concentration(
             else None
         )
     runtime_seconds = time.perf_counter() - started
+    scatter_sample = successful.copy()
+    scatter_sample[ABSOLUTE_REDUCTION_COLUMN] = pd.to_numeric(
+        scatter_sample[ABSOLUTE_REDUCTION_COLUMN], errors="coerce"
+    )
+    scatter_sample[RELATIVE_REDUCTION_COLUMN] = pd.to_numeric(
+        scatter_sample[RELATIVE_REDUCTION_COLUMN], errors="coerce"
+    )
+    scatter_mask = (
+        np.isfinite(scatter_sample[ABSOLUTE_REDUCTION_COLUMN])
+        & (scatter_sample[ABSOLUTE_REDUCTION_COLUMN] > 0)
+        & np.isfinite(scatter_sample[RELATIVE_REDUCTION_COLUMN])
+    )
+    scatter_excluded = scatter_sample.loc[~scatter_mask]
+    scatter_sample = scatter_sample.loc[scatter_mask]
+    labeled_cities = scatter_sample[
+        scatter_sample["region_name_en"].isin(SUPER_LARGE_CITIES)
+    ]
     report = {
-        "schema_version": 1,
+        "schema_version": 2,
         "analysis": "drone_spatial_concentration",
         "metric": {
             "name": "Multi-scale Pilot Capture Score",
@@ -700,6 +762,7 @@ def run_drone_spatial_concentration(
         "classification": {
             "concentration": "sample percentile-rank tertiles",
             "typology": "sample medians of MPCS and eligible annual orders",
+            "scatter_color": "MPCS sample percentile-rank tertiles",
             "representatives": successful.loc[
                 successful["is_representative"].eq(True),
                 [
@@ -711,6 +774,40 @@ def run_drone_spatial_concentration(
                 ],
             ].to_dict("records"),
         },
+        "reduction_concentration_scatter": {
+            "x": {
+                "metric": ABSOLUTE_REDUCTION_COLUMN,
+                "unit": "t CO2e per year",
+                "scale": "log",
+            },
+            "y": {
+                "metric": RELATIVE_REDUCTION_COLUMN,
+                "unit": "percent",
+            },
+            "plotted_city_count": int(len(scatter_sample)),
+            "excluded_scored_city_count": int(len(scatter_excluded)),
+            "excluded_scored_cities": scatter_excluded[
+                ["region_key", "region_name_en"]
+            ].to_dict("records"),
+            "median_absolute_reduction_t_co2e": (
+                float(scatter_sample[ABSOLUTE_REDUCTION_COLUMN].median())
+                if not scatter_sample.empty else None
+            ),
+            "median_relative_reduction_pct": (
+                float(scatter_sample[RELATIVE_REDUCTION_COLUMN].median())
+                if not scatter_sample.empty else None
+            ),
+            "labeled_super_large_cities": labeled_cities[
+                [
+                    "region_key",
+                    "region_name_en",
+                    ABSOLUTE_REDUCTION_COLUMN,
+                    RELATIVE_REDUCTION_COLUMN,
+                    "pilot_concentration_score_pct",
+                    "concentration_class",
+                ]
+            ].to_dict("records"),
+        },
         "sensitivity_spearman_vs_primary": correlations,
         "performance": {
             "runtime_seconds": runtime_seconds,
@@ -719,8 +816,8 @@ def run_drone_spatial_concentration(
         },
         "outputs": {
             "metrics_csv": str(csv_path),
-            "distribution_figure": str(
-                distribution_path.with_suffix(".pdf") if for_latex else distribution_path
+            "reduction_concentration_scatter": str(
+                scatter_path.with_suffix(".pdf") if for_latex else scatter_path
             ),
             "representative_heatmaps": str(
                 heatmap_path.with_suffix(".pdf") if for_latex else heatmap_path

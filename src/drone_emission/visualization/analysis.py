@@ -57,6 +57,17 @@ ORACLE_REDUCTION_LABEL_CITIES = (
     "Chongqing",
     "Chengdu",
 )
+PILOT_SUPER_LARGE_CITIES = (
+    "Beijing",
+    "Shanghai",
+    "Shenzhen",
+    "Chongqing",
+    "Guangzhou",
+    "Chengdu",
+    "Tianjin",
+)
+PILOT_ABSOLUTE_REDUCTION_COL = "oracle_absolute_reduction_t_co2e"
+PILOT_RELATIVE_REDUCTION_COL = "oracle_relative_reduction_pct"
 CITY_REDUCTION_RANK_LABEL_Y = {
     "Chengdu": 44.0,
     "Chongqing": 37.0,
@@ -11732,125 +11743,143 @@ def plot_representative_city_drone_heatmaps(
     return save_path
 
 
-def plot_city_pilot_concentration_distribution(
+def plot_city_reduction_concentration_scatter(
     df: pd.DataFrame,
     configured_city_count: int,
     save_path: str = None,
-    figsize: tuple = (12, 5),
+    figsize: tuple = (6.6, 5.2),
     for_latex: bool = False,
     plot_title: bool = False,
 ):
-    """Plot the city MPCS distribution and concentration-volume typology.
+    """Plot city absolute versus relative reduction colored by MPCS class.
 
     Args:
-        df: Successful city-level concentration results.
+        df: Successful city concentration results with Oracle reduction metrics.
         configured_city_count: Total configured city count before missing-data skips.
         save_path: Path to save figure. Shows plot if None.
         figsize: Figure size tuple.
         for_latex: If True, save as PDF.
         plot_title: If True, show title.
     """
-    plot_df = df.dropna(
-        subset=["pilot_concentration_score_pct", "eligible_annual_orders"]
-    ).copy()
+    required = [
+        "pilot_concentration_score_pct",
+        "concentration_class",
+        PILOT_ABSOLUTE_REDUCTION_COL,
+        PILOT_RELATIVE_REDUCTION_COL,
+    ]
+    missing = [column for column in required if column not in df]
+    if missing:
+        raise ValueError(f"City reduction scatter missing columns: {missing}")
+    plot_df = df.copy()
+    for column in (
+        "pilot_concentration_score_pct",
+        PILOT_ABSOLUTE_REDUCTION_COL,
+        PILOT_RELATIVE_REDUCTION_COL,
+    ):
+        plot_df[column] = pd.to_numeric(plot_df[column], errors="coerce")
+    plot_df = plot_df[
+        np.isfinite(plot_df["pilot_concentration_score_pct"])
+        & np.isfinite(plot_df[PILOT_ABSOLUTE_REDUCTION_COL])
+        & (plot_df[PILOT_ABSOLUTE_REDUCTION_COL] > 0)
+        & np.isfinite(plot_df[PILOT_RELATIVE_REDUCTION_COL])
+    ].copy()
     if plot_df.empty:
-        raise ValueError("No finite city concentration results to plot")
-    score = plot_df["pilot_concentration_score_pct"]
-    lower, upper = score.quantile([1 / 3, 2 / 3])
-    score_median = float(score.median())
-    volume_median = float(plot_df["eligible_annual_orders"].median())
+        raise ValueError("No finite positive city reduction results to plot")
+    absolute_median = float(plot_df[PILOT_ABSOLUTE_REDUCTION_COL].median())
+    relative_median = float(plot_df[PILOT_RELATIVE_REDUCTION_COL].median())
     class_colors = {"Low": "#D95F0E", "Medium": "#7570B3", "High": "#1B9E77"}
 
-    fig, (ax_distribution, ax_typology) = plt.subplots(1, 2, figsize=figsize)
-    bin_min = max(0.0, float(score.min()) - 1.0)
-    bin_max = min(100.0, float(score.max()) + 1.0)
-    if bin_max <= bin_min:
-        bin_min = max(0.0, bin_min - 1.0)
-        bin_max = min(100.0, bin_max + 1.0)
-    bins = np.linspace(bin_min, bin_max, 22)
-    ax_distribution.hist(
-        score,
-        bins=bins,
-        color="#6BAED6",
-        edgecolor="white",
-        linewidth=0.8,
-    )
-    for value, label in ((lower, "33rd"), (upper, "67th")):
-        ax_distribution.axvline(value, color="#444444", linestyle="--", linewidth=1.2)
-        ax_distribution.text(
-            value,
-            ax_distribution.get_ylim()[1] * 0.95,
-            label,
-            rotation=90,
-            va="top",
-            ha="right",
-            fontsize=8,
-            color="#444444",
-        )
-    ax_distribution.plot(score, np.full(len(score), -0.35), "|", color="#333333", markersize=5)
-    ax_distribution.text(
-        0.02,
-        0.98,
-        f"a  Distribution\n{len(plot_df)} scored of {configured_city_count} cities",
-        transform=ax_distribution.transAxes,
-        ha="left",
-        va="top",
-        fontweight="bold",
-    )
-    ax_distribution.set_xlabel("Multi-scale Pilot Capture Score (%)")
-    ax_distribution.set_ylabel("Number of cities")
-    ax_distribution.spines[["top", "right"]].set_visible(False)
-
-    for concentration_class, group in plot_df.groupby("concentration_class"):
-        ax_typology.scatter(
-            group["eligible_annual_orders"],
-            group["pilot_concentration_score_pct"],
-            s=24,
-            alpha=0.68,
+    fig, ax = plt.subplots(figsize=figsize)
+    for concentration_class in ("Low", "Medium", "High"):
+        group = plot_df[plot_df["concentration_class"].eq(concentration_class)]
+        if group.empty:
+            continue
+        ax.scatter(
+            group[PILOT_ABSOLUTE_REDUCTION_COL],
+            group[PILOT_RELATIVE_REDUCTION_COL],
+            s=30,
+            alpha=0.72,
             color=class_colors.get(concentration_class, "#777777"),
             edgecolor="white",
             linewidth=0.35,
             label=f"{concentration_class} concentration",
+            zorder=3,
         )
-    ax_typology.axhline(score_median, color="#666666", linestyle="--", linewidth=1)
-    ax_typology.axvline(volume_median, color="#666666", linestyle="--", linewidth=1)
-    representatives = plot_df[plot_df["is_representative"].eq(True)]
-    for _, row in representatives.iterrows():
-        ax_typology.scatter(
-            row["eligible_annual_orders"],
-            row["pilot_concentration_score_pct"],
-            s=68,
-            facecolor="none",
-            edgecolor="#111111",
-            linewidth=1.4,
-            zorder=5,
-        )
-        ax_typology.annotate(
-            row.get("region_name_en") or row["region_key"],
-            (row["eligible_annual_orders"], row["pilot_concentration_score_pct"]),
-            xytext=(5, 5),
-            textcoords="offset points",
-            fontsize=8,
+    ax.axhline(relative_median, color="#666666", linestyle="--", linewidth=1, zorder=1)
+    ax.axvline(absolute_median, color="#666666", linestyle="--", linewidth=1, zorder=1)
+
+    name_col = "region_name_en" if "region_name_en" in plot_df else "region_key"
+    labeled = plot_df[plot_df[name_col].isin(PILOT_SUPER_LARGE_CITIES)].copy()
+    labeled["_label_order"] = pd.Categorical(
+        labeled[name_col], categories=PILOT_SUPER_LARGE_CITIES, ordered=True
+    )
+    labeled = labeled.sort_values("_label_order")
+    ax.scatter(
+        labeled[PILOT_ABSOLUTE_REDUCTION_COL],
+        labeled[PILOT_RELATIVE_REDUCTION_COL],
+        s=30,
+        facecolors="none",
+        edgecolors="#111111",
+        linewidth=1.15,
+        zorder=5,
+    )
+    label_texts = [
+        ax.text(
+            row[PILOT_ABSOLUTE_REDUCTION_COL],
+            row[PILOT_RELATIVE_REDUCTION_COL],
+            row[name_col],
+            fontsize=7.5,
+            color="#202020",
             zorder=6,
         )
-    ax_typology.text(
+        for _, row in labeled.iterrows()
+    ]
+    if label_texts:
+        from adjustText import adjust_text
+
+        adjust_text(
+            label_texts,
+            x=labeled[PILOT_ABSOLUTE_REDUCTION_COL].to_numpy(dtype=float),
+            y=labeled[PILOT_RELATIVE_REDUCTION_COL].to_numpy(dtype=float),
+            ax=ax,
+            expand=(1.12, 1.22),
+            force_text=(0.15, 0.25),
+            force_static=(0.08, 0.15),
+            ensure_inside_axes=True,
+            arrowprops={"arrowstyle": "-", "color": "0.4", "lw": 0.5},
+        )
+
+    ax.text(
         0.02,
         0.98,
-        "b  Pilot typology",
-        transform=ax_typology.transAxes,
+        f"{len(plot_df)} plotted of {configured_city_count} configured cities",
+        transform=ax.transAxes,
         ha="left",
         va="top",
-        fontweight="bold",
+        fontsize=8,
     )
-    ax_typology.set_xscale("log")
-    ax_typology.set_xlabel("Drone-favorable annual orders")
-    ax_typology.set_ylabel("Multi-scale Pilot Capture Score (%)")
-    ax_typology.legend(loc="lower right", frameon=False, fontsize=8)
-    ax_typology.spines[["top", "right"]].set_visible(False)
+    from matplotlib.lines import Line2D
+
+    handles, labels = ax.get_legend_handles_labels()
+    handles.extend([
+        Line2D([0], [0], color="#666666", linestyle="--", linewidth=1),
+        Line2D(
+            [0], [0], marker="o", linestyle="none", markersize=4.5,
+            markerfacecolor="none", markeredgecolor="#111111",
+            markeredgewidth=1.15,
+        ),
+    ])
+    labels.extend(["City medians", "2020 census super-large city"])
+    ax.set_xscale("log")
+    ax.set_xlabel("Annual absolute emission reduction (t CO$_2$e yr$^{-1}$)")
+    ax.set_ylabel("Relative lifecycle emission reduction (%)")
+    ax.legend(handles, labels, loc="lower right", frameon=False, fontsize=8)
+    ax.spines[["top", "right"]].set_visible(False)
+    ax.grid(axis="both", color="#E5E5E5", linewidth=0.55, zorder=0)
     if plot_title:
-        fig.suptitle(
-            "Spatial concentration and demand scale define city pilot types",
-            fontsize=14,
+        ax.set_title(
+            "City emission-reduction potential and drone-order concentration",
+            fontsize=12,
             fontweight="bold",
         )
     fig.tight_layout()
@@ -11861,7 +11890,7 @@ def plot_city_pilot_concentration_distribution(
             save_path = _add_title_suffix(save_path)
         os.makedirs(os.path.dirname(save_path), exist_ok=True)
         plt.savefig(save_path, dpi=300, bbox_inches="tight")
-        print(f"City pilot concentration distribution saved to {save_path}")
+        print(f"City reduction-concentration scatter saved to {save_path}")
     else:
         plt.show()
     plt.close(fig)
