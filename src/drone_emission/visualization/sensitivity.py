@@ -26,7 +26,12 @@ from typing import Dict, Iterable
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from matplotlib.colors import BoundaryNorm, ListedColormap
+from matplotlib.colors import (
+    BoundaryNorm,
+    LinearSegmentedColormap,
+    ListedColormap,
+    TwoSlopeNorm,
+)
 from matplotlib.lines import Line2D
 from matplotlib.patches import Patch
 from matplotlib.ticker import FuncFormatter
@@ -1771,6 +1776,285 @@ def plot_threshold_resilience_typology(
     if plot_title:
         fig.suptitle("City threshold resilience forms four relative types per scenario")
     fig.tight_layout(rect=(0, 0.16, 1, 1))
+    return _finalize(save_path, 300, for_latex, plot_title)
+
+
+ADJUSTED_RESISTANCE_CMAP = LinearSegmentedColormap.from_list(
+    "adjusted_resistance", ("#D9822B", "#E8E8E8", "#3775BA")
+)
+ADJUSTED_RESISTANCE_CLASS_LABELS = {
+    "high": "High resistance",
+    "typical": "Typical for baseline",
+    "low": "Low resistance",
+}
+
+
+def _validate_adjusted_resistance_frame(frame: pd.DataFrame) -> pd.DataFrame:
+    """Validate plotting fields for baseline-adjusted resistance."""
+    required = {
+        "region_key", "region_name_cn", "region_name_en", "scenario",
+        "baseline_fixed_threshold_reduction_pct", "downside_p05_pp",
+        "conditional_p05_q25_pp", "conditional_p05_q50_pp",
+        "conditional_p05_q75_pp", "adjusted_resistance_score_p05",
+        "resistance_class", "resistance_eligible", "classification_uncertain",
+    }
+    missing = sorted(required - set(frame.columns))
+    if missing:
+        raise KeyError(f"adjusted-resistance plot data missing columns: {missing}")
+    result = frame[frame["scenario"].isin(THRESHOLD_RESILIENCE_SCENARIOS)].copy()
+    if result.duplicated(["region_key", "scenario"]).any():
+        raise ValueError("adjusted-resistance plot data contains duplicate rows")
+    valid_classes = set(ADJUSTED_RESISTANCE_CLASS_LABELS)
+    invalid = sorted(
+        set(result.loc[result["resistance_eligible"], "resistance_class"])
+        - valid_classes
+    )
+    if invalid:
+        raise ValueError(f"unknown adjusted-resistance classes: {invalid}")
+    numeric = (
+        "baseline_fixed_threshold_reduction_pct", "downside_p05_pp",
+        "conditional_p05_q25_pp", "conditional_p05_q50_pp",
+        "conditional_p05_q75_pp", "adjusted_resistance_score_p05",
+    )
+    eligible = result["resistance_eligible"].astype(bool)
+    if not np.isfinite(result.loc[eligible, list(numeric)].to_numpy(float)).all():
+        raise ValueError("eligible adjusted-resistance plot values must be finite")
+    return result
+
+
+def plot_threshold_adjusted_resistance_diagnostic(
+    resistance: pd.DataFrame,
+    save_path: str = None,
+    figsize: tuple = (11.0, 5.0),
+    for_latex: bool = False,
+    plot_title: bool = False,
+):
+    """Show baseline-conditioned downside and adjusted city resistance.
+
+    Args:
+        resistance: City-scenario adjusted-resistance table.
+        save_path: Path to save figure. Shows plot if None.
+        figsize: Figure size tuple.
+        for_latex: If True, save as PDF.
+        plot_title: If True, show title.
+    """
+    frame = _validate_adjusted_resistance_frame(resistance)
+    frame = frame[frame["resistance_eligible"].astype(bool)]
+    scenario_specs = (
+        ("independent", "Independent perturbations"),
+        ("correlated_adverse_stress", "Correlated adverse joint perturbations"),
+    )
+    offsets = {
+        "beijing": (5, 7), "shanghai": (-43, -12), "shenzhen": (5, -13),
+        "chongqing": (5, 7), "guangzhou": (5, -13), "chengdu": (5, 7),
+        "tianjin": (-38, 8),
+    }
+    norm = TwoSlopeNorm(vmin=-2.0, vcenter=0.0, vmax=2.0)
+    fig, axes = plt.subplots(1, 2, figsize=figsize, sharex=True, sharey=False)
+    scatter = None
+    for panel, (ax, (scenario, label)) in enumerate(zip(axes, scenario_specs)):
+        subset = frame[frame["scenario"] == scenario].sort_values(
+            "baseline_fixed_threshold_reduction_pct"
+        )
+        x = subset["baseline_fixed_threshold_reduction_pct"].to_numpy(float)
+        scatter = ax.scatter(
+            x, subset["downside_p05_pp"],
+            c=subset["adjusted_resistance_score_p05"], cmap=ADJUSTED_RESISTANCE_CMAP,
+            norm=norm, s=22, alpha=0.78, edgecolor="white", linewidth=0.3,
+            rasterized=True, zorder=3,
+        )
+        ax.fill_between(
+            x, subset["conditional_p05_q25_pp"],
+            subset["conditional_p05_q75_pp"], color="#B8B8B8", alpha=0.25,
+            linewidth=0, label="Conditional Q25–Q75", zorder=1,
+        )
+        ax.plot(
+            x, subset["conditional_p05_q50_pp"], color="#333333",
+            linewidth=1.0, label="Conditional median", zorder=2,
+        )
+        uncertain = subset[subset["classification_uncertain"].astype(bool)]
+        ax.scatter(
+            uncertain["baseline_fixed_threshold_reduction_pct"],
+            uncertain["downside_p05_pp"], s=42, facecolors="none",
+            edgecolors="#111111", linewidths=0.75, zorder=4,
+        )
+        for region_key in THRESHOLD_RESILIENCE_MEGACITIES:
+            row = subset[subset["region_key"] == region_key]
+            if row.empty:
+                continue
+            item = row.iloc[0]
+            ax.annotate(
+                THRESHOLD_RESILIENCE_MEGACITY_LABELS[region_key],
+                (item["baseline_fixed_threshold_reduction_pct"], item["downside_p05_pp"]),
+                xytext=offsets[region_key], textcoords="offset points", fontsize=6.2,
+                arrowprops=dict(arrowstyle="-", color="#777777", linewidth=0.45),
+                zorder=5,
+            )
+        counts = subset["resistance_class"].value_counts()
+        ax.text(
+            0.02, 0.98,
+            f"High {counts.get('high', 0)}  |  Typical {counts.get('typical', 0)}  |  "
+            f"Low {counts.get('low', 0)}",
+            transform=ax.transAxes, ha="left", va="top", fontsize=6.4,
+            bbox=dict(facecolor="white", edgecolor="none", alpha=0.84, pad=1.5),
+        )
+        ax.set_xlabel("Deterministic reduction baseline (%)")
+        ax.set_ylabel("P05 downside loss (percentage points)")
+        ax.grid(color="#E7E7E7", linewidth=0.45, zorder=0)
+        ax.spines[["top", "right"]].set_visible(False)
+        ax.text(0.5, 1.02, label, transform=ax.transAxes, ha="center", va="bottom",
+                fontsize=9, fontweight="bold")
+        ax.text(-0.06, 1.02, chr(ord("a") + panel), transform=ax.transAxes,
+                fontsize=11, fontweight="bold", ha="right", va="bottom")
+    if scatter is not None:
+        cbar = fig.colorbar(scatter, ax=axes, orientation="horizontal", fraction=0.045,
+                            pad=0.13, aspect=35, extend="both")
+        cbar.set_label("Baseline-adjusted perturbation resistance score")
+    handles = [
+        Line2D([0], [0], color="#333333", linewidth=1.0, label="Conditional median"),
+        Patch(facecolor="#B8B8B8", alpha=0.25, edgecolor="none",
+              label="Conditional Q25–Q75"),
+        Line2D([0], [0], marker="o", linestyle="none", markerfacecolor="none",
+               markeredgecolor="#111111", label="Classification unstable"),
+    ]
+    fig.legend(handles=handles, loc="lower center", ncol=3,
+               bbox_to_anchor=(0.5, 0.005), fontsize=6.7, frameon=False)
+    if plot_title:
+        fig.suptitle("Conditional resistance separates perturbation response from baseline")
+    fig.tight_layout(rect=(0, 0.16, 1, 1))
+    return _finalize(save_path, 300, for_latex, plot_title)
+
+
+def plot_threshold_adjusted_resistance_national(
+    resistance: pd.DataFrame,
+    amplification: pd.DataFrame,
+    save_path: str = None,
+    figsize: tuple = (14.5, 5.2),
+    for_latex: bool = False,
+    plot_title: bool = False,
+):
+    """Map adjusted resistance and rank correlated-stress amplification.
+
+    Args:
+        resistance: City-scenario adjusted-resistance table.
+        amplification: One-row-per-city stress-amplification table.
+        save_path: Path to save figure. Shows plot if None.
+        figsize: Figure size tuple.
+        for_latex: If True, save as PDF.
+        plot_title: If True, show title.
+    """
+    from visualization.regions import (
+        _batch_city_to_adcode,
+        _ensure_all_china_city_areas,
+        _plot_geometry_outline,
+        plot_regions_on_china_map,
+    )
+
+    frame = _validate_adjusted_resistance_frame(resistance)
+    required_amplification = {
+        "region_key", "region_name_en", "resistance_eligible",
+        "stress_amplification_p05_pp",
+    }
+    missing = sorted(required_amplification - set(amplification.columns))
+    if missing:
+        raise KeyError(f"stress-amplification plot data missing columns: {missing}")
+    norm = TwoSlopeNorm(vmin=-2.0, vcenter=0.0, vmax=2.0)
+    fig, axes = plt.subplots(
+        1, 3, figsize=figsize, gridspec_kw={"width_ratios": [1.08, 1.08, 1.0]}
+    )
+    scenario_specs = (
+        ("independent", "Independent perturbations"),
+        ("correlated_adverse_stress", "Correlated adverse joint perturbations"),
+    )
+    areas = None
+    for panel, (scenario, label) in enumerate(scenario_specs):
+        subset = frame[frame["scenario"] == scenario].copy()
+        plot_regions_on_china_map(
+            df=subset, color_by="adjusted_resistance_score_p05", ax=axes[panel],
+            plot_title=False, cmap=ADJUSTED_RESISTANCE_CMAP, norm=norm,
+            draw_colorbar=False, draw_legend=False,
+        )
+        _style_resilience_map_axis(axes[panel])
+        uncertain_names = subset.loc[
+            subset["classification_uncertain"].astype(bool), "region_name_cn"
+        ].tolist()
+        uncertain_adcodes = set(_batch_city_to_adcode(uncertain_names).values())
+        if uncertain_adcodes:
+            areas = areas or _ensure_all_china_city_areas()
+            for adcode, _name, geometry in areas:
+                if adcode in uncertain_adcodes:
+                    _plot_geometry_outline(
+                        axes[panel], geometry, color="#111111", linewidth=0.8, zorder=5
+                    )
+        counts = subset.loc[subset["resistance_eligible"]].groupby(
+            "resistance_class"
+        ).size()
+        axes[panel].text(
+            0.02, 0.02,
+            f"High {counts.get('high', 0)}  |  Typical {counts.get('typical', 0)}  |  "
+            f"Low {counts.get('low', 0)}\nUnstable {len(uncertain_names)}",
+            transform=axes[panel].transAxes, fontsize=6.2, ha="left", va="bottom",
+            bbox=dict(facecolor="white", edgecolor="none", alpha=0.86, pad=1.5),
+        )
+        axes[panel].text(0.5, 1.01, label, transform=axes[panel].transAxes,
+                         ha="center", va="bottom", fontsize=9, fontweight="bold")
+        axes[panel].text(-0.03, 1.01, chr(ord("a") + panel),
+                         transform=axes[panel].transAxes, fontsize=11,
+                         fontweight="bold", ha="right", va="bottom")
+
+    ax = axes[2]
+    ranked = amplification[amplification["resistance_eligible"].astype(bool)].copy()
+    ranked = ranked.sort_values("stress_amplification_p05_pp").reset_index(drop=True)
+    ranked["rank"] = np.arange(1, len(ranked) + 1)
+    ax.scatter(ranked["rank"], ranked["stress_amplification_p05_pp"], s=13,
+               color="#9A9A9A", alpha=0.70, edgecolor="none", rasterized=True)
+    median = float(ranked["stress_amplification_p05_pp"].median())
+    ax.axhline(median, color="#333333", linewidth=0.8, linestyle="--")
+    annotation_offsets = {
+        "beijing": (4, 5), "shanghai": (4, -11), "shenzhen": (4, 5),
+        "chongqing": (4, -11), "guangzhou": (4, 5), "chengdu": (4, -11),
+        "tianjin": (4, 5),
+    }
+    for region_key in THRESHOLD_RESILIENCE_MEGACITIES:
+        row = ranked[ranked["region_key"] == region_key]
+        if row.empty:
+            continue
+        item = row.iloc[0]
+        ax.scatter(item["rank"], item["stress_amplification_p05_pp"], s=26,
+                   color="#D9822B", edgecolor="white", linewidth=0.35, zorder=4)
+        ax.annotate(
+            THRESHOLD_RESILIENCE_MEGACITY_LABELS[region_key],
+            (item["rank"], item["stress_amplification_p05_pp"]),
+            xytext=annotation_offsets[region_key], textcoords="offset points",
+            fontsize=6.1, arrowprops=dict(arrowstyle="-", color="#777777", linewidth=0.4),
+        )
+    ax.set_xlabel("City rank by additional P05 downside")
+    ax.set_ylabel("Stress amplification (percentage points)")
+    ax.grid(color="#E7E7E7", linewidth=0.45, zorder=0)
+    ax.spines[["top", "right"]].set_visible(False)
+    ax.text(0.02, 0.98, f"National median: {median:.1f} pp",
+            transform=ax.transAxes, ha="left", va="top", fontsize=6.5,
+            bbox=dict(facecolor="white", edgecolor="none", alpha=0.84, pad=1.5))
+    ax.text(-0.10, 1.01, "c", transform=ax.transAxes, fontsize=11,
+            fontweight="bold", ha="right", va="bottom")
+    ax.text(0.5, 1.01, "Additional loss under correlated stress",
+            transform=ax.transAxes, ha="center", va="bottom", fontsize=9,
+            fontweight="bold")
+    sm = plt.cm.ScalarMappable(cmap=ADJUSTED_RESISTANCE_CMAP, norm=norm)
+    sm.set_array([])
+    cbar = fig.colorbar(sm, ax=axes[:2], orientation="horizontal", fraction=0.045,
+                        pad=0.10, aspect=35, extend="both")
+    cbar.set_label("Baseline-adjusted perturbation resistance score")
+    fig.text(
+        0.01, 0.005,
+        "Positive scores indicate less P05 downside than cities with a comparable "
+        "baseline; black outlines mark unstable classifications; gray denotes no "
+        "eligible policy effect.",
+        fontsize=6.2, color="#555555", ha="left", va="bottom",
+    )
+    if plot_title:
+        fig.suptitle("Baseline-adjusted perturbation resistance across cities")
+    fig.tight_layout(rect=(0, 0.11, 1, 1))
     return _finalize(save_path, 300, for_latex, plot_title)
 
 
