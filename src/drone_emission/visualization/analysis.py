@@ -8743,8 +8743,8 @@ def plot_city_reduction_rank_all_macro_region(
         for idx, bar in enumerate(bars):
             if idx not in selected_indices:
                 continue
-            bar.set_edgecolor("#111111")
-            bar.set_linewidth(1.0)
+            bar.set_edgecolor((0.53, 0.53, 0.53, 0.4))
+            bar.set_linewidth(0.35)
             bar.set_zorder(3)
 
         selected_cities = selected_cities.sort_values("rank")
