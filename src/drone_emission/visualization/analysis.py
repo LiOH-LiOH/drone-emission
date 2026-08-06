@@ -10,6 +10,7 @@ from matplotlib.ticker import FuncFormatter
 import numpy as np
 import pandas as pd
 from scipy import stats
+import statsmodels.api as sm
 
 plt.rcParams.update({
     "font.family": "sans-serif",
@@ -10741,6 +10742,224 @@ DISTANCE_THRESHOLD_COMPARISON_LABEL_OFFSETS = {
         "kunming": (-7, -13),
     },
 }
+
+
+def _save_demand_distance_figure(
+    fig,
+    save_path: str,
+    for_latex: bool,
+    plot_title: bool,
+    description: str,
+):
+    """Save one exploratory demand-distance figure."""
+    if not save_path:
+        plt.show()
+        plt.close(fig)
+        return None
+    if for_latex and not save_path.endswith(".pdf"):
+        save_path = save_path.rsplit(".", 1)[0] + ".pdf"
+    if plot_title:
+        save_path = _add_title_suffix(save_path)
+    os.makedirs(os.path.dirname(save_path), exist_ok=True)
+    fig.savefig(save_path, dpi=300, bbox_inches="tight", facecolor="white")
+    print(f"{description} saved to {save_path}")
+    plt.close(fig)
+    return save_path
+
+
+def plot_demand_distance_feature_correlations(
+    df: pd.DataFrame,
+    save_path: str = None,
+    figsize: tuple = (9.0, 7.2),
+    for_latex: bool = False,
+    plot_title: bool = False,
+):
+    """Plot ranked city-feature correlations for both demand distances.
+
+    Args:
+        df: Long-form correlation results from demand-distance analysis.
+        save_path: Path to save figure. Shows plot if None.
+        figsize: Figure size tuple.
+        for_latex: If True, save as PDF.
+        plot_title: If True, show title.
+    """
+    required = {
+        "outcome",
+        "outcome_label",
+        "feature_label",
+        "n",
+        "spearman_rho",
+        "ci95_lower",
+        "ci95_upper",
+        "significant_fdr_0_05",
+    }
+    missing = required - set(df.columns)
+    if missing:
+        raise KeyError(f"Correlation plot missing columns: {sorted(missing)}")
+
+    outcomes = ("avg_straight_distance_m", "avg_road_distance_m")
+    colors = {True: "#2166AC", False: "#A6A6A6"}
+    fig, axes = plt.subplots(1, 2, figsize=figsize, sharex=True)
+    for panel, (ax, outcome) in enumerate(zip(axes, outcomes)):
+        plot_df = df[df["outcome"].eq(outcome)].dropna(
+            subset=["spearman_rho", "ci95_lower", "ci95_upper"]
+        ).copy()
+        plot_df = plot_df.sort_values("spearman_rho", ascending=True)
+        y = np.arange(len(plot_df))
+        point_colors = [
+            colors[bool(value)]
+            for value in plot_df["significant_fdr_0_05"]
+        ]
+        lower_error = plot_df["spearman_rho"] - plot_df["ci95_lower"]
+        upper_error = plot_df["ci95_upper"] - plot_df["spearman_rho"]
+        ax.errorbar(
+            plot_df["spearman_rho"],
+            y,
+            xerr=np.vstack([lower_error, upper_error]),
+            fmt="none",
+            ecolor="#777777",
+            elinewidth=0.8,
+            capsize=1.8,
+            zorder=1,
+        )
+        ax.scatter(
+            plot_df["spearman_rho"], y, c=point_colors, s=24,
+            edgecolor="white", linewidth=0.4, zorder=2,
+        )
+        ax.axvline(0, color="#444444", linewidth=0.7, linestyle="--", zorder=0)
+        ax.set_yticks(y)
+        ax.set_yticklabels([
+            f"{label} (n={int(n)})"
+            for label, n in zip(plot_df["feature_label"], plot_df["n"])
+        ], fontsize=7.2)
+        outcome_label = (
+            str(plot_df["outcome_label"].iloc[0])
+            if not plot_df.empty else outcome
+        )
+        ax.set_xlabel(
+            f"Spearman $\\rho$ with {outcome_label.lower()}\n"
+            "(95% bootstrap CI)"
+        )
+        ax.grid(axis="x", color="#E5E5E5", linewidth=0.6)
+        ax.text(
+            0.01, 0.99, chr(ord("a") + panel), transform=ax.transAxes,
+            va="top", ha="left", fontweight="bold", fontsize=10,
+        )
+        if plot_title:
+            ax.set_title(outcome_label)
+    axes[0].legend(
+        handles=[
+            plt.Line2D([], [], marker="o", linestyle="none", color=colors[True],
+                       label="BH-FDR q < 0.05", markersize=5),
+            plt.Line2D([], [], marker="o", linestyle="none", color=colors[False],
+                       label="Not FDR-significant", markersize=5),
+        ],
+        loc="lower left", frameon=False, fontsize=7,
+    )
+    if plot_title:
+        fig.suptitle("City features associated with modeled demand distance")
+    fig.tight_layout()
+    return _save_demand_distance_figure(
+        fig, save_path, for_latex, plot_title,
+        "Demand-distance feature correlation figure",
+    )
+
+
+def _log_linear_confidence_band(x: np.ndarray, y: np.ndarray):
+    """Return log-linear mean predictions and their 95% confidence limits."""
+    log_x = np.log(x)
+    log_y = np.log(y)
+    design = sm.add_constant(log_x, has_constant="add")
+    result = sm.OLS(log_y, design).fit()
+    x_line = np.geomspace(float(x.min()), float(x.max()), 160)
+    prediction_design = sm.add_constant(np.log(x_line), has_constant="add")
+    frame = result.get_prediction(prediction_design).summary_frame(alpha=0.05)
+    return (
+        x_line,
+        np.exp(frame["mean"].to_numpy(dtype=float)),
+        np.exp(frame["mean_ci_lower"].to_numpy(dtype=float)),
+        np.exp(frame["mean_ci_upper"].to_numpy(dtype=float)),
+    )
+
+
+def plot_demand_distance_key_scatters(
+    df: pd.DataFrame,
+    correlations: pd.DataFrame,
+    top_form_feature: str,
+    save_path: str = None,
+    figsize: tuple = (9.0, 3.0),
+    for_latex: bool = False,
+    plot_title: bool = False,
+):
+    """Plot population, affluence, and strongest-form demand-distance relations.
+
+    Args:
+        df: Prepared city-level region statistics.
+        correlations: Long-form demand-distance correlation results.
+        top_form_feature: Selected strongest urban-form feature.
+        save_path: Path to save figure. Shows plot if None.
+        figsize: Figure size tuple.
+        for_latex: If True, save as PDF.
+        plot_title: If True, show title.
+    """
+    outcome = "avg_straight_distance_m"
+    features = ("population_10k", "gdp_per_capita", top_form_feature)
+    label_lookup = dict(
+        correlations[["feature", "feature_label"]].drop_duplicates().itertuples(
+            index=False, name=None
+        )
+    )
+    fig, axes = plt.subplots(1, 3, figsize=figsize, sharey=True)
+    for panel, (ax, feature) in enumerate(zip(axes, features)):
+        pair = df[[feature, outcome]].apply(pd.to_numeric, errors="coerce").dropna()
+        pair = pair[
+            np.isfinite(pair[feature])
+            & np.isfinite(pair[outcome])
+            & pair[feature].gt(0)
+            & pair[outcome].gt(0)
+        ]
+        if len(pair) < 3:
+            raise ValueError(f"Insufficient positive observations for {feature}")
+        x = pair[feature].to_numpy(dtype=float)
+        y = pair[outcome].to_numpy(dtype=float) / 1000.0
+        x_line, y_line, lower, upper = _log_linear_confidence_band(x, y)
+        ax.scatter(
+            x, y, s=13, color="#4C78A8", alpha=0.58,
+            edgecolor="white", linewidth=0.25, zorder=2,
+        )
+        ax.plot(x_line, y_line, color="#B33A3A", linewidth=1.3, zorder=3)
+        ax.fill_between(x_line, lower, upper, color="#B33A3A", alpha=0.14, zorder=1)
+        ax.set_xscale("log")
+        ax.set_yscale("log")
+        ax.set_xlabel(label_lookup.get(feature, feature))
+        if panel == 0:
+            ax.set_ylabel("Mean straight-line demand distance (km)")
+        ax.grid(color="#E8E8E8", linewidth=0.5)
+        record = correlations[
+            correlations["outcome"].eq(outcome)
+            & correlations["feature"].eq(feature)
+        ].iloc[0]
+        ax.text(
+            0.97, 0.04,
+            f"$\\rho$={record['spearman_rho']:+.2f}\n"
+            f"q={record['q_value']:.2g}; n={int(record['n'])}",
+            transform=ax.transAxes, ha="right", va="bottom", fontsize=7.5,
+            bbox={"boxstyle": "round,pad=0.2", "facecolor": "white",
+                  "edgecolor": "#CCCCCC", "alpha": 0.88},
+        )
+        ax.text(
+            0.02, 0.98, chr(ord("a") + panel), transform=ax.transAxes,
+            va="top", ha="left", fontweight="bold", fontsize=10,
+        )
+        if plot_title:
+            ax.set_title(label_lookup.get(feature, feature))
+    if plot_title:
+        fig.suptitle("Key correlates of modeled straight-line demand distance")
+    fig.tight_layout()
+    return _save_demand_distance_figure(
+        fig, save_path, for_latex, plot_title,
+        "Demand-distance key scatter figure",
+    )
 
 
 def _save_distance_threshold_figure(
