@@ -11220,15 +11220,17 @@ def plot_distance_threshold_typical_city_curves(
 
 def plot_distance_threshold_all_city_overview(
     summary_df: pd.DataFrame,
+    oracle_df: pd.DataFrame,
     save_path: str = None,
-    figsize: tuple = (15.6, 4.9),
+    figsize: tuple = (10.6, 4.9),
     for_latex: bool = False,
     plot_title: bool = False,
 ):
-    """Plot the all-city threshold policy landscape and basis comparisons.
+    """Plot the road-threshold landscape and its performance against Oracle.
 
     Args:
         summary_df: Long-form exact optimum records for all complete cities.
+        oracle_df: City results for the trip-level Oracle allocation.
         save_path: Path to save figure. Shows plot if None.
         figsize: Figure size tuple.
         for_latex: If True, save as PDF.
@@ -11261,6 +11263,38 @@ def plot_distance_threshold_all_city_overview(
             + ", ".join(incomplete.index.astype(str))
         )
 
+    if "region_key" not in oracle_df.columns:
+        raise KeyError("Missing Oracle city key: region_key")
+    oracle = oracle_df.copy()
+    if "region_level" in oracle.columns:
+        oracle = oracle[oracle["region_level"] == "city"].copy()
+    if oracle.duplicated("region_key").any():
+        raise ValueError("Duplicate city rows in Oracle results")
+    if {"total_ebike_lifecycle", "oracle_min_lifecycle_kg"}.issubset(
+        oracle.columns
+    ):
+        ebike = pd.to_numeric(
+            oracle["total_ebike_lifecycle"], errors="coerce"
+        )
+        oracle_lifecycle = pd.to_numeric(
+            oracle["oracle_min_lifecycle_kg"], errors="coerce"
+        )
+        oracle["oracle_annual_reduction_pct"] = np.where(
+            ebike > 0,
+            (1.0 - oracle_lifecycle / ebike) * 100.0,
+            np.nan,
+        )
+    elif "oracle_min_reduction_vs_ebike_pct" in oracle.columns:
+        oracle["oracle_annual_reduction_pct"] = pd.to_numeric(
+            oracle["oracle_min_reduction_vs_ebike_pct"], errors="coerce"
+        )
+    else:
+        raise KeyError(
+            "Oracle results require oracle_min_reduction_vs_ebike_pct or "
+            "total_ebike_lifecycle plus oracle_min_lifecycle_kg"
+        )
+    oracle = oracle[["region_key", "oracle_annual_reduction_pct"]]
+
     identity = summary_df[
         ["region_key", "region_name_en"]
     ].drop_duplicates("region_key")
@@ -11278,20 +11312,27 @@ def plot_distance_threshold_all_city_overview(
             wide[f"{basis}_{column}"] = pd.to_numeric(
                 basis_df[column], errors="coerce"
             )
+    wide = wide.join(oracle.set_index("region_key"), how="left")
     wide = wide.reset_index()
     numeric = [
         f"{basis}_{column}"
         for basis in ("road", "straight")
         for column in metric_columns
-    ]
+    ] + ["oracle_annual_reduction_pct"]
     if not np.isfinite(wide[numeric].to_numpy(dtype=float)).all():
-        raise ValueError("All-city threshold metrics must be finite")
+        missing_oracle = wide.loc[
+            ~np.isfinite(wide["oracle_annual_reduction_pct"]), "region_key"
+        ].tolist()
+        raise ValueError(
+            "All-city threshold and Oracle metrics must be finite; missing "
+            "Oracle cities: " + ", ".join(map(str, missing_oracle))
+        )
 
     from matplotlib.colors import Normalize
 
     cmap = plt.get_cmap("Blues")
     norm = Normalize(vmin=0, vmax=100)
-    fig, axes = plt.subplots(1, 3, figsize=figsize)
+    fig, axes = plt.subplots(1, 2, figsize=figsize)
     highlight = wide["region_key"].isin(DISTANCE_THRESHOLD_TYPICAL_CITIES)
     color_values = wide["road_drone_order_ratio_pct"]
 
@@ -11305,19 +11346,12 @@ def plot_distance_threshold_all_city_overview(
             False,
         ),
         (
-            "straight_optimal_threshold_km",
-            "road_optimal_threshold_km",
-            "Straight-distance threshold, d* (km)",
-            "Road-distance threshold, d* (km)",
-            "b  Threshold heterogeneity",
-            True,
-        ),
-        (
-            "straight_annual_reduction_pct",
+            "oracle_annual_reduction_pct",
             "road_annual_reduction_pct",
-            "Straight-policy reduction (%)",
+            "Trip-level optimal reduction (%)\n"
+            "(drone for every lower-emission trip)",
             "Road-policy reduction (%)",
-            "c  Carbon-benefit heterogeneity",
+            "c  Policy performance against trip-level optimum",
             True,
         ),
     )
@@ -11447,7 +11481,8 @@ def plot_distance_threshold_all_city_overview(
     colorbar.ax.tick_params(labelsize=8)
     if plot_title:
         fig.suptitle(
-            "Optimal delivery thresholds reveal strong city-level heterogeneity",
+            "Road-distance thresholds balance operational simplicity "
+            "and carbon performance",
             fontsize=14,
             fontweight="bold",
             y=0.995,
@@ -11466,8 +11501,8 @@ def plot_distance_threshold_all_city_overview(
         {
             "figure_name": "distance_threshold_all_city_overview",
             "core_conclusion": (
-                "Optimal thresholds, lifecycle reductions, and drone shares vary "
-                "substantially across cities."
+                "Road-distance thresholds produce heterogeneous city benefits "
+                "that remain below the trip-level Oracle allocation."
             ),
             "city_count": city_count,
             "configured_city_count": configured_count,
@@ -11475,14 +11510,11 @@ def plot_distance_threshold_all_city_overview(
             "road_threshold_km": _writing_numeric_summary(
                 wide["road_optimal_threshold_km"]
             ),
-            "straight_threshold_km": _writing_numeric_summary(
-                wide["straight_optimal_threshold_km"]
-            ),
             "road_reduction_pct": _writing_numeric_summary(
                 wide["road_annual_reduction_pct"]
             ),
-            "straight_reduction_pct": _writing_numeric_summary(
-                wide["straight_annual_reduction_pct"]
+            "oracle_reduction_pct": _writing_numeric_summary(
+                wide["oracle_annual_reduction_pct"]
             ),
             "road_drone_order_share_pct": _writing_numeric_summary(
                 wide["road_drone_order_ratio_pct"]

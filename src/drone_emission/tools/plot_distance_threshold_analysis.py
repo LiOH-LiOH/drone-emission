@@ -99,6 +99,26 @@ def _load_summary(path: Path, data_dir: Path) -> pd.DataFrame:
     return summary
 
 
+def _load_oracle_results(data_dir: Path) -> pd.DataFrame:
+    """Load city-level trip-optimal lifecycle results."""
+    path = data_dir / "all_region_stats.csv"
+    if not path.exists():
+        raise FileNotFoundError(f"All-region statistics not found: {path}")
+    oracle = pd.read_csv(path)
+    if "region_key" not in oracle.columns:
+        raise ValueError("All-region statistics are missing region_key")
+    has_direct = "oracle_min_reduction_vs_ebike_pct" in oracle.columns
+    has_components = {
+        "total_ebike_lifecycle",
+        "oracle_min_lifecycle_kg",
+    }.issubset(oracle.columns)
+    if not has_direct and not has_components:
+        raise ValueError(
+            "All-region statistics are missing trip-level Oracle metrics"
+        )
+    return oracle
+
+
 def _curve_generation_command(env: str | None) -> str:
     env_flag = f" --env {env}" if env else ""
     regions = " ".join(
@@ -224,8 +244,10 @@ def main() -> None:
         )
 
     if args.only in {"all", "both"}:
+        oracle = _load_oracle_results(data_dir)
         plot_distance_threshold_all_city_overview(
             summary,
+            oracle,
             save_path=str(
                 figures_dir / "distance_threshold_all_city_overview.png"
             ),
