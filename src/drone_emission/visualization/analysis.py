@@ -11972,3 +11972,152 @@ def plot_city_reduction_concentration_scatter(
         plt.show()
     plt.close(fig)
     return save_path
+
+
+def plot_city_reduction_concentration_marker_scatter(
+    df: pd.DataFrame,
+    save_path: str = None,
+    figsize: tuple = (7, 5),
+    for_latex: bool = False,
+    plot_title: bool = False,
+):
+    """Plot city reduction metrics with concentration encoded by marker shape.
+
+    Args:
+        df: Successful city concentration results with Oracle reduction metrics.
+        save_path: Path to save figure. Shows plot if None.
+        figsize: Figure size tuple.
+        for_latex: If True, save as PDF.
+        plot_title: If True, show title.
+    """
+    required = [
+        "pilot_concentration_score_pct",
+        "concentration_class",
+        PILOT_ABSOLUTE_REDUCTION_COL,
+        PILOT_RELATIVE_REDUCTION_COL,
+    ]
+    missing = [column for column in required if column not in df]
+    if missing:
+        raise ValueError(f"City reduction marker scatter missing columns: {missing}")
+
+    plot_df = df.copy()
+    for column in (
+        "pilot_concentration_score_pct",
+        PILOT_ABSOLUTE_REDUCTION_COL,
+        PILOT_RELATIVE_REDUCTION_COL,
+    ):
+        plot_df[column] = pd.to_numeric(plot_df[column], errors="coerce")
+    plot_df = plot_df[
+        np.isfinite(plot_df["pilot_concentration_score_pct"])
+        & plot_df["concentration_class"].isin(("Low", "Medium", "High"))
+        & np.isfinite(plot_df[PILOT_ABSOLUTE_REDUCTION_COL])
+        & (plot_df[PILOT_ABSOLUTE_REDUCTION_COL] > 0)
+        & np.isfinite(plot_df[PILOT_RELATIVE_REDUCTION_COL])
+    ].copy()
+    if plot_df.empty:
+        raise ValueError("No finite positive city reduction results to plot")
+
+    absolute_median = float(plot_df[PILOT_ABSOLUTE_REDUCTION_COL].median())
+    relative_median = float(plot_df[PILOT_RELATIVE_REDUCTION_COL].median())
+    class_styles = {
+        "Low": {"marker": "o", "size": 30},
+        "Medium": {"marker": "s", "size": 28},
+        "High": {"marker": "^", "size": 36},
+    }
+
+    fig, ax = plt.subplots(figsize=figsize, layout="constrained")
+    for concentration_class in ("Low", "Medium", "High"):
+        group = plot_df[plot_df["concentration_class"].eq(concentration_class)]
+        if group.empty:
+            continue
+        style = class_styles[concentration_class]
+        ax.scatter(
+            group[PILOT_ABSOLUTE_REDUCTION_COL],
+            group[PILOT_RELATIVE_REDUCTION_COL],
+            s=style["size"],
+            marker=style["marker"],
+            alpha=0.72,
+            color="#555555",
+            edgecolor="white",
+            linewidth=0.35,
+            label=f"{concentration_class} concentration",
+            zorder=3,
+        )
+    ax.axhline(
+        relative_median,
+        color="#666666",
+        linestyle="--",
+        linewidth=1,
+        zorder=1,
+    )
+    ax.axvline(
+        absolute_median,
+        color="#666666",
+        linestyle="--",
+        linewidth=1,
+        zorder=1,
+    )
+
+    name_col = "region_name_en" if "region_name_en" in plot_df else "region_key"
+    labeled = plot_df[plot_df[name_col].isin(PILOT_SUPER_LARGE_CITIES)].copy()
+    labeled["_label_order"] = pd.Categorical(
+        labeled[name_col], categories=PILOT_SUPER_LARGE_CITIES, ordered=True
+    )
+    labeled = labeled.sort_values("_label_order")
+    label_texts = [
+        ax.text(
+            row[PILOT_ABSOLUTE_REDUCTION_COL],
+            row[PILOT_RELATIVE_REDUCTION_COL],
+            row[name_col],
+            fontsize=7.5,
+            color="#202020",
+            zorder=6,
+        )
+        for _, row in labeled.iterrows()
+    ]
+    if label_texts:
+        from adjustText import adjust_text
+
+        adjust_text(
+            label_texts,
+            x=labeled[PILOT_ABSOLUTE_REDUCTION_COL].to_numpy(dtype=float),
+            y=labeled[PILOT_RELATIVE_REDUCTION_COL].to_numpy(dtype=float),
+            ax=ax,
+            expand=(1.12, 1.22),
+            force_text=(0.15, 0.25),
+            force_static=(0.08, 0.15),
+            ensure_inside_axes=True,
+            arrowprops={"arrowstyle": "-", "color": "0.4", "lw": 0.5},
+        )
+
+    from matplotlib.lines import Line2D
+
+    handles, labels = ax.get_legend_handles_labels()
+    handles.append(
+        Line2D([0], [0], color="#666666", linestyle="--", linewidth=1)
+    )
+    labels.append("City medians")
+    ax.set_xscale("log")
+    ax.set_xlabel("Annual absolute emission reduction (t CO$_2$e yr$^{-1}$)")
+    ax.set_ylabel("Relative lifecycle emission reduction (%)")
+    ax.legend(handles, labels, loc="upper left", frameon=False, fontsize=8)
+    ax.spines[["top", "right"]].set_visible(False)
+    ax.grid(axis="both", color="#E5E5E5", linewidth=0.55, zorder=0)
+    if plot_title:
+        ax.set_title(
+            "City emission-reduction potential by concentration class",
+            fontsize=12,
+            fontweight="bold",
+        )
+    if save_path:
+        if for_latex and not save_path.endswith(".pdf"):
+            save_path = save_path.rsplit(".", 1)[0] + ".pdf"
+        if plot_title:
+            save_path = _add_title_suffix(save_path)
+        os.makedirs(os.path.dirname(save_path), exist_ok=True)
+        plt.savefig(save_path, dpi=300, bbox_inches="tight")
+        print(f"City reduction marker scatter saved to {save_path}")
+    else:
+        plt.show()
+    plt.close(fig)
+    return save_path
