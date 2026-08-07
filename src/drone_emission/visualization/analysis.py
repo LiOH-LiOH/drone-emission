@@ -12098,6 +12098,38 @@ def plot_city_reduction_concentration_marker_scatter(
     )
     labels.append("City medians")
     ax.set_xscale("log")
+    x_min, x_max = ax.get_xlim()
+    y_min, y_max = ax.get_ylim()
+    median_y_fraction = float(
+        np.clip((relative_median - y_min) / (y_max - y_min), 0.0, 1.0)
+    )
+    ax.axhspan(
+        y_min,
+        relative_median,
+        facecolor="#BDBDBD",
+        alpha=0.18,
+        zorder=-2,
+    )
+    ax.axvspan(
+        x_min,
+        absolute_median,
+        ymin=median_y_fraction,
+        ymax=1.0,
+        facecolor="#E6B85C",
+        alpha=0.18,
+        zorder=-2,
+    )
+    ax.axvspan(
+        absolute_median,
+        x_max,
+        ymin=median_y_fraction,
+        ymax=1.0,
+        facecolor="#5AAE61",
+        alpha=0.18,
+        zorder=-2,
+    )
+    ax.set_xlim(x_min, x_max)
+    ax.set_ylim(y_min, y_max)
     ax.set_xlabel("Annual absolute emission reduction (t CO$_2$e yr$^{-1}$)")
     ax.set_ylabel("Relative lifecycle emission reduction (%)")
     ax.legend(handles, labels, loc="upper left", frameon=False, fontsize=8)
