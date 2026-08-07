@@ -1593,10 +1593,10 @@ def plot_threshold_resilience_typology(
     for_latex: bool = False,
     plot_title: bool = False,
 ):
-    """Show separate baseline-resilience city typologies for both scenarios.
+    """Show baseline resilience as simple city scatter plots by scenario.
 
     Args:
-        typology: City-scenario four-quadrant typology table.
+        typology: City-scenario threshold resilience table.
         save_path: Path to save figure. Shows plot if None.
         figsize: Figure size tuple.
         for_latex: If True, save as PDF.
@@ -1607,10 +1607,6 @@ def plot_threshold_resilience_typology(
         "scenario",
         "baseline_fixed_threshold_reduction_pct",
         "prob_reduction_positive",
-        "baseline_median",
-        "resilience_probability_median",
-        "quadrant_id",
-        "boundary_uncertain",
     }
     missing = sorted(required - set(typology.columns))
     if missing:
@@ -1619,11 +1615,6 @@ def plot_threshold_resilience_typology(
     duplicates = frame.duplicated(["region_key", "scenario"], keep=False)
     if duplicates.any():
         raise ValueError("threshold-resilience typology has duplicate city/scenario rows")
-    invalid_quadrants = sorted(
-        set(frame["quadrant_id"]) - set(THRESHOLD_RESILIENCE_QUADRANT_IDS)
-    )
-    if invalid_quadrants:
-        raise ValueError(f"unknown threshold-resilience quadrants: {invalid_quadrants}")
     for scenario in THRESHOLD_RESILIENCE_SCENARIOS:
         if frame.loc[frame["scenario"] == scenario, "region_key"].nunique() == 0:
             raise ValueError(f"threshold-resilience typology missing scenario: {scenario}")
@@ -1658,62 +1649,16 @@ def plot_threshold_resilience_typology(
     fig, axes = plt.subplots(1, 2, figsize=figsize, sharex=True, sharey=True)
     for panel, (ax, (scenario, label)) in enumerate(zip(axes, scenario_specs)):
         subset = frame[frame["scenario"] == scenario].copy()
-        baseline_median = float(subset["baseline_median"].iloc[0])
-        resilience_median = float(
-            subset["resilience_probability_median"].iloc[0]
-        )
-        if not np.allclose(subset["baseline_median"], baseline_median):
-            raise ValueError("baseline median must be constant within a scenario")
-        if not np.allclose(
-            subset["resilience_probability_median"], resilience_median
-        ):
-            raise ValueError("resilience median must be constant within a scenario")
-
-        for quadrant_id in THRESHOLD_RESILIENCE_QUADRANT_IDS:
-            rows = subset[subset["quadrant_id"] == quadrant_id]
-            ax.scatter(
-                rows["baseline_fixed_threshold_reduction_pct"],
-                rows["prob_reduction_positive"],
-                s=21,
-                alpha=0.70,
-                color=THRESHOLD_RESILIENCE_TYPOLOGY_COLORS[quadrant_id],
-                edgecolor="white",
-                linewidth=0.3,
-                label=THRESHOLD_RESILIENCE_QUADRANT_LABELS[quadrant_id],
-                zorder=3,
-            )
-        uncertain = subset[subset["boundary_uncertain"].astype(bool)]
         ax.scatter(
-            uncertain["baseline_fixed_threshold_reduction_pct"],
-            uncertain["prob_reduction_positive"],
-            s=38,
-            facecolors="none",
-            edgecolors="#222222",
-            linewidths=0.7,
-            zorder=4,
+            subset["baseline_fixed_threshold_reduction_pct"],
+            subset["prob_reduction_positive"],
+            s=21,
+            alpha=0.70,
+            color="#3B75AF",
+            edgecolor="white",
+            linewidth=0.3,
+            zorder=3,
         )
-        ax.axvline(
-            baseline_median, color="#666666", linewidth=0.7, linestyle="--"
-        )
-        ax.axhline(
-            resilience_median, color="#666666", linewidth=0.7, linestyle="--"
-        )
-
-        count_positions = {
-            "low_baseline_low_resilience": (0.02, 0.04, "left", "bottom"),
-            "high_baseline_low_resilience": (0.98, 0.04, "right", "bottom"),
-            "low_baseline_high_resilience": (0.02, 0.96, "left", "top"),
-            "high_baseline_high_resilience": (0.98, 0.96, "right", "top"),
-        }
-        for quadrant_id, (x, y, ha, va) in count_positions.items():
-            count = int((subset["quadrant_id"] == quadrant_id).sum())
-            share = count / len(subset)
-            ax.text(
-                x, y, f"n={count} ({share:.0%})", transform=ax.transAxes,
-                fontsize=6.5, color="#444444", ha=ha, va=va,
-                bbox=dict(facecolor="white", edgecolor="none", alpha=0.78, pad=1.0),
-                zorder=5,
-            )
         for region_key in THRESHOLD_RESILIENCE_MEGACITIES:
             row = subset[subset["region_key"] == region_key]
             if row.empty:
@@ -1748,35 +1693,9 @@ def plot_threshold_resilience_typology(
             fontsize=11, fontweight="bold", ha="right", va="bottom",
         )
 
-    legend_handles = [
-        Line2D(
-            [0], [0], marker="o", linestyle="none", markersize=5,
-            markerfacecolor=THRESHOLD_RESILIENCE_TYPOLOGY_COLORS[quadrant_id],
-            markeredgecolor="white",
-            label=THRESHOLD_RESILIENCE_QUADRANT_LABELS[quadrant_id],
-        )
-        for quadrant_id in THRESHOLD_RESILIENCE_QUADRANT_IDS
-    ]
-    legend_handles.append(
-        Line2D(
-            [0], [0], marker="o", linestyle="none", markersize=6,
-            markerfacecolor="none", markeredgecolor="#222222",
-            label="95% CI overlaps scenario median",
-        )
-    )
-    fig.legend(
-        handles=legend_handles, loc="lower center", ncol=3,
-        bbox_to_anchor=(0.5, 0.025), fontsize=6.8, frameon=False,
-    )
-    fig.text(
-        0.01, 0.005,
-        "Quadrants use the national baseline median and each scenario's own "
-        "positive-reduction probability median; high/low denotes relative typology.",
-        fontsize=6.3, color="#555555", ha="left", va="bottom",
-    )
     if plot_title:
-        fig.suptitle("Baseline and positive-reduction safety form four relative types")
-    fig.tight_layout(rect=(0, 0.16, 1, 1))
+        fig.suptitle("Baseline reduction and resilience across cities")
+    fig.tight_layout()
     return _finalize(save_path, 300, for_latex, plot_title)
 
 
