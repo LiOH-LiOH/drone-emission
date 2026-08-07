@@ -5,6 +5,7 @@ from __future__ import annotations
 import sys
 import tempfile
 from pathlib import Path
+from unittest.mock import patch
 
 import matplotlib
 
@@ -27,8 +28,8 @@ from tools import plot_threshold_resilience as plot_runner  # noqa: E402
 from visualization.sensitivity import (  # noqa: E402
     THRESHOLD_RESILIENCE_SCENARIOS,
     THRESHOLD_RESILIENCE_TYPICAL_CITIES,
-    classify_threshold_resilience,
     plot_threshold_resilience_driver_forest,
+    plot_threshold_resilience_national_overview,
     plot_threshold_resilience_typology,
     plot_threshold_resilience_typical_city_distributions,
     prepare_threshold_resilience_drivers,
@@ -113,10 +114,61 @@ def _typology_input() -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
-def test_probability_class_boundaries() -> None:
-    actual = classify_threshold_resilience([0.0, 0.4999, 0.5, 0.8999, 0.9, 1.0])
-    np.testing.assert_array_equal(actual, [0, 0, 1, 1, 2, 2])
+def test_cli_selects_typology() -> None:
     assert plot_runner._parse_only("typology") == {"typology"}
+
+
+def test_national_overview_uses_shared_continuous_probability_scale() -> None:
+    megacities = (
+        "beijing", "shanghai", "shenzhen", "chongqing",
+        "guangzhou", "chengdu", "tianjin",
+    )
+    city_keys = megacities + tuple(f"city_{index}" for index in range(307))
+    rows = []
+    for city_index, city in enumerate(city_keys):
+        independent = city_index / (len(city_keys) - 1)
+        for scenario in THRESHOLD_RESILIENCE_SCENARIOS:
+            probability = (
+                independent if scenario == "independent"
+                else max(0.0, independent - 0.08)
+            )
+            rows.append({
+                "region_key": city,
+                "region_name_cn": f"城市{city_index}",
+                "region_name_en": city.replace("_", " ").title(),
+                "scenario": scenario,
+                "n_samples": 10000,
+                "prob_reduction_positive": probability,
+                "baseline_fixed_threshold_reduction_pct": 10.0,
+            })
+    summary = pd.DataFrame(rows)
+    map_calls = []
+
+    def fake_adcodes(names):
+        return {name: str(index) for index, name in enumerate(names)}
+
+    def fake_map(**kwargs):
+        map_calls.append(kwargs)
+
+    with tempfile.TemporaryDirectory() as temporary_dir:
+        output = Path(temporary_dir) / "national.png"
+        with patch(
+            "visualization.regions._batch_city_to_adcode", fake_adcodes
+        ), patch(
+            "visualization.regions.plot_regions_on_china_map", fake_map
+        ):
+            plot_threshold_resilience_national_overview(
+                summary, save_path=str(output)
+            )
+        assert output.exists()
+        assert output.stat().st_size > 10000
+
+    assert [call["color_by"] for call in map_calls] == list(
+        THRESHOLD_RESILIENCE_SCENARIOS
+    )
+    assert all(call["cmap"].name == "viridis" for call in map_calls)
+    assert all(call["norm"].vmin == 0.0 for call in map_calls)
+    assert all(call["norm"].vmax == 1.0 for call in map_calls)
 
 
 def test_summary_and_samples_validate_complete_inputs() -> None:

@@ -1286,16 +1286,6 @@ THRESHOLD_RESILIENCE_SCENARIO_COLORS = {
     "independent": "#3775BA",
     "correlated_adverse_stress": "#D9822B",
 }
-THRESHOLD_RESILIENCE_CLASS_COLORS = (
-    "#C95A53",
-    "#E6B85C",
-    "#3D8C86",
-)
-THRESHOLD_RESILIENCE_CLASS_LABELS = (
-    "<50%: no majority support",
-    "50–<90%: moderate safety probability",
-    "≥90%: high safety probability",
-)
 THRESHOLD_RESILIENCE_TYPOLOGY_COLORS = {
     "low_baseline_low_resilience": "#D6D6D6",
     "high_baseline_low_resilience": "#E6B85C",
@@ -1332,14 +1322,6 @@ THRESHOLD_RESILIENCE_PARAMETER_LABELS = {
 }
 
 
-def classify_threshold_resilience(probability) -> np.ndarray:
-    """Classify probabilities into <50%, 50–<90%, and ≥90% bins."""
-    values = np.asarray(probability, dtype=float)
-    if not np.isfinite(values).all() or ((values < 0) | (values > 1)).any():
-        raise ValueError("resilience probabilities must be finite and within [0, 1]")
-    return np.where(values < 0.5, 0, np.where(values < 0.9, 1, 2))
-
-
 def validate_threshold_resilience_summary(
     summary: pd.DataFrame,
     expected_cities: int | None = None,
@@ -1371,7 +1353,15 @@ def validate_threshold_resilience_summary(
         raise ValueError(f"expected {expected_cities} cities, found {n_cities}")
     if not (pd.to_numeric(frame["n_samples"], errors="coerce") == 10000).all():
         raise ValueError("every city/scenario must contain 10,000 Monte Carlo draws")
-    classify_threshold_resilience(frame["prob_reduction_positive"])
+    probabilities = pd.to_numeric(
+        frame["prob_reduction_positive"], errors="coerce"
+    ).to_numpy(dtype=float)
+    if (
+        not np.isfinite(probabilities).all()
+        or ((probabilities < 0) | (probabilities > 1)).any()
+    ):
+        raise ValueError("resilience probabilities must be finite and within [0, 1]")
+    frame["prob_reduction_positive"] = probabilities
 
     identifiers = frame[
         ["region_key", "region_name_cn", "region_name_en"]
@@ -1480,8 +1470,8 @@ def plot_threshold_resilience_national_overview(
     if unresolved:
         raise ValueError(f"valid resilience cities unresolved for mapping: {unresolved}")
 
-    cmap = ListedColormap(THRESHOLD_RESILIENCE_CLASS_COLORS)
-    norm = BoundaryNorm((-0.5, 0.5, 1.5, 2.5), cmap.N)
+    cmap = plt.get_cmap("viridis")
+    norm = plt.Normalize(vmin=0.0, vmax=1.0)
     fig, axes = plt.subplots(
         1, 3, figsize=figsize, gridspec_kw={"width_ratios": [1.08, 1.08, 1.0]}
     )
@@ -1491,10 +1481,9 @@ def plot_threshold_resilience_national_overview(
     )
     for panel, (scenario, label) in enumerate(scenario_specs):
         map_df = wide[["region_key", "region_name_cn", scenario]].copy()
-        map_df["resilience_class"] = classify_threshold_resilience(map_df[scenario])
         plot_regions_on_china_map(
             df=map_df,
-            color_by="resilience_class",
+            color_by=scenario,
             ax=axes[panel],
             plot_title=False,
             cmap=cmap,
@@ -1503,16 +1492,9 @@ def plot_threshold_resilience_national_overview(
             draw_legend=False,
         )
         _style_resilience_map_axis(axes[panel])
-        counts = map_df["resilience_class"].value_counts().reindex(range(3), fill_value=0)
         axes[panel].text(
             0.5, 1.01, label, transform=axes[panel].transAxes,
             ha="center", va="bottom", fontsize=9, fontweight="bold",
-        )
-        axes[panel].text(
-            0.02, 0.02,
-            f"<50%: {counts[0]}   50–<90%: {counts[1]}   ≥90%: {counts[2]}",
-            transform=axes[panel].transAxes, fontsize=6.5, ha="left", va="bottom",
-            bbox=dict(facecolor="white", edgecolor="none", alpha=0.86, pad=1.5),
         )
         axes[panel].text(
             -0.03, 1.01, chr(ord("a") + panel), transform=axes[panel].transAxes,
@@ -1522,36 +1504,30 @@ def plot_threshold_resilience_national_overview(
     ax = axes[2]
     x = wide["independent"].to_numpy(dtype=float)
     y = wide["correlated_adverse_stress"].to_numpy(dtype=float)
-    stress_class = classify_threshold_resilience(y)
-    for class_id, color, label in zip(
-        range(3), THRESHOLD_RESILIENCE_CLASS_COLORS,
-        THRESHOLD_RESILIENCE_CLASS_LABELS,
-    ):
-        mask = stress_class == class_id
-        ax.scatter(
-            x[mask], y[mask], s=18, alpha=0.68, color=color,
-            edgecolor="white", linewidth=0.25, label=label, zorder=3,
-        )
+    ax.scatter(
+        x, y, c=y, s=18, alpha=0.68, cmap=cmap, norm=norm,
+        edgecolor="white", linewidth=0.25, zorder=3,
+    )
     ax.plot((0, 1), (0, 1), linestyle="--", color="#555555", linewidth=0.8, zorder=1)
-    for threshold in (0.5, 0.9):
-        ax.axvline(threshold, color="#888888", linewidth=0.55, linestyle=":")
-        ax.axhline(threshold, color="#888888", linewidth=0.55, linestyle=":")
-    annotation_keys = {
-        "beijing": (6, -12),
-        "linzhi": (5, 6),
-        "changdou": (-35, 7),
-        "panzhihua": (5, -13),
-        "zhaotong": (5, 6),
+    annotation_offsets = {
+        "beijing": (7, 12),
+        "shanghai": (-45, -12),
+        "shenzhen": (8, -17),
+        "chongqing": (-48, 10),
+        "guangzhou": (7, -11),
+        "chengdu": (-47, 12),
+        "tianjin": (-42, 14),
     }
-    for region_key, offset in annotation_keys.items():
+    for region_key in THRESHOLD_RESILIENCE_MEGACITIES:
         row = wide[wide["region_key"] == region_key]
         if row.empty:
             continue
         item = row.iloc[0]
         ax.annotate(
-            item["region_name_en"],
+            THRESHOLD_RESILIENCE_MEGACITY_LABELS[region_key],
             (item["independent"], item["correlated_adverse_stress"]),
-            xytext=offset, textcoords="offset points", fontsize=6.5,
+            xytext=annotation_offsets[region_key], textcoords="offset points",
+            fontsize=6.5,
             arrowprops=dict(arrowstyle="-", color="#777777", linewidth=0.5),
         )
     ax.set_xlim(-0.02, 1.02)
@@ -1563,26 +1539,32 @@ def plot_threshold_resilience_national_overview(
             fontweight="bold", ha="right", va="bottom")
     ax.grid(color="#E7E7E7", linewidth=0.45, zorder=0)
 
-    legend_handles = [
-        Patch(facecolor=color, edgecolor="none", label=label)
-        for color, label in zip(
-            THRESHOLD_RESILIENCE_CLASS_COLORS,
-            THRESHOLD_RESILIENCE_CLASS_LABELS,
-        )
-    ]
-    legend_handles.append(Patch(facecolor="#CCCCCC", edgecolor="none", label="No valid result"))
+    sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
+    sm.set_array([])
+    colorbar_ax = fig.add_axes((0.28, 0.11, 0.44, 0.025))
+    colorbar = fig.colorbar(sm, cax=colorbar_ax, orientation="horizontal")
+    colorbar.set_ticks(np.linspace(0.0, 1.0, 6))
+    colorbar.ax.xaxis.set_major_formatter(FuncFormatter(
+        lambda value, _position: f"{value:.0%}"
+    ))
+    colorbar.set_label("Probability of positive reduction", fontsize=7)
+    colorbar.ax.tick_params(labelsize=6.5, length=2)
+    colorbar.outline.set_linewidth(0.4)
     fig.legend(
-        handles=legend_handles, loc="lower center", ncol=4,
-        bbox_to_anchor=(0.36, -0.01), fontsize=7, frameon=False,
+        handles=[Patch(
+            facecolor="#CCCCCC", edgecolor="none", label="No valid result"
+        )],
+        loc="lower right", bbox_to_anchor=(0.98, 0.075),
+        fontsize=7, frameon=False,
     )
     fig.text(
-        0.01, -0.01,
+        0.01, 0.01,
         "314/328 cities; Tibet, Hong Kong and Macao use the national fallback GEF.",
-        fontsize=6.3, ha="left", va="top", color="#555555",
+        fontsize=6.3, ha="left", va="bottom", color="#555555",
     )
     if plot_title:
         fig.suptitle("Probability of retaining positive reduction varies across cities")
-    fig.tight_layout(rect=(0, 0.07, 1, 1))
+    fig.subplots_adjust(left=0.02, right=0.98, top=0.91, bottom=0.23, wspace=0.18)
     return _finalize(save_path, 300, for_latex, plot_title)
 
 
