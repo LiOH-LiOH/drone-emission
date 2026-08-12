@@ -1,5 +1,16 @@
 """Shared constants for analysis and visualization modules."""
 
+DRONE_SPATIAL_SCATTER_LABELED_CITIES = (
+    ("Beijing", "large_absolute_reduction"),
+    ("Guangzhou", "large_absolute_reduction"),
+    ("Shenzhen", "large_absolute_reduction"),
+    ("Shanghai", "large_absolute_reduction"),
+    ("Chengdu", "large_absolute_reduction"),
+    ("Chongqing", "large_absolute_reduction"),
+    ("Panzhihua", "high_relative_low_absolute"),
+    ("Zhaotong", "high_relative_low_absolute"),
+)
+
 # Human-readable labels for variables
 VARIABLE_LABELS = {
     # Results

@@ -33,6 +33,7 @@ from scipy.ndimage import maximum_filter
 from scipy.signal import fftconvolve
 from scipy.spatial import cKDTree
 
+from analysis.constants import DRONE_SPATIAL_SCATTER_LABELED_CITIES
 from utils import load_config
 from utils.tools import get_epsg_from_bounds
 
@@ -48,15 +49,6 @@ CONVERGENCE_TOLERANCE_PCT = 0.5
 MAX_SCREENING_CELLS = 4_000_000
 ABSOLUTE_REDUCTION_COLUMN = "oracle_absolute_reduction_t_co2e"
 RELATIVE_REDUCTION_COLUMN = "oracle_relative_reduction_pct"
-SUPER_LARGE_CITIES = (
-    "Beijing",
-    "Shanghai",
-    "Shenzhen",
-    "Chongqing",
-    "Guangzhou",
-    "Chengdu",
-    "Tianjin",
-)
 
 REQUIRED_OD_COLUMNS = (
     "from_lat",
@@ -725,11 +717,22 @@ def run_drone_spatial_concentration(
     )
     scatter_excluded = scatter_sample.loc[~scatter_mask]
     scatter_sample = scatter_sample.loc[scatter_mask]
+    label_role_by_city = dict(DRONE_SPATIAL_SCATTER_LABELED_CITIES)
+    label_city_order = tuple(label_role_by_city)
     labeled_cities = scatter_sample[
-        scatter_sample["region_name_en"].isin(SUPER_LARGE_CITIES)
-    ]
+        scatter_sample["region_name_en"].isin(label_city_order)
+    ].copy()
+    labeled_cities["label_role"] = labeled_cities["region_name_en"].map(
+        label_role_by_city
+    )
+    labeled_cities["_label_order"] = pd.Categorical(
+        labeled_cities["region_name_en"],
+        categories=label_city_order,
+        ordered=True,
+    )
+    labeled_cities = labeled_cities.sort_values("_label_order")
     report = {
-        "schema_version": 2,
+        "schema_version": 3,
         "analysis": "drone_spatial_concentration",
         "metric": {
             "name": "Multi-scale Pilot Capture Score",
@@ -798,10 +801,23 @@ def run_drone_spatial_concentration(
                 float(scatter_sample[RELATIVE_REDUCTION_COLUMN].median())
                 if not scatter_sample.empty else None
             ),
-            "labeled_super_large_cities": labeled_cities[
+            "label_selection": {
+                "mode": "fixed manuscript exemplars",
+                "roles": {
+                    "large_absolute_reduction": (
+                        "six cities with the largest absolute reductions"
+                    ),
+                    "high_relative_low_absolute": (
+                        "two high-relative-reduction exemplars left of the "
+                        "absolute-reduction median"
+                    ),
+                },
+            },
+            "labeled_cities": labeled_cities[
                 [
                     "region_key",
                     "region_name_en",
+                    "label_role",
                     ABSOLUTE_REDUCTION_COLUMN,
                     RELATIVE_REDUCTION_COLUMN,
                     "pilot_concentration_score_pct",

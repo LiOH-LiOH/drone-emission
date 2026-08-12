@@ -30,7 +30,11 @@ from visualization.macro_regions import (
 )
 
 # Import from constants module (no circular dependency)
-from analysis.constants import PROVINCE_NAME_EN, VARIABLE_LABELS
+from analysis.constants import (
+    DRONE_SPATIAL_SCATTER_LABELED_CITIES,
+    PROVINCE_NAME_EN,
+    VARIABLE_LABELS,
+)
 from analysis.city_attribution import R2_ABSOLUTE_OUTCOME, R2_OUTCOME
 
 
@@ -11839,9 +11843,12 @@ def plot_city_reduction_concentration_scatter(
     ax.set_xscale("log")
 
     name_col = "region_name_en" if "region_name_en" in plot_df else "region_key"
-    labeled = plot_df[plot_df[name_col].isin(PILOT_SUPER_LARGE_CITIES)].copy()
+    labeled_city_order = tuple(
+        city_name for city_name, _ in DRONE_SPATIAL_SCATTER_LABELED_CITIES
+    )
+    labeled = plot_df[plot_df[name_col].isin(labeled_city_order)].copy()
     labeled["_label_order"] = pd.Categorical(
-        labeled[name_col], categories=PILOT_SUPER_LARGE_CITIES, ordered=True
+        labeled[name_col], categories=labeled_city_order, ordered=True
     )
     labeled = labeled.sort_values("_label_order")
     ax.scatter(
@@ -11849,8 +11856,8 @@ def plot_city_reduction_concentration_scatter(
         labeled[PILOT_RELATIVE_REDUCTION_COL],
         s=30,
         facecolors="none",
-        edgecolors="#111111",
-        linewidth=1.15,
+        edgecolors="#555555",
+        linewidth=0.8,
         zorder=5,
     )
     label_texts = [
@@ -11882,15 +11889,10 @@ def plot_city_reduction_concentration_scatter(
     from matplotlib.lines import Line2D
 
     handles, labels = ax.get_legend_handles_labels()
-    handles.extend([
+    handles.append(
         Line2D([0], [0], color="#666666", linestyle="--", linewidth=1),
-        Line2D(
-            [0], [0], marker="o", linestyle="none", markersize=4.5,
-            markerfacecolor="none", markeredgecolor="#111111",
-            markeredgewidth=1.15,
-        ),
-    ])
-    labels.extend(["City medians", "2020 census super-large city"])
+    )
+    labels.append("Median values")
     ax.set_xlabel(
         "Annual absolute emission reduction (t CO$_2$e yr$^{-1}$)",
         fontsize=9,
