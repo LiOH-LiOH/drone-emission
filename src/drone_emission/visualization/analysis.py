@@ -11836,6 +11836,7 @@ def plot_city_reduction_concentration_scatter(
         )
     ax.axhline(relative_median, color="#666666", linestyle="--", linewidth=1, zorder=1)
     ax.axvline(absolute_median, color="#666666", linestyle="--", linewidth=1, zorder=1)
+    ax.set_xscale("log")
 
     name_col = "region_name_en" if "region_name_en" in plot_df else "region_key"
     labeled = plot_df[plot_df[name_col].isin(PILOT_SUPER_LARGE_CITIES)].copy()
@@ -11890,7 +11891,6 @@ def plot_city_reduction_concentration_scatter(
         ),
     ])
     labels.extend(["City medians", "2020 census super-large city"])
-    ax.set_xscale("log")
     ax.set_xlabel(
         "Annual absolute emission reduction (t CO$_2$e yr$^{-1}$)",
         fontsize=9,
