@@ -11768,21 +11768,21 @@ def plot_representative_city_drone_heatmaps(
 
 def plot_city_reduction_concentration_scatter(
     df: pd.DataFrame,
-    configured_city_count: int,
-    save_path: str = None,
-    figsize: tuple = (9, 5.2),
+    scatter_save_path: str = None,
+    distribution_save_path: str = None,
+    scatter_figsize: tuple = (130.5 / 25.4, 100 / 25.4),
+    distribution_figsize: tuple = (43.5 / 25.4, 100 / 25.4),
     for_latex: bool = False,
-    plot_title: bool = False,
 ):
-    """Plot city absolute versus relative reduction colored by MPCS class.
+    """Plot city reduction potential and MPCS distribution separately.
 
     Args:
         df: Successful city concentration results with Oracle reduction metrics.
-        configured_city_count: Total configured city count before missing-data skips.
-        save_path: Path to save figure. Shows plot if None.
-        figsize: Figure size tuple.
+        scatter_save_path: Path for the reduction-potential scatter figure.
+        distribution_save_path: Path for the MPCS distribution figure.
+        scatter_figsize: Scatter figure size tuple.
+        distribution_figsize: Distribution figure size tuple.
         for_latex: If True, save as PDF.
-        plot_title: If True, show title.
     """
     required = [
         "pilot_concentration_score_pct",
@@ -11817,13 +11817,8 @@ def plot_city_reduction_concentration_scatter(
     relative_median = float(plot_df[PILOT_RELATIVE_REDUCTION_COL].median())
     class_colors = {"Low": "#D95F0E", "Medium": "#7570B3", "High": "#1B9E77"}
 
-    fig, (ax, ax_distribution) = plt.subplots(
-        1,
-        2,
-        figsize=figsize,
-        layout="constrained",
-        gridspec_kw={"width_ratios": (3, 1)},
-    )
+    fig, ax = plt.subplots(figsize=scatter_figsize)
+    fig.subplots_adjust(left=0.14, right=0.98, bottom=0.16, top=0.98)
     for concentration_class in ("Low", "Medium", "High"):
         group = plot_df[plot_df["concentration_class"].eq(concentration_class)]
         if group.empty:
@@ -11896,14 +11891,18 @@ def plot_city_reduction_concentration_scatter(
     ])
     labels.extend(["City medians", "2020 census super-large city"])
     ax.set_xscale("log")
-    ax.set_xlabel("Annual absolute emission reduction (t CO$_2$e yr$^{-1}$)")
-    ax.set_ylabel("Relative lifecycle emission reduction (%)")
+    ax.set_xlabel(
+        "Annual absolute emission reduction (t CO$_2$e yr$^{-1}$)",
+        fontsize=9,
+    )
+    ax.set_ylabel("Relative lifecycle emission reduction (%)", fontsize=9)
+    ax.tick_params(axis="both", labelsize=8)
     ax.legend(handles, labels, loc="upper left", frameon=False, fontsize=8)
     ax.spines[["top", "right"]].set_visible(False)
     ax.grid(axis="both", color="#E5E5E5", linewidth=0.55, zorder=0)
 
-    score = distribution_df["pilot_concentration_score_pct"]
-    lower, upper = score.quantile([1 / 3, 2 / 3])
+    fig_distribution, ax_distribution = plt.subplots(figsize=distribution_figsize)
+    fig_distribution.subplots_adjust(left=0.32, right=0.96, bottom=0.16, top=0.98)
     histogram_values = [
         distribution_df.loc[
             distribution_df["concentration_class"].eq(concentration_class),
@@ -11920,58 +11919,45 @@ def plot_city_reduction_concentration_scatter(
         edgecolor="white",
         linewidth=0.6,
     )
-    for value, label, vertical_alignment in (
-        (lower, "Low / Medium", "top"),
-        (upper, "Medium / High", "bottom"),
-    ):
-        ax_distribution.axhline(
-            value,
-            color="#444444",
-            linestyle="--",
-            linewidth=1.0,
-            zorder=4,
-        )
-        ax_distribution.text(
-            0.98,
-            value,
-            f"{label}\n{value:.1f}%",
-            transform=ax_distribution.get_yaxis_transform(),
-            ha="right",
-            va=vertical_alignment,
-            fontsize=6.5,
-            color="#333333",
-            zorder=5,
-            bbox={
-                "facecolor": "white",
-                "edgecolor": "none",
-                "alpha": 0.78,
-                "pad": 0.8,
-            },
-        )
     ax_distribution.set_ylim(0, 100)
     ax_distribution.set_yticks([0, 25, 50, 75, 100])
-    ax_distribution.set_xlabel("Number of cities")
-    ax_distribution.set_ylabel("Multi-scale Pilot\nCapture Score (%)")
+    ax_distribution.set_xlabel("Number of cities", fontsize=9)
+    ax_distribution.set_ylabel("MPCS (%)", fontsize=9)
+    ax_distribution.tick_params(axis="both", labelsize=8)
     ax_distribution.spines[["top", "right"]].set_visible(False)
     ax_distribution.grid(axis="x", color="#E5E5E5", linewidth=0.55, zorder=0)
-    if plot_title:
-        fig.suptitle(
-            "City emission-reduction potential and drone-order concentration",
-            fontsize=12,
-            fontweight="bold",
-        )
-    if save_path:
+
+    def _save_panel(panel_fig, save_path, description):
+        if not save_path:
+            panel_fig.show()
+            return None
         if for_latex and not save_path.endswith(".pdf"):
             save_path = save_path.rsplit(".", 1)[0] + ".pdf"
-        if plot_title:
-            save_path = _add_title_suffix(save_path)
-        os.makedirs(os.path.dirname(save_path), exist_ok=True)
-        plt.savefig(save_path, dpi=300, bbox_inches="tight")
-        print(f"City reduction-concentration scatter saved to {save_path}")
-    else:
-        plt.show()
+        save_dir = os.path.dirname(save_path)
+        if save_dir:
+            os.makedirs(save_dir, exist_ok=True)
+        panel_fig.savefig(
+            save_path,
+            dpi=300,
+            bbox_inches=panel_fig.bbox_inches,
+            pad_inches=0.0,
+        )
+        print(f"{description} saved to {save_path}")
+        return save_path
+
+    scatter_path = _save_panel(
+        fig,
+        scatter_save_path,
+        "City reduction-potential scatter",
+    )
+    distribution_path = _save_panel(
+        fig_distribution,
+        distribution_save_path,
+        "City concentration distribution",
+    )
     plt.close(fig)
-    return save_path
+    plt.close(fig_distribution)
+    return scatter_path, distribution_path
 
 
 def plot_city_reduction_concentration_marker_scatter(

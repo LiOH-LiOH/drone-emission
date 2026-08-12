@@ -34,7 +34,8 @@ from visualization.analysis import (  # noqa: E402
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 CACHE_FILENAME = "city_drone_spatial_concentration.csv"
-SCATTER_FILENAME = "city_reduction_concentration_scatter.png"
+REDUCTION_SCATTER_FILENAME = "city_reduction_potential_scatter.png"
+CONCENTRATION_DISTRIBUTION_FILENAME = "city_concentration_distribution.png"
 HEATMAP_FILENAME = "representative_city_drone_heatmaps.png"
 COMMON_REQUIRED_COLUMNS = {
     "region_key",
@@ -100,15 +101,15 @@ def render_cached_concentration_figures(
     output_dir.mkdir(parents=True, exist_ok=True)
     outputs: list[Path] = []
     if only in {"scatter", "all"}:
-        scatter_path = output_dir / SCATTER_FILENAME
-        rendered = plot_city_reduction_concentration_scatter(
+        scatter_path = output_dir / REDUCTION_SCATTER_FILENAME
+        distribution_path = output_dir / CONCENTRATION_DISTRIBUTION_FILENAME
+        rendered_paths = plot_city_reduction_concentration_scatter(
             successful,
-            configured_city_count=len(results),
-            save_path=str(scatter_path),
+            scatter_save_path=str(scatter_path),
+            distribution_save_path=str(distribution_path),
             for_latex=for_latex,
-            plot_title=plot_title,
         )
-        outputs.append(Path(rendered))
+        outputs.extend(Path(path) for path in rendered_paths if path)
 
     if only in {"heatmaps", "all"}:
         representative_payloads = load_representative_payloads(results, data_dir)

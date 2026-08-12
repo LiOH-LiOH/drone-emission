@@ -37,6 +37,7 @@ Available figures:
     city_population_detour_oracle_reduction_bubble,
     city_gef_distribution,
     city_gef_scatter_components,
+    city_reduction_concentration_scatter,
     city_gef_context_detour_summary,
     break_even_contribution_decomposition,
     break_even_contribution_decomposition_marching_cubes,
@@ -5277,6 +5278,66 @@ def _render_alpha_calibration_5km(out, for_latex, plot_title):
     )
 
 
+def _render_city_reduction_concentration_scatter(data_dir, out, for_latex):
+    """Render the paired city reduction and MPCS panels from cached results."""
+    cache_path = os.path.join(
+        data_dir,
+        "analysis",
+        "drone_spatial_concentration",
+        "city_drone_spatial_concentration.csv",
+    )
+    if not os.path.exists(cache_path):
+        print(
+            "city_reduction_concentration_scatter skipped — missing "
+            f"{cache_path}; run analysis.drone_spatial_concentration first"
+        )
+        return
+
+    from analysis.drone_spatial_concentration import (
+        ABSOLUTE_REDUCTION_COLUMN,
+        RELATIVE_REDUCTION_COLUMN,
+    )
+    from visualization.analysis import plot_city_reduction_concentration_scatter
+
+    results = pd.read_csv(cache_path)
+    required = {
+        "region_key",
+        "region_name_en",
+        "status",
+        "pilot_concentration_score_pct",
+        "concentration_class",
+        ABSOLUTE_REDUCTION_COLUMN,
+        RELATIVE_REDUCTION_COLUMN,
+    }
+    missing = sorted(required.difference(results.columns))
+    if missing:
+        print(
+            "city_reduction_concentration_scatter skipped — cache missing columns: "
+            f"{missing}"
+        )
+        return
+    successful = results[results["status"].eq("ok")].copy()
+    if successful.empty:
+        print(
+            "city_reduction_concentration_scatter skipped — cache has no "
+            "successful city results"
+        )
+        return
+
+    plot_city_reduction_concentration_scatter(
+        successful,
+        scatter_save_path=os.path.join(
+            out,
+            "city_reduction_potential_scatter.png",
+        ),
+        distribution_save_path=os.path.join(
+            out,
+            "city_concentration_distribution.png",
+        ),
+        for_latex=for_latex,
+    )
+
+
 def render_all(
     data_dir: str,
     figures_dir: str,
@@ -5300,6 +5361,13 @@ def render_all(
     figure4_framework_requested = _want("figure4_framework")
     graph_cache = {}
     router_cache = {}
+
+    if _want("city_reduction_concentration_scatter"):
+        _render_city_reduction_concentration_scatter(
+            data_dir=data_dir,
+            out=out,
+            for_latex=for_latex,
+        )
 
     def _figure1_needs_vector_source(name):
         if not figure1_framework_requested:
