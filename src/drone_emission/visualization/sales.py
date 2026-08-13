@@ -22,6 +22,7 @@ from ._utils import (
 # This ensures heat diffusion doesn't get clipped at data boundaries
 HEATMAP_PADDING_COEFF = 0.05
 HEATMAP_SMOOTHING_DEG = 0.0135
+COMPARABLE_SALES_SMOOTHING_KM = 1.5
 
 
 def plot_sales_distribution(df, region_name, log_scale=False, save_path=None, for_latex=False, plot_title=False):
@@ -130,6 +131,62 @@ def _compact_sales_cmap():
     )
 
 
+def _prepare_comparable_sales_heatmap(
+    df,
+    lng_range,
+    lat_range,
+    smoothing_km=COMPARABLE_SALES_SMOOTHING_KM,
+):
+    """Prepare a monthly-sales density grid with a metric spatial bandwidth."""
+    lng, lat, sales = _prepare_data(df)
+    heatmap_range, aspect_ratio, plot_height, plot_width = (
+        _sales_heatmap_geometry(
+            lng,
+            lat,
+            lng_range=lng_range,
+            lat_range=lat_range,
+        )
+    )
+    bins_x = 1000
+    bins_y = max(1, int(bins_x * (plot_height / plot_width)))
+    heatmap, xedges, yedges = np.histogram2d(
+        lng,
+        lat,
+        bins=[bins_x, bins_y],
+        weights=sales,
+        range=heatmap_range,
+    )
+
+    mean_lat = float(np.mean(heatmap_range[1]))
+    km_per_degree_lng = 111.320 * np.cos(np.radians(mean_lat))
+    km_per_degree_lat = 110.574
+    cell_width_km = (xedges[1] - xedges[0]) * km_per_degree_lng
+    cell_height_km = (yedges[1] - yedges[0]) * km_per_degree_lat
+    cell_area_km2 = cell_width_km * cell_height_km
+    density = heatmap / cell_area_km2
+    smoothing_sigma = (
+        smoothing_km / cell_width_km,
+        smoothing_km / cell_height_km,
+    )
+    density_smooth = gaussian_filter(density, sigma=smoothing_sigma)
+
+    return {
+        "lng": lng,
+        "lat": lat,
+        "sales": sales,
+        "heatmap_range": heatmap_range,
+        "aspect_ratio": aspect_ratio,
+        "plot_height": plot_height,
+        "plot_width": plot_width,
+        "xedges": xedges,
+        "yedges": yedges,
+        "heatmap_smooth": density_smooth,
+        "smoothing_sigma": smoothing_sigma,
+        "smoothing_km": float(smoothing_km),
+        "cell_area_km2": float(cell_area_km2),
+    }
+
+
 def _plot_sales_heatmap_on_ax(
     ax,
     df,
@@ -185,7 +242,8 @@ def _plot_sales_heatmap_on_ax(
 def plot_sales_heatmap(
     df, region_name, region_name_cn, boundaries_dict=None, save_path=None,
     for_latex=False, plot_title=False, lng_range=None, lat_range=None, zoom=14,
-    compact=False, figsize=None,
+    compact=False, figsize=None, prepared_heatmap=None, color_norm=None,
+    mask_threshold=None, figure_name=None, comparable_scale=None,
 ):
     """Plot sales heatmap for a region.
 
@@ -202,17 +260,32 @@ def plot_sales_heatmap(
         zoom: Basemap tile zoom level (lower = fewer tiles to download).
         compact: If True, use a qualitative layout for a small composite panel.
         figsize: Optional figure size tuple. Compact mode defaults to (1.25, 1.05).
+        prepared_heatmap: Optional precomputed heatmap returned by
+            _prepare_comparable_sales_heatmap.
+        color_norm: Optional shared matplotlib color normalization.
+        mask_threshold: Optional shared density threshold below which to mask.
+        figure_name: Optional figure identifier for the JSON report.
+        comparable_scale: Optional shared-density metadata for the report.
     """
-    lng, lat, sales = _prepare_data(df)
-    heatmap_range, range_aspect, range_height, range_width = (
-        _sales_heatmap_geometry(
-            lng,
-            lat,
-            boundaries_dict=boundaries_dict if compact else None,
-            lng_range=lng_range,
-            lat_range=lat_range,
+    if prepared_heatmap is not None:
+        lng = prepared_heatmap["lng"]
+        lat = prepared_heatmap["lat"]
+        sales = prepared_heatmap["sales"]
+        heatmap_range = prepared_heatmap["heatmap_range"]
+        range_aspect = prepared_heatmap["aspect_ratio"]
+        range_height = prepared_heatmap["plot_height"]
+        range_width = prepared_heatmap["plot_width"]
+    else:
+        lng, lat, sales = _prepare_data(df)
+        heatmap_range, range_aspect, range_height, range_width = (
+            _sales_heatmap_geometry(
+                lng,
+                lat,
+                boundaries_dict=boundaries_dict if compact else None,
+                lng_range=lng_range,
+                lat_range=lat_range,
+            )
         )
-    )
 
     if compact:
         fig, ax = plt.subplots(figsize=figsize or (1.25, 1.05))
@@ -227,26 +300,29 @@ def plot_sales_heatmap(
         if figsize is not None:
             fig.set_size_inches(figsize)
 
-    # Create weighted 2D histogram (weighted by sales)
-    bins_x = 1000
-    bins_y = int(bins_x * (plot_height / plot_width))
-
-    # Generate weighted 2D histogram
-    heatmap, xedges, yedges = np.histogram2d(
-        lng, lat, bins=[bins_x, bins_y], weights=sales, range=heatmap_range
-    )
-
-    smoothing_sigma = _sales_heatmap_sigma(
-        heatmap_range,
-        bins_x,
-        bins_y,
-        geographic_scale=compact,
-    )
-    heatmap_smooth = gaussian_filter(heatmap, sigma=smoothing_sigma)
+    if prepared_heatmap is not None:
+        xedges = prepared_heatmap["xedges"]
+        yedges = prepared_heatmap["yedges"]
+        heatmap_smooth = prepared_heatmap["heatmap_smooth"]
+        smoothing_sigma = prepared_heatmap["smoothing_sigma"]
+    else:
+        bins_x = 1000
+        bins_y = max(1, int(bins_x * (plot_height / plot_width)))
+        heatmap, xedges, yedges = np.histogram2d(
+            lng, lat, bins=[bins_x, bins_y], weights=sales, range=heatmap_range
+        )
+        smoothing_sigma = _sales_heatmap_sigma(
+            heatmap_range,
+            bins_x,
+            bins_y,
+            geographic_scale=compact,
+        )
+        heatmap_smooth = gaussian_filter(heatmap, sigma=smoothing_sigma)
 
     # Mask the background (low values) to make them transparent
     # Use a very low threshold so the alpha gradient handles the fade
-    mask_threshold = heatmap_smooth.max() * 0.001
+    if mask_threshold is None:
+        mask_threshold = heatmap_smooth.max() * 0.001
     heatmap_masked = np.ma.masked_where(heatmap_smooth < mask_threshold, heatmap_smooth)
 
     map_cmap = _compact_sales_cmap() if compact else get_custom_cmap(0.1)
@@ -258,6 +334,7 @@ def plot_sales_heatmap(
         extent=extent,
         origin="lower",
         cmap=map_cmap,  # Use custom transparent colormap
+        norm=color_norm,
         aspect=aspect_ratio,  # Maintain geographic proportions
         interpolation="bilinear",
         zorder=10,  # Ensure heatmap is on top of basemap
@@ -285,12 +362,23 @@ def plot_sales_heatmap(
         fig.subplots_adjust(left=0.01, right=0.99, top=0.99, bottom=0.20)
         cax = fig.add_axes((0.24, 0.06, 0.56, 0.035))
         cbar = plt.colorbar(im, cax=cax, orientation="horizontal")
-        cbar.set_ticks([im.norm.vmin, im.norm.vmax])
-        cbar.set_ticklabels(["Low", "High"])
+        if comparable_scale is None:
+            cbar.set_ticks([im.norm.vmin, im.norm.vmax])
+            cbar.set_ticklabels(["Low", "High"])
+            colorbar_title = "Weighted sales density"
+            colorbar_ticks = "qualitative Low-High"
+        else:
+            midpoint = (im.norm.vmin + im.norm.vmax) / 2.0
+            cbar.set_ticks([im.norm.vmin, midpoint, im.norm.vmax])
+            cbar.set_ticklabels(
+                [f"{value:.2g}" for value in (im.norm.vmin, midpoint, im.norm.vmax)]
+            )
+            colorbar_title = "Monthly sales density\n(orders km$^{-2}$)"
+            colorbar_ticks = "numeric shared scale"
         cbar.ax.tick_params(labelsize=4.5, length=0, pad=1)
-        cbar.ax.set_title("Weighted sales density", fontsize=4.5, pad=1)
+        cbar.ax.set_title(colorbar_title, fontsize=4.5, pad=1)
         cbar.outline.set_linewidth(0.25)
-        colorbar_label = "Weighted sales density"
+        colorbar_label = colorbar_title.replace("\n", " ")
         colorbar_orientation = "horizontal"
     else:
         divider = make_axes_locatable(ax)
@@ -315,7 +403,7 @@ def plot_sales_heatmap(
         write_figure_report(
             report_path,
             {
-                "figure_name": "shanghai_heatmap",
+                "figure_name": figure_name or f"{region_name.lower()}_heatmap",
                 "figure_path": final_save_path,
                 "layout_mode": "compact" if compact else "full",
                 "native_size_inches": [
@@ -329,7 +417,14 @@ def plot_sales_heatmap(
                 ),
                 "smoothing": {
                     "geographic_bandwidth_degrees": (
-                        HEATMAP_SMOOTHING_DEG if compact else None
+                        HEATMAP_SMOOTHING_DEG
+                        if compact and comparable_scale is None
+                        else None
+                    ),
+                    "geographic_bandwidth_km": (
+                        prepared_heatmap["smoothing_km"]
+                        if prepared_heatmap is not None
+                        else None
                     ),
                     "sigma_grid_cells": (
                         [float(smoothing_sigma[0]), float(smoothing_sigma[1])]
@@ -361,8 +456,9 @@ def plot_sales_heatmap(
                     ),
                     "label": colorbar_label,
                     "orientation": colorbar_orientation,
-                    "ticks": "qualitative Low-High" if compact else "numeric",
+                    "ticks": colorbar_ticks if compact else "numeric",
                 },
+                "comparable_scale": comparable_scale,
             },
         )
         print(f"Sales heatmap report saved to {report_path}")

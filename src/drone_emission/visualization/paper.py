@@ -4,7 +4,7 @@ Run:
     cd src/drone_emission
     ../../.venv/bin/python -m visualization.paper --png              # PNG (fast iteration)
     ../../.venv/bin/python -m visualization.paper                    # PDF (for LaTeX)
-    ../../.venv/bin/python -m visualization.paper --only shanghai_heatmap
+    ../../.venv/bin/python -m visualization.paper --only four_city_sales_heatmaps
     ../../.venv/bin/python -m visualization.paper --only shanghai_heatmap,distance_comparison
 
 Available figures:
@@ -14,7 +14,8 @@ Available figures:
     production_detour_eol_panels, detour_ratio_concept, emission_model_flowchart,
     detour_and_lifecycle, distance_comparison, distance_comparison_single_panel,
     distance_comparison_high_3x3, distance_comparison_low_3x3,
-    shanghai_heatmap, shanghai_merchant_monthly_sales,
+    four_city_sales_heatmaps, shenzhen_heatmap, guangzhou_heatmap,
+    beijing_heatmap, shanghai_heatmap, shanghai_merchant_monthly_sales,
     shanghai_building_height_merchant,
     shanghai_building_footprint_heatmap,
     beijing_road_network_subfigure, beijing_road_network_candidate_grid,
@@ -99,6 +100,33 @@ R2_ATTRIBUTION_FIGURES = {
     "r2_correlation_matrix_spearman",
     "r2_population_reduction_contrast",
     "r2_core_coefficient_robustness",
+}
+
+COMPARABLE_SALES_HEATMAP_CITIES = {
+    "shenzhen": {
+        "region_name_en": "Shenzhen",
+        "region_name_cn": "深圳市",
+        "lng_range": (113.82, 114.25),
+        "lat_range": (22.50, 22.76),
+    },
+    "guangzhou": {
+        "region_name_en": "Guangzhou",
+        "region_name_cn": "广州市",
+        "lng_range": (113.20, 113.46),
+        "lat_range": (22.98, 23.23),
+    },
+    "beijing": {
+        "region_name_en": "Beijing",
+        "region_name_cn": "北京市",
+        "lng_range": (116.15, 116.65),
+        "lat_range": (39.73, 40.15),
+    },
+    "shanghai": {
+        "region_name_en": "Shanghai",
+        "region_name_cn": "上海市",
+        "lng_range": (121.25, 121.65),
+        "lat_range": (31.10, 31.36),
+    },
 }
 CITY_CONTEXT_FIGURES = {
     "shanghai_city_context": {
@@ -831,6 +859,138 @@ def _render_shanghai_heatmap(
         compact=compact,
         figsize=figsize,
     )
+
+
+def _render_comparable_sales_heatmaps(
+    data_dir,
+    out,
+    for_latex,
+    plot_title,
+    selected_city_keys,
+):
+    """Render selected city heatmaps against one absolute density scale."""
+    import numpy as np
+    from matplotlib.colors import Normalize
+
+    from visualization.sales import (
+        COMPARABLE_SALES_SMOOTHING_KM,
+        _prepare_comparable_sales_heatmap,
+        plot_sales_heatmap,
+    )
+
+    required_columns = {"lat", "lng", "month_sales"}
+    city_data = {}
+    input_errors = []
+    for city_key, city_config in COMPARABLE_SALES_HEATMAP_CITIES.items():
+        sales_path = os.path.join(
+            data_dir,
+            "city",
+            city_key,
+            f"{city_key}_sales.csv",
+        )
+        if not os.path.exists(sales_path):
+            input_errors.append(f"{city_key}: missing {sales_path}")
+            continue
+
+        df = pd.read_csv(sales_path)
+        missing_columns = sorted(required_columns.difference(df.columns))
+        if missing_columns:
+            input_errors.append(
+                f"{city_key}: {sales_path} missing columns {missing_columns}"
+            )
+            continue
+
+        numeric = df[["lat", "lng", "month_sales"]].apply(
+            pd.to_numeric,
+            errors="coerce",
+        )
+        finite_rows = np.isfinite(numeric.to_numpy()).all(axis=1)
+        valid_rows = finite_rows & numeric["month_sales"].ge(0).to_numpy()
+        if not valid_rows.any():
+            input_errors.append(f"{city_key}: {sales_path} has no valid sales rows")
+            continue
+        invalid_count = int((~valid_rows).sum())
+        if invalid_count:
+            print(
+                f"{city_key}_heatmap: dropped {invalid_count} invalid sales rows"
+            )
+        valid_df = df.loc[valid_rows].copy()
+        valid_df[["lat", "lng", "month_sales"]] = numeric.loc[
+            valid_rows,
+            ["lat", "lng", "month_sales"],
+        ]
+        city_data[city_key] = (valid_df, city_config)
+
+    if input_errors:
+        raise ValueError(
+            "Comparable city sales heatmaps require all four valid inputs: "
+            + "; ".join(input_errors)
+        )
+
+    prepared = {}
+    positive_density = []
+    for city_key, (df, city_config) in city_data.items():
+        city_prepared = _prepare_comparable_sales_heatmap(
+            df,
+            lng_range=city_config["lng_range"],
+            lat_range=city_config["lat_range"],
+            smoothing_km=COMPARABLE_SALES_SMOOTHING_KM,
+        )
+        density = city_prepared["heatmap_smooth"]
+        city_positive = density[np.isfinite(density) & (density > 0)]
+        if city_positive.size == 0:
+            input_errors.append(
+                f"{city_key}: no positive monthly sales inside the fixed map extent"
+            )
+            continue
+        prepared[city_key] = city_prepared
+        positive_density.append(city_positive)
+
+    if input_errors:
+        raise ValueError(
+            "Comparable city sales heatmaps require all four valid inputs: "
+            + "; ".join(input_errors)
+        )
+
+    shared_vmax = float(np.percentile(np.concatenate(positive_density), 99.5))
+    if not np.isfinite(shared_vmax) or shared_vmax <= 0:
+        raise ValueError("Comparable city sales heatmaps have no valid shared scale")
+    mask_threshold = shared_vmax * 0.001
+    color_norm = Normalize(vmin=0.0, vmax=shared_vmax, clip=True)
+    comparable_scale = {
+        "metric": "monthly sales density",
+        "unit": "orders km^-2",
+        "smoothing_bandwidth_km": float(COMPARABLE_SALES_SMOOTHING_KM),
+        "vmax_percentile": 99.5,
+        "vmin": 0.0,
+        "vmax": shared_vmax,
+        "mask_threshold": float(mask_threshold),
+        "cities": list(COMPARABLE_SALES_HEATMAP_CITIES),
+    }
+
+    for city_key in COMPARABLE_SALES_HEATMAP_CITIES:
+        if city_key not in selected_city_keys:
+            continue
+        df, city_config = city_data[city_key]
+        plot_sales_heatmap(
+            df,
+            city_config["region_name_en"],
+            city_config["region_name_cn"],
+            boundaries_dict=None,
+            save_path=os.path.join(out, f"{city_key}_heatmap.png"),
+            for_latex=for_latex,
+            plot_title=plot_title,
+            lng_range=city_config["lng_range"],
+            lat_range=city_config["lat_range"],
+            zoom=12,
+            compact=True,
+            figsize=(1.25, 1.05),
+            prepared_heatmap=prepared[city_key],
+            color_norm=color_norm,
+            mask_threshold=mask_threshold,
+            figure_name=f"{city_key}_heatmap",
+            comparable_scale=comparable_scale,
+        )
 
 
 def _find_first_existing_path(paths):
@@ -5644,16 +5804,24 @@ def render_all(
             plot_title=plot_title,
         )
 
-    shanghai_heatmap_requested = _want("shanghai_heatmap")
-    shanghai_heatmap_pdf_needed = _figure1_needs_vector_source("shanghai_heatmap")
-    if shanghai_heatmap_requested:
-        _render_shanghai_heatmap(
+    if only is None or "four_city_sales_heatmaps" in only:
+        selected_heatmap_city_keys = set(COMPARABLE_SALES_HEATMAP_CITIES)
+    else:
+        selected_heatmap_city_keys = {
+            city_key
+            for city_key in COMPARABLE_SALES_HEATMAP_CITIES
+            if f"{city_key}_heatmap" in only
+        }
+    if selected_heatmap_city_keys:
+        _render_comparable_sales_heatmaps(
             data_dir=data_dir,
             out=out,
             for_latex=for_latex,
             plot_title=plot_title,
-            compact=True,
+            selected_city_keys=selected_heatmap_city_keys,
         )
+
+    shanghai_heatmap_pdf_needed = _figure1_needs_vector_source("shanghai_heatmap")
     if shanghai_heatmap_pdf_needed:
         _render_shanghai_heatmap(
             data_dir=data_dir,
