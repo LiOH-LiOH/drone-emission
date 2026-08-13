@@ -9220,6 +9220,250 @@ def plot_city_population_detour_oracle_reduction_bubble(
     plt.close(fig)
 
 
+def _prepare_city_reduction_distribution_data(df: pd.DataFrame):
+    """Return positive city-level Oracle reduction metrics and audit counts."""
+    plot_df = df.copy()
+    if "region_level" in plot_df.columns:
+        plot_df = plot_df[plot_df["region_level"] == "city"].copy()
+    source_city_count = len(plot_df)
+
+    try:
+        reduction_pct_col = _weighted_reduction_column(plot_df)
+        reduction_t_col = _oracle_reduction_tonnes_column(plot_df)
+    except KeyError as exc:
+        print(f"City reduction distributions skipped — {exc}")
+        return None
+
+    for column in (reduction_pct_col, reduction_t_col):
+        plot_df[column] = pd.to_numeric(plot_df[column], errors="coerce")
+    complete = plot_df[
+        np.isfinite(plot_df[reduction_pct_col])
+        & np.isfinite(plot_df[reduction_t_col])
+    ].copy()
+    eligible = complete[
+        (complete[reduction_pct_col] > 0)
+        & (complete[reduction_t_col] > 0)
+    ].copy()
+    if len(eligible) < 2:
+        print(
+            "City reduction distributions skipped — "
+            "fewer than two cities have positive finite reductions"
+        )
+        return None
+
+    audit = {
+        "source_city_count": int(source_city_count),
+        "complete_metric_count": int(len(complete)),
+        "eligible_city_count": int(len(eligible)),
+        "excluded_missing_or_nonfinite_count": int(source_city_count - len(complete)),
+        "excluded_nonpositive_count": int(len(complete) - len(eligible)),
+    }
+    return eligible, reduction_pct_col, reduction_t_col, audit
+
+
+def _draw_city_reduction_kde(
+    ax,
+    values,
+    x_limits,
+    x_label,
+    log10_space=False,
+):
+    """Draw a compact filled Scott-bandwidth KDE on one axis."""
+    from scipy.stats import gaussian_kde
+
+    values = np.asarray(values, dtype=float)
+    transformed = np.log10(values) if log10_space else values
+    grid = np.linspace(
+        np.log10(x_limits[0]) if log10_space else x_limits[0],
+        np.log10(x_limits[1]) if log10_space else x_limits[1],
+        512,
+    )
+    density = gaussian_kde(transformed, bw_method="scott")(grid)
+    display_grid = 10 ** grid if log10_space else grid
+    curve_color = "#1F6F78"
+
+    ax.fill_between(
+        display_grid,
+        density,
+        color=curve_color,
+        alpha=0.20,
+        linewidth=0,
+        zorder=1,
+    )
+    ax.plot(display_grid, density, color=curve_color, linewidth=1.35, zorder=2)
+    if log10_space:
+        ax.set_xscale("log")
+        ax.set_xticks([0.1, 1, 10, 100, 1000])
+        ax.xaxis.set_major_formatter(FuncFormatter(lambda value, _: f"{value:g}"))
+    ax.set_xlim(*x_limits)
+    ax.set_ylim(bottom=0)
+    ax.set_xlabel(x_label, fontsize=7)
+    ax.set_ylabel("Density", fontsize=7)
+    ax.tick_params(axis="both", labelsize=6.5, length=2.5, pad=1.5)
+    ax.grid(axis="y", color="#E5E5E5", linewidth=0.5, zorder=0)
+    ax.spines[["top", "right"]].set_visible(False)
+
+
+def _save_city_reduction_distribution(
+    fig,
+    save_path,
+    for_latex,
+    plot_title,
+    report,
+    description,
+):
+    """Save one city-reduction distribution and its audit report."""
+    if not save_path:
+        plt.show()
+        return None
+    if for_latex and not save_path.endswith(".pdf"):
+        save_path = save_path.rsplit(".", 1)[0] + ".pdf"
+    if plot_title:
+        save_path = _add_title_suffix(save_path)
+    save_dir = os.path.dirname(save_path)
+    if save_dir:
+        os.makedirs(save_dir, exist_ok=True)
+    fig.savefig(save_path, dpi=300, bbox_inches="tight")
+    report["figure_path"] = save_path
+    write_figure_report(save_path.rsplit(".", 1)[0] + "_report.json", report)
+    print(f"{description} saved to {save_path}")
+    return save_path
+
+
+def plot_city_relative_lifecycle_reduction_distribution(
+    df: pd.DataFrame,
+    save_path: str = None,
+    figsize: tuple = (2.31, 1.70),
+    for_latex: bool = False,
+    plot_title: bool = False,
+):
+    """Plot the city distribution of relative lifecycle emission reduction.
+
+    Args:
+        df: City-level region statistics with Oracle lifecycle emissions.
+        save_path: Path to save figure. Shows plot if None.
+        figsize: Figure size tuple.
+        for_latex: If True, save as PDF.
+        plot_title: If True, show title.
+    """
+    prepared = _prepare_city_reduction_distribution_data(df)
+    if prepared is None:
+        return None
+    plot_df, reduction_pct_col, _, audit = prepared
+    values = plot_df[reduction_pct_col].to_numpy(dtype=float)
+
+    fig, ax = plt.subplots(figsize=figsize)
+    _draw_city_reduction_kde(
+        ax,
+        values,
+        x_limits=(0.0, 50.0),
+        x_label="Relative lifecycle emission reduction (%)",
+    )
+    if plot_title:
+        ax.set_title(
+            "City-level relative lifecycle emission reduction",
+            fontsize=9,
+            fontweight="bold",
+        )
+    fig.subplots_adjust(left=0.22, right=0.97, bottom=0.27, top=0.93)
+
+    report = {
+        "figure_name": "city_relative_lifecycle_reduction_distribution",
+        "source_scope": "City-level study regions with positive finite Oracle reductions",
+        "metric": {
+            "field": reduction_pct_col,
+            "definition": "Oracle lifecycle reduction versus the all-e-bike baseline",
+            "unit": "percent",
+        },
+        "distribution": {
+            "method": "Gaussian KDE",
+            "bandwidth": "Scott's rule",
+            "estimation_space": "linear percentage",
+            "x_limits": [0.0, 50.0],
+        },
+        "sample_audit": audit,
+        "summary": _writing_numeric_summary(values),
+    }
+    saved_path = _save_city_reduction_distribution(
+        fig,
+        save_path,
+        for_latex,
+        plot_title,
+        report,
+        "City relative lifecycle reduction distribution",
+    )
+    plt.close(fig)
+    return saved_path
+
+
+def plot_city_annual_absolute_reduction_distribution(
+    df: pd.DataFrame,
+    save_path: str = None,
+    figsize: tuple = (2.31, 1.70),
+    for_latex: bool = False,
+    plot_title: bool = False,
+):
+    """Plot the city distribution of annual absolute emission reduction.
+
+    Args:
+        df: City-level region statistics with Oracle lifecycle emissions.
+        save_path: Path to save figure. Shows plot if None.
+        figsize: Figure size tuple.
+        for_latex: If True, save as PDF.
+        plot_title: If True, show title.
+    """
+    prepared = _prepare_city_reduction_distribution_data(df)
+    if prepared is None:
+        return None
+    plot_df, _, reduction_t_col, audit = prepared
+    values = plot_df[reduction_t_col].to_numpy(dtype=float)
+
+    fig, ax = plt.subplots(figsize=figsize)
+    _draw_city_reduction_kde(
+        ax,
+        values,
+        x_limits=(0.03, 5000.0),
+        x_label="Annual absolute emission reduction (t CO$_2$e yr$^{-1}$)",
+        log10_space=True,
+    )
+    if plot_title:
+        ax.set_title(
+            "City-level annual absolute emission reduction",
+            fontsize=9,
+            fontweight="bold",
+        )
+    fig.subplots_adjust(left=0.22, right=0.97, bottom=0.27, top=0.93)
+
+    report = {
+        "figure_name": "city_annual_absolute_reduction_distribution",
+        "source_scope": "City-level study regions with positive finite Oracle reductions",
+        "metric": {
+            "field": reduction_t_col,
+            "definition": "All-e-bike lifecycle emissions minus Oracle lifecycle emissions",
+            "unit": "t CO2e per year",
+        },
+        "distribution": {
+            "method": "Gaussian KDE",
+            "bandwidth": "Scott's rule",
+            "estimation_space": "log10 tonnes CO2e per year",
+            "x_scale": "logarithmic",
+            "x_limits": [0.03, 5000.0],
+        },
+        "sample_audit": audit,
+        "summary": _writing_numeric_summary(values),
+    }
+    saved_path = _save_city_reduction_distribution(
+        fig,
+        save_path,
+        for_latex,
+        plot_title,
+        report,
+        "City annual absolute reduction distribution",
+    )
+    plt.close(fig)
+    return saved_path
+
+
 def _bin_reduction_and_detour(
     od_df: pd.DataFrame,
     bin_width_km: float,
