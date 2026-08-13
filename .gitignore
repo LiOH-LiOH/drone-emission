@@ -16,6 +16,7 @@ scripts/
 regions.json
 regions.template.json
 build/
+outputs/
 pdf/
 signature.png
 analysis_report.md
