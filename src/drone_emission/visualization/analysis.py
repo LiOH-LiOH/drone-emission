@@ -11901,7 +11901,6 @@ def plot_city_reduction_concentration_scatter(
     ax.tick_params(axis="both", labelsize=8)
     ax.legend(handles, labels, loc="upper left", frameon=False, fontsize=8)
     ax.spines[["top", "right"]].set_visible(False)
-    ax.grid(axis="both", color="#E5E5E5", linewidth=0.55, zorder=0)
 
     fig_distribution, ax_distribution = plt.subplots(figsize=distribution_figsize)
     fig_distribution.subplots_adjust(left=0.32, right=0.96, bottom=0.16, top=0.98)
@@ -11927,7 +11926,6 @@ def plot_city_reduction_concentration_scatter(
     ax_distribution.set_ylabel("MPCS (%)", fontsize=9)
     ax_distribution.tick_params(axis="both", labelsize=8)
     ax_distribution.spines[["top", "right"]].set_visible(False)
-    ax_distribution.grid(axis="x", color="#E5E5E5", linewidth=0.55, zorder=0)
 
     def _save_panel(panel_fig, save_path, description):
         if not save_path:
