@@ -9423,7 +9423,10 @@ def plot_city_annual_absolute_reduction_distribution(
         ax,
         values,
         x_limits=(0.03, 5000.0),
-        x_label="Annual absolute emission reduction (t CO$_2$e yr$^{-1}$)",
+        x_label=(
+            "Annual absolute emission reduction\n"
+            "(t CO$_2$e yr$^{-1}$; log scale)"
+        ),
         log10_space=True,
     )
     if plot_title:
