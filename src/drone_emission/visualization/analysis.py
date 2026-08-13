@@ -9300,7 +9300,7 @@ def _draw_city_reduction_kde(
     ax.set_xlabel(x_label, fontsize=7)
     ax.set_ylabel("Density", fontsize=7)
     ax.tick_params(axis="both", labelsize=6.5, length=2.5, pad=1.5)
-    ax.grid(axis="y", color="#E5E5E5", linewidth=0.5, zorder=0)
+    ax.grid(False)
     ax.spines[["top", "right"]].set_visible(False)
 
 
