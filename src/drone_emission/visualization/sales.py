@@ -359,8 +359,12 @@ def plot_sales_heatmap(
     ax.set_ylim(heatmap_range[1])
 
     if compact:
-        fig.subplots_adjust(left=0.01, right=0.99, top=0.99, bottom=0.20)
-        cax = fig.add_axes((0.24, 0.06, 0.56, 0.035))
+        if comparable_scale is None:
+            fig.subplots_adjust(left=0.01, right=0.99, top=0.99, bottom=0.20)
+            cax = fig.add_axes((0.24, 0.06, 0.56, 0.035))
+        else:
+            fig.subplots_adjust(left=0.01, right=0.99, top=0.99, bottom=0.31)
+            cax = fig.add_axes((0.20, 0.035, 0.60, 0.03))
         cbar = plt.colorbar(im, cax=cax, orientation="horizontal")
         if comparable_scale is None:
             cbar.set_ticks([im.norm.vmin, im.norm.vmax])
