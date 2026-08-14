@@ -174,6 +174,7 @@ def add_basemap_and_boundaries(
     attribution_size=8,
     attribution_text=None,
     attribution_wrap=True,
+    basemap_provider="openstreetmap",
 ):
     # Set axis limits BEFORE adding basemap to ensure correct coverage
     if boundaries_dict:
@@ -190,11 +191,25 @@ def add_basemap_and_boundaries(
         # Ensure cache is configured
         configure_contextily_cache()
 
+        providers = {
+            "openstreetmap": (
+                ctx.providers.OpenStreetMap.Mapnik,
+                "(C) OpenStreetMap contributors",
+            ),
+            "cartodb_positron": (
+                ctx.providers.CartoDB.Positron,
+                "(C) OpenStreetMap contributors (C) CARTO",
+            ),
+        }
+        if basemap_provider not in providers:
+            raise ValueError(f"Unsupported basemap provider: {basemap_provider}")
+        basemap_source, default_attribution = providers[basemap_provider]
+
         # Add basemap with higher resolution (zoom level) and reduced opacity
         ctx.add_basemap(
             ax,
             crs="EPSG:4326",
-            source=ctx.providers.OpenStreetMap.Mapnik,
+            source=basemap_source,
             zoom=zoom,  # Higher zoom = higher resolution
             alpha=alpha,  # Reduced opacity for better data visibility
             attribution=False if not attribution_wrap else attribution_text,
@@ -205,7 +220,7 @@ def add_basemap_and_boundaries(
             ax.text(
                 0.005,
                 0.005,
-                attribution_text or "(C) OpenStreetMap contributors",
+                attribution_text or default_attribution,
                 transform=ax.transAxes,
                 fontsize=attribution_size,
                 va="bottom",
@@ -216,7 +231,10 @@ def add_basemap_and_boundaries(
                 ],
                 zorder=100,
             )
-        print(f"Basemap added successfully (zoom={zoom}, alpha={alpha})")
+        print(
+            "Basemap added successfully "
+            f"(provider={basemap_provider}, zoom={zoom}, alpha={alpha})"
+        )
     except Exception as e:
         print(f"Could not add basemap: {e}")
 
@@ -334,6 +352,7 @@ def finalize_plot(
     show_grid=True,
     show_frame=True,
     before_save=None,
+    save_tight=True,
 ):
     """Finalize plot with title, labels, and axis limits.
 
@@ -351,6 +370,7 @@ def finalize_plot(
         show_grid: If False, skip the plot grid.
         show_frame: If False, hide the axes frame/spines.
         before_save: Optional callback receiving the final save path before savefig.
+        save_tight: If True, crop output to the tight content bounding box.
     """
     # Set labels
     if show_geo_axes:
@@ -431,7 +451,8 @@ def finalize_plot(
         if before_save is not None:
             fig.canvas.draw()
             before_save(save_path)
-        plt.savefig(save_path, dpi=300, bbox_inches="tight")
+        save_kwargs = {"bbox_inches": "tight"} if save_tight else {}
+        plt.savefig(save_path, dpi=300, **save_kwargs)
         print(f"\nPlot saved as {save_path}")
     else:
         plt.show()

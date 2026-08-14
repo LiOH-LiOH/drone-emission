@@ -14,8 +14,9 @@ Available figures:
     production_detour_eol_panels, detour_ratio_concept, emission_model_flowchart,
     detour_and_lifecycle, distance_comparison, distance_comparison_single_panel,
     distance_comparison_high_3x3, distance_comparison_low_3x3,
-    four_city_sales_heatmaps, shenzhen_heatmap, guangzhou_heatmap,
-    beijing_heatmap, shanghai_heatmap, shanghai_merchant_monthly_sales,
+    four_city_sales_heatmaps, four_city_sales_heatmap_colorbar,
+    shenzhen_heatmap, guangzhou_heatmap, beijing_heatmap, shanghai_heatmap,
+    shanghai_merchant_monthly_sales,
     shanghai_building_height_merchant,
     shanghai_building_footprint_heatmap,
     beijing_road_network_subfigure, beijing_road_network_candidate_grid,
@@ -108,20 +109,20 @@ COMPARABLE_SALES_HEATMAP_CITIES = {
     "shenzhen": {
         "region_name_en": "Shenzhen",
         "region_name_cn": "深圳市",
-        "lng_range": (113.82, 114.25),
+        "lng_range": (113.835, 114.235),
         "lat_range": (22.50, 22.76),
     },
     "guangzhou": {
         "region_name_en": "Guangzhou",
         "region_name_cn": "广州市",
-        "lng_range": (113.20, 113.46),
-        "lat_range": (22.98, 23.23),
+        "lng_range": (113.13, 113.53),
+        "lat_range": (22.975, 23.235),
     },
     "beijing": {
         "region_name_en": "Beijing",
         "region_name_cn": "北京市",
-        "lng_range": (116.15, 116.65),
-        "lat_range": (39.73, 40.15),
+        "lng_range": (116.20, 116.60),
+        "lat_range": (39.81, 40.07),
     },
     "shanghai": {
         "region_name_en": "Shanghai",
@@ -869,6 +870,7 @@ def _render_comparable_sales_heatmaps(
     for_latex,
     plot_title,
     selected_city_keys,
+    render_colorbar=False,
 ):
     """Render selected city heatmaps against one absolute density scale."""
     import numpy as np
@@ -878,6 +880,7 @@ def _render_comparable_sales_heatmaps(
         COMPARABLE_SALES_SMOOTHING_KM,
         _prepare_comparable_sales_heatmap,
         plot_sales_heatmap,
+        plot_sales_heatmap_colorbar,
     )
 
     required_columns = {"lat", "lng", "month_sales"}
@@ -986,11 +989,27 @@ def _render_comparable_sales_heatmaps(
             lat_range=city_config["lat_range"],
             zoom=12,
             compact=True,
-            figsize=(1.25, 1.05),
+            figsize=(2.0, 1.3),
             prepared_heatmap=prepared[city_key],
             color_norm=color_norm,
             mask_threshold=mask_threshold,
             figure_name=f"{city_key}_heatmap",
+            comparable_scale=comparable_scale,
+            show_colorbar=False,
+            fixed_degree_aspect=True,
+            basemap_provider="cartodb_positron",
+        )
+
+    if render_colorbar:
+        plot_sales_heatmap_colorbar(
+            color_norm.vmin,
+            color_norm.vmax,
+            save_path=os.path.join(
+                out,
+                "four_city_sales_heatmap_colorbar.png",
+            ),
+            for_latex=for_latex,
+            plot_title=plot_title,
             comparable_scale=comparable_scale,
         )
 
@@ -5814,13 +5833,19 @@ def render_all(
             for city_key in COMPARABLE_SALES_HEATMAP_CITIES
             if f"{city_key}_heatmap" in only
         }
-    if selected_heatmap_city_keys:
+    render_sales_heatmap_colorbar = (
+        only is None
+        or "four_city_sales_heatmaps" in only
+        or "four_city_sales_heatmap_colorbar" in only
+    )
+    if selected_heatmap_city_keys or render_sales_heatmap_colorbar:
         _render_comparable_sales_heatmaps(
             data_dir=data_dir,
             out=out,
             for_latex=for_latex,
             plot_title=plot_title,
             selected_city_keys=selected_heatmap_city_keys,
+            render_colorbar=render_sales_heatmap_colorbar,
         )
 
     shanghai_heatmap_pdf_needed = _figure1_needs_vector_source("shanghai_heatmap")

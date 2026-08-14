@@ -227,6 +227,7 @@ def _plot_sales_heatmap_on_ax(
 
     ax.set_xlim(heatmap_range[0])
     ax.set_ylim(heatmap_range[1])
+    ax.set_aspect(aspect_ratio)
     add_basemap_and_boundaries(ax, region_name_cn, boundaries_dict, zoom=zoom)
     ax.set_xlim(heatmap_range[0])
     ax.set_ylim(heatmap_range[1])
@@ -244,6 +245,8 @@ def plot_sales_heatmap(
     for_latex=False, plot_title=False, lng_range=None, lat_range=None, zoom=14,
     compact=False, figsize=None, prepared_heatmap=None, color_norm=None,
     mask_threshold=None, figure_name=None, comparable_scale=None,
+    show_colorbar=True, fixed_degree_aspect=False,
+    basemap_provider="openstreetmap",
 ):
     """Plot sales heatmap for a region.
 
@@ -266,6 +269,10 @@ def plot_sales_heatmap(
         mask_threshold: Optional shared density threshold below which to mask.
         figure_name: Optional figure identifier for the JSON report.
         comparable_scale: Optional shared-density metadata for the report.
+        show_colorbar: If False, omit the colorbar from the figure.
+        fixed_degree_aspect: If True, draw equal longitude and latitude degree
+            spans with the same panel geometry across regions.
+        basemap_provider: Basemap provider key passed to the shared map helper.
     """
     if prepared_heatmap is not None:
         lng = prepared_heatmap["lng"]
@@ -289,7 +296,7 @@ def plot_sales_heatmap(
 
     if compact:
         fig, ax = plt.subplots(figsize=figsize or (1.25, 1.05))
-        aspect_ratio = range_aspect
+        aspect_ratio = 1.0 if fixed_degree_aspect else range_aspect
         plot_height = range_height
         plot_width = range_width
         ax.set_aspect(aspect_ratio)
@@ -352,13 +359,21 @@ def plot_sales_heatmap(
         boundary_linewidth=0.35 if compact else 2,
         boundary_alpha=0.65 if compact else 0.8,
         attribution_size=3.0 if compact else 8,
-        attribution_text="(C) OpenStreetMap contributors" if compact else None,
+        attribution_text=None,
         attribution_wrap=not compact,
+        basemap_provider=basemap_provider,
     )
     ax.set_xlim(heatmap_range[0])
     ax.set_ylim(heatmap_range[1])
+    ax.set_aspect(aspect_ratio)
 
-    if compact:
+    cax = None
+    colorbar_label = None
+    colorbar_orientation = None
+    colorbar_ticks = None
+    if compact and not show_colorbar:
+        fig.subplots_adjust(left=0.0, right=1.0, top=1.0, bottom=0.0)
+    elif compact:
         if comparable_scale is None:
             fig.subplots_adjust(left=0.01, right=0.99, top=0.99, bottom=0.20)
             cax = fig.add_axes((0.24, 0.06, 0.56, 0.035))
@@ -410,6 +425,7 @@ def plot_sales_heatmap(
                 "figure_name": figure_name or f"{region_name.lower()}_heatmap",
                 "figure_path": final_save_path,
                 "layout_mode": "compact" if compact else "full",
+                "fixed_degree_aspect": bool(fixed_degree_aspect),
                 "native_size_inches": [
                     float(fig.get_size_inches()[0]),
                     float(fig.get_size_inches()[1]),
@@ -437,15 +453,25 @@ def plot_sales_heatmap(
                     ),
                 },
                 "basemap": {
-                    "provider": "OpenStreetMap.Mapnik",
+                    "provider": basemap_provider,
+                    "attribution": (
+                        "(C) OpenStreetMap contributors (C) CARTO"
+                        if basemap_provider == "cartodb_positron"
+                        else "(C) OpenStreetMap contributors"
+                    ),
                     "zoom": int(zoom),
                     "alpha": 0.28 if compact else 0.6,
                     "attribution_fontsize_pt": 3.0 if compact else 8.0,
                     "attribution_wrap": not compact,
                 },
                 "coordinate_convention": (
-                    "bbox_saved_tight_fraction values are fractions of the "
-                    "saved page after bbox_inches='tight'."
+                    "The comparable map-only output uses a fixed canvas; "
+                    "other modes report fractions after bbox_inches='tight'."
+                    if compact and fixed_degree_aspect and not show_colorbar
+                    else (
+                        "bbox_saved_tight_fraction values are fractions of the "
+                        "saved page after bbox_inches='tight'."
+                    )
                 ),
                 "map": {
                     "axis": saved_tight_axis_report(
@@ -454,14 +480,18 @@ def plot_sales_heatmap(
                     "lng_range": [float(heatmap_range[0][0]), float(heatmap_range[0][1])],
                     "lat_range": [float(heatmap_range[1][0]), float(heatmap_range[1][1])],
                 },
-                "colorbar": {
-                    "axis": saved_tight_axis_report(
-                        fig, cax, renderer=renderer, tight_bbox=tight_bbox
-                    ),
-                    "label": colorbar_label,
-                    "orientation": colorbar_orientation,
-                    "ticks": colorbar_ticks if compact else "numeric",
-                },
+                "colorbar": (
+                    {
+                        "axis": saved_tight_axis_report(
+                            fig, cax, renderer=renderer, tight_bbox=tight_bbox
+                        ),
+                        "label": colorbar_label,
+                        "orientation": colorbar_orientation,
+                        "ticks": colorbar_ticks if compact else "numeric",
+                    }
+                    if cax is not None
+                    else None
+                ),
                 "comparable_scale": comparable_scale,
             },
         )
@@ -480,7 +510,76 @@ def plot_sales_heatmap(
         show_grid=False,
         show_frame=False,
         before_save=_write_report if save_path else None,
+        save_tight=not (compact and fixed_degree_aspect and not show_colorbar),
     )
+
+
+def plot_sales_heatmap_colorbar(
+    vmin,
+    vmax,
+    save_path=None,
+    figsize=(3.2, 0.8),
+    for_latex=False,
+    plot_title=False,
+    comparable_scale=None,
+):
+    """Plot the standalone shared colorbar for comparable sales heatmaps.
+
+    Args:
+        vmin: Lower bound of the shared monthly-sales density scale.
+        vmax: Upper bound of the shared monthly-sales density scale.
+        save_path: Path to save figure. Shows plot if None.
+        figsize: Figure size tuple.
+        for_latex: If True, save as PDF.
+        plot_title: If True, append the titled-output suffix.
+        comparable_scale: Optional shared-density metadata for the report.
+    """
+    from matplotlib.cm import ScalarMappable
+    from matplotlib.colors import Normalize
+
+    fig = plt.figure(figsize=figsize)
+    cax = fig.add_axes((0.10, 0.18, 0.80, 0.14))
+    norm = Normalize(vmin=float(vmin), vmax=float(vmax), clip=True)
+    mappable = ScalarMappable(norm=norm, cmap=_compact_sales_cmap())
+    midpoint = (float(vmin) + float(vmax)) / 2.0
+    cbar = fig.colorbar(mappable, cax=cax, orientation="horizontal")
+    cbar.set_ticks([float(vmin), midpoint, float(vmax)])
+    cbar.set_ticklabels(
+        [f"{value:.2g}" for value in (float(vmin), midpoint, float(vmax))]
+    )
+    cbar.ax.tick_params(labelsize=9, length=0, pad=2)
+    cbar.ax.set_title(
+        "Monthly sales density (orders km$^{-2}$)",
+        fontsize=10,
+        pad=5,
+    )
+    cbar.outline.set_linewidth(0.5)
+
+    if save_path:
+        os.makedirs(os.path.dirname(save_path), exist_ok=True)
+        if for_latex and not save_path.endswith(".pdf"):
+            save_path = save_path.rsplit(".", 1)[0] + ".pdf"
+        if plot_title:
+            save_path = _add_title_suffix(save_path)
+        report_path = save_path.rsplit(".", 1)[0] + "_report.json"
+        write_figure_report(
+            report_path,
+            {
+                "figure_name": "four_city_sales_heatmap_colorbar",
+                "figure_path": save_path,
+                "native_size_inches": [float(figsize[0]), float(figsize[1])],
+                "orientation": "horizontal",
+                "label": "Monthly sales density (orders km^-2)",
+                "ticks": [float(vmin), midpoint, float(vmax)],
+                "comparable_scale": comparable_scale,
+            },
+        )
+        plt.savefig(save_path, dpi=300)
+        print(f"Sales heatmap colorbar report saved to {report_path}")
+        print(f"Sales heatmap colorbar saved to {save_path}")
+    else:
+        plt.show()
+    plt.close(fig)
 
 
 def plot_merchant_monthly_sales_map(
