@@ -2422,6 +2422,7 @@ def _plot_grouped_scatter_split_panels_axes(
     colorbar_label: str = None,
     scatter_size: float = None,
     scatter_alpha: float = 0.68,
+    grayscale: bool = False,
 ):
     """Draw threshold-split scatter panels into a parent subplot spec."""
     valid_mask = df[[feature_var, result_var, group_var]].notna().all(axis=1)
@@ -2458,13 +2459,28 @@ def _plot_grouped_scatter_split_panels_axes(
     )
     from matplotlib.cm import ScalarMappable
 
+    grayscale_colors = (
+        "#D9D9D9",
+        "#BDBDBD",
+        "#A1A1A1",
+        "#858585",
+        "#696969",
+        "#4D4D4D",
+        "#313131",
+    )
     base_cmap = LinearSegmentedColormap.from_list(
-        "gef", ["#006837", "#31A354", "#D95F0E", "#A50F15"]
+        "gef_grayscale" if grayscale else "gef",
+        grayscale_colors
+        if grayscale
+        else ["#006837", "#31A354", "#D95F0E", "#A50F15"],
     )
     gef_vals = plot_df[group_var].values
     if colorbar_boundaries is not None:
         boundaries = np.asarray(colorbar_boundaries, dtype=float)
-        colors = base_cmap(np.linspace(0.0, 1.0, len(boundaries) - 1))
+        if grayscale and len(boundaries) - 1 == len(grayscale_colors):
+            colors = grayscale_colors
+        else:
+            colors = base_cmap(np.linspace(0.0, 1.0, len(boundaries) - 1))
         cmap = ListedColormap(colors, name="gef_discrete")
         norm = BoundaryNorm(boundaries, cmap.N, clip=True)
     else:
@@ -2509,7 +2525,11 @@ def _plot_grouped_scatter_split_panels_axes(
         ax_high = fig.add_subplot(gs[0, 2], sharex=ax_low, sharey=ax_low)
     axes = [ax_low, ax_high]
     masks = [low_mask, high_mask]
-    line_colors = ["#006837", "#A50F15"]
+    line_colors = (
+        ["#4D4D4D", "#4D4D4D"]
+        if grayscale
+        else ["#006837", "#A50F15"]
+    )
 
     for ax, mask, line_color, label, panel_letter in zip(
         axes, masks, line_colors, group_labels, panel_letters
@@ -4479,6 +4499,7 @@ def _plot_city_gef_scatter_components_axes(
     plot_title: bool = False,
     compact: bool = False,
     show_legend: bool = True,
+    grayscale: bool = False,
 ):
     """Draw GEF-binned per-order emission components into a parent subplot spec."""
     gef_col = None
@@ -4503,7 +4524,7 @@ def _plot_city_gef_scatter_components_axes(
     vehicle_specs = [
         {
             "label": "E-bike",
-            "color": "#4C8CBF",
+            "color": "#BDBDBD" if grayscale else "#4C8CBF",
             "offset": -0.18,
             "use_col": "total_ebike_use_phase_emission_kg",
             "production_col": "total_ebike_production_emission_kg",
@@ -4511,7 +4532,7 @@ def _plot_city_gef_scatter_components_axes(
         },
         {
             "label": "Drone",
-            "color": "#E05C2B",
+            "color": "#636363" if grayscale else "#E05C2B",
             "offset": 0.18,
             "use_col": "total_drone_use_phase_emission_kg",
             "production_col": "total_drone_production_emission_kg",
@@ -4637,9 +4658,10 @@ def _plot_city_gef_scatter_components_axes(
             fixed_values,
             width=width,
             color=spec["color"],
-            alpha=0.38,
-            edgecolor="white",
-            linewidth=0.6,
+            alpha=1.0 if grayscale else 0.38,
+            edgecolor="#222222" if grayscale else "white",
+            linewidth=0.45 if grayscale else 0.6,
+            hatch="////" if grayscale else None,
             zorder=3,
         )
         ax.bar(
@@ -4648,9 +4670,9 @@ def _plot_city_gef_scatter_components_axes(
             width=width,
             bottom=fixed_values,
             color=spec["color"],
-            alpha=0.88,
-            edgecolor="white",
-            linewidth=0.6,
+            alpha=1.0 if grayscale else 0.88,
+            edgecolor="#222222" if grayscale else "white",
+            linewidth=0.45 if grayscale else 0.6,
             zorder=3,
             label=spec["label"],
         )
@@ -4695,12 +4717,34 @@ def _plot_city_gef_scatter_components_axes(
             1,
             1,
             facecolor=spec["color"],
-            alpha=0.88,
-            edgecolor="white",
+            alpha=1.0 if grayscale else 0.88,
+            edgecolor="#222222" if grayscale else "white",
             label=spec["label"],
         )
         for spec in vehicle_specs
     ]
+    if grayscale:
+        legend_handles = [
+            plt.Rectangle(
+                (0, 0),
+                1,
+                1,
+                facecolor="#BDBDBD",
+                edgecolor="#222222",
+                linewidth=0.45,
+                hatch="////",
+                label="Production + EOL",
+            ),
+            plt.Rectangle(
+                (0, 0),
+                1,
+                1,
+                facecolor="#BDBDBD",
+                edgecolor="#222222",
+                linewidth=0.45,
+                label="Use phase",
+            ),
+        ]
     if show_legend:
         legend1 = ax.legend(
             handles=vehicle_handles,

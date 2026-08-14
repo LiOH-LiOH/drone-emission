@@ -207,6 +207,20 @@
       "components": []
     },
     {
+      "figure_id": "city_gef_context_detour_summary_grayscale",
+      "figure_path": "figures/paper/subfigure/city_gef_context_detour_summary_grayscale.pdf",
+      "composition_type": "standalone",
+      "assembly_tool": "Matplotlib",
+      "assembly_notes": "Grayscale counterpart of city_gef_context_detour_summary with redundant vehicle and lifecycle-component encoding.",
+      "generator": {
+        "module_path": "src/drone_emission/visualization/paper.py",
+        "function": "_render_city_gef_context_detour_summary_grayscale"
+      },
+      "standalone_report_path": "figures/paper/subfigure/city_gef_context_detour_summary_grayscale_report.json",
+      "panels": [],
+      "components": []
+    },
+    {
       "figure_id": "contribution_decomposition_city_b",
       "figure_path": "figures/paper/subfigure/contribution_decomposition_city_b.pdf",
       "composition_type": "standalone",

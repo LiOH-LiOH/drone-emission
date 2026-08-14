@@ -271,6 +271,27 @@ POWER_MIX_COLORS = {
     "Solar": "#f2cf5b",
     "Other": "#9e9e9e",
 }
+POWER_MIX_GRAYSCALE_COLORS = {
+    "Hydro": "#2B2B2B",
+    "Thermal": "#606060",
+    "Wind": "#969696",
+    "Solar": "#C7C7C7",
+    "Other": "#E6E6E6",
+}
+CITY_GEF_GRAYSCALE_VEHICLE_COLORS = {
+    "E-bike": "#BDBDBD",
+    "Drone": "#636363",
+}
+CITY_GEF_GRAYSCALE_BIN_COLORS = (
+    "#D9D9D9",
+    "#BDBDBD",
+    "#A1A1A1",
+    "#858585",
+    "#696969",
+    "#4D4D4D",
+    "#313131",
+)
+CITY_GEF_GRAYSCALE_BOTTOM_SCATTER_ALPHA = 0.78
 
 
 @contextmanager
@@ -2587,13 +2608,22 @@ def _plot_compact_city_context_summary_panels(
     panel_start_letter="b",
     legend_ax=None,
     right_label_offset=0.055,
+    grayscale=False,
 ):
     """Draw compact power-mix and distance panels for the city summary."""
     import numpy as np
     from matplotlib.patches import Patch
 
+    power_mix_colors = (
+        POWER_MIX_GRAYSCALE_COLORS if grayscale else POWER_MIX_COLORS
+    )
     power_mix_handles = [
-        Patch(facecolor=POWER_MIX_COLORS[name], edgecolor="none", label=name)
+        Patch(
+            facecolor=power_mix_colors[name],
+            edgecolor="#777777" if grayscale else "none",
+            linewidth=0.4 if grayscale else 0.0,
+            label=name,
+        )
         for name in ("Hydro", "Thermal", "Wind", "Solar", "Other")
     ]
     if legend_ax is None:
@@ -2706,9 +2736,9 @@ def _plot_compact_city_context_summary_panels(
                 [share],
                 left=[left],
                 height=0.52,
-                color=POWER_MIX_COLORS[name],
+                color=power_mix_colors[name],
                 edgecolor="white",
-                linewidth=0.45,
+                linewidth=0.6 if grayscale else 0.45,
                 zorder=3,
             )
             if share >= 12.0:
@@ -2761,7 +2791,7 @@ def _plot_compact_city_context_summary_panels(
             centres[bar_visible],
             drone_share[bar_visible],
             width=0.156,
-            color="#9ecae1",
+            color="#C7C7C7" if grayscale else "#9ecae1",
             edgecolor="white",
             linewidth=0.25,
             zorder=2,
@@ -2866,7 +2896,7 @@ def _plot_compact_city_context_summary_panels(
         fontsize=7.5,
         ha="center",
         va="center",
-        color="#3182bd",
+        color="#444444" if grayscale else "#3182bd",
     )
     fig.text(
         (middle_pos.x0 + middle_pos.x1) / 2.0,
@@ -2883,6 +2913,7 @@ def _create_city_gef_summary_legend_rail(
     fig,
     contexts,
     row_hspace=CITY_GEF_SUMMARY_ROW_HSPACE,
+    grayscale=False,
 ):
     """Create three vertically aligned legend sections beside the summary."""
     from matplotlib.lines import Line2D
@@ -2903,24 +2934,55 @@ def _create_city_gef_summary_legend_rail(
     for ax in (ax_top, ax_middle, ax_bottom):
         ax.set_axis_off()
 
-    vehicle_handles = [
-        Patch(facecolor="#4C8CBF", edgecolor="none", label="E-bike"),
-        Patch(facecolor="#E05C2B", edgecolor="none", label="Drone"),
-    ]
-    component_handles = [
-        Patch(
-            facecolor="#777777",
-            alpha=0.35,
-            edgecolor="#555555",
-            label="Production + EOL",
-        ),
-        Patch(
-            facecolor="#777777",
-            alpha=0.90,
-            edgecolor="#555555",
-            label="Use phase",
-        ),
-    ]
+    if grayscale:
+        vehicle_handles = [
+            Patch(
+                facecolor=CITY_GEF_GRAYSCALE_VEHICLE_COLORS["E-bike"],
+                edgecolor="#222222",
+                linewidth=0.45,
+                label="E-bike",
+            ),
+            Patch(
+                facecolor=CITY_GEF_GRAYSCALE_VEHICLE_COLORS["Drone"],
+                edgecolor="#222222",
+                linewidth=0.45,
+                label="Drone",
+            ),
+        ]
+        component_handles = [
+            Patch(
+                facecolor="#BDBDBD",
+                edgecolor="#222222",
+                linewidth=0.45,
+                hatch="////",
+                label="Production + EOL",
+            ),
+            Patch(
+                facecolor="#BDBDBD",
+                edgecolor="#222222",
+                linewidth=0.45,
+                label="Use phase",
+            ),
+        ]
+    else:
+        vehicle_handles = [
+            Patch(facecolor="#4C8CBF", edgecolor="none", label="E-bike"),
+            Patch(facecolor="#E05C2B", edgecolor="none", label="Drone"),
+        ]
+        component_handles = [
+            Patch(
+                facecolor="#777777",
+                alpha=0.35,
+                edgecolor="#555555",
+                label="Production + EOL",
+            ),
+            Patch(
+                facecolor="#777777",
+                alpha=0.90,
+                edgecolor="#555555",
+                label="Use phase",
+            ),
+        ]
     vehicle_legend = ax_top.legend(
         handles=vehicle_handles,
         loc="upper left",
@@ -3093,7 +3155,7 @@ def _report_axis(ax):
     }
 
 
-def _city_gef_components_report(df, axes):
+def _city_gef_components_report(df, axes, grayscale=False):
     """Return exact plotted data for the GEF component panel."""
     import numpy as np
 
@@ -3109,7 +3171,11 @@ def _city_gef_components_report(df, axes):
     vehicle_specs = [
         {
             "label": "E-bike",
-            "color": "#4C8CBF",
+            "color": (
+                CITY_GEF_GRAYSCALE_VEHICLE_COLORS["E-bike"]
+                if grayscale
+                else "#4C8CBF"
+            ),
             "offset": -0.18,
             "use_col": "total_ebike_use_phase_emission_kg",
             "production_col": "total_ebike_production_emission_kg",
@@ -3117,7 +3183,11 @@ def _city_gef_components_report(df, axes):
         },
         {
             "label": "Drone",
-            "color": "#E05C2B",
+            "color": (
+                CITY_GEF_GRAYSCALE_VEHICLE_COLORS["Drone"]
+                if grayscale
+                else "#E05C2B"
+            ),
             "offset": 0.18,
             "use_col": "total_drone_use_phase_emission_kg",
             "production_col": "total_drone_production_emission_kg",
@@ -3195,13 +3265,17 @@ def _city_gef_components_report(df, axes):
                         "bottom": 0.0,
                         "height_g_co2e_per_order": _report_number(fixed),
                         "top": _report_number(fixed),
-                        "alpha": 0.38,
+                        "alpha": 1.0 if grayscale else 0.38,
+                        "hatch": "////" if grayscale else None,
+                        "edgecolor": "#222222" if grayscale else "white",
                     },
                     "use_phase_segment": {
                         "bottom": _report_number(fixed),
                         "height_g_co2e_per_order": _report_number(use),
                         "top": _report_number(fixed + use),
-                        "alpha": 0.88,
+                        "alpha": 1.0 if grayscale else 0.88,
+                        "hatch": None,
+                        "edgecolor": "#222222" if grayscale else "white",
                     },
                     "total_label": {
                         "x": _report_number(x_center),
@@ -3262,6 +3336,7 @@ def _city_context_summary_report(
     labels,
     panel_records,
     bar_metric="reduction_pct",
+    grayscale=False,
 ):
     """Return exact plotted data for the grouped city context row."""
     import numpy as np
@@ -3285,7 +3360,7 @@ def _city_context_summary_report(
         )
         if bar_metric == "oracle_drone_share_pct":
             bar_values = oracle_drone_share_pct
-            bar_color = "#9ecae1"
+            bar_color = "#C7C7C7" if grayscale else "#9ecae1"
             bar_label = "oracle_drone_share_pct"
         else:
             bar_values = reduction_pct
@@ -3450,7 +3525,11 @@ def _city_context_summary_report(
                         "component": name,
                         "value_100m_kwh": _report_number(value),
                         "share_pct": _report_number(value / total * 100.0),
-                        "color": POWER_MIX_COLORS[name],
+                        "color": (
+                            POWER_MIX_GRAYSCALE_COLORS[name]
+                            if grayscale
+                            else POWER_MIX_COLORS[name]
+                        ),
                     }
                     for name, value in zip(components, values)
                 ],
@@ -3841,6 +3920,7 @@ def _detour_reduction_scatter_report(
     axes,
     panel_letters=("f", "g"),
     compact=False,
+    grayscale=False,
 ):
     """Return exact plotted data for the bottom detour-reduction scatter panels."""
     import numpy as np
@@ -3855,7 +3935,11 @@ def _detour_reduction_scatter_report(
     low_mask = plot_df[group_var] <= threshold
     masks = [low_mask, ~low_mask]
     labels = (f"Low GEF ($\\leq$ {threshold})", f"High GEF (> {threshold})")
-    line_colors = ["#006837", "#A50F15"]
+    line_colors = (
+        ["#4D4D4D", "#4D4D4D"]
+        if grayscale
+        else ["#006837", "#A50F15"]
+    )
     axis_names = ["low_gef", "high_gef"]
     axis_objs = [ax_low, ax_high]
 
@@ -3936,7 +4020,13 @@ def _detour_reduction_scatter_report(
                 },
                 "scatter_style": {
                     "size": CITY_GEF_BOTTOM_SCATTER_SIZE if compact else 24,
-                    "alpha": CITY_GEF_BOTTOM_SCATTER_ALPHA if compact else 0.68,
+                    "alpha": (
+                        CITY_GEF_GRAYSCALE_BOTTOM_SCATTER_ALPHA
+                        if grayscale and compact
+                        else CITY_GEF_BOTTOM_SCATTER_ALPHA
+                        if compact
+                        else 0.68
+                    ),
                     "edgecolors": "none",
                     "zorder": 10,
                 },
@@ -3966,6 +4056,7 @@ def _write_city_gef_context_detour_report(
     bottom_report,
     connector_lines,
     legend_rail=None,
+    render_style="color",
 ):
     """Write JSON and Markdown reports for the city GEF context figure."""
     report_base = save_path.rsplit(".", 1)[0] + "_report"
@@ -3974,6 +4065,7 @@ def _write_city_gef_context_detour_report(
     payload = {
         "figure_name": figure_name,
         "figure_path": save_path,
+        "render_style": render_style,
         "figure_size_inches": {
             "width": figure_size[0],
             "height": figure_size[1],
@@ -3990,6 +4082,16 @@ def _write_city_gef_context_detour_report(
         "connector_lines": connector_lines,
         "legend_rail": legend_rail,
     }
+    if render_style == "grayscale":
+        payload["visual_encoding"] = {
+            "vehicle_colors": CITY_GEF_GRAYSCALE_VEHICLE_COLORS,
+            "production_eol_hatch": "////",
+            "use_phase_hatch": None,
+            "power_mix_colors": POWER_MIX_GRAYSCALE_COLORS,
+            "gef_bin_colors_low_to_high": CITY_GEF_GRAYSCALE_BIN_COLORS,
+            "gef_gray_direction": "higher GEF uses darker gray",
+            "regression_linestyle": "solid",
+        }
     with open(json_path, "w", encoding="utf-8") as f:
         json.dump(payload, f, indent=2, ensure_ascii=False, allow_nan=False)
 
@@ -3998,6 +4100,7 @@ def _write_city_gef_context_detour_report(
         "",
         f"- Figure path: `{save_path}`",
         f"- JSON data path: `{json_path}`",
+        f"- Render style: `{render_style}`",
         f"- Figure size: {figure_size[0]} x {figure_size[1]} inches",
         "- Coordinate convention: data coordinates for plotted elements; figure-fraction coordinates for axes.",
         f"- Connector line groups: {len(connector_lines)}",
@@ -4164,9 +4267,10 @@ def _render_city_gef_context_detour_summary(
     df_enriched,
     city_df,
     exp_config,
+    figure_name="city_gef_context_detour_summary",
+    grayscale=False,
 ):
     """Render GEF components, selected city contexts, and detour-reduction scatter."""
-    figure_name = "city_gef_context_detour_summary"
     contexts = CITY_GEF_CONTEXT_DETOUR_CONTEXTS
     region_keys = [context["region_key"] for context in contexts]
     selected = city_df[city_df["region_key"].isin(region_keys)].copy()
@@ -4280,6 +4384,7 @@ def _render_city_gef_context_detour_summary(
         fig,
         contexts=available_contexts,
         row_hspace=CITY_GEF_SUMMARY_ROW_HSPACE,
+        grayscale=grayscale,
     )
 
     top_axes = _plot_city_gef_scatter_components_axes(
@@ -4289,6 +4394,7 @@ def _render_city_gef_context_detour_summary(
         plot_title=plot_title,
         compact=True,
         show_legend=False,
+        grayscale=grayscale,
     )
     if top_axes is None:
         plt.close(fig)
@@ -4320,6 +4426,7 @@ def _render_city_gef_context_detour_summary(
         panel_start_letter="b",
         legend_ax=legend_rail["middle"],
         right_label_offset=0.035,
+        grayscale=grayscale,
     )
 
     bottom_start_ord = ord("b") + len(available_contexts)
@@ -4343,7 +4450,12 @@ def _render_city_gef_context_detour_summary(
         colorbar_boundaries=CITY_GEF_COLOR_BIN_EDGES,
         colorbar_label="kg CO$_2$e/kWh",
         scatter_size=CITY_GEF_BOTTOM_SCATTER_SIZE,
-        scatter_alpha=CITY_GEF_BOTTOM_SCATTER_ALPHA,
+        scatter_alpha=(
+            CITY_GEF_GRAYSCALE_BOTTOM_SCATTER_ALPHA
+            if grayscale
+            else CITY_GEF_BOTTOM_SCATTER_ALPHA
+        ),
+        grayscale=grayscale,
     )
     if bottom_axes is None:
         plt.close(fig)
@@ -4374,13 +4486,18 @@ def _render_city_gef_context_detour_summary(
     os.makedirs(os.path.dirname(save_path), exist_ok=True)
     fig.canvas.draw()
     fig.savefig(save_path, dpi=300, bbox_inches=fig.bbox_inches, pad_inches=0.0)
-    top_report = _city_gef_components_report(summary_df, top_axes)
+    top_report = _city_gef_components_report(
+        summary_df,
+        top_axes,
+        grayscale=grayscale,
+    )
     top_report["selected_city_gef_markers"] = top_city_gef_markers
     city_reports = _city_context_summary_report(
         binned_by_city,
         labels,
         city_panel_records,
         bar_metric="oracle_drone_share_pct",
+        grayscale=grayscale,
     )
     bottom_report = _detour_reduction_scatter_report(
         summary_df,
@@ -4388,6 +4505,7 @@ def _render_city_gef_context_detour_summary(
         bottom_axes,
         panel_letters=bottom_panel_letters,
         compact=True,
+        grayscale=grayscale,
     )
     bottom_report["selected_city_scatter_markers"] = bottom_city_markers
     bottom_report["major_city_labels"] = bottom_major_city_labels
@@ -4403,6 +4521,9 @@ def _render_city_gef_context_detour_summary(
         "gef_bin_edges": _report_array(CITY_GEF_COLOR_BIN_EDGES),
         "gef_bin_colors": [to_hex(gef_cmap(index)) for index in range(gef_cmap.N)],
         "city_markers": legend_rail["city_entries"],
+        "render_style": "grayscale" if grayscale else "color",
+        "production_eol_hatch": "////" if grayscale else None,
+        "use_phase_hatch": None,
     }
     _write_city_gef_context_detour_report(
         save_path=save_path,
@@ -4413,9 +4534,33 @@ def _render_city_gef_context_detour_summary(
         bottom_report=bottom_report,
         connector_lines=connector_lines,
         legend_rail=legend_rail_report,
+        render_style="grayscale" if grayscale else "color",
     )
     plt.close(fig)
     print(f"City GEF context detour summary saved to {save_path}")
+
+
+def _render_city_gef_context_detour_summary_grayscale(
+    data_dir,
+    out,
+    for_latex,
+    plot_title,
+    df_enriched,
+    city_df,
+    exp_config,
+):
+    """Render the grayscale city GEF context and detour summary."""
+    _render_city_gef_context_detour_summary(
+        data_dir=data_dir,
+        out=out,
+        for_latex=for_latex,
+        plot_title=plot_title,
+        df_enriched=df_enriched,
+        city_df=city_df,
+        exp_config=exp_config,
+        figure_name="city_gef_context_detour_summary_grayscale",
+        grayscale=True,
+    )
 
 
 def _render_shanghai_road_air_distance(data_dir, out, for_latex, plot_title):
@@ -6077,6 +6222,7 @@ def render_all(
         "city_gef_scatter_components",
         "city_population_detour_oracle_reduction_bubble",
         "city_gef_context_detour_summary",
+        "city_gef_context_detour_summary_grayscale",
         "break_even_contribution_decomposition",
         "break_even_contribution_decomposition_marching_cubes",
         "break_even_contribution_decomposition_marching_cubes_de",
@@ -6308,6 +6454,7 @@ def render_all(
                 any(_want(figure_name) for figure_name in CITY_CONTEXT_FIGURES)
                 or any(_want(figure_name) for figure_name in CITY_CONTEXT_GROUP_FIGURES)
                 or _want("city_gef_context_detour_summary")
+                or _want("city_gef_context_detour_summary_grayscale")
                 or _want("break_even_contribution_decomposition")
                 or _want("break_even_contribution_decomposition_marching_cubes")
                 or _want("break_even_contribution_decomposition_marching_cubes_de")
@@ -6804,6 +6951,16 @@ def render_all(
                         )
                     if _want("city_gef_context_detour_summary"):
                         _render_city_gef_context_detour_summary(
+                            data_dir=data_dir,
+                            out=out,
+                            for_latex=for_latex,
+                            plot_title=plot_title,
+                            df_enriched=df_enriched,
+                            city_df=city_df,
+                            exp_config=exp_config,
+                        )
+                    if _want("city_gef_context_detour_summary_grayscale"):
+                        _render_city_gef_context_detour_summary_grayscale(
                             data_dir=data_dir,
                             out=out,
                             for_latex=for_latex,
