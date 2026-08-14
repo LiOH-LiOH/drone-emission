@@ -228,7 +228,10 @@ def main() -> None:
 
     config = load_config(PROJECT_ROOT / "experiment.toml", env=args.env)
     data_dir = Path(config["data_dir"])
-    figures_dir = Path(config["figures_dir"]) / "analysis" / "distance_threshold"
+    analysis_figures_dir = (
+        Path(config["figures_dir"]) / "analysis" / "distance_threshold"
+    )
+    paper_subfigure_dir = Path(config["figures_dir"]) / "paper" / "subfigure"
     summary_path = _resolve_summary_path(data_dir, args.summary_path)
     summary = _load_summary(summary_path, data_dir)
     plot_title = not args.untitled
@@ -239,7 +242,8 @@ def main() -> None:
             curves,
             summary,
             save_path=str(
-                figures_dir / "distance_threshold_typical_city_curves.png"
+                analysis_figures_dir
+                / "distance_threshold_typical_city_curves.png"
             ),
             plot_title=plot_title,
         )
@@ -250,7 +254,7 @@ def main() -> None:
             summary,
             oracle,
             save_path=str(
-                figures_dir / "distance_threshold_city_landscape.pdf"
+                paper_subfigure_dir / "distance_threshold_city_landscape.pdf"
             ),
             for_latex=True,
             plot_title=plot_title,
@@ -259,7 +263,8 @@ def main() -> None:
             summary,
             oracle,
             save_path=str(
-                figures_dir / "distance_threshold_oracle_performance.pdf"
+                paper_subfigure_dir
+                / "distance_threshold_oracle_performance.pdf"
             ),
             for_latex=True,
             plot_title=plot_title,
