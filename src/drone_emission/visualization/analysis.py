@@ -11578,7 +11578,6 @@ def _plot_distance_threshold_all_city_scatter(
     y_col: str,
     x_label: str,
     y_label: str,
-    title: str,
     panel_idx: int,
     diagonal: bool,
 ):
@@ -11628,20 +11627,6 @@ def _plot_distance_threshold_all_city_scatter(
         )
         ax.set_xlim(lower, upper)
         ax.set_ylim(lower, upper)
-    else:
-        ax.axvline(
-            wide[x_col].median(),
-            color="#888888",
-            linewidth=0.75,
-            linestyle="--",
-        )
-        ax.axhline(
-            wide[y_col].median(),
-            color="#888888",
-            linewidth=0.75,
-            linestyle="--",
-        )
-
     for _, row in wide[highlight].iterrows():
         offset = DISTANCE_THRESHOLD_COMPARISON_LABEL_OFFSETS.get(
             panel_idx, {}
@@ -11667,16 +11652,8 @@ def _plot_distance_threshold_all_city_scatter(
         )
     ax.set_xlabel(x_label, fontsize=8)
     ax.set_ylabel(y_label, fontsize=8)
-    ax.text(
-        0.01,
-        1.02,
-        title,
-        transform=ax.transAxes,
-        fontsize=9,
-        fontweight="bold",
-        va="bottom",
-    )
     _style_distance_threshold_axis(ax)
+    ax.grid(False)
     ax.tick_params(labelsize=7)
     return norm, cmap
 
@@ -11749,31 +11726,16 @@ def plot_distance_threshold_city_landscape(
         wide,
         "road_optimal_threshold_km",
         "road_annual_reduction_pct",
-        "Road threshold, d* (km)",
+        "Road threshold (km)",
         "Maximum annual lifecycle reduction (%)",
-        "Road-policy landscape",
         panel_idx=0,
         diagonal=False,
-    )
-    city_count = int(wide["region_key"].nunique())
-    configured_count = int(
-        summary_df.attrs.get("configured_city_count", city_count)
-    )
-    ax.text(
-        0.98,
-        0.03,
-        f"n = {city_count}/{configured_count} cities",
-        transform=ax.transAxes,
-        ha="right",
-        va="bottom",
-        fontsize=6.5,
-        color="#555555",
     )
     fig.subplots_adjust(
         left=0.20,
         right=0.97,
         bottom=0.18,
-        top=0.79 if plot_title else 0.90,
+        top=0.79 if plot_title else 0.96,
     )
     if plot_title:
         fig.suptitle(
@@ -11830,7 +11792,6 @@ def plot_distance_threshold_oracle_performance(
         "Trip-level optimal reduction (%)\n"
         "(drone for every lower-emission trip)",
         "Road-policy reduction (%)",
-        "Policy performance against trip-level optimum",
         panel_idx=1,
         diagonal=True,
     )
@@ -11840,9 +11801,10 @@ def plot_distance_threshold_oracle_performance(
         left=0.17,
         right=0.78,
         bottom=0.18,
-        top=0.79 if plot_title else 0.90,
+        top=0.79 if plot_title else 0.96,
     )
-    colorbar_ax = fig.add_axes([0.84, 0.18, 0.025, 0.72])
+    colorbar_top = 0.79 if plot_title else 0.96
+    colorbar_ax = fig.add_axes([0.84, 0.18, 0.025, colorbar_top - 0.18])
     colorbar = fig.colorbar(
         scalar,
         cax=colorbar_ax,
