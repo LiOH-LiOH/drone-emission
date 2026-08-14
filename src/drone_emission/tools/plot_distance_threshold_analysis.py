@@ -19,7 +19,8 @@ import pandas as pd
 from utils import load_config
 from visualization.analysis import (
     DISTANCE_THRESHOLD_TYPICAL_CITIES,
-    plot_distance_threshold_all_city_overview,
+    plot_distance_threshold_city_landscape,
+    plot_distance_threshold_oracle_performance,
     plot_distance_threshold_typical_city_curves,
 )
 
@@ -245,12 +246,22 @@ def main() -> None:
 
     if args.only in {"all", "both"}:
         oracle = _load_oracle_results(data_dir)
-        plot_distance_threshold_all_city_overview(
+        plot_distance_threshold_city_landscape(
             summary,
             oracle,
             save_path=str(
-                figures_dir / "distance_threshold_all_city_overview.png"
+                figures_dir / "distance_threshold_city_landscape.pdf"
             ),
+            for_latex=True,
+            plot_title=plot_title,
+        )
+        plot_distance_threshold_oracle_performance(
+            summary,
+            oracle,
+            save_path=str(
+                figures_dir / "distance_threshold_oracle_performance.pdf"
+            ),
+            for_latex=True,
             plot_title=plot_title,
         )
 
