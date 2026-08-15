@@ -9396,7 +9396,7 @@ def _save_city_reduction_distribution(
 def plot_city_relative_lifecycle_reduction_distribution(
     df: pd.DataFrame,
     save_path: str = None,
-    figsize: tuple = (2.31, 1.70),
+    figsize: tuple = (2.65, 1.70),
     for_latex: bool = False,
     plot_title: bool = False,
 ):
@@ -9465,7 +9465,7 @@ def plot_city_relative_lifecycle_reduction_distribution(
 def plot_city_annual_absolute_reduction_distribution(
     df: pd.DataFrame,
     save_path: str = None,
-    figsize: tuple = (2.31, 1.70),
+    figsize: tuple = (2.65, 1.70),
     for_latex: bool = False,
     plot_title: bool = False,
 ):
