@@ -9305,47 +9305,66 @@ def _prepare_city_reduction_distribution_data(df: pd.DataFrame):
     return eligible, reduction_pct_col, reduction_t_col, audit
 
 
-def _draw_city_reduction_kde(
+def _draw_city_reduction_violin(
     ax,
     values,
     x_limits,
     x_label,
     log10_space=False,
 ):
-    """Draw a compact filled Scott-bandwidth KDE on one axis."""
+    """Draw a compact horizontal violin with median and IQR markers."""
     from scipy.stats import gaussian_kde
 
     values = np.asarray(values, dtype=float)
     transformed = np.log10(values) if log10_space else values
-    grid = np.linspace(
-        np.log10(x_limits[0]) if log10_space else x_limits[0],
-        np.log10(x_limits[1]) if log10_space else x_limits[1],
-        512,
-    )
+    grid = np.linspace(transformed.min(), transformed.max(), 512)
     density = gaussian_kde(transformed, bw_method="scott")(grid)
+    density[[0, -1]] = 0.0
+    half_width = 0.38 * density / density.max()
     display_grid = 10 ** grid if log10_space else grid
     curve_color = "#1F6F78"
 
     ax.fill_between(
         display_grid,
-        density,
+        -half_width,
+        half_width,
         color=curve_color,
-        alpha=0.20,
+        alpha=0.22,
         linewidth=0,
         zorder=1,
     )
-    ax.plot(display_grid, density, color=curve_color, linewidth=1.35, zorder=2)
+    ax.plot(display_grid, half_width, color=curve_color, linewidth=1.25, zorder=2)
+    ax.plot(display_grid, -half_width, color=curve_color, linewidth=1.25, zorder=2)
+
+    q1, median, q3 = np.quantile(values, [0.25, 0.50, 0.75])
+    ax.plot(
+        [q1, q3],
+        [0.0, 0.0],
+        color=curve_color,
+        linewidth=2.6,
+        solid_capstyle="round",
+        zorder=3,
+    )
+    ax.scatter(
+        [median],
+        [0.0],
+        s=14,
+        facecolor="white",
+        edgecolor=curve_color,
+        linewidth=0.8,
+        zorder=4,
+    )
     if log10_space:
         ax.set_xscale("log")
         ax.set_xticks([0.1, 1, 10, 100, 1000])
         ax.xaxis.set_major_formatter(FuncFormatter(lambda value, _: f"{value:g}"))
     ax.set_xlim(*x_limits)
-    ax.set_ylim(bottom=0)
+    ax.set_ylim(-0.48, 0.48)
     ax.set_xlabel(x_label, fontsize=7)
-    ax.set_ylabel("Density", fontsize=7)
-    ax.tick_params(axis="both", labelsize=6.5, length=2.5, pad=1.5)
+    ax.set_yticks([])
+    ax.tick_params(axis="x", labelsize=6.5, length=2.5, pad=1.5)
     ax.grid(False)
-    ax.spines[["top", "right"]].set_visible(False)
+    ax.spines[["top", "right", "left"]].set_visible(False)
 
 
 def _save_city_reduction_distribution(
@@ -9397,7 +9416,7 @@ def plot_city_relative_lifecycle_reduction_distribution(
     values = plot_df[reduction_pct_col].to_numpy(dtype=float)
 
     fig, ax = plt.subplots(figsize=figsize)
-    _draw_city_reduction_kde(
+    _draw_city_reduction_violin(
         ax,
         values,
         x_limits=(0.0, 50.0),
@@ -9420,10 +9439,13 @@ def plot_city_relative_lifecycle_reduction_distribution(
             "unit": "percent",
         },
         "distribution": {
-            "method": "Gaussian KDE",
+            "method": "Horizontal violin plot with Gaussian KDE",
             "bandwidth": "Scott's rule",
             "estimation_space": "linear percentage",
             "x_limits": [0.0, 50.0],
+            "support": "observed minimum to maximum",
+            "width_normalization": "independent maximum width",
+            "summary_marks": "median point and interquartile range bar",
         },
         "sample_audit": audit,
         "summary": _writing_numeric_summary(values),
@@ -9463,7 +9485,7 @@ def plot_city_annual_absolute_reduction_distribution(
     values = plot_df[reduction_t_col].to_numpy(dtype=float)
 
     fig, ax = plt.subplots(figsize=figsize)
-    _draw_city_reduction_kde(
+    _draw_city_reduction_violin(
         ax,
         values,
         x_limits=(0.03, 5000.0),
@@ -9490,11 +9512,14 @@ def plot_city_annual_absolute_reduction_distribution(
             "unit": "t CO2e per year",
         },
         "distribution": {
-            "method": "Gaussian KDE",
+            "method": "Horizontal violin plot with Gaussian KDE",
             "bandwidth": "Scott's rule",
             "estimation_space": "log10 tonnes CO2e per year",
             "x_scale": "logarithmic",
             "x_limits": [0.03, 5000.0],
+            "support": "observed minimum to maximum",
+            "width_normalization": "independent maximum width",
+            "summary_marks": "median point and interquartile range bar",
         },
         "sample_audit": audit,
         "summary": _writing_numeric_summary(values),
