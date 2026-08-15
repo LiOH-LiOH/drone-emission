@@ -12274,25 +12274,64 @@ def plot_city_reduction_concentration_scatter(
 
     fig_distribution, ax_distribution = plt.subplots(figsize=distribution_figsize)
     fig_distribution.subplots_adjust(left=0.32, right=0.96, bottom=0.16, top=0.98)
-    histogram_values = [
-        distribution_df.loc[
-            distribution_df["concentration_class"].eq(concentration_class),
-            "pilot_concentration_score_pct",
-        ].to_numpy(dtype=float)
-        for concentration_class in ("Low", "Medium", "High")
-    ]
-    ax_distribution.hist(
-        histogram_values,
-        bins=np.arange(0.0, 105.0, 5.0),
-        stacked=True,
-        orientation="horizontal",
-        color=[class_colors[category] for category in ("Low", "Medium", "High")],
-        edgecolor="white",
-        linewidth=0.6,
+    concentration_values = distribution_df[
+        "pilot_concentration_score_pct"
+    ].to_numpy(dtype=float)
+    if concentration_values.size < 2 or np.unique(concentration_values).size < 2:
+        raise ValueError(
+            "At least two distinct city concentration values are required for KDE"
+        )
+    lower_tertile, upper_tertile = np.quantile(
+        concentration_values,
+        (1 / 3, 2 / 3),
+    )
+    concentration_kde = stats.gaussian_kde(
+        concentration_values,
+        bw_method="scott",
+    )
+    concentration_support = np.linspace(0.0, 100.0, 512)
+    concentration_density = concentration_kde(concentration_support)
+    concentration_regions = (
+        (0.0, lower_tertile, class_colors["Low"]),
+        (lower_tertile, upper_tertile, class_colors["Medium"]),
+        (upper_tertile, 100.0, class_colors["High"]),
+    )
+    for lower_bound, upper_bound, color in concentration_regions:
+        region_support = concentration_support[
+            (concentration_support >= lower_bound)
+            & (concentration_support <= upper_bound)
+        ]
+        region_support = np.unique(
+            np.concatenate(([lower_bound], region_support, [upper_bound]))
+        )
+        ax_distribution.fill_betweenx(
+            region_support,
+            0.0,
+            concentration_kde(region_support),
+            color=color,
+            alpha=0.65,
+            linewidth=0,
+            zorder=1,
+        )
+    for quantile in (lower_tertile, upper_tertile):
+        ax_distribution.axhline(
+            quantile,
+            color="#666666",
+            linestyle="--",
+            linewidth=0.9,
+            zorder=2,
+        )
+    ax_distribution.plot(
+        concentration_density,
+        concentration_support,
+        color="#3F3F3F",
+        linewidth=1.2,
+        zorder=3,
     )
     ax_distribution.set_ylim(0, 100)
+    ax_distribution.set_xlim(left=0)
     ax_distribution.set_yticks([0, 25, 50, 75, 100])
-    ax_distribution.set_xlabel("Number of cities", fontsize=9)
+    ax_distribution.set_xlabel("Probability density", fontsize=9)
     ax_distribution.set_ylabel("MPCS (%)", fontsize=9)
     ax_distribution.tick_params(axis="both", labelsize=8)
     ax_distribution.spines[["top", "right"]].set_visible(False)
