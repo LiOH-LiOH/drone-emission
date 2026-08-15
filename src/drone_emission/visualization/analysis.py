@@ -12205,7 +12205,7 @@ def plot_city_reduction_concentration_scatter(
             color=class_colors.get(concentration_class, "#777777"),
             edgecolor="white",
             linewidth=0.35,
-            label=f"{concentration_class} concentration",
+            label=f"{concentration_class} MPCS",
             zorder=3,
         )
     ax.axhline(relative_median, color="#666666", linestyle="--", linewidth=1, zorder=1)
@@ -12332,7 +12332,10 @@ def plot_city_reduction_concentration_scatter(
     ax_distribution.set_xlim(left=0)
     ax_distribution.set_yticks([0, 25, 50, 75, 100])
     ax_distribution.set_xlabel("Probability density", fontsize=9)
-    ax_distribution.set_ylabel("MPCS (%)", fontsize=9)
+    ax_distribution.set_ylabel(
+        "Multi-scale Pilot Capture Score (MPCS, %)",
+        fontsize=9,
+    )
     ax_distribution.tick_params(axis="both", labelsize=8)
     ax_distribution.spines[["top", "right"]].set_visible(False)
 
