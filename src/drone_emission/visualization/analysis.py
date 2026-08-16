@@ -9627,6 +9627,167 @@ def _draw_city_reduction_boxplot(
     return box_report, highlight_offsets
 
 
+def _draw_city_reduction_violin(
+    ax,
+    values,
+    value_limits,
+    y_label,
+    log10_space=False,
+    highlight_values=None,
+):
+    """Draw a vertical KDE violin with summaries and selected-city markers."""
+    from scipy.stats import gaussian_kde
+
+    values = np.asarray(values, dtype=float)
+    valid_values = np.isfinite(values)
+    if log10_space:
+        valid_values &= values > 0
+    values = values[valid_values]
+    transformed = np.log10(values) if log10_space else values.copy()
+    density_grid = np.linspace(transformed.min(), transformed.max(), 512)
+    density = gaussian_kde(transformed, bw_method="scott")(density_grid)
+    density[[0, -1]] = 0.0
+    half_width = 0.32 * density / density.max()
+    display_grid = 10 ** density_grid if log10_space else density_grid
+    curve_color = "#1F6F78"
+
+    ax.fill_betweenx(
+        display_grid,
+        1.0 - half_width,
+        1.0 + half_width,
+        color=curve_color,
+        alpha=0.22,
+        linewidth=0,
+        zorder=1,
+    )
+    ax.plot(
+        1.0 - half_width,
+        display_grid,
+        color=curve_color,
+        linewidth=1.25,
+        zorder=2,
+    )
+    ax.plot(
+        1.0 + half_width,
+        display_grid,
+        color=curve_color,
+        linewidth=1.25,
+        zorder=2,
+    )
+
+    box_stats, box_report = _city_reduction_box_statistics(
+        values,
+        log10_space=log10_space,
+    )
+    ax.plot(
+        [1.0, 1.0],
+        [box_stats["q1"], box_stats["q3"]],
+        color=curve_color,
+        linewidth=2.6,
+        solid_capstyle="round",
+        zorder=3,
+    )
+    ax.scatter(
+        [1.0],
+        [box_stats["med"]],
+        s=14,
+        facecolor="white",
+        edgecolor=curve_color,
+        linewidth=0.8,
+        zorder=4,
+    )
+
+    highlight_values = np.asarray(
+        [] if highlight_values is None else highlight_values,
+        dtype=float,
+    )
+    valid_highlights = np.isfinite(highlight_values)
+    if log10_space:
+        valid_highlights &= highlight_values > 0
+    highlight_values = highlight_values[valid_highlights]
+
+    outlier_values = np.asarray(box_stats["fliers"], dtype=float)
+    if outlier_values.size and highlight_values.size:
+        highlighted_outlier_mask = np.any(
+            np.isclose(
+                outlier_values[:, np.newaxis],
+                highlight_values[np.newaxis, :],
+                rtol=1e-10,
+                atol=0.0,
+            ),
+            axis=1,
+        )
+    else:
+        highlighted_outlier_mask = np.zeros(outlier_values.size, dtype=bool)
+    neutral_outliers = outlier_values[~highlighted_outlier_mask]
+    neutral_outlier_offsets = _city_reduction_outlier_offsets(
+        neutral_outliers,
+        value_limits,
+        log10_space=log10_space,
+    )
+    if neutral_outliers.size:
+        ax.scatter(
+            1.0 + neutral_outlier_offsets,
+            neutral_outliers,
+            s=7,
+            marker="o",
+            facecolor="#B8BDC3",
+            edgecolor="white",
+            linewidth=0.25,
+            alpha=0.82,
+            zorder=3,
+            clip_on=True,
+        )
+
+    highlight_offsets = _city_reduction_highlight_offsets(
+        highlight_values,
+        value_limits,
+        log10_space=log10_space,
+    )
+    if highlight_values.size:
+        ax.scatter(
+            1.0 + highlight_offsets,
+            highlight_values,
+            s=18,
+            marker="o",
+            facecolor=ORACLE_REDUCTION_DISTRIBUTION_HIGHLIGHT_COLOR,
+            edgecolor="white",
+            linewidth=0.45,
+            alpha=0.96,
+            zorder=5,
+            clip_on=True,
+        )
+
+    if log10_space:
+        ax.set_yscale("log")
+        ax.set_yticks([0.1, 1, 10, 100, 1000])
+        ax.yaxis.set_major_formatter(FuncFormatter(lambda value, _: f"{value:g}"))
+    ax.set_ylim(*value_limits)
+    ax.set_xlim(0.45, 1.55)
+    ax.set_ylabel(y_label, fontsize=7)
+    ax.set_xticks([])
+    ax.tick_params(axis="y", labelsize=6.5, length=2.5, pad=1.5)
+    ax.grid(False)
+    ax.spines[["top", "right", "bottom"]].set_visible(False)
+
+    box_report["neutral_outlier_count"] = int(neutral_outliers.size)
+    box_report["highlighted_outlier_count"] = int(highlighted_outlier_mask.sum())
+    box_report["outlier_marker"] = {
+        "shape": "circle",
+        "facecolor": "#B8BDC3",
+        "edgecolor": "white",
+        "size_points_squared": 7,
+        "layout": "deterministic narrow horizontal jitter",
+    }
+    kde_report = {
+        "bandwidth": "Scott's rule",
+        "estimation_space": "log10" if log10_space else "linear",
+        "support": [float(display_grid.min()), float(display_grid.max())],
+        "maximum_half_width": 0.32,
+    }
+    return box_report, kde_report, highlight_offsets
+
+
 def _save_city_reduction_distribution(
     fig,
     save_path,
@@ -9865,6 +10026,204 @@ def plot_city_annual_absolute_reduction_distribution(
         plot_title,
         report,
         "City annual absolute reduction distribution",
+    )
+    plt.close(fig)
+    return saved_path
+
+
+def plot_city_relative_lifecycle_reduction_violin_distribution(
+    df: pd.DataFrame,
+    save_path: str = None,
+    figsize: tuple = (1.65, 2.04),
+    for_latex: bool = False,
+    plot_title: bool = False,
+):
+    """Plot a vertical violin of relative lifecycle emission reduction."""
+    prepared = _prepare_city_reduction_distribution_data(df)
+    if prepared is None:
+        return None
+    plot_df, reduction_pct_col, _, audit = prepared
+    values = plot_df[reduction_pct_col].to_numpy(dtype=float)
+    highlight_records, missing_highlights = _city_reduction_highlight_records(
+        plot_df,
+        reduction_pct_col,
+    )
+
+    fig, ax = plt.subplots(figsize=figsize)
+    box_report, kde_report, _ = _draw_city_reduction_violin(
+        ax,
+        values,
+        value_limits=(0.0, 50.0),
+        y_label="Lifecycle reduction (%)",
+        highlight_values=[record["value"] for record in highlight_records],
+    )
+    outlier_records = _city_reduction_outlier_records(
+        plot_df,
+        reduction_pct_col,
+        box_report,
+    )
+    if plot_title:
+        ax.set_title(
+            "City-level relative lifecycle emission reduction",
+            fontsize=9,
+            fontweight="bold",
+        )
+    fig.subplots_adjust(left=0.39, right=0.96, bottom=0.06, top=0.97)
+
+    report = {
+        "figure_name": "city_relative_lifecycle_reduction_violin_distribution",
+        "source_scope": "City-level study regions with positive finite Oracle reductions",
+        "metric": {
+            "field": reduction_pct_col,
+            "definition": "Oracle lifecycle reduction versus the all-e-bike baseline",
+            "unit": "percent",
+        },
+        "distribution": {
+            "method": "Vertical violin plot with Gaussian KDE",
+            "estimation_space": "linear percentage",
+            "y_limits": [0.0, 50.0],
+            "width_normalization": "independent maximum density",
+            "summary_marks": "median point and interquartile range line",
+            "outliers_displayed": True,
+            "kde": kde_report,
+        },
+        "box_statistics": box_report,
+        "outliers": {
+            "criterion": "observations outside the 1.5 IQR Tukey fences",
+            "count": int(len(outlier_records)),
+            "neutral_marker_count": int(box_report["neutral_outlier_count"]),
+            "highlighted_map_city_count": int(
+                box_report["highlighted_outlier_count"]
+            ),
+            "records": outlier_records,
+        },
+        "sample_audit": audit,
+        "summary": _writing_numeric_summary(values),
+        "highlighted_cities": {
+            "source": "Cities labeled on the Oracle reduction map",
+            "requested_cities": list(ORACLE_REDUCTION_LABEL_CITIES),
+            "matched_count": int(len(highlight_records)),
+            "missing_cities": missing_highlights,
+            "metric_field": reduction_pct_col,
+            "unit": "percent",
+            "marker": {
+                "shape": "circle",
+                "facecolor": ORACLE_REDUCTION_DISTRIBUTION_HIGHLIGHT_COLOR,
+                "edgecolor": "white",
+                "size_points_squared": 18,
+                "layout": "same deterministic symmetric swarm as boxplot",
+                "labels_or_legend": False,
+            },
+            "records": highlight_records,
+        },
+    }
+    saved_path = _save_city_reduction_distribution(
+        fig,
+        save_path,
+        for_latex,
+        plot_title,
+        report,
+        "City relative lifecycle reduction violin distribution",
+    )
+    plt.close(fig)
+    return saved_path
+
+
+def plot_city_annual_absolute_reduction_violin_distribution(
+    df: pd.DataFrame,
+    save_path: str = None,
+    figsize: tuple = (1.65, 2.04),
+    for_latex: bool = False,
+    plot_title: bool = False,
+):
+    """Plot a vertical violin of annual absolute emission reduction."""
+    prepared = _prepare_city_reduction_distribution_data(df)
+    if prepared is None:
+        return None
+    plot_df, _, reduction_t_col, audit = prepared
+    values = plot_df[reduction_t_col].to_numpy(dtype=float)
+    highlight_records, missing_highlights = _city_reduction_highlight_records(
+        plot_df,
+        reduction_t_col,
+    )
+
+    fig, ax = plt.subplots(figsize=figsize)
+    box_report, kde_report, _ = _draw_city_reduction_violin(
+        ax,
+        values,
+        value_limits=(0.03, 5000.0),
+        y_label="Annual reduction\n(t CO$_2$e yr$^{-1}$; log scale)",
+        log10_space=True,
+        highlight_values=[record["value"] for record in highlight_records],
+    )
+    outlier_records = _city_reduction_outlier_records(
+        plot_df,
+        reduction_t_col,
+        box_report,
+    )
+    if plot_title:
+        ax.set_title(
+            "City-level annual absolute emission reduction",
+            fontsize=9,
+            fontweight="bold",
+        )
+    fig.subplots_adjust(left=0.39, right=0.96, bottom=0.06, top=0.97)
+
+    report = {
+        "figure_name": "city_annual_absolute_reduction_violin_distribution",
+        "source_scope": "City-level study regions with positive finite Oracle reductions",
+        "metric": {
+            "field": reduction_t_col,
+            "definition": "All-e-bike lifecycle emissions minus Oracle lifecycle emissions",
+            "unit": "t CO2e per year",
+        },
+        "distribution": {
+            "method": "Vertical violin plot with Gaussian KDE",
+            "estimation_space": "log10 tonnes CO2e per year",
+            "y_scale": "logarithmic",
+            "y_limits": [0.03, 5000.0],
+            "width_normalization": "independent maximum density",
+            "summary_marks": "median point and interquartile range line",
+            "outliers_displayed": True,
+            "kde": kde_report,
+        },
+        "box_statistics": box_report,
+        "outliers": {
+            "criterion": "observations outside the 1.5 IQR Tukey fences in log10 space",
+            "count": int(len(outlier_records)),
+            "neutral_marker_count": int(box_report["neutral_outlier_count"]),
+            "highlighted_map_city_count": int(
+                box_report["highlighted_outlier_count"]
+            ),
+            "records": outlier_records,
+        },
+        "sample_audit": audit,
+        "summary": _writing_numeric_summary(values),
+        "highlighted_cities": {
+            "source": "Cities labeled on the Oracle reduction map",
+            "requested_cities": list(ORACLE_REDUCTION_LABEL_CITIES),
+            "matched_count": int(len(highlight_records)),
+            "missing_cities": missing_highlights,
+            "metric_field": reduction_t_col,
+            "unit": "t CO2e per year",
+            "marker": {
+                "shape": "circle",
+                "facecolor": ORACLE_REDUCTION_DISTRIBUTION_HIGHLIGHT_COLOR,
+                "edgecolor": "white",
+                "size_points_squared": 18,
+                "layout": "same deterministic symmetric swarm as boxplot",
+                "labels_or_legend": False,
+            },
+            "records": highlight_records,
+        },
+    }
+    saved_path = _save_city_reduction_distribution(
+        fig,
+        save_path,
+        for_latex,
+        plot_title,
+        report,
+        "City annual absolute reduction violin distribution",
     )
     plt.close(fig)
     return saved_path

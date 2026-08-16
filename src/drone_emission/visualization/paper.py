@@ -39,6 +39,8 @@ Available figures:
     city_population_detour_oracle_reduction_bubble,
     city_relative_lifecycle_reduction_distribution,
     city_annual_absolute_reduction_distribution,
+    city_relative_lifecycle_reduction_violin_distribution,
+    city_annual_absolute_reduction_violin_distribution,
     city_gef_distribution,
     city_gef_scatter_components,
     city_reduction_concentration_scatter,
@@ -6244,6 +6246,8 @@ def render_all(
         "city_reduction_rank_all_macro_region",
         "city_relative_lifecycle_reduction_distribution",
         "city_annual_absolute_reduction_distribution",
+        "city_relative_lifecycle_reduction_violin_distribution",
+        "city_annual_absolute_reduction_violin_distribution",
         "regions_map",
         "regions_map_oracle_reduction_rank",
         "regions_map_oracle_reduction_rank_map_only",
@@ -6271,6 +6275,8 @@ def render_all(
         "city_reduction_rank_all_macro_region",
         "city_relative_lifecycle_reduction_distribution",
         "city_annual_absolute_reduction_distribution",
+        "city_relative_lifecycle_reduction_violin_distribution",
+        "city_annual_absolute_reduction_violin_distribution",
         "regions_map_oracle_reduction_rank",
         "regions_map_oracle_reduction_rank_map_only",
         "regions_map_optimal_drone_share",
@@ -6302,6 +6308,7 @@ def render_all(
                 from visualization.analysis import (
                     _weighted_reduction_column,
                     plot_city_annual_absolute_reduction_distribution,
+                    plot_city_annual_absolute_reduction_violin_distribution,
                     plot_city_ebike_rank_bottom10,
                     plot_city_ebike_rank_top10,
                     plot_city_gef_distribution,
@@ -6309,6 +6316,7 @@ def render_all(
                     plot_city_oracle_reduction_rank_top10,
                     plot_city_population_detour_oracle_reduction_bubble,
                     plot_city_relative_lifecycle_reduction_distribution,
+                    plot_city_relative_lifecycle_reduction_violin_distribution,
                     plot_city_reduction_rank_all_macro_region,
                     plot_city_reduction_rank_top10,
                     plot_grouped_scatter_split_panels,
@@ -6445,6 +6453,28 @@ def render_all(
                     save_path=os.path.join(
                         out,
                         "city_annual_absolute_reduction_distribution.png",
+                    ),
+                    for_latex=for_latex,
+                    plot_title=plot_title,
+                )
+
+            if _want("city_relative_lifecycle_reduction_violin_distribution"):
+                plot_city_relative_lifecycle_reduction_violin_distribution(
+                    df,
+                    save_path=os.path.join(
+                        out,
+                        "city_relative_lifecycle_reduction_violin_distribution.png",
+                    ),
+                    for_latex=for_latex,
+                    plot_title=plot_title,
+                )
+
+            if _want("city_annual_absolute_reduction_violin_distribution"):
+                plot_city_annual_absolute_reduction_violin_distribution(
+                    df,
+                    save_path=os.path.join(
+                        out,
+                        "city_annual_absolute_reduction_violin_distribution.png",
                     ),
                     for_latex=for_latex,
                     plot_title=plot_title,

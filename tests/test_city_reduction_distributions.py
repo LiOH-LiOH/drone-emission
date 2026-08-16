@@ -24,7 +24,9 @@ from visualization.analysis import (  # noqa: E402
     _city_reduction_highlight_offsets,
     _city_reduction_outlier_offsets,
     plot_city_annual_absolute_reduction_distribution,
+    plot_city_annual_absolute_reduction_violin_distribution,
     plot_city_relative_lifecycle_reduction_distribution,
+    plot_city_relative_lifecycle_reduction_violin_distribution,
 )
 
 
@@ -123,6 +125,44 @@ class CityReductionDistributionTest(unittest.TestCase):
         self.assertTrue(np.any(first > 0))
         self.assertTrue(np.any(first < 0))
         self.assertGreater(len(np.unique(first[:3])), 1)
+
+    def test_violin_variants_keep_vertical_geometry_and_new_names(self) -> None:
+        city_frame = _city_frame()
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            relative_path = (
+                plot_city_relative_lifecycle_reduction_violin_distribution(
+                    city_frame,
+                    save_path=os.path.join(tmp_dir, "relative_violin.png"),
+                    for_latex=True,
+                )
+            )
+            absolute_path = (
+                plot_city_annual_absolute_reduction_violin_distribution(
+                    city_frame,
+                    save_path=os.path.join(tmp_dir, "absolute_violin.png"),
+                    for_latex=True,
+                )
+            )
+
+            relative_report = _load_report(relative_path)
+            absolute_report = _load_report(absolute_path)
+            _assert_highlight_report(relative_report)
+            _assert_highlight_report(absolute_report)
+            self.assertEqual(relative_report["figure_size_inches"], [1.65, 2.04])
+            self.assertEqual(absolute_report["figure_size_inches"], [1.65, 2.04])
+            self.assertEqual(
+                relative_report["figure_name"],
+                "city_relative_lifecycle_reduction_violin_distribution",
+            )
+            self.assertEqual(
+                absolute_report["figure_name"],
+                "city_annual_absolute_reduction_violin_distribution",
+            )
+            self.assertEqual(
+                relative_report["distribution"]["method"],
+                "Vertical violin plot with Gaussian KDE",
+            )
+            self.assertEqual(relative_report["outliers"]["count"], 1)
 
     def test_tukey_whiskers_use_the_requested_calculation_space(self) -> None:
         linear_stats, linear_report = _city_reduction_box_statistics(
