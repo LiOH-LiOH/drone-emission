@@ -8785,7 +8785,7 @@ def plot_city_reduction_rank_all_macro_region(
     fig.legend(
         handles=handles,
         loc="lower center",
-        bbox_to_anchor=(0.5, 0.01),
+        bbox_to_anchor=(0.5, 0.07),
         ncol=len(handles),
         frameon=False,
         fontsize=6.5,
