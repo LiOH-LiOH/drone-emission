@@ -20,6 +20,7 @@ if SRC not in sys.path:
 
 from visualization.analysis import (  # noqa: E402
     ORACLE_REDUCTION_LABEL_CITIES,
+    _city_reduction_box_statistics,
     _city_reduction_highlight_offsets,
     plot_city_annual_absolute_reduction_distribution,
     plot_city_relative_lifecycle_reduction_distribution,
@@ -92,18 +93,44 @@ class CityReductionDistributionTest(unittest.TestCase):
                 absolute_report["highlighted_cities"]["unit"],
                 "t CO2e per year",
             )
+            self.assertEqual(
+                relative_report["distribution"]["method"],
+                "Vertical Tukey boxplot",
+            )
+            self.assertEqual(
+                absolute_report["box_statistics"]["calculation_space"],
+                "log10",
+            )
 
-    def test_highlight_offsets_are_deterministic_and_inside_violin(self) -> None:
+    def test_highlight_offsets_are_deterministic_and_symmetric(self) -> None:
         values = np.array([10.0, 10.2, 10.4, 20.0])
-        grid = np.linspace(0.0, 30.0, 101)
-        half_width = np.full_like(grid, 0.3)
 
-        first = _city_reduction_highlight_offsets(values, grid, half_width)
-        second = _city_reduction_highlight_offsets(values, grid, half_width)
+        first = _city_reduction_highlight_offsets(values, (0.0, 50.0))
+        second = _city_reduction_highlight_offsets(values, (0.0, 50.0))
 
         np.testing.assert_allclose(first, second)
-        self.assertTrue(np.all(np.abs(first) <= 0.78 * 0.3))
+        self.assertTrue(np.all(np.abs(first) <= 0.38))
+        self.assertTrue(np.any(first > 0))
+        self.assertTrue(np.any(first < 0))
         self.assertGreater(len(np.unique(first[:3])), 1)
+
+    def test_tukey_whiskers_use_the_requested_calculation_space(self) -> None:
+        linear_stats, linear_report = _city_reduction_box_statistics(
+            [1.0, 2.0, 3.0, 4.0, 100.0]
+        )
+        self.assertEqual(linear_stats["whishi"], 4.0)
+        self.assertEqual(linear_report["calculation_space"], "linear")
+        self.assertFalse(linear_report["outliers_displayed"])
+
+        log_stats, log_report = _city_reduction_box_statistics(
+            [1.0, 10.0, 100.0, 1000.0, 1e9],
+            log10_space=True,
+        )
+        self.assertEqual(log_stats["q1"], 10.0)
+        self.assertEqual(log_stats["med"], 100.0)
+        self.assertEqual(log_stats["q3"], 1000.0)
+        self.assertEqual(log_stats["whishi"], 1000.0)
+        self.assertEqual(log_report["calculation_space"], "log10")
 
 
 if __name__ == "__main__":

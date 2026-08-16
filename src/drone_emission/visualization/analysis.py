@@ -6344,7 +6344,7 @@ def plot_regions_map_oracle_reduction_rank_map_only(
     df_stats: "pd.DataFrame",
     stats_csv_path: str,
     save_path: str = None,
-    figsize: tuple = (3.85, 3.39),
+    figsize: tuple = (4.30, 3.79),
     for_latex: bool = False,
     plot_title: bool = False,
 ):
@@ -9338,13 +9338,56 @@ def _city_reduction_highlight_records(plot_df, value_col):
     return records, missing
 
 
+def _city_reduction_box_statistics(values, log10_space=False):
+    """Return Tukey box statistics, optionally calculated in log10 space."""
+    values = np.asarray(values, dtype=float)
+    valid = np.isfinite(values)
+    if log10_space:
+        valid &= values > 0
+    values = values[valid]
+    if values.size < 2:
+        raise ValueError("At least two finite values are required for a boxplot")
+
+    calculated = np.log10(values) if log10_space else values.copy()
+    q1, median, q3 = np.quantile(calculated, [0.25, 0.50, 0.75])
+    iqr = q3 - q1
+    lower_fence = q1 - 1.5 * iqr
+    upper_fence = q3 + 1.5 * iqr
+    whisker_low = float(calculated[calculated >= lower_fence].min())
+    whisker_high = float(calculated[calculated <= upper_fence].max())
+
+    def display_value(value):
+        return float(10 ** value) if log10_space else float(value)
+
+    box_stats = {
+        "q1": display_value(q1),
+        "med": display_value(median),
+        "q3": display_value(q3),
+        "whislo": display_value(whisker_low),
+        "whishi": display_value(whisker_high),
+        "fliers": [],
+    }
+    report = {
+        "calculation_space": "log10" if log10_space else "linear",
+        "tukey_iqr_multiplier": 1.5,
+        "q1": box_stats["q1"],
+        "median": box_stats["med"],
+        "q3": box_stats["q3"],
+        "whisker_low": box_stats["whislo"],
+        "whisker_high": box_stats["whishi"],
+        "lower_fence": display_value(lower_fence),
+        "upper_fence": display_value(upper_fence),
+        "outliers_displayed": False,
+    }
+    return box_stats, report
+
+
 def _city_reduction_highlight_offsets(
     highlight_values,
-    density_grid,
-    violin_half_width,
+    value_limits,
     log10_space=False,
 ):
-    """Place highlighted observations in a deterministic compact swarm."""
+    """Place highlighted observations symmetrically beside a vertical box."""
     highlight_values = np.asarray(highlight_values, dtype=float)
     if highlight_values.size == 0:
         return np.array([], dtype=float)
@@ -9352,96 +9395,79 @@ def _city_reduction_highlight_offsets(
     transformed = (
         np.log10(highlight_values) if log10_space else highlight_values.copy()
     )
-    span = max(float(np.ptp(density_grid)), np.finfo(float).eps)
-    local_limits = 0.78 * np.interp(
-        transformed,
-        density_grid,
-        violin_half_width,
-        left=0.0,
-        right=0.0,
+    transformed_limits = (
+        np.log10(np.asarray(value_limits, dtype=float))
+        if log10_space
+        else np.asarray(value_limits, dtype=float)
     )
-    x_collision = 0.035 * span
-    y_collision = 0.055
-    candidate_fractions = (0.0, 0.35, -0.35, 0.70, -0.70, 0.95, -0.95)
+    span = max(float(np.ptp(transformed_limits)), np.finfo(float).eps)
+    y_collision = 0.045 * span
+    x_collision = 0.16
     offsets = np.zeros_like(transformed)
     placed = []
 
-    for index in np.argsort(transformed, kind="stable"):
-        x_value = float(transformed[index])
-        limit = float(local_limits[index])
-        candidates = [fraction * limit for fraction in candidate_fractions]
+    for sequence, index in enumerate(np.argsort(transformed, kind="stable")):
+        y_value = float(transformed[index])
+        preferred_sign = 1.0 if sequence % 2 == 0 else -1.0
+        candidates = (
+            preferred_sign * 0.24,
+            -preferred_sign * 0.24,
+            preferred_sign * 0.38,
+            -preferred_sign * 0.38,
+            preferred_sign * 0.10,
+            -preferred_sign * 0.10,
+        )
         scored = []
         for candidate_order, candidate in enumerate(candidates):
             if not placed:
                 minimum_distance = np.inf
             else:
                 minimum_distance = min(
-                    ((x_value - other_x) / x_collision) ** 2
-                    + ((candidate - other_y) / y_collision) ** 2
+                    ((candidate - other_x) / x_collision) ** 2
+                    + ((y_value - other_y) / y_collision) ** 2
                     for other_x, other_y in placed
                 )
-            scored.append(
-                (minimum_distance, -abs(candidate), -candidate_order, candidate)
-            )
-
+            scored.append((minimum_distance, -candidate_order, candidate))
         separated = [item for item in scored if item[0] >= 1.0]
         chosen = max(separated or scored)[-1]
         offsets[index] = chosen
-        placed.append((x_value, float(chosen)))
+        placed.append((float(chosen), y_value))
 
     return offsets
 
 
-def _draw_city_reduction_violin(
+def _draw_city_reduction_boxplot(
     ax,
     values,
-    x_limits,
-    x_label,
+    value_limits,
+    y_label,
     log10_space=False,
     highlight_values=None,
 ):
-    """Draw a compact horizontal violin with summaries and city highlights."""
-    from scipy.stats import gaussian_kde
-
-    values = np.asarray(values, dtype=float)
-    transformed = np.log10(values) if log10_space else values
-    grid = np.linspace(transformed.min(), transformed.max(), 512)
-    density = gaussian_kde(transformed, bw_method="scott")(grid)
-    density[[0, -1]] = 0.0
-    half_width = 0.38 * density / density.max()
-    display_grid = 10 ** grid if log10_space else grid
+    """Draw a vertical Tukey boxplot with selected-city highlights."""
+    box_stats, box_report = _city_reduction_box_statistics(
+        values,
+        log10_space=log10_space,
+    )
     curve_color = "#1F6F78"
+    ax.bxp(
+        [box_stats],
+        positions=[1.0],
+        widths=0.38,
+        showfliers=False,
+        patch_artist=True,
+        manage_ticks=False,
+        boxprops={
+            "facecolor": curve_color,
+            "edgecolor": curve_color,
+            "alpha": 0.22,
+            "linewidth": 1.25,
+        },
+        whiskerprops={"color": curve_color, "linewidth": 1.15},
+        capprops={"color": curve_color, "linewidth": 1.15},
+        medianprops={"color": curve_color, "linewidth": 2.2},
+    )
 
-    ax.fill_between(
-        display_grid,
-        -half_width,
-        half_width,
-        color=curve_color,
-        alpha=0.22,
-        linewidth=0,
-        zorder=1,
-    )
-    ax.plot(display_grid, half_width, color=curve_color, linewidth=1.25, zorder=2)
-    ax.plot(display_grid, -half_width, color=curve_color, linewidth=1.25, zorder=2)
-
-    q1, median, q3 = np.quantile(values, [0.25, 0.50, 0.75])
-    ax.plot(
-        [q1, q3],
-        [0.0, 0.0],
-        color=curve_color,
-        linewidth=2.6,
-        solid_capstyle="round",
-        zorder=3,
-    )
-    ax.scatter(
-        [median],
-        [0.0],
-        s=14,
-        facecolor="white",
-        edgecolor=curve_color,
-        linewidth=0.8,
-        zorder=4,
-    )
     highlight_values = np.asarray(
         [] if highlight_values is None else highlight_values,
         dtype=float,
@@ -9452,14 +9478,13 @@ def _draw_city_reduction_violin(
     highlight_values = highlight_values[valid_highlights]
     highlight_offsets = _city_reduction_highlight_offsets(
         highlight_values,
-        grid,
-        half_width,
+        value_limits,
         log10_space=log10_space,
     )
     if highlight_values.size:
         ax.scatter(
+            1.0 + highlight_offsets,
             highlight_values,
-            highlight_offsets,
             s=18,
             marker="o",
             facecolor=ORACLE_REDUCTION_DISTRIBUTION_HIGHLIGHT_COLOR,
@@ -9469,18 +9494,19 @@ def _draw_city_reduction_violin(
             zorder=5,
             clip_on=True,
         )
+
     if log10_space:
-        ax.set_xscale("log")
-        ax.set_xticks([0.1, 1, 10, 100, 1000])
-        ax.xaxis.set_major_formatter(FuncFormatter(lambda value, _: f"{value:g}"))
-    ax.set_xlim(*x_limits)
-    ax.set_ylim(-0.48, 0.48)
-    ax.set_xlabel(x_label, fontsize=7)
-    ax.set_yticks([])
-    ax.tick_params(axis="x", labelsize=6.5, length=2.5, pad=1.5)
+        ax.set_yscale("log")
+        ax.set_yticks([0.1, 1, 10, 100, 1000])
+        ax.yaxis.set_major_formatter(FuncFormatter(lambda value, _: f"{value:g}"))
+    ax.set_ylim(*value_limits)
+    ax.set_xlim(0.45, 1.55)
+    ax.set_ylabel(y_label, fontsize=7)
+    ax.set_xticks([])
+    ax.tick_params(axis="y", labelsize=6.5, length=2.5, pad=1.5)
     ax.grid(False)
-    ax.spines[["top", "right", "left"]].set_visible(False)
-    return highlight_offsets
+    ax.spines[["top", "right", "bottom"]].set_visible(False)
+    return box_report, highlight_offsets
 
 
 def _save_city_reduction_distribution(
@@ -9502,7 +9528,7 @@ def _save_city_reduction_distribution(
     save_dir = os.path.dirname(save_path)
     if save_dir:
         os.makedirs(save_dir, exist_ok=True)
-    fig.savefig(save_path, dpi=300, bbox_inches="tight")
+    fig.savefig(save_path, dpi=300)
     report["figure_path"] = save_path
     write_figure_report(save_path.rsplit(".", 1)[0] + "_report.json", report)
     print(f"{description} saved to {save_path}")
@@ -9512,7 +9538,7 @@ def _save_city_reduction_distribution(
 def plot_city_relative_lifecycle_reduction_distribution(
     df: pd.DataFrame,
     save_path: str = None,
-    figsize: tuple = (2.65, 1.70),
+    figsize: tuple = (2.05, 1.87),
     for_latex: bool = False,
     plot_title: bool = False,
 ):
@@ -9536,11 +9562,11 @@ def plot_city_relative_lifecycle_reduction_distribution(
     )
 
     fig, ax = plt.subplots(figsize=figsize)
-    _draw_city_reduction_violin(
+    box_report, _ = _draw_city_reduction_boxplot(
         ax,
         values,
-        x_limits=(0.0, 50.0),
-        x_label="Relative lifecycle emission reduction (%)",
+        value_limits=(0.0, 50.0),
+        y_label="Lifecycle reduction (%)",
         highlight_values=[record["value"] for record in highlight_records],
     )
     if plot_title:
@@ -9549,7 +9575,7 @@ def plot_city_relative_lifecycle_reduction_distribution(
             fontsize=9,
             fontweight="bold",
         )
-    fig.subplots_adjust(left=0.22, right=0.97, bottom=0.27, top=0.93)
+    fig.subplots_adjust(left=0.34, right=0.96, bottom=0.06, top=0.97)
 
     report = {
         "figure_name": "city_relative_lifecycle_reduction_distribution",
@@ -9560,14 +9586,15 @@ def plot_city_relative_lifecycle_reduction_distribution(
             "unit": "percent",
         },
         "distribution": {
-            "method": "Horizontal violin plot with Gaussian KDE",
-            "bandwidth": "Scott's rule",
-            "estimation_space": "linear percentage",
-            "x_limits": [0.0, 50.0],
-            "support": "observed minimum to maximum",
-            "width_normalization": "independent maximum width",
-            "summary_marks": "median point and interquartile range bar",
+            "method": "Vertical Tukey boxplot",
+            "calculation_space": "linear percentage",
+            "y_limits": [0.0, 50.0],
+            "box": "first to third quartile",
+            "median": "line inside box",
+            "whiskers": "most extreme observations within 1.5 IQR",
+            "outliers_displayed": False,
         },
+        "box_statistics": box_report,
         "sample_audit": audit,
         "summary": _writing_numeric_summary(values),
         "highlighted_cities": {
@@ -9582,7 +9609,7 @@ def plot_city_relative_lifecycle_reduction_distribution(
                 "facecolor": ORACLE_REDUCTION_DISTRIBUTION_HIGHLIGHT_COLOR,
                 "edgecolor": "white",
                 "size_points_squared": 18,
-                "layout": "deterministic compact vertical swarm within KDE envelope",
+                "layout": "deterministic symmetric horizontal swarm beside box",
                 "labels_or_legend": False,
             },
             "records": highlight_records,
@@ -9603,7 +9630,7 @@ def plot_city_relative_lifecycle_reduction_distribution(
 def plot_city_annual_absolute_reduction_distribution(
     df: pd.DataFrame,
     save_path: str = None,
-    figsize: tuple = (2.65, 1.70),
+    figsize: tuple = (2.05, 1.87),
     for_latex: bool = False,
     plot_title: bool = False,
 ):
@@ -9627,14 +9654,11 @@ def plot_city_annual_absolute_reduction_distribution(
     )
 
     fig, ax = plt.subplots(figsize=figsize)
-    _draw_city_reduction_violin(
+    box_report, _ = _draw_city_reduction_boxplot(
         ax,
         values,
-        x_limits=(0.03, 5000.0),
-        x_label=(
-            "Annual absolute emission reduction\n"
-            "(t CO$_2$e yr$^{-1}$; log scale)"
-        ),
+        value_limits=(0.03, 5000.0),
+        y_label="Annual reduction\n(t CO$_2$e yr$^{-1}$; log scale)",
         log10_space=True,
         highlight_values=[record["value"] for record in highlight_records],
     )
@@ -9644,7 +9668,7 @@ def plot_city_annual_absolute_reduction_distribution(
             fontsize=9,
             fontweight="bold",
         )
-    fig.subplots_adjust(left=0.22, right=0.97, bottom=0.27, top=0.93)
+    fig.subplots_adjust(left=0.34, right=0.96, bottom=0.06, top=0.97)
 
     report = {
         "figure_name": "city_annual_absolute_reduction_distribution",
@@ -9655,15 +9679,16 @@ def plot_city_annual_absolute_reduction_distribution(
             "unit": "t CO2e per year",
         },
         "distribution": {
-            "method": "Horizontal violin plot with Gaussian KDE",
-            "bandwidth": "Scott's rule",
-            "estimation_space": "log10 tonnes CO2e per year",
-            "x_scale": "logarithmic",
-            "x_limits": [0.03, 5000.0],
-            "support": "observed minimum to maximum",
-            "width_normalization": "independent maximum width",
-            "summary_marks": "median point and interquartile range bar",
+            "method": "Vertical Tukey boxplot",
+            "calculation_space": "log10 tonnes CO2e per year",
+            "y_scale": "logarithmic",
+            "y_limits": [0.03, 5000.0],
+            "box": "first to third quartile calculated in log10 space",
+            "median": "line inside box",
+            "whiskers": "most extreme observations within 1.5 IQR in log10 space",
+            "outliers_displayed": False,
         },
+        "box_statistics": box_report,
         "sample_audit": audit,
         "summary": _writing_numeric_summary(values),
         "highlighted_cities": {
@@ -9678,7 +9703,7 @@ def plot_city_annual_absolute_reduction_distribution(
                 "facecolor": ORACLE_REDUCTION_DISTRIBUTION_HIGHLIGHT_COLOR,
                 "edgecolor": "white",
                 "size_points_squared": 18,
-                "layout": "deterministic compact vertical swarm within KDE envelope",
+                "layout": "deterministic symmetric horizontal swarm beside box",
                 "labels_or_legend": False,
             },
             "records": highlight_records,
