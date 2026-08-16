@@ -9517,6 +9517,7 @@ def _city_reduction_violin_highlight_offsets(
     log10_space=False,
     density_grid=None,
     half_width=None,
+    center_avoidance_interval=None,
 ):
     """Place violin highlights in compact groups centred on the density."""
     highlight_values = np.asarray(highlight_values, dtype=float)
@@ -9555,6 +9556,7 @@ def _city_reduction_violin_highlight_offsets(
         group_offsets = np.linspace(-maximum_offset, maximum_offset, len(group))
         offsets[group] = group_offsets
 
+    maximum_offsets = None
     if density_grid is not None or half_width is not None:
         if density_grid is None or half_width is None:
             raise ValueError("density_grid and half_width must be provided together")
@@ -9571,6 +9573,26 @@ def _city_reduction_violin_highlight_offsets(
         )
         maximum_offsets = 0.95 * np.maximum(local_half_width, 0.0)
         offsets = np.sign(offsets) * np.minimum(np.abs(offsets), maximum_offsets)
+
+    if center_avoidance_interval is not None:
+        interval = np.asarray(center_avoidance_interval, dtype=float)
+        if interval.shape != (2,) or not np.all(np.isfinite(interval)):
+            raise ValueError(
+                "center_avoidance_interval must contain two finite values"
+            )
+        lower, upper = np.sort(interval)
+        avoid_indices = np.flatnonzero(
+            (highlight_values >= lower) & (highlight_values <= upper)
+        )
+        avoid_indices = avoid_indices[
+            np.argsort(transformed[avoid_indices], kind="stable")
+        ]
+        for sequence, index in enumerate(avoid_indices):
+            magnitude = max(abs(float(offsets[index])), 0.06)
+            if maximum_offsets is not None:
+                magnitude = min(magnitude, float(maximum_offsets[index]))
+            sign = -1.0 if sequence % 2 == 0 else 1.0
+            offsets[index] = sign * magnitude
 
     return offsets
 
@@ -9698,6 +9720,7 @@ def _draw_city_reduction_violin(
     y_label,
     log10_space=False,
     highlight_values=None,
+    avoid_summary_overlap=False,
 ):
     """Draw a vertical KDE violin with summaries and selected-city markers."""
     from scipy.stats import gaussian_kde
@@ -9776,6 +9799,9 @@ def _draw_city_reduction_violin(
         log10_space=log10_space,
         density_grid=density_grid,
         half_width=half_width,
+        center_avoidance_interval=(box_stats["q1"], box_stats["q3"])
+        if avoid_summary_overlap
+        else None,
     )
     if highlight_values.size:
         ax.scatter(
@@ -10084,6 +10110,7 @@ def plot_city_relative_lifecycle_reduction_violin_distribution(
         value_limits=(0.0, 50.0),
         y_label="Lifecycle reduction (%)",
         highlight_values=[record["value"] for record in highlight_records],
+        avoid_summary_overlap=True,
     )
     if plot_title:
         ax.set_title(
@@ -10124,8 +10151,8 @@ def plot_city_relative_lifecycle_reduction_violin_distribution(
                 "facecolor": ORACLE_REDUCTION_DISTRIBUTION_HIGHLIGHT_COLOR,
                 "edgecolor": "white",
                 "size_points_squared": 18,
-                "layout": "compact symmetric offsets clipped to 95% of local "
-                "violin half-width",
+                "layout": "Q1-Q3 highlights alternate left and right clear of "
+                "center, clipped to 95% of local violin half-width",
                 "labels_or_legend": False,
             },
             "records": highlight_records,

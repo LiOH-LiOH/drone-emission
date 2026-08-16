@@ -171,11 +171,16 @@ class CityReductionDistributionTest(unittest.TestCase):
                     set(report["box_statistics"]),
                     {"calculation_space", "q1", "median", "q3"},
                 )
-                self.assertEqual(
-                    report["highlighted_cities"]["marker"]["layout"],
-                    "compact symmetric offsets clipped to 95% of local violin "
-                    "half-width",
-                )
+            self.assertEqual(
+                relative_report["highlighted_cities"]["marker"]["layout"],
+                "Q1-Q3 highlights alternate left and right clear of center, "
+                "clipped to 95% of local violin half-width",
+            )
+            self.assertEqual(
+                absolute_report["highlighted_cities"]["marker"]["layout"],
+                "compact symmetric offsets clipped to 95% of local violin "
+                "half-width",
+            )
 
     def test_violin_highlight_offsets_are_compact_and_balanced(self) -> None:
         cases = (
@@ -262,6 +267,35 @@ class CityReductionDistributionTest(unittest.TestCase):
         )
         self.assertEqual(offsets[0], 0.0)
         self.assertGreater(abs(offsets[1]), 0.0)
+
+    def test_violin_summary_avoidance_is_scoped_and_alternating(self) -> None:
+        values = np.array([5.0, 9.0, 13.0, 13.5, 14.0, 20.0])
+        density_grid = np.array([0.0, 25.0])
+        half_width = np.array([0.2, 0.2])
+
+        baseline = _city_reduction_violin_highlight_offsets(
+            values,
+            (0.0, 50.0),
+            density_grid=density_grid,
+            half_width=half_width,
+        )
+        offsets = _city_reduction_violin_highlight_offsets(
+            values,
+            (0.0, 50.0),
+            density_grid=density_grid,
+            half_width=half_width,
+            center_avoidance_interval=(9.0, 14.0),
+        )
+
+        self.assertEqual(baseline[1], 0.0)
+        self.assertEqual(baseline[3], 0.0)
+        np.testing.assert_allclose(offsets[[0, 5]], baseline[[0, 5]])
+        self.assertTrue(np.all(np.abs(offsets[1:5]) >= 0.06))
+        np.testing.assert_array_equal(
+            np.sign(offsets[1:5]),
+            np.array([-1.0, 1.0, -1.0, 1.0]),
+        )
+        self.assertTrue(np.all(np.abs(offsets) <= 0.19 + 1e-12))
 
     def test_violin_draws_no_neutral_outlier_markers(self) -> None:
         import matplotlib.pyplot as plt
