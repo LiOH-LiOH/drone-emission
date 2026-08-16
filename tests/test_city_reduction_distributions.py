@@ -297,6 +297,52 @@ class CityReductionDistributionTest(unittest.TestCase):
         )
         self.assertTrue(np.all(np.abs(offsets) <= 0.19 + 1e-12))
 
+    def test_violin_summary_marks_draw_above_highlights(self) -> None:
+        import matplotlib.pyplot as plt
+        from matplotlib.collections import PathCollection
+
+        fig, ax = plt.subplots()
+        try:
+            _draw_city_reduction_violin(
+                ax,
+                np.array([10.0, 11.5, 12.0, 12.5, 13.0, 13.5, 14.0, 15.0]),
+                value_limits=(0.0, 50.0),
+                y_label="Reduction (%)",
+                highlight_values=[12.0, 12.5, 13.0],
+                avoid_summary_overlap=True,
+            )
+
+            point_collections = [
+                collection
+                for collection in ax.collections
+                if isinstance(collection, PathCollection)
+            ]
+            highlight_collection = max(
+                point_collections,
+                key=lambda collection: collection.get_offsets().shape[0],
+            )
+            median_collection = min(
+                point_collections,
+                key=lambda collection: collection.get_offsets().shape[0],
+            )
+            summary_line = next(
+                line
+                for line in ax.lines
+                if len(line.get_xdata()) == 2
+                and np.allclose(line.get_xdata(), [1.0, 1.0])
+            )
+
+            self.assertGreater(
+                summary_line.get_zorder(),
+                highlight_collection.get_zorder(),
+            )
+            self.assertGreater(
+                median_collection.get_zorder(),
+                highlight_collection.get_zorder(),
+            )
+        finally:
+            plt.close(fig)
+
     def test_violin_draws_no_neutral_outlier_markers(self) -> None:
         import matplotlib.pyplot as plt
         from matplotlib.collections import PathCollection

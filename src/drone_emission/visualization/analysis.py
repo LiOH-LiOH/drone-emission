@@ -9725,6 +9725,25 @@ def _draw_city_reduction_violin(
     """Draw a vertical KDE violin with summaries and selected-city markers."""
     from scipy.stats import gaussian_kde
 
+    def _draw_summary_marks():
+        ax.plot(
+            [1.0, 1.0],
+            [box_stats["q1"], box_stats["q3"]],
+            color=curve_color,
+            linewidth=2.6,
+            solid_capstyle="round",
+            zorder=6,
+        )
+        ax.scatter(
+            [1.0],
+            [box_stats["med"]],
+            s=14,
+            facecolor="white",
+            edgecolor=curve_color,
+            linewidth=0.8,
+            zorder=7,
+        )
+
     values = np.asarray(values, dtype=float)
     valid_values = np.isfinite(values)
     if log10_space:
@@ -9766,23 +9785,6 @@ def _draw_city_reduction_violin(
         values,
         log10_space=log10_space,
     )
-    ax.plot(
-        [1.0, 1.0],
-        [box_stats["q1"], box_stats["q3"]],
-        color=curve_color,
-        linewidth=2.6,
-        solid_capstyle="round",
-        zorder=3,
-    )
-    ax.scatter(
-        [1.0],
-        [box_stats["med"]],
-        s=14,
-        facecolor="white",
-        edgecolor=curve_color,
-        linewidth=0.8,
-        zorder=4,
-    )
 
     highlight_values = np.asarray(
         [] if highlight_values is None else highlight_values,
@@ -9816,6 +9818,7 @@ def _draw_city_reduction_violin(
             zorder=5,
             clip_on=True,
         )
+    _draw_summary_marks()
 
     if log10_space:
         ax.set_yscale("log")
