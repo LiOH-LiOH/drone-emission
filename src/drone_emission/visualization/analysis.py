@@ -9515,6 +9515,8 @@ def _city_reduction_violin_highlight_offsets(
     highlight_values,
     value_limits,
     log10_space=False,
+    density_grid=None,
+    half_width=None,
 ):
     """Place violin highlights in compact groups centred on the density."""
     highlight_values = np.asarray(highlight_values, dtype=float)
@@ -9552,6 +9554,23 @@ def _city_reduction_violin_highlight_offsets(
         maximum_offset = min(0.28, 0.06 * (len(group) - 1))
         group_offsets = np.linspace(-maximum_offset, maximum_offset, len(group))
         offsets[group] = group_offsets
+
+    if density_grid is not None or half_width is not None:
+        if density_grid is None or half_width is None:
+            raise ValueError("density_grid and half_width must be provided together")
+        density_grid = np.asarray(density_grid, dtype=float)
+        half_width = np.asarray(half_width, dtype=float)
+        if density_grid.shape != half_width.shape or density_grid.ndim != 1:
+            raise ValueError("density_grid and half_width must be matching 1D arrays")
+        local_half_width = np.interp(
+            transformed,
+            density_grid,
+            half_width,
+            left=0.0,
+            right=0.0,
+        )
+        maximum_offsets = 0.95 * np.maximum(local_half_width, 0.0)
+        offsets = np.sign(offsets) * np.minimum(np.abs(offsets), maximum_offsets)
 
     return offsets
 
@@ -9755,6 +9774,8 @@ def _draw_city_reduction_violin(
         highlight_values,
         value_limits,
         log10_space=log10_space,
+        density_grid=density_grid,
+        half_width=half_width,
     )
     if highlight_values.size:
         ax.scatter(
@@ -10103,7 +10124,8 @@ def plot_city_relative_lifecycle_reduction_violin_distribution(
                 "facecolor": ORACLE_REDUCTION_DISTRIBUTION_HIGHLIGHT_COLOR,
                 "edgecolor": "white",
                 "size_points_squared": 18,
-                "layout": "compact vertically grouped offsets centred on violin",
+                "layout": "compact symmetric offsets clipped to 95% of local "
+                "violin half-width",
                 "labels_or_legend": False,
             },
             "records": highlight_records,
@@ -10188,7 +10210,8 @@ def plot_city_annual_absolute_reduction_violin_distribution(
                 "facecolor": ORACLE_REDUCTION_DISTRIBUTION_HIGHLIGHT_COLOR,
                 "edgecolor": "white",
                 "size_points_squared": 18,
-                "layout": "compact vertically grouped offsets centred on violin",
+                "layout": "compact symmetric offsets clipped to 95% of local "
+                "violin half-width",
                 "labels_or_legend": False,
             },
             "records": highlight_records,

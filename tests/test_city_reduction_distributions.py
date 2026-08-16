@@ -171,6 +171,11 @@ class CityReductionDistributionTest(unittest.TestCase):
                     set(report["box_statistics"]),
                     {"calculation_space", "q1", "median", "q3"},
                 )
+                self.assertEqual(
+                    report["highlighted_cities"]["marker"]["layout"],
+                    "compact symmetric offsets clipped to 95% of local violin "
+                    "half-width",
+                )
 
     def test_violin_highlight_offsets_are_compact_and_balanced(self) -> None:
         cases = (
@@ -214,6 +219,49 @@ class CityReductionDistributionTest(unittest.TestCase):
             positive = np.sort(first[first > 0])
             negative = np.sort(-first[first < 0])
             np.testing.assert_allclose(positive, negative)
+
+    def test_violin_highlight_offsets_respect_linear_local_width(self) -> None:
+        values = np.array([1.0, 1.02, 1.5, 2.0, 3.0])
+        density_grid = np.array([1.0, 2.0, 3.0])
+        half_width = np.array([0.0, 0.32, 0.0])
+
+        offsets = _city_reduction_violin_highlight_offsets(
+            values,
+            (1.0, 3.0),
+            density_grid=density_grid,
+            half_width=half_width,
+        )
+        local_half_width = np.interp(values, density_grid, half_width)
+
+        self.assertTrue(
+            np.all(np.abs(offsets) <= 0.95 * local_half_width + 1e-12)
+        )
+        self.assertEqual(offsets[0], 0.0)
+        self.assertGreater(abs(offsets[1]), 0.0)
+
+    def test_violin_highlight_offsets_respect_log_local_width(self) -> None:
+        values = np.array([1.0, 1.02, 3.0, 10.0, 100.0])
+        density_grid = np.array([0.0, 1.0, 2.0])
+        half_width = np.array([0.0, 0.32, 0.0])
+
+        offsets = _city_reduction_violin_highlight_offsets(
+            values,
+            (1.0, 100.0),
+            log10_space=True,
+            density_grid=density_grid,
+            half_width=half_width,
+        )
+        local_half_width = np.interp(
+            np.log10(values),
+            density_grid,
+            half_width,
+        )
+
+        self.assertTrue(
+            np.all(np.abs(offsets) <= 0.95 * local_half_width + 1e-12)
+        )
+        self.assertEqual(offsets[0], 0.0)
+        self.assertGreater(abs(offsets[1]), 0.0)
 
     def test_violin_draws_no_neutral_outlier_markers(self) -> None:
         import matplotlib.pyplot as plt
