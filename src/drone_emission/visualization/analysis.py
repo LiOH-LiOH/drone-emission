@@ -8784,18 +8784,22 @@ def plot_city_reduction_rank_all_macro_region(
             )
     fig.legend(
         handles=handles,
-        loc="upper center",
-        bbox_to_anchor=(0.5, 0.99),
+        loc="lower center",
+        bbox_to_anchor=(0.5, 0.01),
         ncol=len(handles),
-        frameon=True,
+        frameon=False,
         fontsize=6.5,
-        borderpad=0.35,
         handlelength=0.9,
         handletextpad=0.35,
         labelspacing=0.25,
         columnspacing=0.65,
     )
-    fig.subplots_adjust(left=0.10, right=0.99, bottom=0.22, top=0.78)
+    fig.subplots_adjust(
+        left=0.10,
+        right=0.99,
+        bottom=0.32,
+        top=0.80 if plot_title else 0.97,
+    )
 
     if not selected_cities.empty:
         selected_indices = set(selected_cities.index)
