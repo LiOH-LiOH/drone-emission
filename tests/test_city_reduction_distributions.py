@@ -21,6 +21,8 @@ if SRC not in sys.path:
 from visualization.analysis import (  # noqa: E402
     ORACLE_REDUCTION_LABEL_CITIES,
     _city_reduction_box_statistics,
+    _city_reduction_violin_highlight_offsets,
+    _draw_city_reduction_violin,
     _city_reduction_highlight_offsets,
     _city_reduction_outlier_offsets,
     plot_city_annual_absolute_reduction_distribution,
@@ -162,7 +164,83 @@ class CityReductionDistributionTest(unittest.TestCase):
                 relative_report["distribution"]["method"],
                 "Vertical violin plot with Gaussian KDE",
             )
-            self.assertEqual(relative_report["outliers"]["count"], 1)
+            for report in (relative_report, absolute_report):
+                self.assertNotIn("outliers", report)
+                self.assertNotIn("outliers_displayed", report["distribution"])
+                self.assertEqual(
+                    set(report["box_statistics"]),
+                    {"calculation_space", "q1", "median", "q3"},
+                )
+
+    def test_violin_highlight_offsets_are_compact_and_balanced(self) -> None:
+        cases = (
+            (
+                np.array([13.2, 10.7, 20.1, 13.0, 14.1, 19.2, 23.9, 35.0]),
+                (0.0, 50.0),
+                False,
+            ),
+            (
+                np.array(
+                    [
+                        3274.0,
+                        2136.0,
+                        2519.0,
+                        1318.0,
+                        2223.0,
+                        727.0,
+                        1576.0,
+                        2012.0,
+                    ]
+                ),
+                (0.03, 5000.0),
+                True,
+            ),
+        )
+
+        for values, limits, log10_space in cases:
+            first = _city_reduction_violin_highlight_offsets(
+                values,
+                limits,
+                log10_space=log10_space,
+            )
+            second = _city_reduction_violin_highlight_offsets(
+                values,
+                limits,
+                log10_space=log10_space,
+            )
+
+            np.testing.assert_allclose(first, second)
+            self.assertTrue(np.all(np.abs(first) <= 0.28))
+            positive = np.sort(first[first > 0])
+            negative = np.sort(-first[first < 0])
+            np.testing.assert_allclose(positive, negative)
+
+    def test_violin_draws_no_neutral_outlier_markers(self) -> None:
+        import matplotlib.pyplot as plt
+        from matplotlib.collections import PathCollection
+
+        fig, ax = plt.subplots()
+        try:
+            box_report, _, _ = _draw_city_reduction_violin(
+                ax,
+                np.array([10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0, 49.0]),
+                value_limits=(0.0, 50.0),
+                y_label="Reduction (%)",
+                highlight_values=[12.0],
+            )
+            point_collections = [
+                collection
+                for collection in ax.collections
+                if isinstance(collection, PathCollection)
+            ]
+
+            self.assertEqual(len(point_collections), 2)
+            self.assertEqual(
+                set(box_report),
+                {"calculation_space", "q1", "median", "q3"},
+            )
+        finally:
+            plt.close(fig)
 
     def test_tukey_whiskers_use_the_requested_calculation_space(self) -> None:
         linear_stats, linear_report = _city_reduction_box_statistics(

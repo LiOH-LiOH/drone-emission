@@ -9511,6 +9511,51 @@ def _city_reduction_highlight_offsets(
     return offsets
 
 
+def _city_reduction_violin_highlight_offsets(
+    highlight_values,
+    value_limits,
+    log10_space=False,
+):
+    """Place violin highlights in compact groups centred on the density."""
+    highlight_values = np.asarray(highlight_values, dtype=float)
+    if highlight_values.size == 0:
+        return np.array([], dtype=float)
+
+    transformed = (
+        np.log10(highlight_values) if log10_space else highlight_values.copy()
+    )
+    transformed_limits = (
+        np.log10(np.asarray(value_limits, dtype=float))
+        if log10_space
+        else np.asarray(value_limits, dtype=float)
+    )
+    span = max(float(np.ptp(transformed_limits)), np.finfo(float).eps)
+    collision_distance = 0.045 * span
+    ordered_indices = np.argsort(transformed, kind="stable")
+    groups = []
+    current_group = [int(ordered_indices[0])]
+
+    for index in ordered_indices[1:]:
+        index = int(index)
+        previous_index = current_group[-1]
+        if transformed[index] - transformed[previous_index] < collision_distance:
+            current_group.append(index)
+        else:
+            groups.append(current_group)
+            current_group = [index]
+    groups.append(current_group)
+
+    offsets = np.zeros_like(transformed)
+    for group in groups:
+        if len(group) == 1:
+            continue
+        maximum_offset = min(0.28, 0.06 * (len(group) - 1))
+        group_offsets = np.linspace(-maximum_offset, maximum_offset, len(group))
+        offsets[group] = group_offsets
+
+    return offsets
+
+
 def _draw_city_reduction_boxplot(
     ax,
     values,
@@ -9706,40 +9751,7 @@ def _draw_city_reduction_violin(
         valid_highlights &= highlight_values > 0
     highlight_values = highlight_values[valid_highlights]
 
-    outlier_values = np.asarray(box_stats["fliers"], dtype=float)
-    if outlier_values.size and highlight_values.size:
-        highlighted_outlier_mask = np.any(
-            np.isclose(
-                outlier_values[:, np.newaxis],
-                highlight_values[np.newaxis, :],
-                rtol=1e-10,
-                atol=0.0,
-            ),
-            axis=1,
-        )
-    else:
-        highlighted_outlier_mask = np.zeros(outlier_values.size, dtype=bool)
-    neutral_outliers = outlier_values[~highlighted_outlier_mask]
-    neutral_outlier_offsets = _city_reduction_outlier_offsets(
-        neutral_outliers,
-        value_limits,
-        log10_space=log10_space,
-    )
-    if neutral_outliers.size:
-        ax.scatter(
-            1.0 + neutral_outlier_offsets,
-            neutral_outliers,
-            s=7,
-            marker="o",
-            facecolor="#B8BDC3",
-            edgecolor="white",
-            linewidth=0.25,
-            alpha=0.82,
-            zorder=3,
-            clip_on=True,
-        )
-
-    highlight_offsets = _city_reduction_highlight_offsets(
+    highlight_offsets = _city_reduction_violin_highlight_offsets(
         highlight_values,
         value_limits,
         log10_space=log10_space,
@@ -9770,14 +9782,9 @@ def _draw_city_reduction_violin(
     ax.grid(False)
     ax.spines[["top", "right", "bottom"]].set_visible(False)
 
-    box_report["neutral_outlier_count"] = int(neutral_outliers.size)
-    box_report["highlighted_outlier_count"] = int(highlighted_outlier_mask.sum())
-    box_report["outlier_marker"] = {
-        "shape": "circle",
-        "facecolor": "#B8BDC3",
-        "edgecolor": "white",
-        "size_points_squared": 7,
-        "layout": "deterministic narrow horizontal jitter",
+    box_report = {
+        key: box_report[key]
+        for key in ("calculation_space", "q1", "median", "q3")
     }
     kde_report = {
         "bandwidth": "Scott's rule",
@@ -10057,11 +10064,6 @@ def plot_city_relative_lifecycle_reduction_violin_distribution(
         y_label="Lifecycle reduction (%)",
         highlight_values=[record["value"] for record in highlight_records],
     )
-    outlier_records = _city_reduction_outlier_records(
-        plot_df,
-        reduction_pct_col,
-        box_report,
-    )
     if plot_title:
         ax.set_title(
             "City-level relative lifecycle emission reduction",
@@ -10084,19 +10086,9 @@ def plot_city_relative_lifecycle_reduction_violin_distribution(
             "y_limits": [0.0, 50.0],
             "width_normalization": "independent maximum density",
             "summary_marks": "median point and interquartile range line",
-            "outliers_displayed": True,
             "kde": kde_report,
         },
         "box_statistics": box_report,
-        "outliers": {
-            "criterion": "observations outside the 1.5 IQR Tukey fences",
-            "count": int(len(outlier_records)),
-            "neutral_marker_count": int(box_report["neutral_outlier_count"]),
-            "highlighted_map_city_count": int(
-                box_report["highlighted_outlier_count"]
-            ),
-            "records": outlier_records,
-        },
         "sample_audit": audit,
         "summary": _writing_numeric_summary(values),
         "highlighted_cities": {
@@ -10111,7 +10103,7 @@ def plot_city_relative_lifecycle_reduction_violin_distribution(
                 "facecolor": ORACLE_REDUCTION_DISTRIBUTION_HIGHLIGHT_COLOR,
                 "edgecolor": "white",
                 "size_points_squared": 18,
-                "layout": "same deterministic symmetric swarm as boxplot",
+                "layout": "compact vertically grouped offsets centred on violin",
                 "labels_or_legend": False,
             },
             "records": highlight_records,
@@ -10156,11 +10148,6 @@ def plot_city_annual_absolute_reduction_violin_distribution(
         log10_space=True,
         highlight_values=[record["value"] for record in highlight_records],
     )
-    outlier_records = _city_reduction_outlier_records(
-        plot_df,
-        reduction_t_col,
-        box_report,
-    )
     if plot_title:
         ax.set_title(
             "City-level annual absolute emission reduction",
@@ -10184,19 +10171,9 @@ def plot_city_annual_absolute_reduction_violin_distribution(
             "y_limits": [0.03, 5000.0],
             "width_normalization": "independent maximum density",
             "summary_marks": "median point and interquartile range line",
-            "outliers_displayed": True,
             "kde": kde_report,
         },
         "box_statistics": box_report,
-        "outliers": {
-            "criterion": "observations outside the 1.5 IQR Tukey fences in log10 space",
-            "count": int(len(outlier_records)),
-            "neutral_marker_count": int(box_report["neutral_outlier_count"]),
-            "highlighted_map_city_count": int(
-                box_report["highlighted_outlier_count"]
-            ),
-            "records": outlier_records,
-        },
         "sample_audit": audit,
         "summary": _writing_numeric_summary(values),
         "highlighted_cities": {
@@ -10211,7 +10188,7 @@ def plot_city_annual_absolute_reduction_violin_distribution(
                 "facecolor": ORACLE_REDUCTION_DISTRIBUTION_HIGHLIGHT_COLOR,
                 "edgecolor": "white",
                 "size_points_squared": 18,
-                "layout": "same deterministic symmetric swarm as boxplot",
+                "layout": "compact vertically grouped offsets centred on violin",
                 "labels_or_legend": False,
             },
             "records": highlight_records,
