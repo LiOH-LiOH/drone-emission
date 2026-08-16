@@ -29,3 +29,6 @@ Recent commits use short imperative summaries such as `Fix circuity issue` and `
 
 ## Security & Configuration Tips
 Do not commit generated data, logs, caches, figures, virtual environments, or local `regions.json`. Keep experiment parameters in `experiment.toml`, and treat region stats under `data/{level}/{region}/region_stats.json` as runtime state.
+
+## Persistent Remote Sessions
+For all work on `hku-sto`, never run a sequence of separate commands such as `ssh hku-sto '...'` that reconnect for each step. Open one background interactive SSH TTY, keep it alive, and send all remote status, pull, test, render, and verification commands through that same session. Poll and reuse the existing process until the workflow is complete; do not start duplicate SSH sessions or duplicate render jobs. File transfer with `scp` may use a separate connection after remote verification, but remote command execution must stay in the persistent TTY.

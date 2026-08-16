@@ -6344,7 +6344,7 @@ def plot_regions_map_oracle_reduction_rank_map_only(
     df_stats: "pd.DataFrame",
     stats_csv_path: str,
     save_path: str = None,
-    figsize: tuple = (4.30, 3.79),
+    figsize: tuple = (4.70, 4.14),
     for_latex: bool = False,
     plot_title: bool = False,
 ):
@@ -9355,6 +9355,7 @@ def _city_reduction_box_statistics(values, log10_space=False):
     upper_fence = q3 + 1.5 * iqr
     whisker_low = float(calculated[calculated >= lower_fence].min())
     whisker_high = float(calculated[calculated <= upper_fence].max())
+    outlier_mask = (calculated < lower_fence) | (calculated > upper_fence)
 
     def display_value(value):
         return float(10 ** value) if log10_space else float(value)
@@ -9365,7 +9366,7 @@ def _city_reduction_box_statistics(values, log10_space=False):
         "q3": display_value(q3),
         "whislo": display_value(whisker_low),
         "whishi": display_value(whisker_high),
-        "fliers": [],
+        "fliers": [display_value(value) for value in calculated[outlier_mask]],
     }
     report = {
         "calculation_space": "log10" if log10_space else "linear",
@@ -9377,9 +9378,83 @@ def _city_reduction_box_statistics(values, log10_space=False):
         "whisker_high": box_stats["whishi"],
         "lower_fence": display_value(lower_fence),
         "upper_fence": display_value(upper_fence),
-        "outliers_displayed": False,
+        "outlier_count": int(outlier_mask.sum()),
+        "outlier_values": box_stats["fliers"],
+        "outliers_displayed": True,
     }
     return box_stats, report
+
+
+def _city_reduction_outlier_offsets(
+    outlier_values,
+    value_limits,
+    log10_space=False,
+):
+    """Return deterministic narrow jitter for overlapping Tukey outliers."""
+    outlier_values = np.asarray(outlier_values, dtype=float)
+    if outlier_values.size == 0:
+        return np.array([], dtype=float)
+
+    transformed = (
+        np.log10(outlier_values) if log10_space else outlier_values.copy()
+    )
+    transformed_limits = (
+        np.log10(np.asarray(value_limits, dtype=float))
+        if log10_space
+        else np.asarray(value_limits, dtype=float)
+    )
+    span = max(float(np.ptp(transformed_limits)), np.finfo(float).eps)
+    collision_distance = 0.018 * span
+    candidate_offsets = (0.0, -0.055, 0.055, -0.11, 0.11)
+    offsets = np.zeros_like(transformed)
+    placed = []
+
+    for index in np.argsort(transformed, kind="stable"):
+        y_value = float(transformed[index])
+        nearby_offsets = [
+            other_offset
+            for other_offset, other_y in placed
+            if abs(y_value - other_y) < collision_distance
+        ]
+        chosen = max(
+            candidate_offsets,
+            key=lambda candidate: (
+                min(
+                    (abs(candidate - other_offset) for other_offset in nearby_offsets),
+                    default=np.inf,
+                ),
+                -candidate_offsets.index(candidate),
+            ),
+        )
+        offsets[index] = chosen
+        placed.append((float(chosen), y_value))
+
+    return offsets
+
+
+def _city_reduction_outlier_records(plot_df, value_col, box_report):
+    """Return city-level records outside the reported Tukey fences."""
+    lower_fence = float(box_report["lower_fence"])
+    upper_fence = float(box_report["upper_fence"])
+    highlighted_names = {
+        city.casefold() for city in ORACLE_REDUCTION_LABEL_CITIES
+    }
+    records = []
+    for _, row in plot_df.iterrows():
+        value = float(row[value_col])
+        if lower_fence <= value <= upper_fence:
+            continue
+        city = _json_safe_scalar(row.get("region_name_en"))
+        records.append(
+            {
+                "city": city,
+                "region_key": _json_safe_scalar(row.get("region_key")),
+                "value": value,
+                "direction": "lower" if value < lower_fence else "upper",
+                "highlighted_map_city": str(city).casefold() in highlighted_names,
+            }
+        )
+    return records
 
 
 def _city_reduction_highlight_offsets(
@@ -9476,6 +9551,40 @@ def _draw_city_reduction_boxplot(
     if log10_space:
         valid_highlights &= highlight_values > 0
     highlight_values = highlight_values[valid_highlights]
+
+    outlier_values = np.asarray(box_stats["fliers"], dtype=float)
+    if outlier_values.size and highlight_values.size:
+        highlighted_outlier_mask = np.any(
+            np.isclose(
+                outlier_values[:, np.newaxis],
+                highlight_values[np.newaxis, :],
+                rtol=1e-10,
+                atol=0.0,
+            ),
+            axis=1,
+        )
+    else:
+        highlighted_outlier_mask = np.zeros(outlier_values.size, dtype=bool)
+    neutral_outliers = outlier_values[~highlighted_outlier_mask]
+    neutral_outlier_offsets = _city_reduction_outlier_offsets(
+        neutral_outliers,
+        value_limits,
+        log10_space=log10_space,
+    )
+    if neutral_outliers.size:
+        ax.scatter(
+            1.0 + neutral_outlier_offsets,
+            neutral_outliers,
+            s=7,
+            marker="o",
+            facecolor="#B8BDC3",
+            edgecolor="white",
+            linewidth=0.25,
+            alpha=0.82,
+            zorder=3,
+            clip_on=True,
+        )
+
     highlight_offsets = _city_reduction_highlight_offsets(
         highlight_values,
         value_limits,
@@ -9506,6 +9615,15 @@ def _draw_city_reduction_boxplot(
     ax.tick_params(axis="y", labelsize=6.5, length=2.5, pad=1.5)
     ax.grid(False)
     ax.spines[["top", "right", "bottom"]].set_visible(False)
+    box_report["neutral_outlier_count"] = int(neutral_outliers.size)
+    box_report["highlighted_outlier_count"] = int(highlighted_outlier_mask.sum())
+    box_report["outlier_marker"] = {
+        "shape": "circle",
+        "facecolor": "#B8BDC3",
+        "edgecolor": "white",
+        "size_points_squared": 7,
+        "layout": "deterministic narrow horizontal jitter",
+    }
     return box_report, highlight_offsets
 
 
@@ -9529,6 +9647,9 @@ def _save_city_reduction_distribution(
     if save_dir:
         os.makedirs(save_dir, exist_ok=True)
     fig.savefig(save_path, dpi=300)
+    report["figure_size_inches"] = [
+        float(value) for value in fig.get_size_inches()
+    ]
     report["figure_path"] = save_path
     write_figure_report(save_path.rsplit(".", 1)[0] + "_report.json", report)
     print(f"{description} saved to {save_path}")
@@ -9538,7 +9659,7 @@ def _save_city_reduction_distribution(
 def plot_city_relative_lifecycle_reduction_distribution(
     df: pd.DataFrame,
     save_path: str = None,
-    figsize: tuple = (2.05, 1.87),
+    figsize: tuple = (1.65, 2.04),
     for_latex: bool = False,
     plot_title: bool = False,
 ):
@@ -9569,13 +9690,18 @@ def plot_city_relative_lifecycle_reduction_distribution(
         y_label="Lifecycle reduction (%)",
         highlight_values=[record["value"] for record in highlight_records],
     )
+    outlier_records = _city_reduction_outlier_records(
+        plot_df,
+        reduction_pct_col,
+        box_report,
+    )
     if plot_title:
         ax.set_title(
             "City-level relative lifecycle emission reduction",
             fontsize=9,
             fontweight="bold",
         )
-    fig.subplots_adjust(left=0.34, right=0.96, bottom=0.06, top=0.97)
+    fig.subplots_adjust(left=0.39, right=0.96, bottom=0.06, top=0.97)
 
     report = {
         "figure_name": "city_relative_lifecycle_reduction_distribution",
@@ -9592,9 +9718,18 @@ def plot_city_relative_lifecycle_reduction_distribution(
             "box": "first to third quartile",
             "median": "line inside box",
             "whiskers": "most extreme observations within 1.5 IQR",
-            "outliers_displayed": False,
+            "outliers_displayed": True,
         },
         "box_statistics": box_report,
+        "outliers": {
+            "criterion": "observations outside the 1.5 IQR Tukey fences",
+            "count": int(len(outlier_records)),
+            "neutral_marker_count": int(box_report["neutral_outlier_count"]),
+            "highlighted_map_city_count": int(
+                box_report["highlighted_outlier_count"]
+            ),
+            "records": outlier_records,
+        },
         "sample_audit": audit,
         "summary": _writing_numeric_summary(values),
         "highlighted_cities": {
@@ -9630,7 +9765,7 @@ def plot_city_relative_lifecycle_reduction_distribution(
 def plot_city_annual_absolute_reduction_distribution(
     df: pd.DataFrame,
     save_path: str = None,
-    figsize: tuple = (2.05, 1.87),
+    figsize: tuple = (1.65, 2.04),
     for_latex: bool = False,
     plot_title: bool = False,
 ):
@@ -9662,13 +9797,18 @@ def plot_city_annual_absolute_reduction_distribution(
         log10_space=True,
         highlight_values=[record["value"] for record in highlight_records],
     )
+    outlier_records = _city_reduction_outlier_records(
+        plot_df,
+        reduction_t_col,
+        box_report,
+    )
     if plot_title:
         ax.set_title(
             "City-level annual absolute emission reduction",
             fontsize=9,
             fontweight="bold",
         )
-    fig.subplots_adjust(left=0.34, right=0.96, bottom=0.06, top=0.97)
+    fig.subplots_adjust(left=0.39, right=0.96, bottom=0.06, top=0.97)
 
     report = {
         "figure_name": "city_annual_absolute_reduction_distribution",
@@ -9686,9 +9826,18 @@ def plot_city_annual_absolute_reduction_distribution(
             "box": "first to third quartile calculated in log10 space",
             "median": "line inside box",
             "whiskers": "most extreme observations within 1.5 IQR in log10 space",
-            "outliers_displayed": False,
+            "outliers_displayed": True,
         },
         "box_statistics": box_report,
+        "outliers": {
+            "criterion": "observations outside the 1.5 IQR Tukey fences in log10 space",
+            "count": int(len(outlier_records)),
+            "neutral_marker_count": int(box_report["neutral_outlier_count"]),
+            "highlighted_map_city_count": int(
+                box_report["highlighted_outlier_count"]
+            ),
+            "records": outlier_records,
+        },
         "sample_audit": audit,
         "summary": _writing_numeric_summary(values),
         "highlighted_cities": {

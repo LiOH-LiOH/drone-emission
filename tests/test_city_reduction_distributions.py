@@ -22,6 +22,7 @@ from visualization.analysis import (  # noqa: E402
     ORACLE_REDUCTION_LABEL_CITIES,
     _city_reduction_box_statistics,
     _city_reduction_highlight_offsets,
+    _city_reduction_outlier_offsets,
     plot_city_annual_absolute_reduction_distribution,
     plot_city_relative_lifecycle_reduction_distribution,
 )
@@ -101,6 +102,15 @@ class CityReductionDistributionTest(unittest.TestCase):
                 absolute_report["box_statistics"]["calculation_space"],
                 "log10",
             )
+            self.assertEqual(relative_report["figure_size_inches"], [1.65, 2.04])
+            self.assertEqual(absolute_report["figure_size_inches"], [1.65, 2.04])
+            self.assertTrue(relative_report["distribution"]["outliers_displayed"])
+            self.assertTrue(absolute_report["distribution"]["outliers_displayed"])
+            self.assertEqual(relative_report["outliers"]["count"], 1)
+            self.assertEqual(
+                relative_report["outliers"]["count"],
+                len(relative_report["outliers"]["records"]),
+            )
 
     def test_highlight_offsets_are_deterministic_and_symmetric(self) -> None:
         values = np.array([10.0, 10.2, 10.4, 20.0])
@@ -119,8 +129,10 @@ class CityReductionDistributionTest(unittest.TestCase):
             [1.0, 2.0, 3.0, 4.0, 100.0]
         )
         self.assertEqual(linear_stats["whishi"], 4.0)
+        self.assertEqual(linear_stats["fliers"], [100.0])
         self.assertEqual(linear_report["calculation_space"], "linear")
-        self.assertFalse(linear_report["outliers_displayed"])
+        self.assertTrue(linear_report["outliers_displayed"])
+        self.assertEqual(linear_report["outlier_count"], 1)
 
         log_stats, log_report = _city_reduction_box_statistics(
             [1.0, 10.0, 100.0, 1000.0, 1e9],
@@ -130,7 +142,19 @@ class CityReductionDistributionTest(unittest.TestCase):
         self.assertEqual(log_stats["med"], 100.0)
         self.assertEqual(log_stats["q3"], 1000.0)
         self.assertEqual(log_stats["whishi"], 1000.0)
+        self.assertEqual(log_stats["fliers"], [1e9])
         self.assertEqual(log_report["calculation_space"], "log10")
+
+    def test_outlier_offsets_are_narrow_and_deterministic(self) -> None:
+        values = np.array([30.0, 30.1, 30.2, 40.0])
+
+        first = _city_reduction_outlier_offsets(values, (0.0, 50.0))
+        second = _city_reduction_outlier_offsets(values, (0.0, 50.0))
+
+        np.testing.assert_allclose(first, second)
+        self.assertTrue(np.all(np.abs(first) <= 0.11))
+        self.assertTrue(np.any(first < 0))
+        self.assertTrue(np.any(first > 0))
 
 
 if __name__ == "__main__":
