@@ -61,6 +61,7 @@ ORACLE_REDUCTION_LABEL_CITIES = (
     "Chongqing",
     "Chengdu",
 )
+ORACLE_REDUCTION_DISTRIBUTION_HIGHLIGHT_COLOR = "#D55E00"
 PILOT_SUPER_LARGE_CITIES = (
     "Beijing",
     "Shanghai",
@@ -9309,14 +9310,97 @@ def _prepare_city_reduction_distribution_data(df: pd.DataFrame):
     return eligible, reduction_pct_col, reduction_t_col, audit
 
 
+def _city_reduction_highlight_records(plot_df, value_col):
+    """Return the map-labeled cities that remain eligible for a metric."""
+    if "region_name_en" not in plot_df.columns:
+        return [], list(ORACLE_REDUCTION_LABEL_CITIES)
+
+    name_key = plot_df["region_name_en"].astype(str).str.casefold()
+    records = []
+    missing = []
+    for city in ORACLE_REDUCTION_LABEL_CITIES:
+        rows = plot_df[name_key == city.casefold()]
+        if rows.empty:
+            missing.append(city)
+            continue
+        row = rows.iloc[0]
+        value = float(row[value_col])
+        if not np.isfinite(value):
+            missing.append(city)
+            continue
+        records.append(
+            {
+                "city": city,
+                "region_key": _json_safe_scalar(row.get("region_key")),
+                "value": value,
+            }
+        )
+    return records, missing
+
+
+def _city_reduction_highlight_offsets(
+    highlight_values,
+    density_grid,
+    violin_half_width,
+    log10_space=False,
+):
+    """Place highlighted observations in a deterministic compact swarm."""
+    highlight_values = np.asarray(highlight_values, dtype=float)
+    if highlight_values.size == 0:
+        return np.array([], dtype=float)
+
+    transformed = (
+        np.log10(highlight_values) if log10_space else highlight_values.copy()
+    )
+    span = max(float(np.ptp(density_grid)), np.finfo(float).eps)
+    local_limits = 0.78 * np.interp(
+        transformed,
+        density_grid,
+        violin_half_width,
+        left=0.0,
+        right=0.0,
+    )
+    x_collision = 0.035 * span
+    y_collision = 0.055
+    candidate_fractions = (0.0, 0.35, -0.35, 0.70, -0.70, 0.95, -0.95)
+    offsets = np.zeros_like(transformed)
+    placed = []
+
+    for index in np.argsort(transformed, kind="stable"):
+        x_value = float(transformed[index])
+        limit = float(local_limits[index])
+        candidates = [fraction * limit for fraction in candidate_fractions]
+        scored = []
+        for candidate_order, candidate in enumerate(candidates):
+            if not placed:
+                minimum_distance = np.inf
+            else:
+                minimum_distance = min(
+                    ((x_value - other_x) / x_collision) ** 2
+                    + ((candidate - other_y) / y_collision) ** 2
+                    for other_x, other_y in placed
+                )
+            scored.append(
+                (minimum_distance, -abs(candidate), -candidate_order, candidate)
+            )
+
+        separated = [item for item in scored if item[0] >= 1.0]
+        chosen = max(separated or scored)[-1]
+        offsets[index] = chosen
+        placed.append((x_value, float(chosen)))
+
+    return offsets
+
+
 def _draw_city_reduction_violin(
     ax,
     values,
     x_limits,
     x_label,
     log10_space=False,
+    highlight_values=None,
 ):
-    """Draw a compact horizontal violin with median and IQR markers."""
+    """Draw a compact horizontal violin with summaries and city highlights."""
     from scipy.stats import gaussian_kde
 
     values = np.asarray(values, dtype=float)
@@ -9358,6 +9442,33 @@ def _draw_city_reduction_violin(
         linewidth=0.8,
         zorder=4,
     )
+    highlight_values = np.asarray(
+        [] if highlight_values is None else highlight_values,
+        dtype=float,
+    )
+    valid_highlights = np.isfinite(highlight_values)
+    if log10_space:
+        valid_highlights &= highlight_values > 0
+    highlight_values = highlight_values[valid_highlights]
+    highlight_offsets = _city_reduction_highlight_offsets(
+        highlight_values,
+        grid,
+        half_width,
+        log10_space=log10_space,
+    )
+    if highlight_values.size:
+        ax.scatter(
+            highlight_values,
+            highlight_offsets,
+            s=18,
+            marker="o",
+            facecolor=ORACLE_REDUCTION_DISTRIBUTION_HIGHLIGHT_COLOR,
+            edgecolor="white",
+            linewidth=0.45,
+            alpha=0.96,
+            zorder=5,
+            clip_on=True,
+        )
     if log10_space:
         ax.set_xscale("log")
         ax.set_xticks([0.1, 1, 10, 100, 1000])
@@ -9369,6 +9480,7 @@ def _draw_city_reduction_violin(
     ax.tick_params(axis="x", labelsize=6.5, length=2.5, pad=1.5)
     ax.grid(False)
     ax.spines[["top", "right", "left"]].set_visible(False)
+    return highlight_offsets
 
 
 def _save_city_reduction_distribution(
@@ -9418,6 +9530,10 @@ def plot_city_relative_lifecycle_reduction_distribution(
         return None
     plot_df, reduction_pct_col, _, audit = prepared
     values = plot_df[reduction_pct_col].to_numpy(dtype=float)
+    highlight_records, missing_highlights = _city_reduction_highlight_records(
+        plot_df,
+        reduction_pct_col,
+    )
 
     fig, ax = plt.subplots(figsize=figsize)
     _draw_city_reduction_violin(
@@ -9425,6 +9541,7 @@ def plot_city_relative_lifecycle_reduction_distribution(
         values,
         x_limits=(0.0, 50.0),
         x_label="Relative lifecycle emission reduction (%)",
+        highlight_values=[record["value"] for record in highlight_records],
     )
     if plot_title:
         ax.set_title(
@@ -9453,6 +9570,23 @@ def plot_city_relative_lifecycle_reduction_distribution(
         },
         "sample_audit": audit,
         "summary": _writing_numeric_summary(values),
+        "highlighted_cities": {
+            "source": "Cities labeled on the Oracle reduction map",
+            "requested_cities": list(ORACLE_REDUCTION_LABEL_CITIES),
+            "matched_count": int(len(highlight_records)),
+            "missing_cities": missing_highlights,
+            "metric_field": reduction_pct_col,
+            "unit": "percent",
+            "marker": {
+                "shape": "circle",
+                "facecolor": ORACLE_REDUCTION_DISTRIBUTION_HIGHLIGHT_COLOR,
+                "edgecolor": "white",
+                "size_points_squared": 18,
+                "layout": "deterministic compact vertical swarm within KDE envelope",
+                "labels_or_legend": False,
+            },
+            "records": highlight_records,
+        },
     }
     saved_path = _save_city_reduction_distribution(
         fig,
@@ -9487,6 +9621,10 @@ def plot_city_annual_absolute_reduction_distribution(
         return None
     plot_df, _, reduction_t_col, audit = prepared
     values = plot_df[reduction_t_col].to_numpy(dtype=float)
+    highlight_records, missing_highlights = _city_reduction_highlight_records(
+        plot_df,
+        reduction_t_col,
+    )
 
     fig, ax = plt.subplots(figsize=figsize)
     _draw_city_reduction_violin(
@@ -9498,6 +9636,7 @@ def plot_city_annual_absolute_reduction_distribution(
             "(t CO$_2$e yr$^{-1}$; log scale)"
         ),
         log10_space=True,
+        highlight_values=[record["value"] for record in highlight_records],
     )
     if plot_title:
         ax.set_title(
@@ -9527,6 +9666,23 @@ def plot_city_annual_absolute_reduction_distribution(
         },
         "sample_audit": audit,
         "summary": _writing_numeric_summary(values),
+        "highlighted_cities": {
+            "source": "Cities labeled on the Oracle reduction map",
+            "requested_cities": list(ORACLE_REDUCTION_LABEL_CITIES),
+            "matched_count": int(len(highlight_records)),
+            "missing_cities": missing_highlights,
+            "metric_field": reduction_t_col,
+            "unit": "t CO2e per year",
+            "marker": {
+                "shape": "circle",
+                "facecolor": ORACLE_REDUCTION_DISTRIBUTION_HIGHLIGHT_COLOR,
+                "edgecolor": "white",
+                "size_points_squared": 18,
+                "layout": "deterministic compact vertical swarm within KDE envelope",
+                "labels_or_legend": False,
+            },
+            "records": highlight_records,
+        },
     }
     saved_path = _save_city_reduction_distribution(
         fig,
