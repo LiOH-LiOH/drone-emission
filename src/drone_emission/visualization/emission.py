@@ -1370,9 +1370,9 @@ def _annotate_selected_city_macro_regions(ax, rows: list[dict], y: np.ndarray):
             zorder=1,
         )
 
-    bracket_x = -0.255
-    bracket_cap_x = -0.210
-    label_x = -0.295
+    bracket_x = -0.280
+    bracket_cap_x = -0.235
+    label_x = -0.320
     for group_idx, (start, end) in enumerate(groups):
         row = rows[start]
         color = row.get("macro_region_color", "#777777")
@@ -1526,20 +1526,7 @@ def _plot_selected_city_gdp_profile(
         all_study_max_trillion,
     )
     ax.set_xlim(0.0, gdp_max_trillion * 1.08)
-    source_years = [
-        int(rows[idx]["gdp_source_year"])
-        for idx in city_indices
-        if rows[idx].get("gdp_source_year") is not None
-    ]
-    year_label = (
-        f"{min(source_years)}–{max(source_years)}"
-        if source_years
-        else "year unavailable"
-    )
-    ax.set_xlabel(
-        f"GDP (¥ trillion)\nLatest available\n({year_label})",
-        fontsize=8.2,
-    )
+    ax.set_xlabel("GDP (¥ trillion)", fontsize=8.2)
     ax.grid(axis="x", color="#DDDDDD", linewidth=0.6, alpha=0.8)
     ax.tick_params(axis="x", labelsize=8.2)
     ax.tick_params(axis="y", left=False, labelleft=False)
