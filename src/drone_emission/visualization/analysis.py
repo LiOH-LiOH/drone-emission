@@ -6000,6 +6000,7 @@ def plot_regions_map_oracle_reduction_rank(
     show_rank_inset: bool = True,
     figure_name: str = "regions_map_oracle_reduction_rank",
     label_leaders_from_bubble_edge: bool = False,
+    draw_label_leaders: bool = True,
     draw_south_china_inset_bubbles: bool = False,
     color_scale_style: str = "colorbar",
     label_layout_path: str = None,
@@ -6018,6 +6019,7 @@ def plot_regions_map_oracle_reduction_rank(
         show_rank_inset: If True, show the top-city rank inset.
         figure_name: Figure name used in the JSON report.
         label_leaders_from_bubble_edge: If True, label leader lines start at bubble edge.
+        draw_label_leaders: If True, draw lines between labels and city bubbles.
         draw_south_china_inset_bubbles: If True, draw scaled bubbles on the South China Sea inset.
         color_scale_style: "colorbar" for a side colorbar, or "legend" for an in-map legend.
         label_layout_path: Optional JSON file with manual city label offsets.
@@ -6146,6 +6148,7 @@ def plot_regions_map_oracle_reduction_rank(
         ax_map,
         bubble_df,
         line_from_bubble_edge=label_leaders_from_bubble_edge,
+        draw_label_leaders=draw_label_leaders,
         label_offsets=label_offsets,
         return_artists=return_label_artists,
     )
@@ -6367,7 +6370,8 @@ def plot_regions_map_oracle_reduction_rank_map_only(
         plot_title=plot_title,
         show_rank_inset=False,
         figure_name="regions_map_oracle_reduction_rank_map_only",
-        label_leaders_from_bubble_edge=False,
+        label_leaders_from_bubble_edge=True,
+        draw_label_leaders=False,
         draw_south_china_inset_bubbles=True,
         color_scale_style="legend",
     )
@@ -6527,6 +6531,7 @@ def _add_regions_oracle_city_highlights(
     ax,
     bubble_df,
     line_from_bubble_edge=False,
+    draw_label_leaders=True,
     label_offsets=None,
     return_artists=False,
 ):
@@ -6565,7 +6570,11 @@ def _add_regions_oracle_city_highlights(
         xy = (x, y)
         label_offset = offset
         leader_shrink_points = 0.0
-        arrowprops = dict(arrowstyle="-", color="0.25", lw=0.75)
+        arrowprops = (
+            dict(arrowstyle="-", color="0.25", lw=0.75)
+            if draw_label_leaders
+            else None
+        )
         if line_from_bubble_edge:
             offset_vec = np.array(offset, dtype=float)
             offset_norm = np.linalg.norm(offset_vec)
@@ -6578,13 +6587,14 @@ def _add_regions_oracle_city_highlights(
                 )
                 label_offset = tuple(label_offset_vec)
                 leader_shrink_points = radius_points + 1.0
-                arrowprops = dict(
-                    arrowstyle="-",
-                    color="0.25",
-                    lw=0.75,
-                    shrinkA=1.5,
-                    shrinkB=leader_shrink_points,
-                )
+                if draw_label_leaders:
+                    arrowprops = dict(
+                        arrowstyle="-",
+                        color="0.25",
+                        lw=0.75,
+                        shrinkA=1.5,
+                        shrinkB=leader_shrink_points,
+                    )
         annotation = ax.annotate(
             city,
             xy,

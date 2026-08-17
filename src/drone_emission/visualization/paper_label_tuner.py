@@ -174,6 +174,7 @@ def main():
         show_rank_inset=False,
         figure_name=args.figure,
         label_leaders_from_bubble_edge=True,
+        draw_label_leaders=False,
         draw_south_china_inset_bubbles=True,
         color_scale_style="legend",
         label_offsets=label_offsets,
