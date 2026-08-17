@@ -6367,7 +6367,7 @@ def plot_regions_map_oracle_reduction_rank_map_only(
         plot_title=plot_title,
         show_rank_inset=False,
         figure_name="regions_map_oracle_reduction_rank_map_only",
-        label_leaders_from_bubble_edge=True,
+        label_leaders_from_bubble_edge=False,
         draw_south_china_inset_bubbles=True,
         color_scale_style="legend",
     )
