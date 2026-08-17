@@ -6080,7 +6080,7 @@ def plot_regions_map_oracle_reduction_rank(
         grid = fig.add_gridspec(
             2,
             1,
-            height_ratios=(1.0, 0.18),
+            height_ratios=(1.0, 0.12),
             hspace=0.0,
         )
         ax_map = fig.add_subplot(grid[0])
@@ -6257,7 +6257,7 @@ def plot_regions_map_oracle_reduction_rank(
             left=0.01,
             right=0.995,
             top=0.995,
-            bottom=0.02,
+            bottom=0.01,
             hspace=0.0,
         )
     else:
@@ -6344,7 +6344,7 @@ def plot_regions_map_oracle_reduction_rank_map_only(
     df_stats: "pd.DataFrame",
     stats_csv_path: str,
     save_path: str = None,
-    figsize: tuple = (6.55, 5.78),
+    figsize: tuple = (6.55, 4.90),
     for_latex: bool = False,
     plot_title: bool = False,
 ):
