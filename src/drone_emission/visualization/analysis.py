@@ -12973,6 +12973,7 @@ def plot_city_reduction_concentration_scatter(
             force_text=(0.15, 0.25),
             force_static=(0.08, 0.15),
             ensure_inside_axes=True,
+            arrowprops=None,
         )
 
     from matplotlib.lines import Line2D
@@ -13204,7 +13205,7 @@ def plot_city_reduction_concentration_marker_scatter(
             force_text=(0.15, 0.25),
             force_static=(0.08, 0.15),
             ensure_inside_axes=True,
-            arrowprops={"arrowstyle": "-", "color": "0.4", "lw": 0.5},
+            arrowprops=None,
         )
 
     from matplotlib.lines import Line2D
