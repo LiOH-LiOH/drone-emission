@@ -6344,7 +6344,7 @@ def plot_regions_map_oracle_reduction_rank_map_only(
     df_stats: "pd.DataFrame",
     stats_csv_path: str,
     save_path: str = None,
-    figsize: tuple = (6.60, 5.82),
+    figsize: tuple = (6.55, 5.78),
     for_latex: bool = False,
     plot_title: bool = False,
 ):
