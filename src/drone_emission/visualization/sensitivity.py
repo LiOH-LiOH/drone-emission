@@ -1754,8 +1754,13 @@ def plot_threshold_resilience_national_kdes(summary: pd.DataFrame, save_dir: str
         ax.xaxis.set_major_formatter(FuncFormatter(lambda v, _: f"{v:.0%}"))
         ax.set_xlabel("Probability of positive reduction")
         ax.set_ylabel("Density")
-        fig.subplots_adjust(left=0.18, right=0.97, bottom=0.22, top=0.96)
-        path = os.path.join(save_dir, f"threshold_resilience_national_overview_{suffix}_kde.pdf")
+        ax.spines["top"].set_visible(False)
+        ax.spines["right"].set_visible(False)
+        fig.subplots_adjust(left=0.18, right=0.92, bottom=0.22, top=0.96)
+        path = os.path.join(
+            save_dir,
+            f"threshold_resilience_national_overview_{suffix}_kde.pdf",
+        )
         fig.savefig(path, dpi=300, facecolor="white")
         plt.close(fig)
         outputs[scenario] = {"path": path, "bandwidth_factor": float(kde.factor)}

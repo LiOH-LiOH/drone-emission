@@ -14,6 +14,7 @@ matplotlib.use("Agg")
 
 import numpy as np  # noqa: E402
 import pandas as pd  # noqa: E402
+import matplotlib.pyplot as plt  # noqa: E402
 from pypdf import PdfReader  # noqa: E402
 
 HERE = Path(__file__).resolve().parent
@@ -31,6 +32,7 @@ from visualization.sensitivity import (  # noqa: E402
     THRESHOLD_RESILIENCE_SCENARIOS,
     THRESHOLD_RESILIENCE_TYPICAL_CITIES,
     plot_threshold_resilience_driver_forest,
+    plot_threshold_resilience_national_kdes,
     plot_threshold_resilience_national_overview,
     plot_threshold_resilience_national_subfigures,
     plot_threshold_resilience_typology,
@@ -266,6 +268,57 @@ def test_national_subfigures_write_fixed_size_pdfs_and_shared_report() -> None:
     assert all(call["norm"].vmax == 1.0 for call in map_calls)
     assert all(call["draw_colorbar"] is False for call in map_calls)
     assert all(call["draw_legend"] is False for call in map_calls)
+
+
+def test_national_kdes_leave_endpoint_room_and_hide_top_right_spines() -> None:
+    rows = []
+    for city_index in range(314):
+        independent = city_index / 313
+        for scenario in THRESHOLD_RESILIENCE_SCENARIOS:
+            rows.append({
+                "region_key": f"city_{city_index}",
+                "region_name_cn": f"城市{city_index}",
+                "region_name_en": f"City {city_index}",
+                "scenario": scenario,
+                "n_samples": 10000,
+                "prob_reduction_positive": (
+                    independent
+                    if scenario == "independent"
+                    else max(0.0, independent - 0.08)
+                ),
+                "baseline_fixed_threshold_reduction_pct": 10.0,
+            })
+    summary = pd.DataFrame(rows)
+
+    figures = []
+    with tempfile.TemporaryDirectory() as temporary_dir:
+        with patch("visualization.sensitivity.plt.close"):
+            outputs = plot_threshold_resilience_national_kdes(
+                summary, temporary_dir
+            )
+            figures = [plt.figure(number) for number in plt.get_fignums()]
+            assert len(figures) == 2
+            for figure in figures:
+                ax = figure.axes[0]
+                assert ax.get_xlim() == (0.0, 1.0)
+                assert ax.xaxis.get_major_formatter()(1.0, 0) == "100%"
+                assert not ax.spines["top"].get_visible()
+                assert not ax.spines["right"].get_visible()
+                np.testing.assert_allclose(
+                    ax.get_position().x1, 0.92, atol=1e-9
+                )
+
+            for result in outputs.values():
+                path = Path(result["path"])
+                assert path.exists()
+                page = PdfReader(str(path)).pages[0]
+                size_mm = (
+                    float(page.mediabox.width) * 25.4 / 72.0,
+                    float(page.mediabox.height) * 25.4 / 72.0,
+                )
+                np.testing.assert_allclose(size_mm, (88, 55), atol=0.1)
+    for figure in figures:
+        plt.close(figure)
 
 
 def test_summary_and_samples_validate_complete_inputs() -> None:
