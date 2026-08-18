@@ -47,6 +47,10 @@ Available figures:
     city_gef_context_detour_summary,
     break_even_contribution_decomposition,
     break_even_contribution_decomposition_marching_cubes,
+    break_even_contribution_decomposition_marching_cubes_subfigures,
+    break_even_contribution_decomposition_marching_cubes_a,
+    break_even_contribution_decomposition_marching_cubes_b,
+    break_even_contribution_decomposition_marching_cubes_c,
     break_even_contribution_decomposition_marching_cubes_de,
     contribution_decomposition,
     contribution_decomposition_city_b,
@@ -96,6 +100,17 @@ TOP6_REDUCTION_DETOUR_FIGURES = {
     "top6_reduction_detour_grid",
     "top6_reduction_detour_grid_low_gef",
     "top6_reduction_detour_grid_random",
+}
+BREAK_EVEN_MARCHING_CUBES_SUBFIGURE_GROUP = (
+    "break_even_contribution_decomposition_marching_cubes_subfigures"
+)
+BREAK_EVEN_MARCHING_CUBES_SUBFIGURES = {
+    f"break_even_contribution_decomposition_marching_cubes_{panel}"
+    for panel in ("a", "b", "c")
+}
+BREAK_EVEN_MARCHING_CUBES_SUBFIGURE_REQUESTS = {
+    BREAK_EVEN_MARCHING_CUBES_SUBFIGURE_GROUP,
+    *BREAK_EVEN_MARCHING_CUBES_SUBFIGURES,
 }
 R2_ATTRIBUTION_FIGURES = {
     "r2_gef_detour_suitability_landscape",
@@ -5392,6 +5407,47 @@ def _render_break_even_contribution_decomposition(
         )
 
 
+def _render_break_even_marching_cubes_subfigures(
+    data_dir,
+    out,
+    for_latex,
+    plot_title,
+    exp_config,
+    only,
+):
+    """Render selected standalone panels from the marching-cubes composite."""
+    from visualization.emission import (
+        plot_break_even_contribution_decomposition_marching_cubes_subfigures,
+    )
+
+    if only is None or BREAK_EVEN_MARCHING_CUBES_SUBFIGURE_GROUP in only:
+        selected_panels = ("a", "b", "c")
+    else:
+        selected_panels = tuple(
+            panel
+            for panel in ("a", "b", "c")
+            if (
+                "break_even_contribution_decomposition_"
+                f"marching_cubes_{panel}"
+            )
+            in only
+        )
+    if not selected_panels:
+        return
+
+    break_even_prepared = _prepare_break_even_phase_diagram(
+        data_dir=data_dir,
+        exp_config=exp_config,
+    )
+    plot_break_even_contribution_decomposition_marching_cubes_subfigures(
+        break_even_prepared,
+        save_dir=out,
+        for_latex=for_latex,
+        plot_title=plot_title,
+        selected_panels=selected_panels,
+    )
+
+
 def _render_distance_comparison_grid(data_dir, out, for_latex, plot_title, extreme):
     """Load Shanghai roadnet data and render a 3x3 distance-comparison grid for one tail."""
     region_key = "shanghai"
@@ -6228,6 +6284,7 @@ def render_all(
         "break_even_contribution_decomposition",
         "break_even_contribution_decomposition_marching_cubes",
         "break_even_contribution_decomposition_marching_cubes_de",
+        *BREAK_EVEN_MARCHING_CUBES_SUBFIGURE_REQUESTS,
         "contribution_decomposition",
         "contribution_decomposition_city_b",
         "scatter_detour_ratio_vs_reduction_by_gef",
@@ -6478,6 +6535,19 @@ def render_all(
                     ),
                     for_latex=for_latex,
                     plot_title=plot_title,
+                )
+
+            if (
+                only is None
+                or only & BREAK_EVEN_MARCHING_CUBES_SUBFIGURE_REQUESTS
+            ):
+                _render_break_even_marching_cubes_subfigures(
+                    data_dir=data_dir,
+                    out=out,
+                    for_latex=for_latex,
+                    plot_title=plot_title,
+                    exp_config=exp_config,
+                    only=only,
                 )
 
             needs_reduction_detour_city_stats = (

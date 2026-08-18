@@ -3326,36 +3326,15 @@ def prepare_break_even_phase_diagram_data(
     }
 
 
-def _plot_break_even_phase_diagram_panels(
-    fig,
-    ax_a,
-    ax_b,
-    ax_c,
-    prepared: Dict,
-    plot_title: bool = False,
-    panel_letters: tuple[str, str, str] = ("a", "b", "c"),
-    font_scale: float = 1.0,
-    panel_letter_fontsize: int = 13,
-    show_surface_annotations: bool = True,
-    panel_a_mode: str = "lines",
-    heatmap_height_scale: float = 1.0,
-):
-    """Draw break-even phase-diagram panels on caller-provided axes."""
-    air_distance_grid_km = prepared["air_distance_grid_km"]
-    detour_ratios = prepared["detour_ratios"]
-    panel_a = prepared["panel_a"]
+def _break_even_heatmap_encoding(prepared: Dict) -> Dict:
+    """Return the shared color encoding for the fixed-GEF heatmaps."""
     panel_b = prepared["panel_b"]
-    distance_limits = prepared["axes"]["distance_limits"]
-    detour_limits = prepared["axes"]["detour_limits"]
-    gef_limits = prepared["axes"]["gef_limits"]
-
-    break_even_lines = panel_a.get("break_even_lines", [])
-
     finite_blocks = []
     for gef_panel in panel_b["gef_panels"]:
         values = np.asarray(gef_panel["delta_g"], dtype=float)
         finite_blocks.append(values[np.isfinite(values)])
-    finite_delta = np.concatenate([block for block in finite_blocks if len(block)])
+    finite_blocks = [block for block in finite_blocks if len(block)]
+    finite_delta = np.concatenate(finite_blocks) if finite_blocks else np.array([])
     max_abs = (
         float(np.nanpercentile(np.abs(finite_delta), 90))
         if len(finite_delta)
@@ -3366,12 +3345,36 @@ def _plot_break_even_phase_diagram_panels(
     delta_bounds = np.linspace(-max_abs, max_abs, 9)
     delta_cmap = plt.get_cmap("RdBu_r", len(delta_bounds) - 1)
     delta_norm = BoundaryNorm(delta_bounds, ncolors=delta_cmap.N, clip=False)
+    return {
+        "bounds": delta_bounds,
+        "cmap": delta_cmap,
+        "norm": delta_norm,
+    }
+
+
+def _plot_break_even_surface_panel(
+    fig,
+    ax,
+    prepared: Dict,
+    plot_title: bool = False,
+    font_scale: float = 1.0,
+    show_annotations: bool = True,
+    panel_mode: str = "lines",
+):
+    """Draw the 3D break-even panel and return its extracted surface."""
+    air_distance_grid_km = prepared["air_distance_grid_km"]
+    detour_ratios = prepared["detour_ratios"]
+    panel_a = prepared["panel_a"]
+    distance_limits = prepared["axes"]["distance_limits"]
+    detour_limits = prepared["axes"]["detour_limits"]
+    gef_limits = prepared["axes"]["gef_limits"]
+    break_even_lines = panel_a.get("break_even_lines", [])
     line_cmap = plt.get_cmap("viridis")
     line_norm = plt.Normalize(vmin=gef_limits[0], vmax=gef_limits[1])
     surface_colorbar_mappable = None
-    X, Y = np.meshgrid(air_distance_grid_km, detour_ratios)
+    surface_mesh = None
 
-    if panel_a_mode == "marching_cubes":
+    if panel_mode == "marching_cubes":
         surface_mesh = _build_break_even_marching_cubes_surface(
             air_distance_grid_km=air_distance_grid_km,
             detour_ratios=detour_ratios,
@@ -3380,7 +3383,7 @@ def _plot_break_even_phase_diagram_panels(
             gef_limits=gef_limits,
         )
         if surface_mesh:
-            ax_a.plot_trisurf(
+            ax.plot_trisurf(
                 surface_mesh["x"],
                 surface_mesh["y"],
                 surface_mesh["z"],
@@ -3398,7 +3401,7 @@ def _plot_break_even_phase_diagram_panels(
                 break_even_lines,
                 max_curves=5,
             ):
-                ax_a.plot(
+                ax.plot(
                     overlay_line["x"],
                     overlay_line["y"],
                     overlay_line["z"],
@@ -3415,7 +3418,7 @@ def _plot_break_even_phase_diagram_panels(
         for line in break_even_lines:
             gef = float(line["gef"])
             line_color = line_cmap(line_norm(gef))
-            ax_a.plot(
+            ax.plot(
                 line["x"],
                 line["y"],
                 line["z"],
@@ -3424,8 +3427,8 @@ def _plot_break_even_phase_diagram_panels(
                 alpha=0.95,
             )
 
-    if show_surface_annotations:
-        if panel_a_mode == "marching_cubes":
+    if show_annotations:
+        if panel_mode == "marching_cubes":
             annotation_specs = (
                 (0.90, "Break-even surface from marching cubes", 9.5, "#444444"),
                 (
@@ -3443,11 +3446,11 @@ def _plot_break_even_phase_diagram_panels(
                 (0.05, "Each line marks Delta g = 0", 8.4, "#555555"),
             )
         for y, text, fontsize, color in annotation_specs:
-            ax_a.text2D(
+            ax.text2D(
                 0.02,
                 y,
                 text,
-                transform=ax_a.transAxes,
+                transform=ax.transAxes,
                 fontsize=fontsize * font_scale,
                 color=color,
                 bbox={
@@ -3457,25 +3460,25 @@ def _plot_break_even_phase_diagram_panels(
                     "edgecolor": "none",
                 },
             )
-    ax_a.set_xlim(*distance_limits)
-    ax_a.set_ylim(*detour_limits)
-    ax_a.set_zlim(*gef_limits)
-    ax_a.set_xlabel("Air distance (km)", fontsize=10.5 * font_scale, labelpad=8)
-    ax_a.set_ylabel("Detour ratio (road / air)", fontsize=10.5 * font_scale, labelpad=8)
-    ax_a.set_zlabel("GEF (kg CO2e/kWh)", fontsize=10.5 * font_scale, labelpad=8)
-    ax_a.set_proj_type("ortho")
-    if panel_a_mode == "marching_cubes":
-        ax_a.view_init(elev=20, azim=225)
+    ax.set_xlim(*distance_limits)
+    ax.set_ylim(*detour_limits)
+    ax.set_zlim(*gef_limits)
+    ax.set_xlabel("Air distance (km)", fontsize=10.5 * font_scale, labelpad=8)
+    ax.set_ylabel("Detour ratio (road / air)", fontsize=10.5 * font_scale, labelpad=8)
+    ax.set_zlabel("GEF (kg CO2e/kWh)", fontsize=10.5 * font_scale, labelpad=8)
+    ax.set_proj_type("ortho")
+    if panel_mode == "marching_cubes":
+        ax.view_init(elev=20, azim=225)
     else:
-        ax_a.view_init(elev=28, azim=-128)
-    ax_a.grid(alpha=0.2)
-    ax_a.xaxis.pane.set_alpha(0.0)
-    ax_a.yaxis.pane.set_alpha(0.0)
-    ax_a.zaxis.pane.set_alpha(0.0)
+        ax.view_init(elev=28, azim=-128)
+    ax.grid(alpha=0.2)
+    ax.xaxis.pane.set_alpha(0.0)
+    ax.yaxis.pane.set_alpha(0.0)
+    ax.zaxis.pane.set_alpha(0.0)
     if surface_colorbar_mappable is not None:
         surface_colorbar = fig.colorbar(
             surface_colorbar_mappable,
-            ax=ax_a,
+            ax=ax,
             fraction=0.035,
             pad=0.05,
             shrink=0.62,
@@ -3488,55 +3491,81 @@ def _plot_break_even_phase_diagram_panels(
         )
         surface_colorbar.ax.tick_params(labelsize=8.5 * font_scale)
 
-    heatmap_axes = [ax_b, ax_c]
-    heatmap_detour_limits = (detour_limits[0], min(detour_limits[1], 2.4))
-    heatmap_mappable = None
-    for ax, gef_panel in zip(heatmap_axes, panel_b["gef_panels"]):
-        delta_g = np.asarray(gef_panel["delta_g"], dtype=float)
-        im = ax.imshow(
-            delta_g,
-            cmap=delta_cmap,
-            aspect="auto",
-            origin="lower",
-            extent=[
-                distance_limits[0],
-                distance_limits[1],
-                detour_limits[0],
-                detour_limits[1],
-            ],
-            norm=delta_norm,
-            interpolation="nearest",
-        )
-        heatmap_mappable = im
-        if np.nanmin(delta_g) <= 0.0 <= np.nanmax(delta_g):
-            contour = ax.contour(
-                X,
-                Y,
-                delta_g,
-                levels=[0.0],
-                colors="black",
-                linewidths=1.3,
-                zorder=6,
-            )
-            ax.clabel(
-                contour,
-                fmt={0.0: "Delta g = 0"},
-                fontsize=8 * font_scale,
-                inline=True,
-            )
-        ax.set_xlim(*distance_limits)
-        ax.set_ylim(*heatmap_detour_limits)
-        ax.set_xlabel("Air distance (km)", fontsize=11 * font_scale)
-        if ax is ax_b:
-            ax.set_ylabel("Detour ratio (road / air)", fontsize=11 * font_scale)
+    if plot_title:
+        if panel_mode == "marching_cubes":
+            title = "Break-even surface by marching cubes"
         else:
-            ax.set_ylabel("")
-        ax.grid(alpha=0.15)
-        if plot_title:
-            ax.set_title(
-                f"{gef_panel['label']} ({gef_panel['gef']:.2f})",
-                fontsize=11.5 * font_scale,
-            )
+            title = "Break-even curves by GEF"
+        ax.set_title(title, fontsize=12 * font_scale, pad=10)
+
+    return surface_mesh
+
+
+def _plot_break_even_heatmap_panel(
+    ax,
+    prepared: Dict,
+    gef_panel: Dict,
+    encoding: Dict,
+    plot_title: bool = False,
+    font_scale: float = 1.0,
+    show_ylabel: bool = True,
+    show_y_ticklabels: bool = True,
+    show_annotation: bool = True,
+):
+    """Draw one fixed-GEF lifecycle-emission difference heatmap."""
+    air_distance_grid_km = prepared["air_distance_grid_km"]
+    detour_ratios = prepared["detour_ratios"]
+    distance_limits = prepared["axes"]["distance_limits"]
+    detour_limits = prepared["axes"]["detour_limits"]
+    heatmap_detour_limits = (detour_limits[0], min(detour_limits[1], 2.4))
+    X, Y = np.meshgrid(air_distance_grid_km, detour_ratios)
+    delta_g = np.asarray(gef_panel["delta_g"], dtype=float)
+    im = ax.imshow(
+        delta_g,
+        cmap=encoding["cmap"],
+        aspect="auto",
+        origin="lower",
+        extent=[
+            distance_limits[0],
+            distance_limits[1],
+            detour_limits[0],
+            detour_limits[1],
+        ],
+        norm=encoding["norm"],
+        interpolation="nearest",
+    )
+    if np.nanmin(delta_g) <= 0.0 <= np.nanmax(delta_g):
+        contour = ax.contour(
+            X,
+            Y,
+            delta_g,
+            levels=[0.0],
+            colors="black",
+            linewidths=1.3,
+            zorder=6,
+        )
+        ax.clabel(
+            contour,
+            fmt={0.0: "Delta g = 0"},
+            fontsize=8 * font_scale,
+            inline=True,
+        )
+    ax.set_xlim(*distance_limits)
+    ax.set_ylim(*heatmap_detour_limits)
+    ax.set_xlabel("Air distance (km)", fontsize=11 * font_scale)
+    ax.set_ylabel(
+        "Detour ratio (road / air)" if show_ylabel else "",
+        fontsize=11 * font_scale,
+    )
+    if not show_y_ticklabels:
+        ax.tick_params(axis="y", left=False, labelleft=False)
+    ax.grid(alpha=0.15)
+    if plot_title:
+        ax.set_title(
+            f"{gef_panel['label']} ({gef_panel['gef']:.2f})",
+            fontsize=11.5 * font_scale,
+        )
+    if show_annotation:
         ax.text(
             0.03,
             0.97,
@@ -3553,6 +3582,53 @@ def _plot_break_even_phase_diagram_panels(
             },
             zorder=7,
         )
+    return im
+
+
+def _plot_break_even_phase_diagram_panels(
+    fig,
+    ax_a,
+    ax_b,
+    ax_c,
+    prepared: Dict,
+    plot_title: bool = False,
+    panel_letters: tuple[str, str, str] = ("a", "b", "c"),
+    font_scale: float = 1.0,
+    panel_letter_fontsize: int = 13,
+    show_surface_annotations: bool = True,
+    panel_a_mode: str = "lines",
+    heatmap_height_scale: float = 1.0,
+):
+    """Draw break-even phase-diagram panels on caller-provided axes."""
+    panel_b = prepared["panel_b"]
+    encoding = _break_even_heatmap_encoding(prepared)
+
+    _plot_break_even_surface_panel(
+        fig,
+        ax_a,
+        prepared,
+        plot_title=plot_title,
+        font_scale=font_scale,
+        show_annotations=show_surface_annotations,
+        panel_mode=panel_a_mode,
+    )
+
+    heatmap_axes = [ax_b, ax_c]
+    heatmap_mappable = None
+    for index, (ax, gef_panel) in enumerate(
+        zip(heatmap_axes, panel_b["gef_panels"])
+    ):
+        heatmap_mappable = _plot_break_even_heatmap_panel(
+            ax,
+            prepared,
+            gef_panel,
+            encoding,
+            plot_title=plot_title,
+            font_scale=font_scale,
+            show_ylabel=index == 0,
+            show_y_ticklabels=True,
+            show_annotation=True,
+        )
 
     if heatmap_height_scale != 1.0:
         for ax in heatmap_axes:
@@ -3566,8 +3642,8 @@ def _plot_break_even_phase_diagram_panels(
         ax=heatmap_axes,
         fraction=0.022,
         pad=0.01,
-        boundaries=delta_bounds,
-        ticks=delta_bounds[::2],
+        boundaries=encoding["bounds"],
+        ticks=encoding["bounds"][::2],
         extend="both",
         spacing="proportional",
     )
@@ -3576,16 +3652,10 @@ def _plot_break_even_phase_diagram_panels(
         fontsize=10 * font_scale,
     )
 
-    if plot_title:
-        if panel_a_mode == "marching_cubes":
-            title = "Break-even surface by marching cubes"
-        else:
-            title = "Break-even curves by GEF"
-        ax_a.set_title(title, fontsize=12 * font_scale, pad=10)
-
-    _add_panel_letter(ax_a, panel_letters[0], fontsize=panel_letter_fontsize)
-    _add_panel_letter(ax_b, panel_letters[1], fontsize=panel_letter_fontsize)
-    _add_panel_letter(ax_c, panel_letters[2], fontsize=panel_letter_fontsize)
+    if panel_letters:
+        _add_panel_letter(ax_a, panel_letters[0], fontsize=panel_letter_fontsize)
+        _add_panel_letter(ax_b, panel_letters[1], fontsize=panel_letter_fontsize)
+        _add_panel_letter(ax_c, panel_letters[2], fontsize=panel_letter_fontsize)
 
 
 def plot_break_even_phase_diagram(
@@ -3784,6 +3854,204 @@ def plot_break_even_contribution_decomposition_marching_cubes(
         contribution_waterfall_ylim_expand=0.12,
         row_hspace=0.30,
     )
+
+
+def plot_break_even_contribution_decomposition_marching_cubes_subfigures(
+    break_even_prepared: Dict,
+    save_dir: str = None,
+    for_latex: bool = False,
+    plot_title: bool = False,
+    selected_panels: tuple[str, ...] = ("a", "b", "c"),
+):
+    """Save standalone a-c panels from the marching-cubes composite figure.
+
+    Args:
+        break_even_prepared: Output of ``prepare_break_even_phase_diagram_data``.
+        save_dir: Directory for the standalone subfigures. Shows plots if None.
+        for_latex: If True, save as PDF.
+        plot_title: If True, show titles.
+        selected_panels: Panel letters to render from ``a``, ``b``, and ``c``.
+    """
+    if not break_even_prepared:
+        print("Break-even marching-cubes subfigures skipped — prepared data missing")
+        return {}
+
+    valid_panels = {"a", "b", "c"}
+    requested_panels = tuple(
+        panel for panel in selected_panels if panel in valid_panels
+    )
+    if not requested_panels:
+        print("Break-even marching-cubes subfigures skipped — no panels requested")
+        return {}
+
+    gef_panels = break_even_prepared["panel_b"].get("gef_panels", [])
+    needs_heatmaps = any(panel in requested_panels for panel in ("b", "c"))
+    if needs_heatmaps and len(gef_panels) < 2:
+        print("Break-even marching-cubes subfigures skipped — GEF panels missing")
+        return {}
+
+    figure_name = "break_even_contribution_decomposition_marching_cubes"
+    extension = ".pdf" if for_latex else ".png"
+    width_mm = {"a": 65.0, "b": 52.0, "c": 63.0}
+    height_mm = 58.0
+    font_scale = 0.72
+    encoding = _break_even_heatmap_encoding(break_even_prepared)
+    output_paths = {}
+    panel_reports = {}
+
+    if save_dir:
+        os.makedirs(save_dir, exist_ok=True)
+
+    for panel in requested_panels:
+        fig = plt.figure(
+            figsize=(width_mm[panel] / 25.4, height_mm / 25.4),
+            facecolor="white",
+        )
+        output_path = None
+        if save_dir:
+            output_path = os.path.join(
+                save_dir,
+                f"{figure_name}_{panel}{extension}",
+            )
+            if plot_title:
+                output_path = _add_title_suffix(output_path)
+
+        if panel == "a":
+            ax = fig.add_axes([0.00, 0.08, 0.86, 0.88], projection="3d")
+            surface_mesh = _plot_break_even_surface_panel(
+                fig,
+                ax,
+                break_even_prepared,
+                plot_title=plot_title,
+                font_scale=font_scale,
+                show_annotations=False,
+                panel_mode="marching_cubes",
+            )
+            ax.set_xlabel("Air distance (km)", fontsize=7.5, labelpad=3)
+            ax.set_ylabel("Detour ratio (road / air)", fontsize=7.5, labelpad=3)
+            ax.set_zlabel("GEF (kg CO2e/kWh)", fontsize=7.5, labelpad=3)
+            ax.tick_params(axis="both", labelsize=6.5, pad=1)
+            panel_reports[panel] = {
+                "output_path": output_path,
+                "figure_size_mm": {"width": width_mm[panel], "height": height_mm},
+                "axis": _report_axis(ax),
+                "zlim_data": _report_array(ax.get_zlim()),
+                "surface_method": (
+                    "skimage.measure.marching_cubes on Delta g = 0 "
+                    "with step_size = 1"
+                ),
+                "surface_vertex_count": (
+                    int(len(surface_mesh["x"])) if surface_mesh else 0
+                ),
+                "surface_triangle_count": (
+                    int(len(surface_mesh["triangles"])) if surface_mesh else 0
+                ),
+            }
+        else:
+            if panel == "b":
+                ax = fig.add_axes([0.25, 0.22, 0.71, 0.72])
+                gef_panel = gef_panels[0]
+                show_ylabel = True
+                show_y_ticklabels = True
+            else:
+                ax = fig.add_axes([0.08, 0.22, 0.59, 0.72])
+                gef_panel = gef_panels[1]
+                show_ylabel = False
+                show_y_ticklabels = False
+
+            heatmap_mappable = _plot_break_even_heatmap_panel(
+                ax,
+                break_even_prepared,
+                gef_panel,
+                encoding,
+                plot_title=plot_title,
+                font_scale=font_scale,
+                show_ylabel=show_ylabel,
+                show_y_ticklabels=show_y_ticklabels,
+                show_annotation=False,
+            )
+            ax.tick_params(axis="both", labelsize=6.5)
+            if panel == "c":
+                colorbar_ax = fig.add_axes([0.75, 0.22, 0.045, 0.72])
+                colorbar = fig.colorbar(
+                    heatmap_mappable,
+                    cax=colorbar_ax,
+                    boundaries=encoding["bounds"],
+                    ticks=encoding["bounds"][::2],
+                    extend="both",
+                    spacing="proportional",
+                )
+                colorbar.set_label(
+                    "Delta g = E_drone - E_ebike\n(g CO2e/order)",
+                    fontsize=6.5,
+                    labelpad=3,
+                )
+                colorbar.ax.tick_params(labelsize=6.0)
+
+            panel_reports[panel] = {
+                "output_path": output_path,
+                "figure_size_mm": {"width": width_mm[panel], "height": height_mm},
+                "axis": _report_axis(ax),
+                "label": gef_panel["label"],
+                "grid_emission_factor_kg_co2e_per_kwh": float(gef_panel["gef"]),
+                "delta_g_summary_g_co2e_per_order": _array_summary(
+                    gef_panel["delta_g"]
+                ),
+                "shows_shared_colorbar": panel == "c",
+            }
+
+        if output_path:
+            fig.savefig(output_path, dpi=300, facecolor="white")
+            output_paths[panel] = output_path
+            plt.close(fig)
+            print(
+                f"Break-even marching-cubes subfigure {panel} "
+                f"saved to {output_path}"
+            )
+        else:
+            plt.show()
+            plt.close(fig)
+
+    if save_dir:
+        report_path = os.path.join(
+            save_dir,
+            "break_even_contribution_decomposition_"
+            "marching_cubes_subfigures_report.json",
+        )
+        report = {
+            "figure_name": (
+                "break_even_contribution_decomposition_"
+                "marching_cubes_subfigures"
+            ),
+            "requested_panels": list(requested_panels),
+            "combined_target_size_mm": {
+                "width": 180.0,
+                "height": height_mm,
+            },
+            "panel_order": ["a", "b", "c"],
+            "panels": panel_reports,
+            "shared_heatmap_encoding": {
+                "quantity": "Delta g = E_drone - E_ebike",
+                "unit": "g CO2e/order",
+                "bounds": _report_array(encoding["bounds"]),
+                "ticks": _report_array(encoding["bounds"][::2]),
+                "negative_interpretation": "Drone has lower lifecycle emissions",
+            },
+            "panel_letters_drawn": False,
+            "in_panel_gef_annotations_drawn": False,
+        }
+        with open(report_path, "w", encoding="utf-8") as report_file:
+            json.dump(
+                _json_safe(report),
+                report_file,
+                indent=2,
+                ensure_ascii=False,
+                allow_nan=False,
+            )
+        output_paths["report"] = report_path
+        print(f"Break-even marching-cubes subfigure report saved to {report_path}")
+
+    return output_paths
 
 
 def add_experiment_info_box(
