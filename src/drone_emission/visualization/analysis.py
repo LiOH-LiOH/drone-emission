@@ -11049,13 +11049,6 @@ def plot_kappa_vrp_saturation(
 # ---------------------------------------------------------------------------
 # Manuscript R2 city-attribution subfigures
 
-R2_FIGURE_CITY_KEYS = ("chengdu", "guangzhou", "beijing", "shanghai")
-R2_FIGURE_CITY_LABELS = {
-    "chengdu": "Chengdu",
-    "guangzhou": "Guangzhou",
-    "beijing": "Beijing",
-    "shanghai": "Shanghai",
-}
 R2_SCREEN_LABELS = {
     "grid_emission_factor": "Grid emission factor",
     "detour_ratio": "Detour ratio",
@@ -11663,35 +11656,9 @@ def plot_r2_population_reduction_contrast(
         slope, intercept = np.polyfit(population_million, plot_df[outcome], 1)
         x_line = np.linspace(population_million.min(), population_million.max(), 120)
         ax.plot(x_line, slope * x_line + intercept, color="#D95F02", linewidth=1.5)
-        city_records = []
-        for idx, row in plot_df[plot_df["region_key"].isin(R2_FIGURE_CITY_KEYS)].iterrows():
-            x_value = float(row["population_10k"] / 100.0)
-            y_value = float(row[outcome])
-            ax.scatter(x_value, y_value, s=38, facecolor="white", edgecolor="#222222",
-                       linewidth=0.9, zorder=4)
-            city_records.append({"region_key": row["region_key"], "x_population_million": x_value,
-                                 "y": y_value})
-        p_label = "$P < 0.001$" if record["p_value"] < 0.001 else f"$P = {record['p_value']:.3f}$"
-        ci_low, ci_high = record["ci95"]
-        equivalence = record["equivalence"]
-        equivalence_label = ""
-        if outcome == R2_OUTCOME:
-            equivalence_label = (
-                "\nequivalent within ±0.10"
-                if equivalence["equivalent_0_05"]
-                else "\nequivalence not established"
-            )
-        ax.text(
-            0.03, 0.96,
-            f"r = {record['coefficient']:+.3f} "
-            f"[{ci_low:+.2f}, {ci_high:+.2f}]\n"
-            f"{p_label}, n = {record['n']}{equivalence_label}",
-            transform=ax.transAxes, va="top", fontsize=8,
-            bbox={"boxstyle": "round,pad=0.22", "fc": "white", "ec": "#BBBBBB", "alpha": 0.9},
-        )
         ax.set_xlabel("Population (million)")
         ax.set_ylabel(y_label)
-        ax.grid(color="#E0E0E0", linewidth=0.5, alpha=0.7)
+        ax.grid(False)
         ax.spines[["top", "right"]].set_visible(False)
         if plot_title:
             ax.set_title(title)
@@ -11700,7 +11667,6 @@ def plot_r2_population_reduction_contrast(
             "outcome": outcome,
             "correlation": record,
             "linear_fit": {"slope": float(slope), "intercept": float(intercept)},
-            "selected_cities": city_records,
         }
         save_path = (
             os.path.join(save_dir, f"{figure_name}.png")
