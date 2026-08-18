@@ -3360,6 +3360,8 @@ def _plot_break_even_surface_panel(
     font_scale: float = 1.0,
     show_annotations: bool = True,
     panel_mode: str = "lines",
+    colorbar_ax=None,
+    colorbar_ticks=None,
 ):
     """Draw the 3D break-even panel and return its extracted surface."""
     air_distance_grid_km = prepared["air_distance_grid_km"]
@@ -3476,14 +3478,23 @@ def _plot_break_even_surface_panel(
     ax.yaxis.pane.set_alpha(0.0)
     ax.zaxis.pane.set_alpha(0.0)
     if surface_colorbar_mappable is not None:
-        surface_colorbar = fig.colorbar(
-            surface_colorbar_mappable,
-            ax=ax,
-            fraction=0.035,
-            pad=0.05,
-            shrink=0.62,
-            ticks=np.linspace(gef_limits[0], gef_limits[1], 4),
-        )
+        if colorbar_ticks is None:
+            colorbar_ticks = np.linspace(gef_limits[0], gef_limits[1], 4)
+        if colorbar_ax is None:
+            surface_colorbar = fig.colorbar(
+                surface_colorbar_mappable,
+                ax=ax,
+                fraction=0.035,
+                pad=0.05,
+                shrink=0.62,
+                ticks=colorbar_ticks,
+            )
+        else:
+            surface_colorbar = fig.colorbar(
+                surface_colorbar_mappable,
+                cax=colorbar_ax,
+                ticks=colorbar_ticks,
+            )
         surface_colorbar.ax.set_title(
             "GEF\n(kg CO2e/kWh)",
             fontsize=8.2 * font_scale,
@@ -3892,8 +3903,8 @@ def plot_break_even_contribution_decomposition_marching_cubes_subfigures(
 
     figure_name = "break_even_contribution_decomposition_marching_cubes"
     extension = ".pdf" if for_latex else ".png"
-    width_mm = {"a": 65.0, "b": 52.0, "c": 63.0}
-    height_mm = 58.0
+    width_mm = {"a": 120.0, "b": 55.0, "c": 65.0}
+    height_mm = {"a": 60.0, "b": 52.0, "c": 52.0}
     font_scale = 0.72
     encoding = _break_even_heatmap_encoding(break_even_prepared)
     output_paths = {}
@@ -3904,7 +3915,7 @@ def plot_break_even_contribution_decomposition_marching_cubes_subfigures(
 
     for panel in requested_panels:
         fig = plt.figure(
-            figsize=(width_mm[panel] / 25.4, height_mm / 25.4),
+            figsize=(width_mm[panel] / 25.4, height_mm[panel] / 25.4),
             facecolor="white",
         )
         output_path = None
@@ -3917,7 +3928,9 @@ def plot_break_even_contribution_decomposition_marching_cubes_subfigures(
                 output_path = _add_title_suffix(output_path)
 
         if panel == "a":
-            ax = fig.add_axes([0.00, 0.08, 0.86, 0.88], projection="3d")
+            ax = fig.add_axes([0.04, 0.16, 0.76, 0.78], projection="3d")
+            colorbar_ax = fig.add_axes([0.88, 0.24, 0.025, 0.58])
+            gef_ticks = (0.05, 0.30, 0.55, 0.80)
             surface_mesh = _plot_break_even_surface_panel(
                 fig,
                 ax,
@@ -3926,14 +3939,22 @@ def plot_break_even_contribution_decomposition_marching_cubes_subfigures(
                 font_scale=font_scale,
                 show_annotations=False,
                 panel_mode="marching_cubes",
+                colorbar_ax=colorbar_ax,
+                colorbar_ticks=gef_ticks,
             )
             ax.set_xlabel("Air distance (km)", fontsize=7.5, labelpad=3)
             ax.set_ylabel("Detour ratio (road / air)", fontsize=7.5, labelpad=3)
             ax.set_zlabel("GEF (kg CO2e/kWh)", fontsize=7.5, labelpad=3)
+            ax.set_xticks((1, 2, 3, 4, 5))
+            ax.set_yticks((1.0, 1.4, 1.8, 2.2, 2.4))
+            ax.set_zticks(gef_ticks)
             ax.tick_params(axis="both", labelsize=6.5, pad=1)
             panel_reports[panel] = {
                 "output_path": output_path,
-                "figure_size_mm": {"width": width_mm[panel], "height": height_mm},
+                "figure_size_mm": {
+                    "width": width_mm[panel],
+                    "height": height_mm[panel],
+                },
                 "axis": _report_axis(ax),
                 "zlim_data": _report_array(ax.get_zlim()),
                 "surface_method": (
@@ -3990,7 +4011,10 @@ def plot_break_even_contribution_decomposition_marching_cubes_subfigures(
 
             panel_reports[panel] = {
                 "output_path": output_path,
-                "figure_size_mm": {"width": width_mm[panel], "height": height_mm},
+                "figure_size_mm": {
+                    "width": width_mm[panel],
+                    "height": height_mm[panel],
+                },
                 "axis": _report_axis(ax),
                 "label": gef_panel["label"],
                 "grid_emission_factor_kg_co2e_per_kwh": float(gef_panel["gef"]),
@@ -4025,8 +4049,13 @@ def plot_break_even_contribution_decomposition_marching_cubes_subfigures(
             ),
             "requested_panels": list(requested_panels),
             "combined_target_size_mm": {
-                "width": 180.0,
-                "height": height_mm,
+                "width": 120.0,
+                "height": 116.0,
+            },
+            "external_layout": {
+                "first_row": ["a"],
+                "second_row": ["b", "c"],
+                "row_gap_mm": 4.0,
             },
             "panel_order": ["a", "b", "c"],
             "panels": panel_reports,
