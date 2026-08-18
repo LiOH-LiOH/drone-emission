@@ -6979,10 +6979,7 @@ def render_all(
                             plot_r2_population_reduction_contrast(
                                 r2_df,
                                 r2_analysis,
-                                save_path=os.path.join(
-                                    out,
-                                    "r2_population_reduction_contrast.png",
-                                ),
+                                save_dir=out,
                                 for_latex=for_latex,
                                 plot_title=plot_title,
                             )

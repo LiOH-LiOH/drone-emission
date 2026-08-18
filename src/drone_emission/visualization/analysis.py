@@ -11623,30 +11623,39 @@ def plot_r2_correlation_matrix_spearman(
 def plot_r2_population_reduction_contrast(
     df: pd.DataFrame,
     analysis: dict,
-    save_path: str = None,
-    figsize: tuple = (8.4, 3.8),
+    save_dir: str = None,
+    figsize: tuple = (3.4, 3.8),
     for_latex: bool = False,
     plot_title: bool = False,
 ):
-    """Contrast population correlations with absolute and relative reduction.
+    """Plot separate population correlations for absolute and relative reduction.
 
     Args:
         df: Prepared city-attribution DataFrame.
         analysis: Shared R2 analysis result dictionary.
-        save_path: Path to save figure. Shows plot if None.
-        figsize: Figure size tuple.
+        save_dir: Directory for both figures. Shows plots if None.
+        figsize: Figure size tuple for each standalone figure.
         for_latex: If True, save as PDF.
         plot_title: If True, show title.
     """
     specs = (
-        (R2_ABSOLUTE_OUTCOME, "Annual optimal reduction (t CO$_2$e yr$^{-1}$)",
-         analysis["population_contrast"]["absolute_reduction"]),
-        (R2_OUTCOME, "Optimal lifecycle reduction (%)",
-         analysis["population_contrast"]["relative_reduction"]),
+        (
+            R2_ABSOLUTE_OUTCOME,
+            "Annual optimal reduction (t CO$_2$e yr$^{-1}$)",
+            analysis["population_contrast"]["absolute_reduction"],
+            "r2_population_absolute_reduction",
+            "Population and annual absolute reduction",
+        ),
+        (
+            R2_OUTCOME,
+            "Optimal lifecycle reduction (%)",
+            analysis["population_contrast"]["relative_reduction"],
+            "r2_population_relative_reduction",
+            "Population and relative lifecycle reduction",
+        ),
     )
-    fig, axes = plt.subplots(1, 2, figsize=figsize)
-    panel_records = []
-    for ax, (outcome, y_label, record) in zip(axes, specs):
+    for outcome, y_label, record, figure_name, title in specs:
+        fig, ax = plt.subplots(figsize=figsize)
         plot_df = df[["region_key", "population_10k", outcome]].dropna().copy()
         population_million = plot_df["population_10k"] / 100.0
         ax.scatter(population_million, plot_df[outcome], s=20, color="#4C78A8",
@@ -11684,20 +11693,28 @@ def plot_r2_population_reduction_contrast(
         ax.set_ylabel(y_label)
         ax.grid(color="#E0E0E0", linewidth=0.5, alpha=0.7)
         ax.spines[["top", "right"]].set_visible(False)
-        panel_records.append({
+        if plot_title:
+            ax.set_title(title)
+        fig.tight_layout()
+        report = {
             "outcome": outcome,
             "correlation": record,
             "linear_fit": {"slope": float(slope), "intercept": float(intercept)},
             "selected_cities": city_records,
-        })
-    if plot_title:
-        fig.suptitle("City size predicts the reduction pool, not relative suitability")
-    fig.tight_layout()
-    _r2_save_figure(
-        fig, save_path, for_latex, plot_title,
-        "r2_population_reduction_contrast",
-        {"panels": panel_records},
-    )
+        }
+        save_path = (
+            os.path.join(save_dir, f"{figure_name}.png")
+            if save_dir
+            else None
+        )
+        _r2_save_figure(
+            fig,
+            save_path,
+            for_latex,
+            plot_title,
+            figure_name,
+            report,
+        )
 
 
 def plot_r2_core_coefficient_robustness(

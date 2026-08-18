@@ -300,15 +300,28 @@
       "components": []
     },
     {
-      "figure_id": "r2_population_reduction_contrast",
-      "figure_path": "figures/paper/subfigure/r2_population_reduction_contrast.pdf",
+      "figure_id": "r2_population_absolute_reduction",
+      "figure_path": "figures/paper/subfigure/r2_population_absolute_reduction.pdf",
       "composition_type": "standalone",
       "assembly_tool": "Matplotlib",
       "generator": {
         "module_path": "src/drone_emission/visualization/analysis.py",
         "function": "plot_r2_population_reduction_contrast"
       },
-      "standalone_report_path": "figures/paper/subfigure/r2_population_reduction_contrast_report.json",
+      "standalone_report_path": "figures/paper/subfigure/r2_population_absolute_reduction_report.json",
+      "panels": [],
+      "components": []
+    },
+    {
+      "figure_id": "r2_population_relative_reduction",
+      "figure_path": "figures/paper/subfigure/r2_population_relative_reduction.pdf",
+      "composition_type": "standalone",
+      "assembly_tool": "Matplotlib",
+      "generator": {
+        "module_path": "src/drone_emission/visualization/analysis.py",
+        "function": "plot_r2_population_reduction_contrast"
+      },
+      "standalone_report_path": "figures/paper/subfigure/r2_population_relative_reduction_report.json",
       "panels": [],
       "components": []
     },
