@@ -3906,7 +3906,7 @@ def plot_break_even_contribution_decomposition_marching_cubes_subfigures(
     figure_name = "break_even_contribution_decomposition_marching_cubes"
     extension = ".pdf" if for_latex else ".png"
     width_mm = {"a": 120.0, "b": 55.0, "c": 65.0}
-    height_mm = {"a": 60.0, "b": 52.0, "c": 52.0}
+    height_mm = {"a": 85.0, "b": 52.0, "c": 52.0}
     font_scale = 0.72
     encoding = _break_even_heatmap_encoding(break_even_prepared)
     output_paths = {}
@@ -3930,8 +3930,8 @@ def plot_break_even_contribution_decomposition_marching_cubes_subfigures(
                 output_path = _add_title_suffix(output_path)
 
         if panel == "a":
-            ax = fig.add_axes([0.04, 0.16, 0.76, 0.78], projection="3d")
-            colorbar_ax = fig.add_axes([0.88, 0.24, 0.025, 0.58])
+            ax = fig.add_axes([0.06, 0.12, 0.76, 0.82], projection="3d")
+            colorbar_ax = fig.add_axes([0.82, 0.22, 0.025, 0.58])
             gef_ticks = (0.05, 0.30, 0.55, 0.80)
             surface_mesh = _plot_break_even_surface_panel(
                 fig,
@@ -3958,6 +3958,7 @@ def plot_break_even_contribution_decomposition_marching_cubes_subfigures(
                     "height": height_mm[panel],
                 },
                 "axis": _report_axis(ax),
+                "colorbar_axis": _report_axis(colorbar_ax),
                 "zlim_data": _report_array(ax.get_zlim()),
                 "surface_method": (
                     "skimage.measure.marching_cubes on Delta g = 0 "
@@ -4053,7 +4054,7 @@ def plot_break_even_contribution_decomposition_marching_cubes_subfigures(
             "requested_panels": list(requested_panels),
             "combined_target_size_mm": {
                 "width": 120.0,
-                "height": 116.0,
+                "height": 141.0,
             },
             "external_layout": {
                 "first_row": ["a"],
