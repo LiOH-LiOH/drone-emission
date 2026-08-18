@@ -5775,6 +5775,8 @@ def render_all(
                 for_latex=for_latex,
                 plot_title=plot_title,
             )
+            from visualization.sensitivity import plot_threshold_resilience_national_kdes
+            plot_threshold_resilience_national_kdes(pd.read_csv(summary_path), out)
 
     def _figure1_needs_vector_source(name):
         if not figure1_framework_requested:

@@ -36,6 +36,7 @@ from matplotlib.colors import (
 from matplotlib.lines import Line2D
 from matplotlib.patches import Patch
 from matplotlib.ticker import FuncFormatter
+from scipy.stats import gaussian_kde
 
 from sensitivity.adjusted_resistance import ABSOLUTE_DOWNSIDE_EXAMPLE_CITIES
 from sensitivity.threshold_resilience import (
@@ -1732,6 +1733,33 @@ def plot_threshold_resilience_national_subfigures(
     )
     print(f"Threshold resilience national subfigure report saved to {report_path}")
     return output_paths
+
+
+def plot_threshold_resilience_national_kdes(summary: pd.DataFrame, save_dir: str):
+    """Save independent and stress city-probability KDE subfigures."""
+    wide = validate_threshold_resilience_summary(summary, expected_cities=314)
+    os.makedirs(save_dir, exist_ok=True)
+    outputs = {}
+    for scenario, color, suffix in (
+        ("independent", "#3B75AF", "independent"),
+        ("correlated_adverse_stress", "#C44E52", "stress"),
+    ):
+        values = wide[scenario].to_numpy(float)
+        kde = gaussian_kde(values)
+        x = np.linspace(0, 1, 500)
+        fig, ax = plt.subplots(figsize=(88 / 25.4, 55 / 25.4))
+        ax.plot(x, kde(x), color=color, linewidth=1.4)
+        ax.fill_between(x, kde(x), color=color, alpha=0.18)
+        ax.set_xlim(0, 1)
+        ax.xaxis.set_major_formatter(FuncFormatter(lambda v, _: f"{v:.0%}"))
+        ax.set_xlabel("Probability of positive reduction")
+        ax.set_ylabel("Density")
+        fig.subplots_adjust(left=0.18, right=0.97, bottom=0.22, top=0.96)
+        path = os.path.join(save_dir, f"threshold_resilience_national_overview_{suffix}_kde.pdf")
+        fig.savefig(path, dpi=300, facecolor="white")
+        plt.close(fig)
+        outputs[scenario] = {"path": path, "bandwidth_factor": float(kde.factor)}
+    return outputs
 
 
 def plot_threshold_resilience_typology(
