@@ -11656,6 +11656,25 @@ def plot_r2_population_reduction_contrast(
         slope, intercept = np.polyfit(population_million, plot_df[outcome], 1)
         x_line = np.linspace(population_million.min(), population_million.max(), 120)
         ax.plot(x_line, slope * x_line + intercept, color="#D95F02", linewidth=1.5)
+        label_x = population_million.min() + 0.65 * (
+            population_million.max() - population_million.min()
+        )
+        label_y = slope * label_x + intercept
+        intercept_sign = "+" if intercept >= 0 else "-"
+        label_below_line = outcome == R2_ABSOLUTE_OUTCOME
+        ax.annotate(
+            f"$y = {slope:.2f}x {intercept_sign} {abs(intercept):.2f}$\n"
+            f"$r = {record['coefficient']:.2f}$",
+            xy=(label_x, label_y),
+            xytext=(0, -6 if label_below_line else 6),
+            textcoords="offset points",
+            ha="center",
+            va="top" if label_below_line else "bottom",
+            fontsize=7.5,
+            color="#444444",
+            linespacing=1.15,
+            zorder=5,
+        )
         ax.set_xlabel("Population (million)")
         ax.set_ylabel(y_label)
         ax.grid(False)
