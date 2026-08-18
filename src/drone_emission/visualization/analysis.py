@@ -11624,7 +11624,7 @@ def plot_r2_population_reduction_contrast(
     df: pd.DataFrame,
     analysis: dict,
     save_dir: str = None,
-    figsize: tuple = (3.4, 3.8),
+    figsize: tuple = (3.53, 3.92),
     for_latex: bool = False,
     plot_title: bool = False,
 ):
