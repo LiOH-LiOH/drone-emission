@@ -3522,6 +3522,7 @@ def _plot_break_even_heatmap_panel(
     show_ylabel: bool = True,
     show_y_ticklabels: bool = True,
     show_annotation: bool = True,
+    show_contour_label: bool = True,
 ):
     """Draw one fixed-GEF lifecycle-emission difference heatmap."""
     air_distance_grid_km = prepared["air_distance_grid_km"]
@@ -3555,12 +3556,13 @@ def _plot_break_even_heatmap_panel(
             linewidths=1.3,
             zorder=6,
         )
-        ax.clabel(
-            contour,
-            fmt={0.0: "Delta g = 0"},
-            fontsize=8 * font_scale,
-            inline=True,
-        )
+        if show_contour_label:
+            ax.clabel(
+                contour,
+                fmt={0.0: "Delta g = 0"},
+                fontsize=8 * font_scale,
+                inline=True,
+            )
     ax.set_xlim(*distance_limits)
     ax.set_ylim(*heatmap_detour_limits)
     ax.set_xlabel("Air distance (km)", fontsize=11 * font_scale)
@@ -3990,6 +3992,7 @@ def plot_break_even_contribution_decomposition_marching_cubes_subfigures(
                 show_ylabel=show_ylabel,
                 show_y_ticklabels=show_y_ticklabels,
                 show_annotation=False,
+                show_contour_label=False,
             )
             ax.tick_params(axis="both", labelsize=6.5)
             if panel == "c":
