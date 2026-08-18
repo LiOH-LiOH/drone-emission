@@ -73,6 +73,7 @@ Available figures:
     figure1_framework, figure2_framework, figure3_framework, figure4_framework,
     regions_map_kappa_panels,
     drone_tech_sensitivity,
+    threshold_resilience_national_overview,
     oat_tornado_story, oat_tornado_full
 """
 
@@ -5752,6 +5753,28 @@ def render_all(
             out=out,
             for_latex=for_latex,
         )
+
+    if _want("threshold_resilience_national_overview"):
+        summary_path = os.path.join(data_dir, "all_threshold_resilience.csv")
+        if not os.path.exists(summary_path):
+            print(
+                "threshold_resilience_national_overview skipped — missing "
+                f"{summary_path}; run threshold resilience first"
+            )
+        else:
+            from visualization.sensitivity import (
+                plot_threshold_resilience_national_subfigures,
+            )
+
+            plot_threshold_resilience_national_subfigures(
+                pd.read_csv(summary_path),
+                save_path=os.path.join(
+                    out,
+                    "threshold_resilience_national_overview.png",
+                ),
+                for_latex=for_latex,
+                plot_title=plot_title,
+            )
 
     def _figure1_needs_vector_source(name):
         if not figure1_framework_requested:

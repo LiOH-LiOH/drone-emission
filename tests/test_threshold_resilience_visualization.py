@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import sys
 import tempfile
 from pathlib import Path
@@ -13,6 +14,7 @@ matplotlib.use("Agg")
 
 import numpy as np  # noqa: E402
 import pandas as pd  # noqa: E402
+from pypdf import PdfReader  # noqa: E402
 
 HERE = Path(__file__).resolve().parent
 SRC = HERE.parent / "src" / "drone_emission"
@@ -30,6 +32,7 @@ from visualization.sensitivity import (  # noqa: E402
     THRESHOLD_RESILIENCE_TYPICAL_CITIES,
     plot_threshold_resilience_driver_forest,
     plot_threshold_resilience_national_overview,
+    plot_threshold_resilience_national_subfigures,
     plot_threshold_resilience_typology,
     plot_threshold_resilience_typical_city_distributions,
     prepare_threshold_resilience_drivers,
@@ -169,6 +172,100 @@ def test_national_overview_uses_shared_continuous_probability_scale() -> None:
     assert all(call["cmap"].name == "viridis" for call in map_calls)
     assert all(call["norm"].vmin == 0.0 for call in map_calls)
     assert all(call["norm"].vmax == 1.0 for call in map_calls)
+
+
+def test_national_subfigures_write_fixed_size_pdfs_and_shared_report() -> None:
+    city_keys = tuple(f"city_{index}" for index in range(314))
+    rows = []
+    for city_index, city in enumerate(city_keys):
+        independent = city_index / (len(city_keys) - 1)
+        for scenario in THRESHOLD_RESILIENCE_SCENARIOS:
+            probability = (
+                independent if scenario == "independent"
+                else max(0.0, independent - 0.08)
+            )
+            rows.append({
+                "region_key": city,
+                "region_name_cn": f"城市{city_index}",
+                "region_name_en": city.replace("_", " ").title(),
+                "scenario": scenario,
+                "n_samples": 10000,
+                "prob_reduction_positive": probability,
+                "baseline_fixed_threshold_reduction_pct": 10.0,
+            })
+    summary = pd.DataFrame(rows)
+    map_calls = []
+
+    def fake_adcodes(names):
+        return {name: str(index) for index, name in enumerate(names)}
+
+    def fake_map(**kwargs):
+        map_calls.append(kwargs)
+
+    with tempfile.TemporaryDirectory() as temporary_dir:
+        base_path = (
+            Path(temporary_dir) / "threshold_resilience_national_overview.png"
+        )
+        with patch(
+            "visualization.regions._batch_city_to_adcode", fake_adcodes
+        ), patch(
+            "visualization.regions.plot_regions_on_china_map", fake_map
+        ):
+            outputs = plot_threshold_resilience_national_subfigures(
+                summary,
+                save_path=str(base_path),
+                for_latex=True,
+            )
+
+        independent_path = Path(outputs["independent"])
+        stress_path = Path(outputs["correlated_adverse_stress"])
+        colorbar_path = Path(outputs["colorbar"])
+        report_path = Path(outputs["report"])
+        for path in (independent_path, stress_path, colorbar_path, report_path):
+            assert path.exists()
+            assert path.stat().st_size > 0
+
+        assert independent_path.name.endswith("_independent.pdf")
+        assert stress_path.name.endswith("_stress.pdf")
+        assert colorbar_path.name.endswith("_colorbar.pdf")
+
+        def page_size_mm(path):
+            page = PdfReader(str(path)).pages[0]
+            return (
+                float(page.mediabox.width) * 25.4 / 72.0,
+                float(page.mediabox.height) * 25.4 / 72.0,
+            )
+
+        np.testing.assert_allclose(
+            page_size_mm(independent_path), (88, 75), atol=0.1
+        )
+        np.testing.assert_allclose(page_size_mm(stress_path), (88, 75), atol=0.1)
+        np.testing.assert_allclose(page_size_mm(colorbar_path), (90, 12), atol=0.1)
+
+        report = json.loads(report_path.read_text(encoding="utf-8"))
+        assert report["sample"] == {
+            "city_count": 314,
+            "configured_city_count": 328,
+            "fallback_gef_note": (
+                "Tibet, Hong Kong and Macao use the national fallback GEF."
+            ),
+        }
+        assert report["global_encodings"]["colormap"] == "viridis"
+        assert report["global_encodings"]["probability_range"] == [0.0, 1.0]
+        assert report["layout"]["map_size_mm"] == {
+            "width": 88.0,
+            "height": 75.0,
+        }
+        assert set(report["scenarios"]) == set(THRESHOLD_RESILIENCE_SCENARIOS)
+
+    assert [call["color_by"] for call in map_calls] == list(
+        THRESHOLD_RESILIENCE_SCENARIOS
+    )
+    assert all(call["cmap"].name == "viridis" for call in map_calls)
+    assert all(call["norm"].vmin == 0.0 for call in map_calls)
+    assert all(call["norm"].vmax == 1.0 for call in map_calls)
+    assert all(call["draw_colorbar"] is False for call in map_calls)
+    assert all(call["draw_legend"] is False for call in map_calls)
 
 
 def test_summary_and_samples_validate_complete_inputs() -> None:
