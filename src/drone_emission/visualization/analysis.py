@@ -3078,7 +3078,7 @@ def plot_regions_map_pathway_scenario_maps(
         ax_twin = _plot_pathway_curve_panel(
             ax,
             curve_data.get(curve_key),
-            panel_label,
+            "",
             axis_label,
             orientation="horizontal",
             saved_limits=curve_saved_limits,
@@ -3088,6 +3088,7 @@ def plot_regions_map_pathway_scenario_maps(
             show_share_axis=True,
             mirror_x=False,
         )
+        ax.grid(False)
         if plot_title:
             ax.set_title(title, fontsize=11, fontweight="bold", pad=8)
         fig.subplots_adjust(left=0.17, right=0.83, bottom=0.22, top=0.88)
