@@ -40,8 +40,8 @@
 %------------------------------------------------------------
 %This block of code defines the information to appear in the
 %Title page
-\title[Drone vs E-Bike Delivery Emissions] %optional
-{Drone food delivery can reduce emissions in clean-grid cities with indirect road networks}
+\title[Urban form and electricity systems] %optional
+{Urban form and electricity systems govern the lifecycle climate benefits of drone food delivery}
 
 % \subtitle{A short story}
 
@@ -738,6 +738,7 @@
   % \textbf{Per-order allocation:} Production emissions are allocated based on lifetime deliveries, accounting for vehicle lifespan and battery replacement cycles.
 \end{frame}
 
+\iffalse
 \section{Results}
 
 \iffalse
@@ -1313,12 +1314,376 @@
   \end{columns}
 \end{frame}
 
+\fi
+
+\newcommand{\PanelGraphic}[3]{%
+  \begin{tikzpicture}[baseline=(panel.base)]
+    \node[inner sep=0] (panel) {\includegraphics[#2]{#3}};
+    \node[anchor=north west, font=\bfseries\scriptsize, fill=white,
+      inner sep=1pt] at (panel.north west) {#1};
+  \end{tikzpicture}%
+}
+
+\section{Results}
+
+\begin{frame}{Selective allocation links demand, routes, and lifecycle emissions}
+  \centering
+  \includegraphics[
+    width=0.94\linewidth,
+    height=0.52\textheight,
+    keepaspectratio,
+    trim=0 382 0 0,
+    clip
+  ]{../paper/figures/fig1_allocation_framework_national.pdf}
+
+  \vspace{0.3em}
+  \begin{minipage}{0.94\linewidth}
+    \footnotesize
+    \begin{itemize}
+      \item Merchant sales are allocated to nearby residential buildings to generate door-to-door OD demand.
+      \item Drones use direct air routes; e-bikes follow the pedestrian-accessible road network.
+      \item Provincial grid factors convert route energy into use-phase emissions before the lower-emission mode is selected.
+    \end{itemize}
+  \end{minipage}
+  \par\raggedright\scriptsize\color{gray} Main Fig.~1a
+\end{frame}
+
+\begin{frame}{Selective deployment cuts national lifecycle emissions by 14.18\%}
+  \begin{columns}[T,totalwidth=\linewidth]
+    \begin{column}{0.61\textwidth}
+      \raggedright\textbf{b}\par\vspace{-1.1em}
+      \centering
+      \includegraphics[width=0.23\linewidth]{../../figures/paper/subfigure/median_trip_production_emissions.pdf}
+      \includegraphics[width=0.46\linewidth]{../../figures/paper/subfigure/median_trip_use_phase_emissions.pdf}
+      \includegraphics[width=0.23\linewidth]{../../figures/paper/subfigure/median_trip_eol_emissions.pdf}
+
+      \vspace{0.5em}
+      \PanelGraphic{c}{width=0.96\linewidth}{../../figures/paper/subfigure/province_total_ebike_lifecycle.pdf}
+    \end{column}
+    \begin{column}{0.35\textwidth}
+      \footnotesize
+      \begin{itemize}
+        \item Across 314 cities, selective allocation avoids \textbf{49.14~\ktCOtwoePerYr{}} from a \textbf{346.58~\ktCOtwoePerYr{}} all-e-bike baseline.
+        \item For Beijing's weighted-median order, lower drone production and end-of-life burdens outweigh its higher use-phase emissions.
+        \item Guangdong and Zhejiang combine high provincial baselines with broad within-province variation; Beijing and Shanghai concentrate large savings in single metropolitan markets.
+      \end{itemize}
+    \end{column}
+  \end{columns}
+  \scriptsize\color{gray} Main Fig.~1b,c
+\end{frame}
+
+\begin{frame}{Absolute mitigation concentrates in major metropolitan markets}
+  \begin{columns}[T,totalwidth=\linewidth]
+    \begin{column}{0.61\textwidth}
+      \centering
+      \PanelGraphic{a}{width=0.96\linewidth}{../../figures/paper/subfigure/regions_map_oracle_reduction_rank_map_only.pdf}
+    \end{column}
+    \begin{column}{0.35\textwidth}
+      \footnotesize
+      \begin{itemize}
+        \item Beijing leads at \textbf{3.27~kt~\COtwoe{}~yr$^{-1}$}, followed by Guangzhou (2.52), Shenzhen (2.22), Shanghai (2.14), Chengdu (2.01), and Chongqing (1.58).
+        \item These are also China's six largest urban populations, although their population and mitigation rankings differ.
+        \item Market scale therefore strongly shapes absolute mitigation.
+      \end{itemize}
+    \end{column}
+  \end{columns}
+  \scriptsize\color{gray} Main Fig.~2a
+\end{frame}
+
+\begin{frame}{Mitigation efficiency follows a different geography}
+  \centering
+  \PanelGraphic{d}{width=0.92\linewidth,height=0.43\textheight,keepaspectratio}{../../figures/paper/subfigure/city_reduction_rank_all_macro_region.pdf}
+
+  \vspace{0.4em}
+  \begin{minipage}{0.92\linewidth}
+    \footnotesize
+    \begin{itemize}
+      \item Panzhihua reaches \textbf{45.05\%}; the other nine highest percentage reductions are all in Yunnan (36.33--42.20\%).
+      \item Large metropolitan markets dominate absolute savings, whereas the highest mitigation efficiencies concentrate in Southwest China.
+      \item Absolute mitigation and mitigation efficiency therefore identify different deployment priorities.
+    \end{itemize}
+  \end{minipage}
+  \par\raggedright\scriptsize\color{gray} Main Fig.~2d
+\end{frame}
+
+\begin{frame}{Climate opportunity and pilot capture define deployment candidates}
+  \centering
+  \PanelGraphic{a}{width=0.64\linewidth,height=0.48\textheight,keepaspectratio}{../../figures/paper/subfigure/city_reduction_potential_scatter.pdf}
+  \PanelGraphic{b}{width=0.22\linewidth,height=0.48\textheight,keepaspectratio}{../../figures/paper/subfigure/city_concentration_distribution.pdf}
+
+  \vspace{0.3em}
+  \begin{minipage}{0.94\linewidth}
+    \footnotesize
+    \begin{itemize}
+      \item Median thresholds identify \textbf{98} scale-deployment, \textbf{59} pilot-validation, and \textbf{156} defer-deployment candidates.
+      \item Among pilot-validation candidates, 36 have high MPCS, 15 medium MPCS, and only 8 low MPCS: most contain a spatially concentrated pilot opportunity.
+      \item Climate opportunity defines the candidate group; MPCS separately tests whether favourable orders fit within a bounded 2--5~km pilot area.
+    \end{itemize}
+  \end{minipage}
+  \par\raggedright\scriptsize\color{gray} Main Fig.~3
+\end{frame}
+
+\begin{frame}{Population explains mitigation scale, not relative efficiency}
+  \begin{columns}[T,totalwidth=\linewidth]
+    \begin{column}{0.61\textwidth}
+      \centering
+      \PanelGraphic{a}{width=0.48\linewidth}{../../figures/paper/subfigure/r2_population_absolute_reduction.pdf}
+      \PanelGraphic{b}{width=0.48\linewidth}{../../figures/paper/subfigure/r2_population_relative_reduction.pdf}
+    \end{column}
+    \begin{column}{0.35\textwidth}
+      \footnotesize
+      \begin{itemize}
+        \item Population strongly predicts absolute reduction ($r\approx0.80$) but shows no clear relationship with percentage reduction.
+        \item Chengdu combines 2.01~kt and 35.01\%; Guangzhou and Chongqing also perform strongly on both dimensions.
+        \item Beijing, Shenzhen, Shanghai, and Hangzhou have larger absolute savings but only 10.65--14.14\% reductions; Wuhan shows the reverse pattern.
+      \end{itemize}
+    \end{column}
+  \end{columns}
+  \scriptsize\color{gray} Extended Data Fig.~1
+\end{frame}
+
+\begin{frame}{Cleaner grids preserve the drone's embodied-emission advantage}
+  \centering
+  \includegraphics[
+    width=0.92\linewidth,
+    height=0.43\textheight,
+    keepaspectratio,
+    trim=0 415 0 0,
+    clip
+  ]{../paper/figures/fig4_gef_distance_detour.pdf}
+
+  \vspace{0.3em}
+  \begin{columns}[T,totalwidth=0.94\linewidth]
+    \begin{column}{0.47\linewidth}
+      \footnotesize
+      \begin{itemize}
+        \item At GEF 0.1--0.2~\kgCOtwoePerKWh{}, mean lifecycle emissions are \textbf{19.25~\gCOtwoe{}} for drones versus \textbf{28.94} for e-bikes.
+      \end{itemize}
+    \end{column}
+    \begin{column}{0.47\linewidth}
+      \footnotesize
+      \begin{itemize}
+        \item At GEF 0.7--0.8, totals converge to 90.92 and 93.17~\gCOtwoe{} per order.
+        \item Production and end-of-life remain near 3~\gCOtwoe{}; grid intensity changes the operational term.
+      \end{itemize}
+    \end{column}
+  \end{columns}
+  \par\raggedright\scriptsize\color{gray} Main Fig.~4a
+\end{frame}
+
+\begin{frame}{Longer trips increasingly favour drones}
+  \centering
+  \includegraphics[
+    width=0.92\linewidth,
+    height=0.46\textheight,
+    keepaspectratio,
+    trim=0 203 0 190,
+    clip
+  ]{../paper/figures/fig4_gef_distance_detour.pdf}
+
+  \vspace{0.2em}
+  \begin{columns}[T,totalwidth=0.94\linewidth]
+    \begin{column}{0.47\linewidth}
+      \footnotesize
+      \begin{itemize}
+        \item Savings rise \textbf{4.05--6.87~\gCOtwoe{}} for each additional air-km across Chengdu, Guangzhou, Beijing, and Shanghai.
+        \item Chengdu's 80.20\% hydropower mix keeps every displayed distance bin favourable.
+      \end{itemize}
+    \end{column}
+    \begin{column}{0.47\linewidth}
+      \footnotesize
+      \begin{itemize}
+        \item In Guangzhou, Beijing, and Shanghai, the shortest bins remain negative with only 21.53--28.50\% drone share.
+        \item Longer trips dilute fixed take-off and landing energy while retaining the direct-route advantage.
+      \end{itemize}
+    \end{column}
+  \end{columns}
+  \par\raggedright\scriptsize\color{gray} Main Fig.~4b--e
+\end{frame}
+
+\begin{frame}{Road detours strengthen benefits within both grid regimes}
+  \centering
+  \includegraphics[
+    width=0.92\linewidth,
+    height=0.46\textheight,
+    keepaspectratio,
+    trim=0 0 0 405,
+    clip
+  ]{../paper/figures/fig4_gef_distance_detour.pdf}
+
+  \vspace{0.2em}
+  \begin{columns}[T,totalwidth=0.94\linewidth]
+    \begin{column}{0.47\linewidth}
+      \footnotesize
+      \begin{itemize}
+        \item Detour ratio is positively associated with percentage reduction in both low-GEF cities ($n=42$, $r=0.729$) and high-GEF cities ($n=238$, $r=0.940$).
+        \item Chengdu combines low GEF (0.1404) with a 1.484 detour ratio and reaches 35.01\%.
+      \end{itemize}
+    \end{column}
+    \begin{column}{0.47\linewidth}
+      \footnotesize
+      \begin{itemize}
+        \item Guangzhou and Shenzhen share one provincial GEF, isolating the role of road geometry.
+        \item Guangzhou's higher detour ratio produces a larger reduction: 20.11\% versus 14.14\% in Shenzhen.
+      \end{itemize}
+    \end{column}
+  \end{columns}
+  \par\raggedright\scriptsize\color{gray} Main Fig.~4f,g
+\end{frame}
+
+\begin{frame}{Grid, distance, and detour jointly define the break-even envelope}
+  \begin{columns}[T,totalwidth=\linewidth]
+    \begin{column}{0.61\textwidth}
+      \centering
+      \includegraphics[height=0.70\textheight]{../paper/figures/extended_data_fig3_break_even_operating_envelope.pdf}
+    \end{column}
+    \begin{column}{0.35\textwidth}
+      \footnotesize
+      \begin{itemize}
+        \item At Chengdu's GEF (0.1404), most evaluated distance--detour combinations favour drones; the median drone-minus-e-bike difference is $-16.9$~\gCOtwoe{}.
+        \item At GEF 0.49, short and low-detour trips remain e-bike-favourable, reaching +19.1~\gCOtwoe{}.
+        \item This idealized envelope explains the modelled allocation boundary rather than replacing observed city and order distributions.
+      \end{itemize}
+    \end{column}
+  \end{columns}
+  \scriptsize\color{gray} Extended Data Fig.~3
+\end{frame}
+
+\begin{frame}{Avoided road detours are the largest positive contribution}
+  \begin{columns}[T,totalwidth=\linewidth]
+    \begin{column}{0.61\textwidth}
+      \centering
+      \includegraphics[width=\linewidth,height=0.72\textheight,keepaspectratio]{../paper/figures/fig5_contribution_decomposition.pdf}
+    \end{column}
+    \begin{column}{0.35\textwidth}
+      \footnotesize
+      \begin{itemize}
+        \item Nationally, avoided detours contribute \textbf{+33.70 points} and production plus end-of-life \textbf{+9.58}; bundling offsets \textbf{$-$19.96} and drone energy \textbf{$-$9.14}.
+        \item Beijing reaches only 13.19\% but leads absolute savings at 3.27~kt; Guangzhou reaches 20.11\% and 2.52~kt.
+        \item Kunming reaches 40.69\% yet saves only 0.62~kt: contribution structure shapes efficiency, while market scale shapes the total.
+      \end{itemize}
+    \end{column}
+  \end{columns}
+  \scriptsize\color{gray} Main Fig.~5
+\end{frame}
+
+\begin{frame}{Grid decarbonization expands mitigation and drone substitution}
+  \begin{columns}[T,totalwidth=\linewidth]
+    \begin{column}{0.61\textwidth}
+      \centering
+      \PanelGraphic{a}{width=0.48\linewidth}{../../figures/paper/subfigure/regions_map_pathway_scenarios_today.pdf}
+      \PanelGraphic{b}{width=0.48\linewidth}{../../figures/paper/subfigure/regions_map_pathway_scenarios_halved_gef.pdf}
+    \end{column}
+    \begin{column}{0.35\textwidth}
+      \footnotesize
+      \begin{itemize}
+        \item Current conditions save \textbf{49.14~kt~\COtwoe{}~yr$^{-1}$}; the median city assigns \textbf{47.11\%} of orders to drones.
+        \item Halving provincial GEFs raises savings to \textbf{184.96~kt} and median drone share to \textbf{76.69\%}.
+        \item Provincial median share rises from 16.80\% to 52.10\% in Ningxia and 57.03\% to 88.66\% in Guangdong; Sichuan is already near saturation.
+      \end{itemize}
+    \end{column}
+  \end{columns}
+  \scriptsize\color{gray} Main Fig.~6a,b
+\end{frame}
+
+\begin{frame}{Stronger bundling improves the system while reducing drone share}
+  \begin{columns}[T,totalwidth=\linewidth]
+    \begin{column}{0.61\textwidth}
+      \centering
+      \PanelGraphic{c}{width=0.48\linewidth}{../../figures/paper/subfigure/regions_map_pathway_scenarios_operator_bundling.pdf}
+      \PanelGraphic{d}{width=0.48\linewidth}{../../figures/paper/subfigure/regions_map_pathway_scenarios_halved_gef_bundling.pdf}
+    \end{column}
+    \begin{column}{0.35\textwidth}
+      \footnotesize
+      \begin{itemize}
+        \item Stronger bundling raises total savings to \textbf{72.21~kt} by improving e-bike operation, but median drone share falls to \textbf{20.24\%}.
+        \item Drone share falls to 4.10\% in Ningxia and 29.16\% in Guangdong, but remains 92.02\% in Sichuan.
+        \item Combining both levers saves \textbf{190.39~kt} with 46.58\% median drone share: mixed-fleet mitigation, not drone share, is the objective.
+      \end{itemize}
+    \end{column}
+  \end{columns}
+  \scriptsize\color{gray} Main Fig.~6c,d
+\end{frame}
+
+\section{Discussion}
+
+\begin{frame}{Modelled benefits remain positive under broad parameter uncertainty}
+  \begin{columns}[T,totalwidth=\linewidth]
+    \begin{column}{0.61\textwidth}
+      \centering
+      \PanelGraphic{a}{width=0.46\linewidth}{../../figures/paper/subfigure/threshold_resilience_national_overview_independent.pdf}
+      \PanelGraphic{b}{width=0.46\linewidth}{../../figures/paper/subfigure/threshold_resilience_national_overview_stress.pdf}
+
+      \vspace{0.3em}
+      \PanelGraphic{c}{width=0.42\linewidth}{../../figures/paper/subfigure/threshold_resilience_national_overview_independent_kde.pdf}
+      \PanelGraphic{d}{width=0.42\linewidth}{../../figures/paper/subfigure/threshold_resilience_national_overview_stress_kde.pdf}
+    \end{column}
+    \begin{column}{0.35\textwidth}
+      \footnotesize
+      \begin{itemize}
+        \item Under independent perturbations, \textbf{257 cities (81.85\%)} exceed a 50\% probability of positive reduction.
+        \item Under correlated adverse stress, \textbf{271 cities (86.31\%)} exceed the same threshold.
+        \item Uncertainty does not erase the opportunity, but the probability of realizing it remains spatially heterogeneous.
+      \end{itemize}
+    \end{column}
+  \end{columns}
+  \scriptsize\color{gray} Extended Data Fig.~2
+\end{frame}
+
+\begin{frame}{City-specific road-distance rules retain most modelled mitigation}
+  \begin{columns}[T,totalwidth=\linewidth]
+    \begin{column}{0.61\textwidth}
+      \centering
+      \PanelGraphic{a}{width=0.48\linewidth}{../../figures/paper/subfigure/distance_threshold_city_landscape.pdf}
+      \PanelGraphic{b}{width=0.48\linewidth}{../../figures/paper/subfigure/distance_threshold_oracle_performance.pdf}
+    \end{column}
+    \begin{column}{0.35\textwidth}
+      \footnotesize
+      \begin{itemize}
+        \item The median city cutoff is \textbf{2.05~km}, spanning 0.03--4.26~km: a national uniform threshold cannot represent city heterogeneity.
+        \item The road rule achieves 9.28\% median city reduction versus 11.34\% under trip-level optimization.
+        \item Median mitigation retention is \textbf{82.65\%}, with a median gap of only 1.89 percentage points.
+      \end{itemize}
+    \end{column}
+  \end{columns}
+  \scriptsize\color{gray} Extended Data Fig.~4
+\end{frame}
+
+\begin{frame}{This is a lifecycle opportunity, not a deployment timetable}
+  \begin{columns}[T,totalwidth=\linewidth]
+    \begin{column}{0.48\textwidth}
+      \small
+      \textbf{Deployment logic}
+      \begin{itemize}
+        \item Screen cities by absolute mitigation and relative efficiency
+        \item Test whether favourable orders can be captured in bounded pilot areas
+        \item Calibrate assignment rules to local grids, roads, and demand
+      \end{itemize}
+    \end{column}
+    \begin{column}{0.48\textwidth}
+      \small
+      \textbf{Model boundaries}
+      \begin{itemize}
+        \item Fixed 1~kg payload and Beijing-calibrated demand transferred nationally
+        \item Weather, airspace, service time, fleet capacity, safety, noise, and infrastructure excluded
+        \item Annual provincial GEFs do not resolve marginal or time-of-day emissions
+      \end{itemize}
+    \end{column}
+  \end{columns}
+
+  \vspace{0.7em}
+  \begin{block}{Conclusion}
+    Selective drones can complement efficient e-bike delivery; they should not be treated as a blanket replacement.
+  \end{block}
+\end{frame}
+
 \section{References}
 
 \begin{frame}[allowframebreaks]{References}
   \printbibliography
 \end{frame}
 
+\iffalse
 \section{Appendix}
 
 \begin{frame}{Use-phase Emission Model - E-bike Parameters}
@@ -1394,5 +1759,6 @@
     \end{tabular}
   \end{center}
 \end{frame}
+\fi
 
 \end{document}
