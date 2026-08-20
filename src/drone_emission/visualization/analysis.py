@@ -49,7 +49,10 @@ WEIGHTED_DRONE_SHARE_COLUMNS = (
 )
 ORACLE_REDUCTION_KG_COL = "oracle_min_reduction_vs_ebike_kg"
 ORACLE_REDUCTION_T_COL = "oracle_min_reduction_vs_ebike_t"
-PATHWAY_SCENARIOS_CACHE_VERSION = 1
+PATHWAY_SCENARIOS_CACHE_VERSION = 2
+PATHWAY_CURVE_N_POINTS = 21
+PATHWAY_CURVE_MAX_ROWS_PER_CITY = 1500
+PATHWAY_CURVE_RANDOM_STATE = 42
 ORACLE_REDUCTION_MAP_ONLY_FIGURE = "regions_map_oracle_reduction_rank_map_only"
 ORACLE_REDUCTION_LABEL_CITIES = (
     "Beijing",
@@ -1011,9 +1014,9 @@ def _build_pathway_curve_data(
     exp_config: dict | None,
     baseline_kappa: float,
     kappa_end: float = 0.65,
-    n_points: int = 7,
-    max_rows_per_city: int = 1500,
-    random_state: int = 42,
+    n_points: int = PATHWAY_CURVE_N_POINTS,
+    max_rows_per_city: int = PATHWAY_CURVE_MAX_ROWS_PER_CITY,
+    random_state: int = PATHWAY_CURVE_RANDOM_STATE,
 ) -> dict:
     """Build sampled nationwide kappa and GEF pathway curves."""
     from emission.cal_single_delivery import create_drone_params, create_ebike_params
@@ -1189,6 +1192,11 @@ def _pathway_scenarios_cache_meta(
         "od_files": _pathway_city_od_cache_signatures(stats_df, data_dir),
         "exp_config": _pathway_exp_config_cache_signature(exp_config),
         "baseline_kappa": float(baseline_kappa),
+        "curve_sampling": {
+            "n_points": PATHWAY_CURVE_N_POINTS,
+            "max_rows_per_city": PATHWAY_CURVE_MAX_ROWS_PER_CITY,
+            "random_state": PATHWAY_CURVE_RANDOM_STATE,
+        },
         "panels": [
             {
                 "label": label,
@@ -1840,154 +1848,39 @@ def _write_regions_map_pathway_scenarios_report(
     print(f"Regions map pathway scenarios report saved to {report_path}")
 
 
-def _pathway_scenario_maps_panel_report(
-    panel_df: pd.DataFrame,
-    color_col: str,
-    ax_map,
-    panel_label: str,
-    title: str,
-    metric_title: str,
-    kappa: float,
-    gef_mult: float,
-    annual_saved_kg: float,
-    drone_share_median: float,
-):
-    """Return compact metadata for one scenario-map panel."""
-    city_values = panel_df.reindex(
-        columns=[
-            "region_key",
-            "region_name_en",
-            "region_name_cn",
-            "province",
-            color_col,
-        ]
-    ).copy()
-    city_values[color_col] = pd.to_numeric(city_values[color_col], errors="coerce")
-    ranked = city_values.dropna(subset=[color_col]).sort_values(color_col, ascending=False)
-
-    def compact_city_records(frame):
-        records = []
-        for _, row in frame.iterrows():
-            records.append(
-                {
-                    "region_key": _json_safe_scalar(row.get("region_key")),
-                    "region_name_en": _json_safe_scalar(row.get("region_name_en")),
-                    "region_name_cn": _json_safe_scalar(row.get("region_name_cn")),
-                    "province": _json_safe_scalar(row.get("province")),
-                    color_col: _json_safe_scalar(row.get(color_col)),
-                }
-            )
-        return records
-
-    return {
-        "panel_letter": panel_label,
-        "title": title,
-        "metric": metric_title,
-        "scenario": {
-            "kappa": _json_safe_scalar(kappa),
-            "gef_multiplier": _json_safe_scalar(gef_mult),
-            "annual_co2_saved_kt_per_year": _json_safe_scalar(annual_saved_kg / 1e6),
-            "median_city_drone_share_pct": _json_safe_scalar(drone_share_median),
-        },
-        "map_axis": _axis_report(ax_map),
-        "map_color_by": color_col,
-        "top_10_cities_by_map_value": compact_city_records(ranked.head(10)),
-        "bottom_10_cities_by_map_value": compact_city_records(
-            ranked.tail(10).sort_values(color_col)
-        ),
-    }
-
-
 def _write_regions_map_pathway_scenario_maps_report(
     save_path: str,
+    output_paths: dict,
     figsize: tuple,
     named_csv_path: str,
     stats_csv_path: str,
-    panels: list[tuple],
-    panel_dfs: dict,
-    share_dfs: dict,
-    map_panel_specs: list[tuple],
     curve_data: dict,
     curve_axes: list,
     curve_twins: list,
-    annual_saved_total_kg: dict,
-    drone_share_median: dict,
-    reduction_cmap,
-    reduction_bins,
-    reduction_edges,
-    reduction_cbar_ax,
-    share_cmap,
-    share_bins,
-    share_edges,
-    share_cbar_ax,
 ):
-    """Write a compact JSON report for regions_map_pathway_scenario_maps."""
+    """Write a compact JSON report for the standalone pathway curves."""
     report_path = save_path.rsplit(".", 1)[0] + "_report.json"
-    scenario_by_label = {
-        label: (title, kappa, gef_mult, strategy)
-        for label, title, kappa, gef_mult, strategy in panels
-    }
-    panel_reports = {}
-    for (
-        ax,
-        panel_letter,
-        scenario_label,
-        scenario_title,
-        metric_title,
-        color_col,
-        _cmap,
-        _norm,
-    ) in map_panel_specs:
-        title, kappa, gef_mult, _strategy = scenario_by_label[scenario_label]
-        panel_df = (
-            panel_dfs[scenario_label]
-            if color_col == "max_lifecycle_reduction_pct"
-            else share_dfs[scenario_label]
-        )
-        key = f"{panel_letter}_{scenario_title.lower().replace(' ', '_')}_{metric_title.lower().replace(' ', '_')}"
-        panel_reports[key] = _pathway_scenario_maps_panel_report(
-            panel_df=panel_df,
-            color_col=color_col,
-            ax_map=ax,
-            panel_label=panel_letter,
-            title=title,
-            metric_title=metric_title,
-            kappa=kappa,
-            gef_mult=gef_mult,
-            annual_saved_kg=annual_saved_total_kg.get(scenario_label, np.nan),
-            drone_share_median=drone_share_median.get(scenario_label, np.nan),
-        )
-
     payload = {
         "figure_name": "regions_map_pathway_scenario_maps",
-        "figure_path": save_path,
+        "figure_paths": output_paths,
         "source_named_csv_path": named_csv_path,
         "source_stats_csv_path": stats_csv_path,
-        "figure_size_inches": {"width": figsize[0], "height": figsize[1]},
+        "panel_size_inches": {"width": figsize[0], "height": figsize[1]},
+        "panel_size_mm": {
+            "width": figsize[0] * 25.4,
+            "height": figsize[1] * 25.4,
+        },
         "coordinate_convention": (
-            "Axis bbox values are figure-fraction coordinates. Map colors encode "
-            "scenario reduction or drone share; gray indicates unstudied regions."
+            "Axis bbox values are figure-fraction coordinates. Both panels run "
+            "left-to-right from today's parameter value toward the improved scenario."
         ),
         "layout": {
-            "row_1": "Emission reduction maps: Halved GEF, Today, Operator bundling",
-            "row_2": "Drone share maps: Halved GEF, Today, Operator bundling",
-            "row_3": "Pathway curves: mirrored GEF curve and kappa curve",
+            "assembly": "Standalone g and h panels intended for vertical stacking",
+            "top": "g: grid emission factor pathway",
+            "bottom": "h: e-bike bundling pathway",
+            "suggested_inter_panel_gap_mm": 6.0,
         },
         "global_encodings": {
-            "reduction_map_colorbar": _colorbar_report(
-                reduction_cbar_ax,
-                reduction_bins,
-                reduction_edges,
-                "Reduction vs today's all-ebike anchor (%)",
-                reduction_cmap,
-            ),
-            "drone_share_map_colorbar": _colorbar_report(
-                share_cbar_ax,
-                share_bins,
-                share_edges,
-                "Drone share (%)",
-                share_cmap,
-            ),
             "curve_colors": {
                 "co2_saved": "#1b7837",
                 "drone_share": "#2166ac",
@@ -2001,7 +1894,6 @@ def _write_regions_map_pathway_scenario_maps_report(
             },
         },
         "panels": {
-            **panel_reports,
             "g_gef_pathway_curve": {
                 **_pathway_curve_report(
                     curve_axes[0],
@@ -2011,8 +1903,9 @@ def _write_regions_map_pathway_scenario_maps_report(
                     co2_saved_mark="bar",
                     co2_saved_baseline=0.0,
                 ),
-                "mirrored_x_axis": True,
-                "visible_y_axis": "co2_saved",
+                "left_to_right_direction": "GEF multiplier 1.0 to 0.5",
+                "mirrored_x_axis": False,
+                "visible_y_axes": ["co2_saved", "drone_share"],
             },
             "h_kappa_pathway_curve": {
                 **_pathway_curve_report(
@@ -2023,8 +1916,9 @@ def _write_regions_map_pathway_scenario_maps_report(
                     co2_saved_mark="bar",
                     co2_saved_baseline=0.0,
                 ),
+                "left_to_right_direction": "baseline kappa to 0.65",
                 "mirrored_x_axis": False,
-                "visible_y_axis": "drone_share",
+                "visible_y_axes": ["co2_saved", "drone_share"],
             },
         },
     }
@@ -3090,75 +2984,38 @@ def plot_regions_map_pathway_scenario_maps(
     data_dir: str = None,
     exp_config: dict = None,
     save_path: str = None,
-    figsize: tuple = (18, 14),
+    figsize: tuple = (120 / 25.4, 72 / 25.4),
     for_latex: bool = False,
     plot_title: bool = False,
 ):
-    """Region maps plus pathway curves for selected pathway scenarios.
+    """Render standalone GEF and kappa pathway-curve panels.
 
-    Panels show emission reduction and drone share for the halved-GEF, today's
-    base, and operator-bundling pathway scenarios, followed by the GEF and
-    kappa pathway curves from the shared pathway helpers. Values use the same
-    cache-backed scenario preparation as `plot_regions_map_pathway_scenarios`.
+    Panel g shows the grid-emission-factor pathway and panel h shows the e-bike
+    bundling pathway. Both run left-to-right from today's parameter value to the
+    improved scenario, use shared y-axis limits, and are sized for vertical
+    assembly into an approximately 120 mm by 150 mm paper figure.
 
     Args:
         named_csv_path: Path to all_sensitivity_named.csv.
         stats_csv_path: Path to all_region_stats.csv (provides region_name_cn lookup).
         data_dir: Data root containing city OD-pair CSVs for oracle-min scenarios.
         exp_config: Experiment config for vehicle parameters and GEF path.
-        save_path: Path to save figure. Shows plot if None.
-        figsize: Figure size tuple.
+        save_path: Base output path. Panel suffixes are added before extension.
+            Shows plots if None.
+        figsize: Size tuple for each standalone panel.
         for_latex: If True, save as PDF.
-        plot_title: If True, show figure-level title.
+        plot_title: If True, show a title in each panel.
     """
-    from visualization.regions import plot_regions_on_china_map
-
     scenario_data = _prepare_pathway_scenario_data(
         named_csv_path=named_csv_path,
         stats_csv_path=stats_csv_path,
         data_dir=data_dir,
         exp_config=exp_config,
     )
-    base = scenario_data["base"]
-    panel_dfs = scenario_data["panel_dfs"]
-    panel_named = scenario_data["panel_named"]
-    all_values = scenario_data["all_values"]
-    panels = scenario_data["panels"]
     curve_data = scenario_data["curve_data"]
     drone_share_median = scenario_data["drone_share_median"]
     annual_saved_total_kg = scenario_data["annual_saved_total_kg"]
     baseline_kappa = scenario_data["baseline_kappa"]
-
-    scenario_labels = ("b", "a", "c")
-    share_col_out = "pathway_drone_share_pct"
-    share_dfs = {}
-    for label in scenario_labels:
-        rows = panel_named.get(label, pd.DataFrame())
-        if rows.empty:
-            sub = pd.DataFrame(columns=["region_key", share_col_out])
-        else:
-            share_col = _scenario_drone_share_column(rows)
-            sub = rows[["region_key", share_col]].rename(
-                columns={share_col: share_col_out}
-            )
-        share_dfs[label] = base.drop(columns=[share_col_out], errors="ignore").merge(
-            sub,
-            on="region_key",
-            how="left",
-        )
-
-    if not all_values:
-        print(
-            "plot_regions_map_pathway_scenario_maps: no scenario rows matched any "
-            "region in stats — rendering empty maps. Run sensitivity --stages named first."
-        )
-        v_max = 1.0
-    else:
-        v_max = max(max(all_values), 0.0)
-    reduction_cmap, reduction_norm, reduction_bins, reduction_edges = _build_reduction_cmap(
-        v_max
-    )
-    share_cmap, share_norm, share_bins, share_edges = _build_drone_share_cmap()
 
     if "kappa" in curve_data:
         curve_data["kappa"] = _override_pathway_curve_endpoint(
@@ -3187,242 +3044,85 @@ def plot_regions_map_pathway_scenario_maps(
             drone_share_median.get("b", np.nan),
         )
 
-    fig = plt.figure(figsize=figsize)
-    gs = fig.add_gridspec(
-        3,
-        6,
-        height_ratios=[1, 1, 0.75],
-        hspace=0.16,
-        wspace=0.18,
-    )
-    panel_specs = [
-        (
-            fig.add_subplot(gs[0, 0:2]),
-            "a",
-            "b",
-            "Halved GEF",
-            "Emission reduction",
-            "max_lifecycle_reduction_pct",
-            reduction_cmap,
-            reduction_norm,
-        ),
-        (
-            fig.add_subplot(gs[0, 2:4]),
-            "b",
-            "a",
-            "Today",
-            "Emission reduction",
-            "max_lifecycle_reduction_pct",
-            reduction_cmap,
-            reduction_norm,
-        ),
-        (
-            fig.add_subplot(gs[0, 4:6]),
-            "c",
-            "c",
-            "Operator bundling",
-            "Emission reduction",
-            "max_lifecycle_reduction_pct",
-            reduction_cmap,
-            reduction_norm,
-        ),
-        (
-            fig.add_subplot(gs[1, 0:2]),
-            "d",
-            "b",
-            "Halved GEF",
-            "Drone share",
-            share_col_out,
-            share_cmap,
-            share_norm,
-        ),
-        (
-            fig.add_subplot(gs[1, 2:4]),
-            "e",
-            "a",
-            "Today",
-            "Drone share",
-            share_col_out,
-            share_cmap,
-            share_norm,
-        ),
-        (
-            fig.add_subplot(gs[1, 4:6]),
-            "f",
-            "c",
-            "Operator bundling",
-            "Drone share",
-            share_col_out,
-            share_cmap,
-            share_norm,
-        ),
-    ]
-
-    for (
-        ax,
-        panel_letter,
-        scenario_label,
-        scenario_title,
-        metric_title,
-        color_col,
-        cmap,
-        norm,
-    ) in panel_specs:
-        map_df = (
-            panel_dfs[scenario_label]
-            if color_col == "max_lifecycle_reduction_pct"
-            else share_dfs[scenario_label]
-        )
-        plot_regions_on_china_map(
-            df=map_df,
-            color_by=color_col,
-            ax=ax,
-            plot_title=False,
-            cmap=cmap,
-            norm=norm,
-            draw_colorbar=False,
-            draw_legend=False,
-        )
-        ax.set_xlabel("")
-        ax.set_ylabel("")
-        ax.set_xticks([])
-        ax.set_yticks([])
-        ax.grid(False)
-        for spine in ax.spines.values():
-            spine.set_visible(False)
-        ax.text(
-            -0.02,
-            1.02,
-            panel_letter,
-            transform=ax.transAxes,
-            fontsize=14,
-            fontweight="bold",
-            va="bottom",
-            ha="right",
-        )
-
-    curve_axes = [
-        fig.add_subplot(gs[2, 0:3]),
-        fig.add_subplot(gs[2, 3:6]),
-    ]
     curve_saved_limits, curve_share_limits = _pathway_curve_metric_limits(curve_data)
-    curve_twins = [
-        _plot_pathway_curve_panel(
-            curve_axes[0],
-            curve_data.get("gef"),
+    panel_specs = (
+        (
+            "g_gef_pathway",
+            "gef",
             "g",
             "Grid emission factor multiplier",
-            orientation="horizontal",
-            saved_limits=curve_saved_limits,
-            share_limits=curve_share_limits,
-            saved_as_bar=True,
-            show_share_axis=False,
-            mirror_x=True,
+            "Grid decarbonization pathway",
         ),
-        _plot_pathway_curve_panel(
-            curve_axes[1],
-            curve_data.get("kappa"),
+        (
+            "h_kappa_pathway",
+            "kappa",
             "h",
             r"E-bike bundling factor $\kappa$",
+            "E-bike bundling pathway",
+        ),
+    )
+    curve_axes = []
+    curve_twins = []
+    curve_figures = []
+    output_paths = {}
+
+    if save_path:
+        save_root, save_ext = os.path.splitext(save_path)
+        if not save_ext:
+            save_ext = ".png"
+        if for_latex:
+            save_ext = ".pdf"
+
+    for suffix, curve_key, panel_label, axis_label, title in panel_specs:
+        fig, ax = plt.subplots(figsize=figsize)
+        ax_twin = _plot_pathway_curve_panel(
+            ax,
+            curve_data.get(curve_key),
+            panel_label,
+            axis_label,
             orientation="horizontal",
             saved_limits=curve_saved_limits,
             share_limits=curve_share_limits,
             saved_as_bar=True,
-            show_saved_axis=False,
-        ),
-    ]
-
-    if plot_title:
-        fig.suptitle(
-            "Pathway scenario maps and transition curves",
-            fontsize=14,
-            fontweight="bold",
+            show_saved_axis=True,
+            show_share_axis=True,
+            mirror_x=False,
         )
+        if plot_title:
+            ax.set_title(title, fontsize=11, fontweight="bold", pad=8)
+        fig.subplots_adjust(left=0.17, right=0.83, bottom=0.22, top=0.88)
+        curve_axes.append(ax)
+        curve_twins.append(ax_twin)
+        curve_figures.append(fig)
 
-    fig.tight_layout(rect=(0, 0.02, 0.90, 0.98))
-    fig.canvas.draw()
-    for ax in curve_axes:
-        pos = ax.get_position()
-        width = pos.width * 0.94
-        height = pos.height * 0.72
-        x0 = pos.x0 + (pos.width - width) / 2
-        y0 = pos.y0 + (pos.height - height) / 2
-        ax.set_position([x0, y0, width, height])
-    for ax, ax_twin in zip(curve_axes, curve_twins):
-        if ax_twin is not None:
-            ax_twin.set_position(ax.get_position())
-
-    def _row_colorbar_position(row_axes, x0=0.915, width=0.014, height_scale=1.12):
-        positions = [ax.get_position() for ax in row_axes]
-        row_y0 = min(pos.y0 for pos in positions)
-        row_y1 = max(pos.y1 for pos in positions)
-        row_center = (row_y0 + row_y1) / 2
-        height = (row_y1 - row_y0) * height_scale
-        return (x0, row_center - height / 2, width, height)
-
-    cbar_ax_reduction = fig.add_axes(
-        _row_colorbar_position([spec[0] for spec in panel_specs[:3]])
-    )
-    cbar_reduction, n_reduction_bands = _draw_discrete_reduction_colorbar(
-        fig,
-        cbar_ax_reduction,
-        reduction_cmap,
-        reduction_norm,
-        reduction_bins,
-        reduction_edges,
-        r"Reduction vs today's all-ebike anchor (%)",
-    )
-    _annotate_unstudied(fig, cbar_reduction, cbar_ax_reduction, n_reduction_bands)
-
-    cbar_ax_share = fig.add_axes(
-        _row_colorbar_position([spec[0] for spec in panel_specs[3:]])
-    )
-    cbar_share, n_share_bands = _draw_discrete_reduction_colorbar(
-        fig,
-        cbar_ax_share,
-        share_cmap,
-        share_norm,
-        share_bins,
-        share_edges,
-        "Drone share (%)",
-    )
-    _annotate_unstudied(fig, cbar_share, cbar_ax_share, n_share_bands)
+        if save_path:
+            panel_path = f"{save_root}_{suffix}{save_ext}"
+            if plot_title:
+                panel_path = _add_title_suffix(panel_path)
+            os.makedirs(os.path.dirname(panel_path), exist_ok=True)
+            fig.savefig(panel_path, dpi=300)
+            output_paths[suffix] = panel_path
+            print(f"Pathway curve panel {panel_label} saved to {panel_path}")
+        else:
+            plt.show()
 
     if save_path:
-        if for_latex and not save_path.endswith(".pdf"):
-            save_path = save_path.rsplit(".", 1)[0] + ".pdf"
+        report_base_path = f"{save_root}{save_ext}"
         if plot_title:
-            save_path = _add_title_suffix(save_path)
-        os.makedirs(os.path.dirname(save_path), exist_ok=True)
-        plt.savefig(save_path, dpi=300, bbox_inches="tight")
-        print(f"Regions map pathway scenario maps saved to {save_path}")
+            report_base_path = _add_title_suffix(report_base_path)
         _write_regions_map_pathway_scenario_maps_report(
-            save_path=save_path,
+            save_path=report_base_path,
+            output_paths=output_paths,
             figsize=figsize,
             named_csv_path=named_csv_path,
             stats_csv_path=stats_csv_path,
-            panels=panels,
-            panel_dfs=panel_dfs,
-            share_dfs=share_dfs,
-            map_panel_specs=panel_specs,
             curve_data=curve_data,
             curve_axes=curve_axes,
             curve_twins=curve_twins,
-            annual_saved_total_kg=annual_saved_total_kg,
-            drone_share_median=drone_share_median,
-            reduction_cmap=reduction_cmap,
-            reduction_bins=reduction_bins,
-            reduction_edges=reduction_edges,
-            reduction_cbar_ax=cbar_ax_reduction,
-            share_cmap=share_cmap,
-            share_bins=share_bins,
-            share_edges=share_edges,
-            share_cbar_ax=cbar_ax_share,
         )
-    else:
-        plt.show()
 
-    plt.close(fig)
+    for fig in curve_figures:
+        plt.close(fig)
 
 
 def plot_regions_map_pathway_scenarios(

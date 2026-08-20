@@ -1335,7 +1335,7 @@ def _render_pathway_curve(
     if curve_key == "gef":
         axis_label = "Grid emission factor multiplier"
         curve_df = curve_data.get("gef")
-        mirror_x = True
+        mirror_x = False
     else:
         axis_label = r"E-bike bundling factor $\kappa$"
         curve_df = curve_data.get("kappa")
@@ -1392,7 +1392,7 @@ def _render_pathway_direction_split(
         curve_key = "gef"
         curve_panel_label = "e"
         curve_axis_label = "Grid emission factor multiplier"
-        curve_mirror_x = True
+        curve_mirror_x = False
         title = "Cleaner-grid direction"
     elif direction == "bundling":
         map_pairs = (
