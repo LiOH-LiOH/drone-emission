@@ -44,6 +44,7 @@ Available figures:
     city_gef_distribution,
     city_gef_scatter_components,
     city_reduction_concentration_scatter,
+    city_reduction_potential_5km_drone_orders_scatter,
     city_gef_context_detour_summary,
     break_even_contribution_decomposition,
     break_even_contribution_decomposition_marching_cubes,
@@ -5723,6 +5724,67 @@ def _render_city_reduction_concentration_scatter(data_dir, out, for_latex):
     )
 
 
+def _render_city_reduction_5km_drone_orders_scatter(
+    data_dir, out, for_latex, plot_title
+):
+    """Render city reduction potential colored by optimal 5-km pilot demand."""
+    cache_path = os.path.join(
+        data_dir,
+        "analysis",
+        "drone_spatial_concentration",
+        "city_drone_spatial_concentration.csv",
+    )
+    if not os.path.exists(cache_path):
+        print(
+            "city_reduction_potential_5km_drone_orders_scatter skipped — missing "
+            f"{cache_path}; run analysis.drone_spatial_concentration first"
+        )
+        return
+
+    from analysis.drone_spatial_concentration import (
+        ABSOLUTE_REDUCTION_COLUMN,
+        RELATIVE_REDUCTION_COLUMN,
+    )
+    from visualization.analysis import (
+        plot_city_reduction_5km_drone_orders_scatter,
+    )
+
+    results = pd.read_csv(cache_path)
+    required = {
+        "region_key",
+        "region_name_en",
+        "status",
+        "eligible_annual_orders",
+        "capture_5km_pct",
+        ABSOLUTE_REDUCTION_COLUMN,
+        RELATIVE_REDUCTION_COLUMN,
+    }
+    missing = sorted(required.difference(results.columns))
+    if missing:
+        print(
+            "city_reduction_potential_5km_drone_orders_scatter skipped — "
+            f"cache missing columns: {missing}"
+        )
+        return
+    successful = results[results["status"].eq("ok")].copy()
+    if successful.empty:
+        print(
+            "city_reduction_potential_5km_drone_orders_scatter skipped — "
+            "cache has no successful city results"
+        )
+        return
+
+    plot_city_reduction_5km_drone_orders_scatter(
+        successful,
+        save_path=os.path.join(
+            out,
+            "city_reduction_potential_5km_drone_orders_scatter.png",
+        ),
+        for_latex=for_latex,
+        plot_title=plot_title,
+    )
+
+
 def render_all(
     data_dir: str,
     figures_dir: str,
@@ -5752,6 +5814,14 @@ def render_all(
             data_dir=data_dir,
             out=out,
             for_latex=for_latex,
+        )
+
+    if _want("city_reduction_potential_5km_drone_orders_scatter"):
+        _render_city_reduction_5km_drone_orders_scatter(
+            data_dir=data_dir,
+            out=out,
+            for_latex=for_latex,
+            plot_title=plot_title,
         )
 
     if _want("threshold_resilience_national_overview"):

@@ -76,6 +76,7 @@ PILOT_SUPER_LARGE_CITIES = (
 )
 PILOT_ABSOLUTE_REDUCTION_COL = "oracle_absolute_reduction_t_co2e"
 PILOT_RELATIVE_REDUCTION_COL = "oracle_relative_reduction_pct"
+PILOT_CAPTURED_5KM_ORDERS_COL = "captured_5km_annual_orders"
 CITY_REDUCTION_RANK_LABEL_Y = {
     "Chengdu": 44.0,
     "Chongqing": 37.0,
@@ -12803,6 +12804,209 @@ def plot_city_reduction_concentration_scatter(
     plt.close(fig)
     plt.close(fig_distribution)
     return scatter_path, distribution_path
+
+
+def _prepare_city_reduction_5km_order_scatter(df: pd.DataFrame) -> pd.DataFrame:
+    """Return valid city rows with optimal 5-km captured annual orders."""
+    required = [
+        "eligible_annual_orders",
+        "capture_5km_pct",
+        PILOT_ABSOLUTE_REDUCTION_COL,
+        PILOT_RELATIVE_REDUCTION_COL,
+    ]
+    missing = [column for column in required if column not in df]
+    if missing:
+        raise ValueError(f"City 5-km order scatter missing columns: {missing}")
+
+    plot_df = df.copy()
+    for column in required:
+        plot_df[column] = pd.to_numeric(plot_df[column], errors="coerce")
+    plot_df[PILOT_CAPTURED_5KM_ORDERS_COL] = (
+        plot_df["eligible_annual_orders"] * plot_df["capture_5km_pct"] / 100.0
+    )
+    plot_df = plot_df[
+        np.isfinite(plot_df[PILOT_ABSOLUTE_REDUCTION_COL])
+        & (plot_df[PILOT_ABSOLUTE_REDUCTION_COL] > 0)
+        & np.isfinite(plot_df[PILOT_RELATIVE_REDUCTION_COL])
+        & np.isfinite(plot_df[PILOT_CAPTURED_5KM_ORDERS_COL])
+        & (plot_df[PILOT_CAPTURED_5KM_ORDERS_COL] > 0)
+    ].copy()
+    if plot_df.empty:
+        raise ValueError("No finite positive city 5-km captured-order results to plot")
+    return plot_df
+
+
+def plot_city_reduction_5km_drone_orders_scatter(
+    df: pd.DataFrame,
+    save_path: str = None,
+    figsize: tuple = (130.5 / 25.4, 100 / 25.4),
+    for_latex: bool = False,
+    plot_title: bool = False,
+):
+    """Plot city reduction potential colored by orders in the optimal 5-km area.
+
+    Args:
+        df: City concentration results with 5-km capture and reduction metrics.
+        save_path: Path to save figure. Shows plot if None.
+        figsize: Figure size tuple.
+        for_latex: If True, save as PDF.
+        plot_title: If True, show title.
+    """
+    from matplotlib.colors import LogNorm
+    from matplotlib.lines import Line2D
+
+    plot_df = _prepare_city_reduction_5km_order_scatter(df)
+    absolute_median = float(plot_df[PILOT_ABSOLUTE_REDUCTION_COL].median())
+    relative_median = float(plot_df[PILOT_RELATIVE_REDUCTION_COL].median())
+    order_values = plot_df[PILOT_CAPTURED_5KM_ORDERS_COL].to_numpy(dtype=float)
+    vmin = float(order_values.min())
+    vmax = float(order_values.max())
+    if np.isclose(vmin, vmax):
+        vmin /= np.sqrt(10.0)
+        vmax *= np.sqrt(10.0)
+
+    fig, ax = plt.subplots(figsize=figsize)
+    fig.subplots_adjust(left=0.14, right=0.86, bottom=0.16, top=0.98)
+    points = ax.scatter(
+        plot_df[PILOT_ABSOLUTE_REDUCTION_COL],
+        plot_df[PILOT_RELATIVE_REDUCTION_COL],
+        c=order_values,
+        cmap="viridis",
+        norm=LogNorm(vmin=vmin, vmax=vmax),
+        s=30,
+        alpha=0.72,
+        edgecolor="white",
+        linewidth=0.35,
+        zorder=3,
+    )
+    ax.axhline(relative_median, color="#666666", linestyle="--", linewidth=1, zorder=1)
+    ax.axvline(absolute_median, color="#666666", linestyle="--", linewidth=1, zorder=1)
+    ax.set_xscale("log")
+
+    name_col = "region_name_en" if "region_name_en" in plot_df else "region_key"
+    labeled_city_order = tuple(
+        city_name for city_name, _ in DRONE_SPATIAL_SCATTER_LABELED_CITIES
+    )
+    labeled = plot_df[plot_df[name_col].isin(labeled_city_order)].copy()
+    labeled["_label_order"] = pd.Categorical(
+        labeled[name_col], categories=labeled_city_order, ordered=True
+    )
+    labeled = labeled.sort_values("_label_order")
+    ax.scatter(
+        labeled[PILOT_ABSOLUTE_REDUCTION_COL],
+        labeled[PILOT_RELATIVE_REDUCTION_COL],
+        s=30,
+        facecolors="none",
+        edgecolors="#555555",
+        linewidth=0.8,
+        zorder=5,
+    )
+    try:
+        from adjustText import adjust_text
+    except ImportError:
+        adjust_text = None
+    if adjust_text is not None:
+        label_texts = [
+            ax.text(
+                row[PILOT_ABSOLUTE_REDUCTION_COL],
+                row[PILOT_RELATIVE_REDUCTION_COL],
+                row[name_col],
+                fontsize=7.5,
+                color="#202020",
+                zorder=6,
+            )
+            for _, row in labeled.iterrows()
+        ]
+        if label_texts:
+            adjust_text(
+                label_texts,
+                x=labeled[PILOT_ABSOLUTE_REDUCTION_COL].to_numpy(dtype=float),
+                y=labeled[PILOT_RELATIVE_REDUCTION_COL].to_numpy(dtype=float),
+                ax=ax,
+                expand=(1.12, 1.22),
+                force_text=(0.15, 0.25),
+                force_static=(0.08, 0.15),
+                ensure_inside_axes=True,
+                arrowprops=None,
+            )
+    else:
+        fallback_y_offsets = {
+            "Beijing": -5,
+            "Shenzhen": 5,
+        }
+        for _, row in labeled.iterrows():
+            x_value = row[PILOT_ABSOLUTE_REDUCTION_COL]
+            city_name = row[name_col]
+            align_right = x_value >= absolute_median
+            ax.annotate(
+                city_name,
+                (x_value, row[PILOT_RELATIVE_REDUCTION_COL]),
+                xytext=(-3 if align_right else 3, fallback_y_offsets.get(city_name, 2)),
+                textcoords="offset points",
+                ha="right" if align_right else "left",
+                va="center",
+                fontsize=7.5,
+                color="#202020",
+                zorder=6,
+            )
+
+    colorbar = fig.colorbar(points, ax=ax, pad=0.025)
+    colorbar.ax.yaxis.set_major_formatter(
+        FuncFormatter(
+            lambda value, _: (
+                f"{value / 1_000_000:g}M"
+                if value >= 1_000_000
+                else f"{value / 1_000:g}K"
+                if value >= 1_000
+                else f"{value:g}"
+            )
+        )
+    )
+    colorbar.set_label(
+        "Annual drone-favorable orders captured\n"
+        "within optimal 5-km pilot area (orders yr$^{-1}$)",
+        fontsize=8,
+    )
+    colorbar.ax.tick_params(labelsize=8)
+    ax.set_xlabel(
+        "Annual absolute emission reduction (t CO$_2$e yr$^{-1}$)",
+        fontsize=9,
+    )
+    ax.set_ylabel("Relative lifecycle emission reduction (%)", fontsize=9)
+    ax.tick_params(axis="both", labelsize=8)
+    ax.legend(
+        handles=[
+            Line2D(
+                [0], [0], color="#666666", linestyle="--", linewidth=1,
+                label="Median values",
+            )
+        ],
+        loc="upper left",
+        frameon=False,
+        fontsize=8,
+    )
+    ax.spines[["top", "right"]].set_visible(False)
+    if plot_title:
+        ax.set_title(
+            "City reduction potential and optimal 5-km pilot demand",
+            fontsize=11,
+            fontweight="bold",
+        )
+
+    if save_path:
+        if for_latex and not save_path.endswith(".pdf"):
+            save_path = save_path.rsplit(".", 1)[0] + ".pdf"
+        if plot_title:
+            save_path = _add_title_suffix(save_path)
+        save_dir = os.path.dirname(save_path)
+        if save_dir:
+            os.makedirs(save_dir, exist_ok=True)
+        fig.savefig(save_path, dpi=300, bbox_inches="tight")
+        print(f"City 5-km drone-order scatter saved to {save_path}")
+    else:
+        plt.show()
+    plt.close(fig)
+    return save_path
 
 
 def plot_city_reduction_concentration_marker_scatter(

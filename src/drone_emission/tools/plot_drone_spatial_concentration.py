@@ -27,6 +27,7 @@ from analysis.drone_spatial_concentration import (  # noqa: E402
 )
 from utils import load_config  # noqa: E402
 from visualization.analysis import (  # noqa: E402
+    plot_city_reduction_5km_drone_orders_scatter,
     plot_city_reduction_concentration_scatter,
     plot_representative_city_drone_heatmaps,
 )
@@ -35,6 +36,7 @@ from visualization.analysis import (  # noqa: E402
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 CACHE_FILENAME = "city_drone_spatial_concentration.csv"
 REDUCTION_SCATTER_FILENAME = "city_reduction_potential_scatter.png"
+ORDER_SCATTER_FILENAME = "city_reduction_potential_5km_drone_orders_scatter.png"
 CONCENTRATION_DISTRIBUTION_FILENAME = "city_concentration_distribution.png"
 HEATMAP_FILENAME = "representative_city_drone_heatmaps.png"
 COMMON_REQUIRED_COLUMNS = {
@@ -49,6 +51,12 @@ COMMON_REQUIRED_COLUMNS = {
 SCATTER_REQUIRED_COLUMNS = {
     ABSOLUTE_REDUCTION_COLUMN,
     RELATIVE_REDUCTION_COLUMN,
+}
+ORDER_SCATTER_REQUIRED_COLUMNS = {
+    ABSOLUTE_REDUCTION_COLUMN,
+    RELATIVE_REDUCTION_COLUMN,
+    "eligible_annual_orders",
+    "capture_5km_pct",
 }
 HEATMAP_REQUIRED_COLUMNS = {
     "eligible_annual_orders",
@@ -71,6 +79,8 @@ def _load_cache(path: Path, only: str) -> pd.DataFrame:
     required = set(COMMON_REQUIRED_COLUMNS)
     if only in {"scatter", "all"}:
         required.update(SCATTER_REQUIRED_COLUMNS)
+    if only in {"orders", "all"}:
+        required.update(ORDER_SCATTER_REQUIRED_COLUMNS)
     if only in {"heatmaps", "all"}:
         required.update(HEATMAP_REQUIRED_COLUMNS)
     missing = sorted(required.difference(results.columns))
@@ -111,6 +121,16 @@ def render_cached_concentration_figures(
         )
         outputs.extend(Path(path) for path in rendered_paths if path)
 
+    if only in {"orders", "all"}:
+        order_scatter_path = output_dir / ORDER_SCATTER_FILENAME
+        rendered = plot_city_reduction_5km_drone_orders_scatter(
+            successful,
+            save_path=str(order_scatter_path),
+            for_latex=for_latex,
+            plot_title=plot_title,
+        )
+        outputs.append(Path(rendered))
+
     if only in {"heatmaps", "all"}:
         representative_payloads = load_representative_payloads(results, data_dir)
         if not representative_payloads:
@@ -136,7 +156,7 @@ def main() -> None:
     parser.add_argument("--output-dir", type=Path, default=None)
     parser.add_argument(
         "--only",
-        choices=("scatter", "heatmaps", "all"),
+        choices=("scatter", "orders", "heatmaps", "all"),
         default="all",
     )
     parser.add_argument("--for-latex", action="store_true", help="Save PDF figures")
