@@ -473,7 +473,7 @@ def plot_observed_delivery_distance_distribution(
     ax.text(
         threshold_km - 0.15,
         0.95,
-        f"{coverage_pct:.1f}% of orders $\\leq$ 5 km",
+        f"{coverage_pct:.1f}% of orders\n$\\leq$ 5 km",
         transform=ax.get_xaxis_transform(),
         color="#4D4D4D",
         fontsize=8.5,
