@@ -374,6 +374,28 @@
       "standalone_report_path": "figures/paper/subfigure/r2_core_coefficient_robustness_report.json",
       "panels": [],
       "components": []
+    },
+    {
+      "figure_id": "extended_data_fig6_delivery_distance_distribution",
+      "figure_path": "docs/paper/figures/extended_data_fig6_delivery_distance_distribution.pdf",
+      "composition_type": "direct_copy",
+      "assembly_tool": "File copy",
+      "assembly_notes": "The final manuscript asset is an unmodified copy of the Matplotlib source PDF.",
+      "generator": {
+        "module_path": "src/drone_emission/visualization/paper.py",
+        "function": "_render_observed_delivery_distance_distribution"
+      },
+      "source_composite_id": "observed_delivery_distance_distribution",
+      "source_composite_path": "figures/paper/subfigure/observed_delivery_distance_distribution.pdf",
+      "final_asset_path": "docs/paper/figures/extended_data_fig6_delivery_distance_distribution.pdf",
+      "panels": [],
+      "components": [
+        {
+          "role": "Observed Beijing delivery-distance distribution and 5-km coverage",
+          "source_path": "figures/paper/subfigure/observed_delivery_distance_distribution.pdf",
+          "report_path": "figures/paper/subfigure/observed_delivery_distance_distribution_report.json"
+        }
+      ]
     }
   ]
 }

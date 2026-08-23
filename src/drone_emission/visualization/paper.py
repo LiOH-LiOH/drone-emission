@@ -5663,9 +5663,10 @@ def _render_observed_delivery_distance_distribution(
     )
 
     cali_elm.elm_data_dir = order_dir + os.sep
-    distances = cali_elm.load_all_eleme_distances(
+    distances, sample_metadata = cali_elm.load_all_eleme_distances(
         min_orders_per_shop=None,
         max_distance_km=None,
+        return_metadata=True,
     )
     plot_observed_delivery_distance_distribution(
         distances,
@@ -5675,6 +5676,7 @@ def _render_observed_delivery_distance_distribution(
         ),
         for_latex=for_latex,
         plot_title=plot_title,
+        sample_metadata=sample_metadata,
     )
 
 

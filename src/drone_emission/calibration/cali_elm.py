@@ -58,7 +58,11 @@ def caliberate_elm_data():
     print(f"Latitude: {min_lat} to {max_lat}")
 
 
-def load_all_eleme_distances(min_orders_per_shop=50, max_distance_km=10.0):
+def load_all_eleme_distances(
+    min_orders_per_shop=50,
+    max_distance_km=10.0,
+    return_metadata=False,
+):
     """Load all Eleme order files and compute delivery distances.
 
     Applies offset correction and GCJ02→WGS84 conversion, then computes
@@ -69,10 +73,12 @@ def load_all_eleme_distances(min_orders_per_shop=50, max_distance_km=10.0):
             If None, include every shop.
         max_distance_km: Maximum retained distance in km. If None, retain all
             finite positive distances.
+        return_metadata: If True, also return sample-audit metadata.
 
     Returns:
         np.ndarray of finite positive distances in km, optionally capped at
-        max_distance_km.
+        max_distance_km. If ``return_metadata`` is True, returns
+        ``(distances, metadata)``.
     """
     OFFSET_LNG = -5.1192
     OFFSET_LAT = 0.781
@@ -87,6 +93,8 @@ def load_all_eleme_distances(min_orders_per_shop=50, max_distance_km=10.0):
         df = pd.read_csv(fp)
         all_dfs.append(df)
     combined = pd.concat(all_dfs, ignore_index=True)
+    raw_order_count = len(combined)
+    raw_shop_count = combined["shop_id"].nunique()
     print(f"Loaded {len(combined)} total orders from {len(file_paths)} files")
 
     # Optionally filter shops with enough orders.
@@ -103,6 +111,8 @@ def load_all_eleme_distances(min_orders_per_shop=50, max_distance_km=10.0):
             "Shop-order filter disabled: "
             f"{len(combined)} orders from {len(shop_counts)} shops"
         )
+    filtered_order_count = len(combined)
+    filtered_shop_count = combined["shop_id"].nunique()
 
     # Apply offset correction
     pick_lng = combined["pick_lng"].values + OFFSET_LNG
@@ -125,8 +135,19 @@ def load_all_eleme_distances(min_orders_per_shop=50, max_distance_km=10.0):
     ])
 
     # Filter invalid and zero-distance observations, with an optional upper cap.
-    mask = np.isfinite(distances) & (distances > 0)
+    finite_positive_mask = np.isfinite(distances) & (distances > 0)
+    finite_positive_count = int(np.count_nonzero(finite_positive_mask))
+    excluded_invalid_or_zero_count = int(
+        distances.size - finite_positive_count
+    )
+    above_max_distance_count = 0
+    mask = finite_positive_mask.copy()
     if max_distance_km is not None:
+        above_max_distance_count = int(
+            np.count_nonzero(
+                finite_positive_mask & (distances > max_distance_km)
+            )
+        )
         mask &= distances <= max_distance_km
     distances = distances[mask]
     if max_distance_km is None:
@@ -136,7 +157,29 @@ def load_all_eleme_distances(min_orders_per_shop=50, max_distance_km=10.0):
     print(f"After distance filter {distance_range}: {len(distances)} orders")
     print(f"Mean distance: {distances.mean():.3f} km, Median: {np.median(distances):.3f} km")
 
-    return distances
+    if not return_metadata:
+        return distances
+
+    metadata = {
+        "source_file_count": int(len(file_paths)),
+        "raw_order_count": int(raw_order_count),
+        "raw_shop_count": int(raw_shop_count),
+        "min_orders_per_shop": (
+            None
+            if min_orders_per_shop is None
+            else int(min_orders_per_shop)
+        ),
+        "orders_after_shop_filter": int(filtered_order_count),
+        "shops_after_shop_filter": int(filtered_shop_count),
+        "finite_positive_distance_count": finite_positive_count,
+        "excluded_invalid_or_zero_count": excluded_invalid_or_zero_count,
+        "max_distance_km": (
+            None if max_distance_km is None else float(max_distance_km)
+        ),
+        "above_max_distance_count": above_max_distance_count,
+        "retained_distance_count": int(distances.size),
+    }
+    return distances, metadata
 
 
 def fit_tanner_impedance(distances, bin_width=0.1, max_distance=10.0):
