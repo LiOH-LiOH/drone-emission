@@ -425,9 +425,8 @@ def plot_observed_delivery_distance_distribution(
         plot_title: If True, show title.
     """
     bin_width = 0.1
-    display_max_km = 10.0
+    display_max_km = 7.0
     threshold_km = 5.0
-    overflow_x = 10.7
 
     plot_distances = np.asarray(distances, dtype=float)
     plot_distances = plot_distances[
@@ -435,12 +434,14 @@ def plot_observed_delivery_distance_distribution(
     ]
     if plot_distances.size == 0:
         raise ValueError("No finite positive delivery distances to plot")
+    if np.any(plot_distances > display_max_km):
+        raise ValueError(
+            f"Delivery distances exceed the {display_max_km:g} km axis limit"
+        )
 
-    displayed = plot_distances[plot_distances <= display_max_km]
     bins = np.arange(0, display_max_km + bin_width, bin_width)
-    counts, bin_edges = np.histogram(displayed, bins=bins)
+    counts, bin_edges = np.histogram(plot_distances, bins=bins)
     bin_centers = (bin_edges[:-1] + bin_edges[1:]) / 2
-    overflow_count = np.count_nonzero(plot_distances > display_max_km)
     coverage_pct = 100 * np.count_nonzero(
         plot_distances <= threshold_km
     ) / plot_distances.size
@@ -455,15 +456,6 @@ def plot_observed_delivery_distance_distribution(
         linewidth=0.25,
         alpha=0.86,
     )
-    ax.bar(
-        overflow_x,
-        overflow_count,
-        width=0.35,
-        color="#B8B8B8",
-        edgecolor="#4D4D4D",
-        linewidth=0.55,
-        hatch="///",
-    )
     ax.axvline(
         threshold_km,
         color="#4D4D4D",
@@ -473,7 +465,7 @@ def plot_observed_delivery_distance_distribution(
     ax.text(
         threshold_km - 0.15,
         0.95,
-        f"{coverage_pct:.1f}% of orders\n$\\leq$ 5 km",
+        f"{coverage_pct:.2f}% of orders\n$\\leq$ 5 km",
         transform=ax.get_xaxis_transform(),
         color="#4D4D4D",
         fontsize=8.5,
@@ -481,13 +473,11 @@ def plot_observed_delivery_distance_distribution(
         va="top",
     )
 
-    ax.set_xlim(0, 11.0)
+    ax.set_xlim(0, display_max_km)
     ax.set_ylim(bottom=0)
     ax.set_xlabel("Delivery distance (km)", fontsize=10, labelpad=3)
     ax.set_ylabel("Order count", fontsize=10, labelpad=3)
-    x_ticks = [*np.arange(0, display_max_km + 1, 1), overflow_x]
-    x_tick_labels = [str(value) for value in range(11)] + [">10"]
-    ax.set_xticks(x_ticks, labels=x_tick_labels)
+    ax.set_xticks(np.arange(0, display_max_km + 1, 1))
     ax.tick_params(axis="both", labelsize=9, length=3, pad=2)
     ax.spines["top"].set_visible(False)
     ax.spines["right"].set_visible(False)
