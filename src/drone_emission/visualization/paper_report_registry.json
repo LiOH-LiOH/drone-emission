@@ -110,6 +110,43 @@
       ]
     },
     {
+      "figure_id": "extended_data_fig5_pathway_curves",
+      "figure_path": "docs/paper/figures/extended_data_fig5_pathway_curves.pdf",
+      "composition_type": "inkscape_composite",
+      "assembly_tool": "Inkscape",
+      "assembly_notes": "The two standalone pathway curves were stacked vertically and relabeled as panels a and b in Inkscape.",
+      "source_composite_id": "figure14",
+      "source_composite_path": "figures/inkscape/figure14.svg",
+      "final_asset_path": "docs/paper/figures/extended_data_fig5_pathway_curves.pdf",
+      "panels": [
+        {
+          "panel_id": "a",
+          "title": "Grid decarbonization pathway",
+          "components": [
+            {
+              "role": "National grid-emission-factor pathway for annual CO2 savings and median city drone share",
+              "source_path": "figures/paper/subfigure/regions_map_pathway_scenario_maps_g_gef_pathway.pdf",
+              "report_path": "figures/paper/subfigure/regions_map_pathway_scenario_maps_report.json",
+              "report_selector": ["panels", "g_gef_pathway_curve"]
+            }
+          ]
+        },
+        {
+          "panel_id": "b",
+          "title": "E-bike bundling pathway",
+          "components": [
+            {
+              "role": "National e-bike-bundling pathway for annual CO2 savings and median city drone share",
+              "source_path": "figures/paper/subfigure/regions_map_pathway_scenario_maps_h_kappa_pathway.pdf",
+              "report_path": "figures/paper/subfigure/regions_map_pathway_scenario_maps_report.json",
+              "report_selector": ["panels", "h_kappa_pathway_curve"]
+            }
+          ]
+        }
+      ],
+      "components": []
+    },
+    {
       "figure_id": "figure7",
       "figure_path": "figures/inkscape/figure7.svg",
       "composition_type": "inkscape_composite",

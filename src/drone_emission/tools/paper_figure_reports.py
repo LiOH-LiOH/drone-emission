@@ -1,9 +1,10 @@
-"""Build compact, writing-oriented reports for the five manuscript figures.
+"""Build compact, writing-oriented reports for registered manuscript figures.
 
 Run from ``src/drone_emission`` after all registered paper subfigures have
 been rendered::
 
     ../../.venv/bin/python -m tools.paper_figure_reports
+    ../../.venv/bin/python -m tools.paper_figure_reports --only FIGURE_ID
 
 The command is intentionally strict: every registered PDF and raw report must
 exist, the raw report must not predate its PDF, and every final report must fit
@@ -12,6 +13,7 @@ within the 128 KiB writing-context budget.
 
 from __future__ import annotations
 
+import argparse
 import json
 import math
 import os
@@ -45,7 +47,6 @@ _DROP_EXACT = {
     "palette",
     "panel_anchor_points",
     "panel_label",
-    "points",
     "reduction_panel_label",
     "save_padding_inches",
     "scatter_style",
@@ -68,7 +69,7 @@ _PRESERVE_LIST_KEYS = {
 
 
 class ReportBuildError(RuntimeError):
-    """Raised when the strict five-figure report build cannot complete."""
+    """Raised when a strict paper-figure report build cannot complete."""
 
 
 def _project_path(path_text: str) -> Path:
@@ -181,6 +182,12 @@ def _compact(value: Any, parent_key: str | None = None) -> Any:
         }
         return {key: item for key, item in compacted.items() if item is not None}
     if isinstance(value, list):
+        if parent_key == "points" and all(isinstance(item, dict) for item in value):
+            summary = _record_list_summary(value)
+            if value:
+                summary["first_point"] = _compact(value[0])
+                summary["last_point"] = _compact(value[-1])
+            return summary
         if (
             parent_key in _PRESERVE_LIST_KEYS
             or len(value) <= MAX_INLINE_LIST_ITEMS
@@ -287,7 +294,7 @@ def _source_manifest(figure: dict[str, Any]) -> dict[str, Any]:
         }
 
     manifest = {
-        "schema_version": 1,
+        "schema_version": 2,
         "figure_id": figure["figure_id"],
         "figure_path": figure["figure_path"],
         "composition_type": figure["composition_type"],
@@ -308,6 +315,13 @@ def _source_manifest(figure: dict[str, Any]) -> dict[str, Any]:
             clean_component(component) for component in figure.get("components", [])
         ],
     }
+    for key in (
+        "source_composite_id",
+        "source_composite_path",
+        "final_asset_path",
+    ):
+        if figure.get(key) is not None:
+            manifest[key] = figure[key]
     return manifest
 
 
@@ -356,8 +370,8 @@ def _build_figure_report(figure: dict[str, Any]) -> dict[str, Any]:
     if figure["composition_type"] == "standalone":
         expected_sources = 1
 
-    return {
-        "schema_version": 1,
+    report = {
+        "schema_version": 2,
         "figure_id": figure["figure_id"],
         "figure_path": figure["figure_path"],
         "composition_type": figure["composition_type"],
@@ -379,6 +393,14 @@ def _build_figure_report(figure: dict[str, Any]) -> dict[str, Any]:
             ),
         },
     }
+    for key in (
+        "source_composite_id",
+        "source_composite_path",
+        "final_asset_path",
+    ):
+        if figure.get(key) is not None:
+            report[key] = figure[key]
+    return report
 
 
 def _json_bytes(payload: dict[str, Any]) -> bytes:
@@ -421,15 +443,37 @@ def _atomic_batch_write(outputs: dict[Path, bytes]) -> None:
 
 
 def main() -> None:
-    """Validate all sources and atomically write five reports and manifests."""
+    """Validate sources and atomically write registered reports and manifests."""
+    parser = argparse.ArgumentParser(
+        description="Build compact metadata for registered paper figures."
+    )
+    parser.add_argument(
+        "--only",
+        action="append",
+        metavar="FIGURE_ID",
+        help="Build only the selected figure ID; may be repeated.",
+    )
+    args = parser.parse_args()
+
     try:
         registry = json.loads(REGISTRY_PATH.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
         raise SystemExit(f"Cannot read paper report registry: {exc}") from exc
 
     figures = registry.get("figures")
-    if not isinstance(figures, list) or len(figures) != 5:
-        raise SystemExit("Paper report registry must contain exactly five figures")
+    if not isinstance(figures, list) or not figures:
+        raise SystemExit("Paper report registry must contain a non-empty figure list")
+    if args.only:
+        requested = set(args.only)
+        known = {figure.get("figure_id") for figure in figures}
+        unknown = sorted(requested - known)
+        if unknown:
+            raise SystemExit(
+                "Unknown paper figure ID(s): " + ", ".join(unknown)
+            )
+        figures = [
+            figure for figure in figures if figure.get("figure_id") in requested
+        ]
 
     outputs: dict[Path, bytes] = {}
     try:
