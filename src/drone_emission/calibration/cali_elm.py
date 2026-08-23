@@ -66,6 +66,7 @@ def load_all_eleme_distances(min_orders_per_shop=50, max_distance_km=10.0):
 
     Args:
         min_orders_per_shop: Minimum orders per shop to include (filters noise).
+            If None, include every shop.
         max_distance_km: Maximum retained distance in km. If None, retain all
             finite positive distances.
 
@@ -88,11 +89,20 @@ def load_all_eleme_distances(min_orders_per_shop=50, max_distance_km=10.0):
     combined = pd.concat(all_dfs, ignore_index=True)
     print(f"Loaded {len(combined)} total orders from {len(file_paths)} files")
 
-    # Filter shops with enough orders
+    # Optionally filter shops with enough orders.
     shop_counts = combined["shop_id"].value_counts()
-    valid_shops = shop_counts[shop_counts >= min_orders_per_shop].index
-    combined = combined[combined["shop_id"].isin(valid_shops)]
-    print(f"After filtering (>={min_orders_per_shop} orders/shop): {len(combined)} orders from {len(valid_shops)} shops")
+    if min_orders_per_shop is not None:
+        valid_shops = shop_counts[shop_counts >= min_orders_per_shop].index
+        combined = combined[combined["shop_id"].isin(valid_shops)]
+        print(
+            f"After filtering (>={min_orders_per_shop} orders/shop): "
+            f"{len(combined)} orders from {len(valid_shops)} shops"
+        )
+    else:
+        print(
+            "Shop-order filter disabled: "
+            f"{len(combined)} orders from {len(shop_counts)} shops"
+        )
 
     # Apply offset correction
     pick_lng = combined["pick_lng"].values + OFFSET_LNG

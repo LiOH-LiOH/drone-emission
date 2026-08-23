@@ -425,7 +425,6 @@ def plot_observed_delivery_distance_distribution(
         plot_title: If True, show title.
     """
     bin_width = 0.1
-    display_max_km = 7.0
     threshold_km = 5.0
 
     plot_distances = np.asarray(distances, dtype=float)
@@ -434,10 +433,7 @@ def plot_observed_delivery_distance_distribution(
     ]
     if plot_distances.size == 0:
         raise ValueError("No finite positive delivery distances to plot")
-    if np.any(plot_distances > display_max_km):
-        raise ValueError(
-            f"Delivery distances exceed the {display_max_km:g} km axis limit"
-        )
+    display_max_km = max(1.0, float(np.ceil(plot_distances.max())))
 
     bins = np.arange(0, display_max_km + bin_width, bin_width)
     counts, bin_edges = np.histogram(plot_distances, bins=bins)
