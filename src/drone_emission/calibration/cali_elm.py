@@ -58,7 +58,7 @@ def caliberate_elm_data():
     print(f"Latitude: {min_lat} to {max_lat}")
 
 
-def load_all_eleme_distances(min_orders_per_shop=50):
+def load_all_eleme_distances(min_orders_per_shop=50, max_distance_km=10.0):
     """Load all Eleme order files and compute delivery distances.
 
     Applies offset correction and GCJ02→WGS84 conversion, then computes
@@ -66,9 +66,12 @@ def load_all_eleme_distances(min_orders_per_shop=50):
 
     Args:
         min_orders_per_shop: Minimum orders per shop to include (filters noise).
+        max_distance_km: Maximum retained distance in km. If None, retain all
+            finite positive distances.
 
     Returns:
-        np.ndarray of distances in km, filtered to (0, 10] km range.
+        np.ndarray of finite positive distances in km, optionally capped at
+        max_distance_km.
     """
     OFFSET_LNG = -5.1192
     OFFSET_LAT = 0.781
@@ -111,10 +114,16 @@ def load_all_eleme_distances(min_orders_per_shop=50):
         for i in range(len(pick_wgs))
     ])
 
-    # Filter: 0 < distance <= 10 km
-    mask = (distances > 0) & (distances <= 10)
+    # Filter invalid and zero-distance observations, with an optional upper cap.
+    mask = np.isfinite(distances) & (distances > 0)
+    if max_distance_km is not None:
+        mask &= distances <= max_distance_km
     distances = distances[mask]
-    print(f"After distance filter (0, 10] km: {len(distances)} orders")
+    if max_distance_km is None:
+        distance_range = "(0, inf) km"
+    else:
+        distance_range = f"(0, {max_distance_km:g}] km"
+    print(f"After distance filter {distance_range}: {len(distances)} orders")
     print(f"Mean distance: {distances.mean():.3f} km, Median: {np.median(distances):.3f} km")
 
     return distances

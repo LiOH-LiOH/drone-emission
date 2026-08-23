@@ -408,6 +408,109 @@ def plot_tanner_impedance_fit(
     plt.close(fig)
 
 
+def plot_observed_delivery_distance_distribution(
+    distances,
+    save_path=None,
+    figsize=(5.0, 3.4),
+    for_latex=False,
+    plot_title=False,
+):
+    """Plot the observed delivery-distance distribution and 5 km coverage.
+
+    Args:
+        distances: Array of delivery distances in km.
+        save_path: Path to save the figure. Shows plot if None.
+        figsize: Figure size tuple.
+        for_latex: If True, save as PDF.
+        plot_title: If True, show title.
+    """
+    bin_width = 0.1
+    display_max_km = 10.0
+    threshold_km = 5.0
+    overflow_x = 10.7
+
+    plot_distances = np.asarray(distances, dtype=float)
+    plot_distances = plot_distances[
+        np.isfinite(plot_distances) & (plot_distances > 0)
+    ]
+    if plot_distances.size == 0:
+        raise ValueError("No finite positive delivery distances to plot")
+
+    displayed = plot_distances[plot_distances <= display_max_km]
+    bins = np.arange(0, display_max_km + bin_width, bin_width)
+    counts, bin_edges = np.histogram(displayed, bins=bins)
+    bin_centers = (bin_edges[:-1] + bin_edges[1:]) / 2
+    overflow_count = np.count_nonzero(plot_distances > display_max_km)
+    coverage_pct = 100 * np.count_nonzero(
+        plot_distances <= threshold_km
+    ) / plot_distances.size
+
+    fig, ax = plt.subplots(figsize=figsize)
+    ax.bar(
+        bin_centers,
+        counts,
+        width=bin_width * 0.9,
+        color="#4C72B0",
+        edgecolor="white",
+        linewidth=0.25,
+        alpha=0.86,
+    )
+    ax.bar(
+        overflow_x,
+        overflow_count,
+        width=0.35,
+        color="#B8B8B8",
+        edgecolor="#4D4D4D",
+        linewidth=0.55,
+        hatch="///",
+    )
+    ax.axvline(
+        threshold_km,
+        color="#4D4D4D",
+        ls="--",
+        lw=0.9,
+    )
+    ax.text(
+        threshold_km - 0.15,
+        0.95,
+        f"{coverage_pct:.1f}% of orders $\\leq$ 5 km",
+        transform=ax.get_xaxis_transform(),
+        color="#4D4D4D",
+        fontsize=8.5,
+        ha="right",
+        va="top",
+    )
+
+    ax.set_xlim(0, 11.0)
+    ax.set_ylim(bottom=0)
+    ax.set_xlabel("Delivery distance (km)", fontsize=10, labelpad=3)
+    ax.set_ylabel("Order count", fontsize=10, labelpad=3)
+    x_ticks = [*np.arange(0, display_max_km + 1, 1), overflow_x]
+    x_tick_labels = [str(value) for value in range(11)] + [">10"]
+    ax.set_xticks(x_ticks, labels=x_tick_labels)
+    ax.tick_params(axis="both", labelsize=9, length=3, pad=2)
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+    for spine in ax.spines.values():
+        spine.set_linewidth(0.6)
+    if plot_title:
+        ax.set_title("Observed Delivery Distance Distribution", fontsize=11)
+
+    plt.tight_layout()
+
+    if save_path:
+        os.makedirs(os.path.dirname(save_path), exist_ok=True)
+        if for_latex and not save_path.endswith(".pdf"):
+            save_path = save_path.rsplit(".", 1)[0] + ".pdf"
+        if plot_title:
+            save_path = _add_title_suffix(save_path)
+        fig.savefig(save_path, dpi=300, bbox_inches="tight")
+        print(f"Observed delivery distance distribution saved to {save_path}")
+    else:
+        plt.show()
+    plt.close(fig)
+
+
 def plot_milkrun_distance_analysis(df, save_path=None, for_latex=False, plot_title=False):
     """Create a 1×3 figure: histogram, CDF, distance-vs-time scatter."""
     dist_km = df["dist_km"]

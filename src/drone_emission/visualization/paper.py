@@ -8,6 +8,7 @@ Run:
     ../../.venv/bin/python -m visualization.paper --only shanghai_heatmap,distance_comparison
 
 Available figures:
+    observed_delivery_distance_distribution,
     tanner_impedance_fit, tanner_impedance_fit_panel_a, alpha_calibration_5km,
     detour_lifecycle_distance, lifecycle_distance_detour_boxplot,
     lifecycle_distance_route_factor, production_phase_per_km, end_of_life_phase_per_km,
@@ -5634,6 +5635,49 @@ def _render_tanner_impedance_fit(data_dir, out, for_latex, plot_title):
     )
 
 
+def _render_observed_delivery_distance_distribution(
+    data_dir,
+    out,
+    for_latex,
+    plot_title,
+):
+    """Render the full observed Eleme delivery-distance distribution."""
+    order_dir = os.path.join(
+        data_dir,
+        "raw",
+        "即时配送数据",
+        "疫情期间北京饿了么",
+        "eleme_round1_train_20200313",
+        "order",
+    )
+    if not os.path.isdir(order_dir):
+        print(
+            "observed_delivery_distance_distribution skipped — missing "
+            f"{order_dir}"
+        )
+        return
+
+    from calibration import cali_elm
+    from visualization.calibration import (
+        plot_observed_delivery_distance_distribution,
+    )
+
+    cali_elm.elm_data_dir = order_dir + os.sep
+    distances = cali_elm.load_all_eleme_distances(
+        min_orders_per_shop=50,
+        max_distance_km=None,
+    )
+    plot_observed_delivery_distance_distribution(
+        distances,
+        save_path=os.path.join(
+            out,
+            "observed_delivery_distance_distribution.png",
+        ),
+        for_latex=for_latex,
+        plot_title=plot_title,
+    )
+
+
 def _alpha_calibration_csv_path():
     """Return the tracked α calibration sweep CSV path."""
     return os.path.normpath(
@@ -5917,6 +5961,14 @@ def render_all(
         )
 
     # --- Calibration figures ---
+    if _want("observed_delivery_distance_distribution"):
+        _render_observed_delivery_distance_distribution(
+            data_dir=data_dir,
+            out=out,
+            for_latex=for_latex,
+            plot_title=plot_title,
+        )
+
     tanner_impedance_fit_requested = _want("tanner_impedance_fit")
     tanner_impedance_fit_pdf_needed = _figure4_needs_vector_source(
         "tanner_impedance_fit"
