@@ -5828,9 +5828,10 @@ def _render_city_reduction_5km_drone_orders_scatter(
 def render_locked_requests(
     data_dir: str,
     figures_dir: str,
+    *,
+    only: set,
     for_latex: bool = False,
     plot_title: bool = False,
-    only: set,
     exp_config: dict = None,
     profile: bool = False,
 ):
