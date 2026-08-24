@@ -34,11 +34,21 @@ mkdir -p "$CITY_DATA/city/chengdu" "$CITY_CACHE" "$CITY_WORK" "$CITY_FIGURES" \
 
 inventory() {
     local output="$1"
-    shift
-    find "$@" -type f -printf '%p\t%s\t%T@\n' | LC_ALL=C sort > "$output"
+    {
+        find "$FORMAL_DATA" -maxdepth 1 -type f -printf '%p\t%s\t%T@\n'
+        for level in city district; do
+            if [[ -d "$FORMAL_DATA/$level" ]]; then
+                find "$FORMAL_DATA/$level" -maxdepth 2 -type f -printf '%p\t%s\t%T@\n'
+            fi
+        done
+        if [[ -d "$FORMAL_CACHE/drone_spatial_concentration" ]]; then
+            find "$FORMAL_CACHE/drone_spatial_concentration" -type f -printf '%p\t%s\t%T@\n'
+        fi
+        find "$FORMAL_FIGURES" "$FORMAL_PAPER" -type f -printf '%p\t%s\t%T@\n'
+    } | LC_ALL=C sort > "$output"
 }
 
-inventory "$REPORTS/formal.before.tsv" "$FORMAL_DATA" "$FORMAL_CACHE" "$FORMAL_FIGURES" "$FORMAL_PAPER"
+inventory "$REPORTS/formal.before.tsv"
 
 PYTHONDONTWRITEBYTECODE=1 "$PWD/.venv/bin/python" -m drone_emission --help \
     > "$REPORTS/cli-help.txt"
@@ -112,6 +122,6 @@ DRONE_EMISSION_WORK_ROOT="$FIGURE_WORK" \
 DRONE_EMISSION_FIGURES_ROOT="$FIGURE_OUTPUT" \
     ./entrypoint.sh promote --dry-run > "$REPORTS/promote-dry-run.txt"
 
-inventory "$REPORTS/formal.after.tsv" "$FORMAL_DATA" "$FORMAL_CACHE" "$FORMAL_FIGURES" "$FORMAL_PAPER"
+inventory "$REPORTS/formal.after.tsv"
 cmp "$REPORTS/formal.before.tsv" "$REPORTS/formal.after.tsv"
 printf '%s\n' "$VALIDATION_ROOT"
