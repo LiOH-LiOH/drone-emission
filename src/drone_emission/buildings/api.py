@@ -5,7 +5,6 @@ import subprocess
 import geopandas as gpd
 import numpy as np
 from utils.boundaries import resolve_enlarged_boundaries
-from visualization.buildings import visualize_building_heights, visualize_buildings
 
 from .load_gba import get_gba_tile_infos, load_buildings_from_gba
 
@@ -128,7 +127,6 @@ def load_buildings(region_info, exp_config):
     region_config = region_info.to_dict()
 
     region_name_en = region_config["region_name_en"]
-    region_name_cn = region_config["region_name_cn"]
     region_level = region_config["region_level"]
     boundaries_dict = region_config.get("boundaries_dict", None)
     if not boundaries_dict:
@@ -202,41 +200,3 @@ def load_buildings(region_info, exp_config):
     region_info.set_stat("building_area_total", gdf["area_m2"].sum())
 
     print(f"Total building volume: {region_info.get_stat('building_volume_total')}")
-
-    # Visualization
-    fig_dir = os.path.join(
-        exp_config["figures_dir"], region_level, region_name_en.lower()
-    )
-    if not os.path.exists(fig_dir):
-        os.makedirs(fig_dir)
-
-    for_latex = exp_config.get("for_latex", False)
-    plot_title = exp_config.get("plot_title", False)
-    save_path = os.path.join(fig_dir, f"{region_name_en.lower()}_buildings_vis.png")
-
-    visualize_buildings(
-        gdf,
-        city_name=region_name_en,
-        city_name_cn=region_name_cn,
-        boundaries_dict=large_bounds_dict,
-        original_boundaries_dict=boundaries_dict,
-        save_path=save_path,
-        for_latex=for_latex,
-        plot_title=plot_title,
-    )
-
-    # Height heatmap visualization
-    height_save_path = os.path.join(
-        fig_dir, f"{region_name_en.lower()}_buildings_height.png"
-    )
-
-    visualize_building_heights(
-        gdf,
-        city_name=region_name_en,
-        city_name_cn=region_name_cn,
-        boundaries_dict=large_bounds_dict,
-        original_boundaries_dict=boundaries_dict,
-        save_path=height_save_path,
-        for_latex=for_latex,
-        plot_title=plot_title,
-    )

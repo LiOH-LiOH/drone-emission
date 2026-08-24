@@ -8,7 +8,11 @@ logs/
 data/
 gba_data/
 figures/
-archive/
+archive/figures/
+docs/archive/
+docs/poster/archive/
+src/drone_emission/archive/
+src/drone_emission/tools/archive/
 notes/
 .DS_Store
 backup_*

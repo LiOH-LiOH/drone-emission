@@ -38,12 +38,18 @@ from matplotlib.patches import Patch
 from matplotlib.ticker import FuncFormatter
 from scipy.stats import gaussian_kde
 
-from sensitivity.adjusted_resistance import ABSOLUTE_DOWNSIDE_EXAMPLE_CITIES
 from sensitivity.threshold_resilience import (
     THRESHOLD_RESILIENCE_MEGACITIES,
     THRESHOLD_RESILIENCE_QUADRANT_IDS,
     THRESHOLD_RESILIENCE_QUADRANT_LABELS,
     THRESHOLD_RESILIENCE_SCENARIOS,
+)
+
+ABSOLUTE_DOWNSIDE_EXAMPLE_CITIES = (
+    "shanghai",
+    "beijing",
+    "guangzhou",
+    "chengdu",
 )
 
 from ._utils import _add_title_suffix

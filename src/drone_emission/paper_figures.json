@@ -1,0 +1,130 @@
+{
+  "schema_version": 1,
+  "paper_scope": "main_text_and_locked_extended_data",
+  "figure_count": 12,
+  "figures": [
+    {
+      "id": "fig1_allocation_framework_national",
+      "mode": "inkscape",
+      "render_requests": ["shanghai_merchant_monthly_sales", "shanghai_building_footprint_heatmap", "province_gef_china_map", "beijing_road_network_subfigure", "shanghai_building_height_merchant", "distance_comparison_single_panel", "detour_ratio_concept", "median_trip_production_emissions", "median_trip_use_phase_emissions", "median_trip_eol_emissions", "province_total_ebike_lifecycle"],
+      "required_subfigures": ["shanghai_merchant_monthly_sales.pdf", "shanghai_building_footprint_heatmap.pdf", "province_gef_china_map.pdf", "beijing_road_network_subfigure.pdf", "shanghai_building_height_merchant.pdf", "distance_comparison_single_panel.pdf", "detour_ratio_concept.pdf", "median_trip_production_emissions.pdf", "median_trip_use_phase_emissions.pdf", "median_trip_eol_emissions.pdf", "province_total_ebike_lifecycle.pdf"],
+      "report_inputs": ["figures/paper/report/fig1_allocation_framework_national.sources.json"],
+      "inkscape_source": "figures/inkscape/figure7.svg",
+      "staging": "figures/paper/fig1_allocation_framework_national.pdf",
+      "publish": "docs/paper/figures/fig1_allocation_framework_national.pdf"
+    },
+    {
+      "id": "fig2_city_mitigation_priorities",
+      "mode": "inkscape",
+      "render_requests": ["regions_map_oracle_reduction_rank_map_only", "city_annual_absolute_reduction_distribution", "city_relative_lifecycle_reduction_distribution", "city_reduction_rank_all_macro_region"],
+      "required_subfigures": ["regions_map_oracle_reduction_rank_map_only.pdf", "city_annual_absolute_reduction_distribution.pdf", "city_relative_lifecycle_reduction_distribution.pdf", "city_reduction_rank_all_macro_region.pdf"],
+      "report_inputs": ["figures/paper/report/fig2_city_mitigation_priorities.sources.json"],
+      "inkscape_source": "figures/inkscape/figure5.svg",
+      "staging": "figures/paper/fig2_city_mitigation_priorities.pdf",
+      "publish": "docs/paper/figures/fig2_city_mitigation_priorities.pdf"
+    },
+    {
+      "id": "fig3_city_deployment_screening",
+      "mode": "inkscape",
+      "render_requests": ["city_reduction_concentration_scatter"],
+      "required_subfigures": ["city_reduction_potential_scatter.pdf", "city_concentration_distribution.pdf"],
+      "report_inputs": ["figures/paper/report/fig3_city_deployment_screening.sources.json"],
+      "inkscape_source": "figures/inkscape/figure8.svg",
+      "staging": "figures/paper/fig3_city_deployment_screening.pdf",
+      "publish": "docs/paper/figures/fig3_city_deployment_screening.pdf"
+    },
+    {
+      "id": "fig4_gef_distance_detour",
+      "mode": "direct",
+      "render_requests": ["city_gef_context_detour_summary"],
+      "source_output": "city_gef_context_detour_summary.pdf",
+      "required_subfigures": ["city_gef_context_detour_summary.pdf"],
+      "report_inputs": ["figures/paper/report/fig4_gef_distance_detour.sources.json"],
+      "inkscape_source": null,
+      "staging": "figures/paper/fig4_gef_distance_detour.pdf",
+      "publish": "docs/paper/figures/fig4_gef_distance_detour.pdf"
+    },
+    {
+      "id": "fig5_contribution_decomposition",
+      "mode": "direct",
+      "render_requests": ["contribution_decomposition_city_b"],
+      "source_output": "contribution_decomposition_city_b.pdf",
+      "required_subfigures": ["contribution_decomposition_city_b.pdf"],
+      "report_inputs": ["figures/paper/report/fig5_contribution_decomposition.sources.json"],
+      "inkscape_source": null,
+      "staging": "figures/paper/fig5_contribution_decomposition.pdf",
+      "publish": "docs/paper/figures/fig5_contribution_decomposition.pdf"
+    },
+    {
+      "id": "fig6_future_scenarios",
+      "mode": "inkscape",
+      "render_requests": ["regions_map_pathway_scenarios"],
+      "required_subfigures": ["regions_map_pathway_scenarios_today.pdf", "regions_map_pathway_scenarios_halved_gef.pdf", "regions_map_pathway_scenarios_operator_bundling.pdf", "regions_map_pathway_scenarios_halved_gef_bundling.pdf", "regions_map_pathway_scenarios_colorbar.pdf"],
+      "report_inputs": ["figures/paper/report/fig6_future_scenarios.sources.json"],
+      "inkscape_source": "figures/inkscape/figure6.svg",
+      "staging": "figures/paper/fig6_future_scenarios.pdf",
+      "publish": "docs/paper/figures/fig6_future_scenarios.pdf"
+    },
+    {
+      "id": "candidate_probability_positive_reduction_maps",
+      "mode": "inkscape",
+      "render_requests": ["threshold_resilience_national_overview"],
+      "required_subfigures": ["threshold_resilience_national_overview_independent.pdf", "threshold_resilience_national_overview_stress.pdf", "threshold_resilience_national_overview_independent_kde.pdf", "threshold_resilience_national_overview_stress_kde.pdf", "threshold_resilience_national_overview_colorbar.pdf"],
+      "report_inputs": ["figures/paper/report/candidate_probability_positive_reduction_maps.sources.json"],
+      "inkscape_source": "figures/inkscape/figure13.svg",
+      "staging": "figures/paper/candidate_probability_positive_reduction_maps.pdf",
+      "publish": "docs/paper/figures/candidate_probability_positive_reduction_maps.pdf"
+    },
+    {
+      "id": "extended_data_fig1_population_reduction_contrast",
+      "mode": "inkscape",
+      "render_requests": ["r2_population_reduction_contrast"],
+      "required_subfigures": ["r2_population_absolute_reduction.pdf", "r2_population_relative_reduction.pdf"],
+      "report_inputs": ["figures/paper/report/extended_data_fig1_population_reduction_contrast.sources.json"],
+      "inkscape_source": "figures/inkscape/figure12.svg",
+      "staging": "figures/paper/extended_data_fig1_population_reduction_contrast.pdf",
+      "publish": "docs/paper/figures/extended_data_fig1_population_reduction_contrast.pdf"
+    },
+    {
+      "id": "extended_data_fig3_break_even_operating_envelope",
+      "mode": "inkscape",
+      "render_requests": ["break_even_contribution_decomposition_marching_cubes_subfigures"],
+      "required_subfigures": ["break_even_contribution_decomposition_marching_cubes_a.pdf", "break_even_contribution_decomposition_marching_cubes_b.pdf", "break_even_contribution_decomposition_marching_cubes_c.pdf"],
+      "report_inputs": ["figures/paper/report/extended_data_fig3_break_even_operating_envelope.sources.json"],
+      "inkscape_source": "figures/inkscape/figure11.svg",
+      "staging": "figures/paper/extended_data_fig3_break_even_operating_envelope.pdf",
+      "publish": "docs/paper/figures/extended_data_fig3_break_even_operating_envelope.pdf"
+    },
+    {
+      "id": "extended_data_fig4_road_distance_rule",
+      "mode": "inkscape",
+      "render_requests": ["distance_threshold_policy_comparison"],
+      "required_subfigures": ["distance_threshold_city_landscape.pdf", "distance_threshold_oracle_performance.pdf"],
+      "report_inputs": ["figures/paper/report/extended_data_fig4_road_distance_rule.sources.json"],
+      "inkscape_source": "figures/inkscape/figure9.svg",
+      "staging": "figures/paper/extended_data_fig4_road_distance_rule.pdf",
+      "publish": "docs/paper/figures/extended_data_fig4_road_distance_rule.pdf"
+    },
+    {
+      "id": "extended_data_fig5_pathway_curves",
+      "mode": "inkscape",
+      "render_requests": ["regions_map_pathway_scenario_maps"],
+      "required_subfigures": ["regions_map_pathway_scenario_maps_g_gef_pathway.pdf", "regions_map_pathway_scenario_maps_h_kappa_pathway.pdf"],
+      "report_inputs": ["figures/paper/report/extended_data_fig5_pathway_curves.sources.json"],
+      "inkscape_source": "figures/inkscape/figure14.svg",
+      "staging": "figures/paper/extended_data_fig5_pathway_curves.pdf",
+      "publish": "docs/paper/figures/extended_data_fig5_pathway_curves.pdf"
+    },
+    {
+      "id": "extended_data_fig6_delivery_distance_distribution",
+      "mode": "direct",
+      "render_requests": ["observed_delivery_distance_distribution"],
+      "source_output": "observed_delivery_distance_distribution.pdf",
+      "required_subfigures": ["observed_delivery_distance_distribution.pdf"],
+      "report_inputs": ["figures/paper/report/extended_data_fig6_delivery_distance_distribution.sources.json"],
+      "inkscape_source": null,
+      "staging": "figures/paper/extended_data_fig6_delivery_distance_distribution.pdf",
+      "publish": "docs/paper/figures/extended_data_fig6_delivery_distance_distribution.pdf"
+    }
+  ]
+}

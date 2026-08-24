@@ -4,10 +4,6 @@ import numpy as np
 import pandas as pd
 from utils.province import get_province_from_district
 from utils.grid_emission_factor import fetch_factor, normalize_province_name
-from visualization.emission import (
-    plot_distance_detour_scatter,
-    plot_road_distance_distribution,
-)
 
 from .cal_single_delivery import (
     LifeCycleEmissions,
@@ -367,43 +363,6 @@ def cal_emission(region_info, exp_config):
     )
     print(f"Oracle minimum lifecycle: {oracle_lifecycle:.2f} kg CO2e")
     print(f"Oracle reduction vs all-ebike: {oracle_reduction:.2f}%")
-
-    # 绘制图形
-    fig_save_dir = os.path.join(
-        exp_config["figures_dir"],
-        region_level,
-        region_name_en.lower(),
-    )
-    for_latex = exp_config.get("for_latex", False)
-    plot_title = exp_config.get("plot_title", False)
-
-    # 绘制道路距离分布图（按年销量加权）
-    dist_save_path = os.path.join(
-        fig_save_dir, f"{region_name_en.lower()}_road_distance_distribution.png"
-    )
-    dist_fig_path = plot_road_distance_distribution(
-        road_distances,
-        annual_sales,
-        save_path=dist_save_path,
-        for_latex=for_latex,
-        plot_title=plot_title,
-    )
-    print(f"道路距离分布图已保存: {dist_fig_path}")
-
-    # 绘制距离与绕行比散点图
-    straight_distances = od_df["distance_km"].values
-    detour_save_path = os.path.join(
-        fig_save_dir, f"{region_name_en.lower()}_distance_detour_scatter.png"
-    )
-    detour_fig_path = plot_distance_detour_scatter(
-        straight_distances,
-        road_distances,
-        annual_sales,
-        save_path=detour_save_path,
-        for_latex=for_latex,
-        plot_title=plot_title,
-    )
-    print(f"距离-绕行比散点图已保存: {detour_fig_path}")
 
     return pd.DataFrame(
         [

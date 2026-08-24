@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "drone-emission"
+version = "0.1.0"
+description = "Reproducible city-to-national drone delivery emission analysis"
+requires-python = ">=3.10"
+dependencies = []
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+drone_emission = ["paper_figures.json", "calibration/*.csv", "visualization/layouts/*.json"]

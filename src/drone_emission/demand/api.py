@@ -5,10 +5,8 @@ import numpy as np
 import pandas as pd
 from haversine import Unit, haversine, haversine_vector
 from sklearn.neighbors import BallTree
-from utils.boundaries import resolve_enlarged_boundaries
 from utils.coordinates import gcj02_to_wgs84, haversine_distance
 from utils.tools import get_epsg_from_bounds
-from visualization.buildings import visualize_store_coverage
 
 from .cal_area import preprocess_buildings
 
@@ -128,49 +126,6 @@ def generate_od_pairs(region_info, exp_config):
     # Prepare store-building matching data
     indices_list, stores_df, buildings_gdf, store_coords = (
         prepare_store_building_matching(region_info, exp_config)
-    )
-
-    # === Plot store coverage example ===
-    # Pick a store near the center of the region for visualization
-    bounds = region_config.get("boundaries_dict", {})
-    center_lat = (bounds.get("min_lat", 0) + bounds.get("max_lat", 0)) / 2
-    center_lng = (bounds.get("min_lng", 0) + bounds.get("max_lng", 0)) / 2
-    dists_to_center = [
-        (sc[0] - center_lat) ** 2 + (sc[1] - center_lng) ** 2
-        for sc in store_coords
-    ]
-    # Among stores with nearby buildings, pick the one closest to the center
-    nearby_counts = [len(idx) for idx in indices_list]
-    candidates = [i for i, c in enumerate(nearby_counts) if c > 0]
-    example_idx = min(candidates, key=lambda i: dists_to_center[i])
-
-    fig_dir = os.path.join(
-        exp_config["figures_dir"], region_level, region_name_en.lower()
-    )
-    os.makedirs(fig_dir, exist_ok=True)
-
-    # Get store coord in WGS84 (already converted)
-    example_store_coord = (
-        store_coords[example_idx][1],
-        store_coords[example_idx][0],
-    )  # (lng, lat)
-
-    large_bounds_dict = resolve_enlarged_boundaries(region_info, exp_config)
-
-    for_latex = exp_config.get("for_latex", False)
-    plot_title = exp_config.get("plot_title", False)
-    visualize_store_coverage(
-        buildings_gdf=buildings_gdf,
-        store_coord=example_store_coord,
-        nearby_indices=indices_list[example_idx],
-        city_name=region_name_en,
-        city_name_cn=region_config.get("region_name_cn"),
-        boundaries_dict=large_bounds_dict,
-        original_boundaries_dict=region_config.get("boundaries_dict"),
-        radius_km=delivery_radius_km,
-        save_path=os.path.join(fig_dir, f"{region_name_en.lower()}_store_coverage.png"),
-        for_latex=for_latex,
-        plot_title=plot_title,
     )
 
     # === Process each store and its nearby buildings ===

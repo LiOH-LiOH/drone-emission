@@ -18,7 +18,16 @@ from visualization.calibration import (
     plot_tanner_fit,
 )
 
-elm_data_dir = "/Users/linjingxian/Code/drone-emission/data/raw/即时配送数据/疫情期间北京饿了么/eleme_round1_train_20200313/order/"
+PROJECT_ROOT = os.path.dirname(
+    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+)
+elm_data_dir = os.environ.get(
+    "DRONE_EMISSION_BEIJING_OD_ROOT",
+    os.path.join(
+        PROJECT_ROOT, "data", "raw", "即时配送数据", "疫情期间北京饿了么",
+        "eleme_round1_train_20200313", "order",
+    ),
+)
 
 
 def get_eg_data():
@@ -686,7 +695,10 @@ def calibrate_alpha(target_mean_distance=2.23, delivery_radius_km=None,
 
 if __name__ == "__main__":
     # Project root figures directory
-    FIGURES_DIR = "/Users/linjingxian/Code/drone-emission/figures"
+    FIGURES_DIR = os.environ.get(
+        "DRONE_EMISSION_FIGURES_ROOT",
+        os.path.join(PROJECT_ROOT, "figures"),
+    )
 
     caliberate_elm_data()
     shop_id, shop_loc, orders = get_eg_data()

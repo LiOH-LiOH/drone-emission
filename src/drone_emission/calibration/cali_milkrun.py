@@ -1,5 +1,6 @@
 import os
 import sys
+from pathlib import Path
 
 import pandas as pd
 
@@ -8,8 +9,11 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from visualization.calibration import plot_milkrun_distance_analysis
 
-eg_path = "/Users/linjingxian/Code/drone-emission/data/raw/Milkrun_data/order level data until 20211021.csv"
-fig_dir = "/Users/linjingxian/Code/drone-emission/figures/calibration"
+PROJECT_ROOT = Path(__file__).resolve().parents[3]
+DATA_ROOT = Path(os.environ.get("DRONE_EMISSION_DATA_ROOT", PROJECT_ROOT / "data"))
+FIGURES_ROOT = Path(os.environ.get("DRONE_EMISSION_FIGURES_ROOT", PROJECT_ROOT / "figures"))
+eg_path = DATA_ROOT / "raw" / "Milkrun_data" / "order level data until 20211021.csv"
+fig_dir = FIGURES_ROOT / "calibration"
 
 
 def load_milkrun_data(file_path):

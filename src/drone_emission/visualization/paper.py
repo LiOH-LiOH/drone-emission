@@ -1,13 +1,9 @@
-"""Entry point for rendering all paper figures.
+"""Internal plot implementations used by the manifest-driven renderer.
 
-Run:
-    cd src/drone_emission
-    ../../.venv/bin/python -m visualization.paper --png              # PNG (fast iteration)
-    ../../.venv/bin/python -m visualization.paper                    # PDF (for LaTeX)
-    ../../.venv/bin/python -m visualization.paper --only four_city_sales_heatmaps
-    ../../.venv/bin/python -m visualization.paper --only shanghai_heatmap,distance_comparison
+The public entry point is ``python -m drone_emission render``. Historical
+internal plot names below are implementation details, not CLI identifiers.
 
-Available figures:
+Internal figures:
     observed_delivery_distance_distribution,
     tanner_impedance_fit, tanner_impedance_fit_panel_a, alpha_calibration_5km,
     detour_lifecycle_distance, lifecycle_distance_detour_boxplot,
@@ -79,12 +75,10 @@ Available figures:
     oat_tornado_story, oat_tornado_full
 """
 
-import argparse
 from contextlib import contextmanager
 import json
 import os
 import pickle
-import sys
 import time
 
 import pandas as pd
@@ -7374,51 +7368,3 @@ def render_all(
                     for_latex=for_latex,
                     plot_title=plot_title,
                 )
-
-
-def _bootstrap_paths():
-    here = os.path.dirname(os.path.abspath(__file__))
-    src = os.path.normpath(os.path.join(here, ".."))
-    if src not in sys.path:
-        sys.path.insert(0, src)
-
-
-def main():
-    _bootstrap_paths()
-    from utils import load_config
-
-    parser = argparse.ArgumentParser(description="Render paper figures")
-    parser.add_argument("--env", type=str, default=None)
-    parser.add_argument("--png", action="store_true", help="Force PNG output")
-    parser.add_argument("--titled", action="store_true", help="Add titles to figures")
-    parser.add_argument("--only", type=str, default=None, help="Comma-separated figure names to render")
-    parser.add_argument("--profile", action="store_true", help="Print elapsed time for selected render blocks")
-    args = parser.parse_args()
-
-    project_root = os.path.normpath(
-        os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "..")
-    )
-    config = load_config(os.path.join(project_root, "experiment.toml"), env=args.env)
-    for_latex = (not args.png) and config.get("for_latex", False)
-    plot_title = args.titled or config.get("plot_title", False)
-    only = set(args.only.split(",")) if args.only else None
-
-    print(
-        "for_latex="
-        f"{for_latex}, plot_title={plot_title}, only={only or 'all'}, "
-        f"profile={args.profile}"
-    )
-    render_all(
-        config["data_dir"],
-        config["figures_dir"],
-        for_latex=for_latex,
-        plot_title=plot_title,
-        only=only,
-        exp_config=config,
-        profile=args.profile,
-    )
-
-
-
-if __name__ == "__main__":
-    main()

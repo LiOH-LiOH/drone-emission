@@ -1,18 +1,12 @@
-import argparse
-import sys
 import traceback
 from pathlib import Path
 
 from buildings import load_buildings
 from demand import generate_od_pairs
 from emission import cal_emission
-from equity import analyze_equity
 from preprocessing import prepare_sales
-from profit import cal_profit
 from roadnet import load_roadnet
-from utils import load_config
-from utils.config import configure_cache
-from utils.region_config import get_registry, init_registry
+from utils.region_config import get_registry
 
 # Project root directory
 PROJECT_ROOT = Path(__file__).parent.parent.parent
@@ -48,14 +42,6 @@ def run_region_analysis(region_key: str, config: dict):
         exp_config=config,
     )
     cal_emission(
-        region_info=region,
-        exp_config=config,
-    )
-    # cal_profit(
-    #     region_info=region,
-    #     exp_config=config,
-    # )
-    analyze_equity(
         region_info=region,
         exp_config=config,
     )
@@ -117,54 +103,3 @@ def run_all(config: dict, level: str = "city", skip_completed: bool = False):
     print(f"  Failed:    {len(failed)}")
     if failed:
         print(f"  Failed regions: {', '.join(failed)}")
-
-
-def parse_args():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--env", type=str, default=None, help="Environment name")
-    parser.add_argument(
-        "--region", type=str, default="nanshan", help="Region to analyze"
-    )
-    parser.add_argument(
-        "--all", action="store_true", help="Run all regions of the specified level"
-    )
-    parser.add_argument(
-        "--level", type=str, default="city", help="Region level to process with --all (default: city)"
-    )
-    parser.add_argument(
-        "--skip-completed", action="store_true",
-        help="Skip regions that already have emission results"
-    )
-    parser.add_argument(
-        "--no-fetch", action="store_true",
-        help="Skip fetching buildings and road network (use existing data files)"
-    )
-    return parser.parse_args()
-
-
-if __name__ == "__main__":
-    args = parse_args()
-
-    config = load_config(str(EXP_CONFIG_PATH), env=args.env)
-    if args.no_fetch:
-        config["fetch_buildings"] = False
-        config["fetch_roadnet"] = False
-    configure_cache(config)
-
-    # Initialize region configuration with per-region stats support
-    registry = init_registry(str(REGIONS_CONFIG_PATH), data_dir=config.get("data_dir"))
-
-    if getattr(args, "all"):
-        run_all(config, level=args.level, skip_completed=args.skip_completed)
-    else:
-        if args.skip_completed and args.region in registry and has_emission_results(registry[args.region]):
-            print(f"Skipping {args.region} (already has emission results)")
-            sys.exit(0)
-        try:
-            run_region_analysis(args.region, config)
-            registry.save_region(args.region)
-        except Exception as e:
-            print(f"\nERROR processing {args.region}: {e}")
-            traceback.print_exc()
-            registry.save_region(args.region)
-            sys.exit(1)

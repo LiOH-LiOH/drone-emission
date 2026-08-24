@@ -33,6 +33,7 @@ fi
 echo "Installing dependencies..."
 "${VENV_DIR}/bin/pip" install --upgrade pip
 "${VENV_DIR}/bin/pip" install -r "${REQ_FILE}"
+"${VENV_DIR}/bin/pip" install -e .
 
 echo ""
 echo "Done. Activate with:"

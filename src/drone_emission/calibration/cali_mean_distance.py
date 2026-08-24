@@ -1,11 +1,14 @@
+import os
+from pathlib import Path
+
 import pandas as pd
 
 MEAN_DISTANCE = 2.23  # in km
 
-distance_nanshan_path = "/Users/linjingxian/Code/drone-emission/data/district/nanshan/backup_nanshan_od_pairs.csv"
-nanshan_path = (
-    "/Users/linjingxian/Code/drone-emission/data/district/nanshan/nanshan_od_pairs.csv"
-)
+PROJECT_ROOT = Path(__file__).resolve().parents[3]
+DATA_ROOT = Path(os.environ.get("DRONE_EMISSION_DATA_ROOT", PROJECT_ROOT / "data"))
+distance_nanshan_path = DATA_ROOT / "district" / "nanshan" / "backup_nanshan_od_pairs.csv"
+nanshan_path = DATA_ROOT / "district" / "nanshan" / "nanshan_od_pairs.csv"
 
 
 def cali_mean_distance():

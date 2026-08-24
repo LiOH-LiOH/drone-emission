@@ -1,12 +1,8 @@
 """Consolidate per-region sensitivity outputs into cross-region tables.
 
-Reads each region's ``{region}_oat.csv``, ``{region}_shapley.csv``,
-``{region}_named.csv``, ``{region}_sobol.csv`` and concatenates them into:
-
-  data/all_sensitivity_oat.csv
-  data/all_sensitivity_shapley.csv
-  data/all_sensitivity_named.csv
-  data/all_sensitivity_sobol.csv
+Reads each region's retained ``{region}_named.csv`` and concatenates it into
+``data/all_sensitivity_named.csv``. Retired OAT, Shapley and Sobol workflows
+are preserved under ``archive/code``.
 
 Usage:
     cd src/drone_emission
@@ -29,12 +25,7 @@ sys.path.insert(0, os.path.join(PROJECT_ROOT, "src", "drone_emission"))
 
 from utils import load_config  # noqa: E402
 
-SUFFIXES = (
-    ("_oat.csv", "all_sensitivity_oat.csv"),
-    ("_shapley.csv", "all_sensitivity_shapley.csv"),
-    ("_named.csv", "all_sensitivity_named.csv"),
-    ("_sobol.csv", "all_sensitivity_sobol.csv"),
-)
+SUFFIXES = (("_named.csv", "all_sensitivity_named.csv"),)
 
 
 def _is_sensitivity_csv(filename: str, suffix: str) -> bool:
@@ -68,8 +59,7 @@ def consolidate(data_dir: str, level_filter: str | None = None) -> None:
                 if "region_key" not in df.columns:
                     df.insert(0, "region_key", region_name)
                 by_suffix[suffix].append(df)
-                if suffix == "_oat.csv":
-                    has_outputs = True
+                has_outputs = True
             if has_outputs:
                 region_count += 1
 
