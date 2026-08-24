@@ -98,6 +98,7 @@ def test_shell_declares_single_global_memory_contract():
     assert source.count("systemd-run --user --scope") == 1
     assert 'MemoryMax=${MEMORY_MAX_GB}G' in source
     assert 'MemorySwapMax=0' in source
+    assert "command -v jq" not in source
 
 
 def test_docs_paper_has_exact_manifest_publication_set():

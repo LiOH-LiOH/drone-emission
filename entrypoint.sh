@@ -100,8 +100,7 @@ run_cities() {
         run_python_stage cities ${args[@]+"${args[@]}"}
         return
     fi
-    command -v jq >/dev/null 2>&1 || { echo "jq is required for city selection" >&2; exit 1; }
-    jq -r 'to_entries[] | select(.value.region_level == "city") | .key' regions.json \
+    "$PYTHON" -c 'import json, sys; registry=json.load(open(sys.argv[1], encoding="utf-8")); print("\n".join(key for key, value in registry.items() if value.get("region_level") == "city"))' regions.json \
         | xargs -P "$JOBS" -I '{}' \
             "$PYTHON" -m drone_emission --env "$ENVIRONMENT" cities --region '{}' ${args[@]+"${args[@]}"}
 }

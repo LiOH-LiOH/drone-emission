@@ -111,8 +111,15 @@ DRONE_EMISSION_FIGURES_ROOT="$FIGURE_OUTPUT" \
     ./entrypoint.sh render
 
 mapfile -t PDF_PATHS < <(
-    jq -r '.figures[] | if .mode == "direct" then "paper/" + .id + ".pdf" else .required_subfigures[] | "paper/subfigure/" + . end' \
-        src/drone_emission/paper_figures.json
+    "$PWD/.venv/bin/python" -c '
+import json, sys
+for figure in json.load(open(sys.argv[1], encoding="utf-8"))["figures"]:
+    if figure["mode"] == "direct":
+        print("paper/" + figure["id"] + ".pdf")
+    else:
+        for name in figure["required_subfigures"]:
+            print("paper/subfigure/" + name)
+' src/drone_emission/paper_figures.json
 )
 [[ "${#PDF_PATHS[@]}" -eq 39 ]] || { echo "Expected 39 review PDFs, found ${#PDF_PATHS[@]}" >&2; exit 1; }
 : > "$REPORTS/fetch-pdfs.txt"
@@ -131,8 +138,12 @@ while IFS=$'\t' read -r figure_id panel; do
         "$FIGURE_OUTPUT/paper/subfigure/$panel" \
         "$FIGURE_OUTPUT/paper/$figure_id.pdf"
 done < <(
-    jq -r '.figures[] | select(.mode == "inkscape") | [.id, .required_subfigures[0]] | @tsv' \
-        src/drone_emission/paper_figures.json
+    "$PWD/.venv/bin/python" -c '
+import json, sys
+for figure in json.load(open(sys.argv[1], encoding="utf-8"))["figures"]:
+    if figure["mode"] == "inkscape":
+        print(figure["id"] + "\t" + figure["required_subfigures"][0])
+' src/drone_emission/paper_figures.json
 )
 DRONE_EMISSION_DATA_ROOT="$FIGURE_DATA" \
 DRONE_EMISSION_CACHE_ROOT="$FIGURE_CACHE" \
