@@ -24,13 +24,13 @@ CITY_DATA="$VALIDATION_ROOT/city/data"
 CITY_CACHE="$VALIDATION_ROOT/city/cache"
 CITY_WORK="$VALIDATION_ROOT/city/work"
 CITY_FIGURES="$VALIDATION_ROOT/city/figures"
-FIGURE_DATA="$VALIDATION_ROOT/figures/data"
+FIGURE_DATA="$FORMAL_DATA"
 FIGURE_CACHE="$VALIDATION_ROOT/figures/cache"
 FIGURE_WORK="$VALIDATION_ROOT/figures/work"
 FIGURE_OUTPUT="$VALIDATION_ROOT/figures/output"
 REPORTS="$VALIDATION_ROOT/reports"
 mkdir -p "$CITY_DATA/city/chengdu" "$CITY_CACHE" "$CITY_WORK" "$CITY_FIGURES" \
-    "$FIGURE_DATA" "$FIGURE_CACHE" "$FIGURE_WORK" "$FIGURE_OUTPUT" "$REPORTS"
+    "$FIGURE_CACHE" "$FIGURE_WORK" "$FIGURE_OUTPUT" "$REPORTS"
 
 inventory() {
     local output="$1"
@@ -88,11 +88,12 @@ DRONE_EMISSION_FIGURES_ROOT="$CITY_FIGURES" \
     "$FORMAL_DATA/city/chengdu" "$CITY_DATA/city/chengdu" \
     --report "$REPORTS/chengdu-comparison.json"
 
-# Figure inputs must be a copy-on-write snapshot. Never fall back to symlinks or
-# full copies silently: lack of reflink support is an isolation/storage blocker.
-cp -a --reflink=always "$FORMAL_DATA/." "$FIGURE_DATA/"
-if [[ -d "$FORMAL_CACHE" ]]; then
-    cp -a --reflink=always "$FORMAL_CACHE/." "$FIGURE_CACHE/"
+# Render treats the formal data tree as a read-only source. The CLI first builds
+# its compatibility view under FIGURE_WORK: mutable derived inputs are copied,
+# while large immutable inputs are linked for reads only. Copy the one cache
+# family named by the manifest so all writable cache state remains isolated.
+if [[ -d "$FORMAL_CACHE/drone_spatial_concentration" ]]; then
+    cp -a "$FORMAL_CACHE/drone_spatial_concentration" "$FIGURE_CACHE/"
 fi
 
 DRONE_EMISSION_DATA_ROOT="$FIGURE_DATA" \
