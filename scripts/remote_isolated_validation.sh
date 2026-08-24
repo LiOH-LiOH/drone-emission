@@ -92,9 +92,17 @@ DRONE_EMISSION_FIGURES_ROOT="$CITY_FIGURES" \
 # its compatibility view under FIGURE_WORK: mutable derived inputs are copied,
 # while large immutable inputs are linked for reads only. Copy the one cache
 # family named by the manifest so all writable cache state remains isolated.
-if [[ -d "$FORMAL_CACHE/drone_spatial_concentration" ]]; then
-    cp -a "$FORMAL_CACHE/drone_spatial_concentration" "$FIGURE_CACHE/"
+SPATIAL_CACHE_SOURCE="$FORMAL_CACHE/drone_spatial_concentration"
+if [[ ! -d "$SPATIAL_CACHE_SOURCE" ]]; then
+    # Compatibility with the existing remote cache layout; the active workflow
+    # writes future results to cache, but validation must reuse what is present.
+    SPATIAL_CACHE_SOURCE="$FORMAL_DATA/analysis/drone_spatial_concentration"
 fi
+[[ -f "$SPATIAL_CACHE_SOURCE/city_drone_spatial_concentration.csv" ]] || {
+    echo "Authoritative spatial-concentration result is missing" >&2
+    exit 1
+}
+cp -a "$SPATIAL_CACHE_SOURCE" "$FIGURE_CACHE/drone_spatial_concentration"
 
 DRONE_EMISSION_DATA_ROOT="$FIGURE_DATA" \
 DRONE_EMISSION_CACHE_ROOT="$FIGURE_CACHE" \
