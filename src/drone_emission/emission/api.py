@@ -233,12 +233,12 @@ def cal_emission(region_info, exp_config):
         od_df["drone_time_min"] = drone_time
         od_df["ebike_time_min"] = ebike_time
         od_df["ebike_kappa"] = ebike_kappa
-        od_df["drone_lifecycle_production_g"] = drone_lifecycle_production
-        od_df["drone_lifecycle_use_g"] = drone_lifecycle_use
-        od_df["drone_lifecycle_eol_g"] = drone_lifecycle_eol
         od_df["ebike_lifecycle_production_g"] = ebike_lifecycle_production
         od_df["ebike_lifecycle_use_g"] = ebike_lifecycle_use
         od_df["ebike_lifecycle_eol_g"] = ebike_lifecycle_eol
+        od_df["drone_lifecycle_production_g"] = drone_lifecycle_production
+        od_df["drone_lifecycle_use_g"] = drone_lifecycle_use
+        od_df["drone_lifecycle_eol_g"] = drone_lifecycle_eol
         od_df.to_csv(od_save_path, index=False)
         print(f"Emission and time data saved to {od_save_path}")
 
