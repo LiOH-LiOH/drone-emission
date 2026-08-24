@@ -1,6 +1,7 @@
 """Small fixture-free contract tests intended for remote validation."""
 
 import ast
+import csv
 import json
 from pathlib import Path
 
@@ -36,6 +37,29 @@ def test_render_selection_rejects_internal_plot_names():
         assert "manifest IDs only" in str(error)
     else:
         raise AssertionError("internal plot name was accepted")
+
+
+def test_locked_observed_distance_histogram_is_complete():
+    root = Path(__file__).parents[1]
+    histogram = (
+        root
+        / "src"
+        / "drone_emission"
+        / "calibration"
+        / "observed_delivery_distance_histogram.csv"
+    )
+    with histogram.open(newline="", encoding="utf-8") as handle:
+        rows = list(csv.DictReader(handle))
+    assert len(rows) == 90
+    assert sum(int(row["count"]) for row in rows) == 278688
+    figure = next(
+        item
+        for item in load_manifest()["figures"]
+        if item["id"] == "extended_data_fig6_delivery_distance_distribution"
+    )
+    assert figure["required_inputs"] == [
+        "package:calibration/observed_delivery_distance_histogram.csv"
+    ]
 
 
 def test_city_pipeline_has_no_visualization_dependency():

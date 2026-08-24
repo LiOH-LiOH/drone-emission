@@ -29,7 +29,7 @@ no username is embedded in source code.
 | Command | Function and writes |
 |---|---|
 | `python -m drone_emission inputs` | Validates the experiment, region registry, merchant-sales table, grid factors, and configured roots. It does not mutate data. |
-| `python -m drone_emission calibrate` | Rebuilds the Tanner fit only when raw Beijing OD text files are available. The locked TOML and calibration CSV remain the normal inputs; rebuilt output goes to work. |
+| `python -m drone_emission calibrate` | Rebuilds the Tanner fit only when raw Beijing OD text files are available. The locked TOML, calibration CSV, and audited Beijing distance histogram remain the normal inputs; rebuilt output goes to work. |
 | `python -m drone_emission cities` | Runs merchant filtering, building preparation, OD construction, road routing, lifecycle emissions, and per-city stats. It never imports plotting code. Completed cities are restored unless `--force` is supplied. |
 | `python -m drone_emission aggregate` | Consolidates compatible `all_region_stats.{json,csv}` and `all_region_stats_enriched.csv`. |
 | `python -m drone_emission analyze` | Restores or computes named scenarios, distance thresholds, threshold resilience, spatial concentration, and city attribution. Derived files are written below cache/work through a compatibility data view; city data is read-only. |

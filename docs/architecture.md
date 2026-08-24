@@ -25,6 +25,10 @@ rendering never rewrites city OD files or per-region statistics. The manifest
 records input contracts, render requests, required outputs, source reports,
 Inkscape sources, staging paths, and publication paths.
 
+The observed Beijing delivery-distance panel renders from the tracked audited
+histogram by default. Raw Beijing OD is required only to rebuild and relock that
+calibration input, not for an ordinary paper render.
+
 `promote` validates all 12 staging filenames, manifest mappings, and PDF magic
 headers before copying. Neither `render` nor `reproduce` writes to the ignored
 Overleaf working tree under `docs/paper/`. `supplementary.tex` remains outside

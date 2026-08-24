@@ -3,6 +3,7 @@ coord_convert
 adjustText
 tomli
 cpca
+setuptools>=68,<81
 geopandas
 haversine
 lxml

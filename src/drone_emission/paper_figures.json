@@ -129,7 +129,7 @@
     {
       "id": "extended_data_fig6_delivery_distance_distribution",
       "mode": "direct",
-      "required_inputs": ["raw/即时配送数据/疫情期间北京饿了么/eleme_round1_train_20200313/order/*.txt"],
+      "required_inputs": ["package:calibration/observed_delivery_distance_histogram.csv"],
       "render_requests": ["observed_delivery_distance_distribution"],
       "source_output": "observed_delivery_distance_distribution.pdf",
       "required_subfigures": ["observed_delivery_distance_distribution.pdf"],

@@ -416,6 +416,7 @@ def plot_observed_delivery_distance_distribution(
     for_latex=False,
     plot_title=False,
     sample_metadata=None,
+    distance_summary=None,
 ):
     """Plot the observed delivery-distance distribution and 5 km coverage.
 
@@ -426,6 +427,8 @@ def plot_observed_delivery_distance_distribution(
         for_latex: If True, save as PDF.
         plot_title: If True, show title.
         sample_metadata: Optional sample-audit metadata from the data loader.
+        distance_summary: Optional audited summary retained when ``distances``
+            are reconstructed from the locked histogram.
     """
     bin_width = 0.1
     threshold_km = 5.0
@@ -514,7 +517,7 @@ def plot_observed_delivery_distance_distribution(
                 "sample and is not a universal delivery-distance bound."
             ),
             "sample_metadata": dict(sample_metadata or {}),
-            "distance_summary_km": {
+            "distance_summary_km": distance_summary or {
                 "count": int(plot_distances.size),
                 "min": float(np.min(plot_distances)),
                 "q1": float(np.quantile(plot_distances, 0.25)),
