@@ -7,8 +7,8 @@ import pandas as pd
 from scipy import stats
 from scipy.optimize import curve_fit
 
-from utils.coordinates import gcj02_to_wgs84
-from visualization._utils import (
+from drone_emission.utils.coordinates import gcj02_to_wgs84
+from drone_emission.visualization._utils import (
     _add_title_suffix,
     configure_contextily_cache,
     finalize_plot,

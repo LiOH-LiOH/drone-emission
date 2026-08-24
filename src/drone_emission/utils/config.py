@@ -62,9 +62,5 @@ def load_config(config_path: str, env: str = None) -> Dict[str, Any]:
         # Note: This will overwrite top-level keys with keys from the [env] section
         config.update(toml_data[env])
 
-    # Imports here avoid a package dependency cycle for legacy direct callers.
-    try:
-        from drone_emission.paths import apply_path_overrides
-    except ImportError:
-        from paths import apply_path_overrides
+    from drone_emission.paths import apply_path_overrides
     return apply_path_overrides(config, env=env)

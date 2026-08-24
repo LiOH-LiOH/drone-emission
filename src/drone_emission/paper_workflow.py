@@ -32,6 +32,15 @@ def load_manifest() -> dict:
             raise ValueError(f"Staging filename mismatch for {figure['id']}")
         if Path(figure["publish"]).name != expected_name:
             raise ValueError(f"Publish filename mismatch for {figure['id']}")
+        if not figure.get("render_requests") or not figure.get("required_subfigures"):
+            raise ValueError(f"Figure contract is incomplete for {figure['id']}")
+        reports = figure.get("report_inputs", [])
+        if len(reports) != 1 or not reports[0].endswith(".sources.json"):
+            raise ValueError(f"Figure source-report mapping is invalid for {figure['id']}")
+        if figure["mode"] == "direct" and not figure.get("source_output"):
+            raise ValueError(f"Direct figure has no source_output: {figure['id']}")
+        if figure["mode"] == "inkscape" and not figure.get("inkscape_source"):
+            raise ValueError(f"Inkscape figure has no source: {figure['id']}")
     return manifest
 
 
@@ -59,14 +68,40 @@ def _valid_pdf(path: Path) -> bool:
         return handle.read(5) == b"%PDF-"
 
 
+def _write_source_report(figure: dict, config: dict, outputs: list[Path]) -> Path:
+    figures_root = Path(config["figures_dir"])
+    relative = Path(figure["report_inputs"][0])
+    if relative.parts[:1] == ("figures",):
+        relative = Path(*relative.parts[1:])
+    report_path = figures_root / relative
+    report_path.parent.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "schema_version": 1,
+        "figure_id": figure["id"],
+        "mode": figure["mode"],
+        "data_root": str(Path(config["data_dir"]).resolve()),
+        "cache_root": str(Path(config["cache_dir"]).resolve()),
+        "work_root": str(Path(config["work_dir"]).resolve()),
+        "required_inputs": figure.get("required_inputs", []),
+        "render_requests": figure["render_requests"],
+        "outputs": [str(path.resolve()) for path in outputs],
+        "inkscape_source": figure.get("inkscape_source"),
+        "publish": figure["publish"],
+    }
+    temporary = report_path.with_suffix(report_path.suffix + ".tmp")
+    temporary.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    temporary.replace(report_path)
+    return report_path
+
+
 def _render_distance_threshold(config: dict) -> None:
     """Render the two locked distance-policy panels from compact tables."""
-    from tools.plot_distance_threshold_analysis import (
+    from drone_emission.tools.plot_distance_threshold_analysis import (
         _load_oracle_results,
         _load_summary,
         _resolve_summary_path,
     )
-    from visualization.analysis import (
+    from drone_emission.visualization.analysis import (
         plot_distance_threshold_city_landscape,
         plot_distance_threshold_oracle_performance,
     )
@@ -111,11 +146,11 @@ def render(config: dict, only: list[str] | None = None) -> list[Path]:
         if request != "distance_threshold_policy_comparison"
     }
     if requests:
-        from utils.config import configure_cache
-        from visualization.paper import render_all
+        from drone_emission.utils.config import configure_cache
+        from drone_emission.visualization.paper import render_locked_requests
 
         configure_cache(config)
-        render_all(
+        render_locked_requests(
             config["data_dir"],
             config["figures_dir"],
             for_latex=True,
@@ -132,10 +167,13 @@ def render(config: dict, only: list[str] | None = None) -> list[Path]:
     missing: list[str] = []
     staged: list[Path] = []
     for figure in selected:
+        figure_outputs: list[Path] = []
         for name in figure.get("required_subfigures", []):
             source = subfigure_dir / name
             if not _valid_pdf(source):
                 missing.append(str(source))
+            else:
+                figure_outputs.append(source)
         if figure["mode"] == "direct":
             source = subfigure_dir / figure["source_output"]
             target = PROJECT_ROOT / figure["staging"]
@@ -145,6 +183,8 @@ def render(config: dict, only: list[str] | None = None) -> list[Path]:
             if _valid_pdf(source):
                 shutil.copy2(source, target)
                 staged.append(target)
+                figure_outputs.append(target)
+        _write_source_report(figure, config, figure_outputs)
     if missing:
         raise FileNotFoundError(
             "Rendering did not produce required PDF source(s):\n- "

@@ -7,7 +7,7 @@ import numpy as np
 import pandas as pd
 from scipy import stats
 
-from analysis.constants import VARIABLE_LABELS
+from drone_emission.analysis.constants import VARIABLE_LABELS
 
 # Project root directory
 _PROJECT_ROOT = os.path.dirname(
@@ -417,7 +417,7 @@ def run_correlation_analysis(
     os.makedirs(output_dir, exist_ok=True)
 
     # Lazy imports to avoid circular dependency
-    from visualization.analysis import (
+    from drone_emission.visualization.analysis import (
         plot_correlation_heatmap,
         plot_emission_distribution,
         plot_feature_scatter,

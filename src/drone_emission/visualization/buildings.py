@@ -8,8 +8,8 @@ from matplotlib.collections import LineCollection
 from matplotlib.colors import BoundaryNorm, ListedColormap
 from matplotlib.cm import ScalarMappable
 from shapely.geometry import Point
-from utils.coordinates import gcj02_to_wgs84
-from utils.tools import get_epsg_code, get_epsg_from_bounds
+from drone_emission.utils.coordinates import gcj02_to_wgs84
+from drone_emission.utils.tools import get_epsg_code, get_epsg_from_bounds
 
 from ._utils import (
     _add_title_suffix,

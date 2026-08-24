@@ -15,15 +15,14 @@ from datetime import datetime
 import numpy as np
 import pandas as pd
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from analysis.constants import VARIABLE_LABELS, province_name_en
-from analysis.correlation import (
+from drone_emission.analysis.constants import VARIABLE_LABELS, province_name_en
+from drone_emission.analysis.correlation import (
     FEATURE_VARIABLES,
     RESULT_VARIABLES,
     load_region_stats,
 )
-from utils import load_config
+from drone_emission.utils import load_config
 
 PROJECT_ROOT = os.path.dirname(
     os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))

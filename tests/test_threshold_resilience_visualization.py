@@ -19,16 +19,14 @@ from pypdf import PdfReader  # noqa: E402
 
 HERE = Path(__file__).resolve().parent
 SRC = HERE.parent / "src" / "drone_emission"
-if str(SRC) not in sys.path:
-    sys.path.insert(0, str(SRC))
 
-from sensitivity.threshold_resilience import (  # noqa: E402
+from drone_emission.sensitivity.threshold_resilience import (  # noqa: E402
     PARAMETER_ORDER,
     THRESHOLD_RESILIENCE_QUADRANT_IDS,
     derive_threshold_resilience_typology,
 )
-from tools import plot_threshold_resilience as plot_runner  # noqa: E402
-from visualization.sensitivity import (  # noqa: E402
+from drone_emission.tools import plot_threshold_resilience as plot_runner  # noqa: E402
+from drone_emission.visualization.sensitivity import (  # noqa: E402
     THRESHOLD_RESILIENCE_SCENARIOS,
     THRESHOLD_RESILIENCE_TYPICAL_CITIES,
     plot_threshold_resilience_driver_forest,
@@ -158,9 +156,9 @@ def test_national_overview_uses_shared_continuous_probability_scale() -> None:
     with tempfile.TemporaryDirectory() as temporary_dir:
         output = Path(temporary_dir) / "national.png"
         with patch(
-            "visualization.regions._batch_city_to_adcode", fake_adcodes
+            "drone_emission.visualization.regions._batch_city_to_adcode", fake_adcodes
         ), patch(
-            "visualization.regions.plot_regions_on_china_map", fake_map
+            "drone_emission.visualization.regions.plot_regions_on_china_map", fake_map
         ):
             plot_threshold_resilience_national_overview(
                 summary, save_path=str(output)
@@ -209,9 +207,9 @@ def test_national_subfigures_write_fixed_size_pdfs_and_shared_report() -> None:
             Path(temporary_dir) / "threshold_resilience_national_overview.png"
         )
         with patch(
-            "visualization.regions._batch_city_to_adcode", fake_adcodes
+            "drone_emission.visualization.regions._batch_city_to_adcode", fake_adcodes
         ), patch(
-            "visualization.regions.plot_regions_on_china_map", fake_map
+            "drone_emission.visualization.regions.plot_regions_on_china_map", fake_map
         ):
             outputs = plot_threshold_resilience_national_subfigures(
                 summary,
@@ -292,7 +290,7 @@ def test_national_kdes_leave_endpoint_room_and_hide_top_right_spines() -> None:
 
     figures = []
     with tempfile.TemporaryDirectory() as temporary_dir:
-        with patch("visualization.sensitivity.plt.close"):
+        with patch("drone_emission.visualization.sensitivity.plt.close"):
             outputs = plot_threshold_resilience_national_kdes(
                 summary, temporary_dir
             )

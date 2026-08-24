@@ -6,10 +6,10 @@ selection, and publication-ready output for identifying which urban
 features significantly predict emission reduction outcomes.
 
 Usage:
-    from analysis.regression import run_regression_analysis
+    from drone_emission.analysis.regression import run_regression_analysis
     run_regression_analysis(csv_path, output_dir)
 
-    from analysis.regression import run_hierarchical_regression
+    from drone_emission.analysis.regression import run_hierarchical_regression
     run_hierarchical_regression(df, result_var)
 """
 
@@ -21,7 +21,7 @@ import statsmodels.api as sm
 from scipy import stats as sp_stats
 from statsmodels.stats.outliers_influence import variance_inflation_factor
 
-from analysis.constants import VARIABLE_LABELS
+from drone_emission.analysis.constants import VARIABLE_LABELS
 
 # Regression focuses on the primary outcome used in the paper narrative.
 REGRESSION_RESULT_VARIABLES = [
@@ -325,7 +325,7 @@ def run_lasso_regression(
     from sklearn.preprocessing import StandardScaler
 
     if feature_vars is None:
-        from analysis.correlation import get_all_feature_variables
+        from drone_emission.analysis.correlation import get_all_feature_variables
         feature_vars = get_all_feature_variables()
 
     available = [f for f in feature_vars if f in df.columns]
@@ -405,7 +405,7 @@ def analyze_hierarchical_regression(
     Returns:
         Dict with hierarchical and lasso results per result variable.
     """
-    from analysis.correlation import load_region_stats
+    from drone_emission.analysis.correlation import load_region_stats
 
     _PROJECT_ROOT = os.path.dirname(
         os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -415,7 +415,7 @@ def analyze_hierarchical_regression(
     os.makedirs(output_dir, exist_ok=True)
 
     # Lazy import for visualization
-    from visualization.analysis import plot_hierarchical_r2_comparison
+    from drone_emission.visualization.analysis import plot_hierarchical_r2_comparison
 
     df = load_region_stats(csv_path)
     print(f"Loaded {len(df)} completed regions for hierarchical regression")
@@ -529,7 +529,7 @@ def run_regression_analysis(
     Returns:
         Dictionary with regression results per result variable.
     """
-    from analysis.correlation import load_region_stats
+    from drone_emission.analysis.correlation import load_region_stats
 
     if result_vars is None:
         result_vars = REGRESSION_RESULT_VARIABLES
@@ -553,7 +553,7 @@ def run_regression_analysis(
     os.makedirs(output_dir, exist_ok=True)
 
     # Lazy import to avoid circular dependency
-    from visualization.analysis import plot_regression_coefficients
+    from drone_emission.visualization.analysis import plot_regression_coefficients
 
     results = {}
 

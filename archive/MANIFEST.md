@@ -14,6 +14,7 @@ by active code.
 | matching visualization modules/tests | No locked figure dependency | Manifest-driven `render` |
 | outer/maintenance shell scripts | Multiple competing entry points | `python -m drone_emission ...` |
 | unrelated local generated figures | Runtime history, not manuscript inputs | `figures/paper/`, required subfigures/reports, and composites 5–9/11–14 |
+| historical plot CLIs and emission sensitivity runners removed during package cleanup | They mixed computation with candidate plotting and bypassed the manifest | Recover the exact pre-refactor implementation from commit `a520754`; formal plots use `python -m drone_emission render` |
 
 To restore code, move the archived file back to the same path relative to the
 repository root and update the active package and manifest deliberately. To

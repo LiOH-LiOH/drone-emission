@@ -24,7 +24,7 @@ from typing import Iterable
 import pandas as pd
 import requests
 
-from utils import load_config
+from drone_emission.utils import load_config
 
 PROJECT_ROOT = os.path.dirname(
     os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))

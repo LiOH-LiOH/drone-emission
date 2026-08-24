@@ -16,8 +16,8 @@ from pathlib import Path
 
 import pandas as pd
 
-from utils import load_config
-from visualization.analysis import (
+from drone_emission.utils import load_config
+from drone_emission.visualization.analysis import (
     DISTANCE_THRESHOLD_TYPICAL_CITIES,
     plot_distance_threshold_city_landscape,
     plot_distance_threshold_oracle_performance,

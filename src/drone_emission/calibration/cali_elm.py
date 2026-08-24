@@ -8,16 +8,8 @@ from haversine import Unit, haversine
 from scipy.optimize import curve_fit
 
 # Add src directory to path for imports
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from utils.coordinates import gcj02_to_wgs84
-from visualization.calibration import (
-    plot_alpha_calibration,
-    plot_delivery_coverage,
-    plot_tanner_distance_histogram,
-    plot_tanner_fit,
-)
-
+from drone_emission.utils.coordinates import gcj02_to_wgs84
 PROJECT_ROOT = os.path.dirname(
     os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 )
@@ -238,7 +230,7 @@ def _sweep_alpha(alpha_values, indices_list, stores_df, buildings_gdf,
                   store_coords, tanner_a, tanner_b, min_sales,
                   store_weights=None):
     """Run one sweep of α values and return (alpha_values, mean_distances)."""
-    from demand.api import generate_one_store_od_pairs_vectorized
+    from drone_emission.demand.api import generate_one_store_od_pairs_vectorized
 
     mean_distances = []
     n_alphas = len(alpha_values)
@@ -441,9 +433,9 @@ def build_alpha_calibration_sweep(
     """
     from pathlib import Path
 
-    from demand.api import prepare_store_building_matching
-    from utils import load_config
-    from utils.region_config import init_registry
+    from drone_emission.demand.api import prepare_store_building_matching
+    from drone_emission.utils import load_config
+    from drone_emission.utils.region_config import init_registry
 
     PROJECT_ROOT = Path(__file__).parent.parent.parent.parent
     EXP_CONFIG_PATH = PROJECT_ROOT / "experiment.toml"
@@ -673,6 +665,8 @@ def calibrate_alpha(target_mean_distance=2.23, delivery_radius_km=None,
     Returns:
         The calibrated α value.
     """
+    from drone_emission.visualization.calibration import plot_alpha_calibration
+
     sweep_df, best_alpha, best_mean = build_alpha_calibration_sweep(
         target_mean_distance=target_mean_distance,
         delivery_radius_km=delivery_radius_km,
@@ -694,6 +688,12 @@ def calibrate_alpha(target_mean_distance=2.23, delivery_radius_km=None,
 
 
 if __name__ == "__main__":
+    from drone_emission.visualization.calibration import (
+        plot_delivery_coverage,
+        plot_tanner_distance_histogram,
+        plot_tanner_fit,
+    )
+
     # Project root figures directory
     FIGURES_DIR = os.environ.get(
         "DRONE_EMISSION_FIGURES_ROOT",

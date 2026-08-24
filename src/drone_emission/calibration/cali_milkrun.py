@@ -5,9 +5,8 @@ from pathlib import Path
 import pandas as pd
 
 # Add src directory to path for imports
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from visualization.calibration import plot_milkrun_distance_analysis
+from drone_emission.visualization.calibration import plot_milkrun_distance_analysis
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 DATA_ROOT = Path(os.environ.get("DRONE_EMISSION_DATA_ROOT", PROJECT_ROOT / "data"))

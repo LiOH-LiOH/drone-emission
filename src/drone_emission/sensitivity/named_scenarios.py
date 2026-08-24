@@ -25,7 +25,7 @@ from dataclasses import replace
 import numpy as np
 import pandas as pd
 
-from emission.cal_single_delivery import DroneParams, EbikeParams
+from drone_emission.emission.cal_single_delivery import DroneParams, EbikeParams
 
 from .vectorized_lca import (
     DroneScenario,

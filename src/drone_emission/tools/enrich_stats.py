@@ -21,8 +21,8 @@ import os
 
 import pandas as pd
 
-from utils import load_config
-from utils.grid_emission_factor import PROVINCE_NAME_MAP, normalize_province_name
+from drone_emission.utils import load_config
+from drone_emission.utils.grid_emission_factor import PROVINCE_NAME_MAP, normalize_province_name
 
 PROJECT_ROOT = os.path.dirname(
     os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))

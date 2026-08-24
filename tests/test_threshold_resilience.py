@@ -15,16 +15,14 @@ from scipy.stats import spearmanr
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 SRC = os.path.normpath(os.path.join(HERE, "..", "src", "drone_emission"))
-if SRC not in sys.path:
-    sys.path.insert(0, SRC)
 
-from emission.cal_single_delivery import (  # noqa: E402
+from drone_emission.emission.cal_single_delivery import (  # noqa: E402
     DroneParams,
     EbikeParams,
     create_drone_params,
     create_ebike_params,
 )
-from sensitivity.threshold_resilience import (  # noqa: E402
+from drone_emission.sensitivity.threshold_resilience import (  # noqa: E402
     PARAMETER_ORDER,
     TriangularSpec,
     aggregate_fixed_threshold,
@@ -34,15 +32,15 @@ from sensitivity.threshold_resilience import (  # noqa: E402
     sample_parameters,
     wilson_interval,
 )
-from sensitivity.vectorized_lca import (  # noqa: E402
+from drone_emission.sensitivity.vectorized_lca import (  # noqa: E402
     DroneScenario,
     EbikeScenario,
     compute_drone_per_order_g,
     compute_ebike_per_order_g,
     compute_ebike_per_order_parts_g,
 )
-from utils import load_config  # noqa: E402
-from tools import run_threshold_resilience as runner  # noqa: E402
+from drone_emission.utils import load_config  # noqa: E402
+from drone_emission.tools import run_threshold_resilience as runner  # noqa: E402
 
 
 def _specs() -> dict[str, TriangularSpec]:

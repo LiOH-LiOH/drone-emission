@@ -15,7 +15,7 @@ import csv
 import json
 import os
 
-from utils import load_config
+from drone_emission.utils import load_config
 
 PROJECT_ROOT = os.path.dirname(
     os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))

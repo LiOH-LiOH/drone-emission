@@ -27,10 +27,9 @@ import pandas as pd
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
-sys.path.insert(0, str(PROJECT_ROOT / "src" / "drone_emission"))
 
-from analysis.city_attribution import compute_weighted_detour_stats  # noqa: E402
-from utils import load_config  # noqa: E402
+from drone_emission.analysis.city_attribution import compute_weighted_detour_stats  # noqa: E402
+from drone_emission.utils import load_config  # noqa: E402
 
 
 PATCH_FIELDS = (
@@ -213,7 +212,7 @@ def main() -> None:
         print(f"Patched {summary_csv}")
 
     if args.enrich:
-        from tools.enrich_stats import enrich
+        from drone_emission.tools.enrich_stats import enrich
 
         enrich(
             data_dir=str(data_dir),

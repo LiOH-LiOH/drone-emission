@@ -1,7 +1,7 @@
 import os
 
 import pandas as pd
-from utils import filter_region_data
+from drone_emission.utils import filter_region_data
 
 
 def prepare_sales(region_info, exp_config):

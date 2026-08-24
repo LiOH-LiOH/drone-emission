@@ -15,23 +15,22 @@ import os
 import sys
 
 # Add parent directory to path for imports when running directly
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from utils import load_config
-from visualization.regions import plot_regions_on_china_map
-from visualization.analysis import (
+from drone_emission.utils import load_config
+from drone_emission.visualization.regions import plot_regions_on_china_map
+from drone_emission.visualization.analysis import (
     plot_annual_emissions_comparison,
     plot_city_emission_ranking,
     plot_emission_distribution,
     plot_province_boxplot,
 )
-from analysis.correlation import (
+from drone_emission.analysis.correlation import (
     RESULT_VARIABLES,
     load_annual_emissions,
     load_region_stats,
     run_correlation_analysis,
 )
-from analysis.regression import analyze_hierarchical_regression, run_regression_analysis
+from drone_emission.analysis.regression import analyze_hierarchical_regression, run_regression_analysis
 
 # Project root directory (4 levels up from this file)
 PROJECT_ROOT = os.path.dirname(

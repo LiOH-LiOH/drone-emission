@@ -5,7 +5,6 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import sys
 from pathlib import Path
 
 from .paper_workflow import load_manifest, promote, render
@@ -13,7 +12,7 @@ from .paths import PROJECT_ROOT
 
 
 def _config(env: str | None) -> dict:
-    from utils import load_config
+    from drone_emission.utils import load_config
 
     return load_config(str(PROJECT_ROOT / "experiment.toml"), env=env)
 
@@ -63,7 +62,7 @@ def command_calibrate(args: argparse.Namespace) -> None:
             "Beijing raw OD files are unavailable; locked experiment.toml and "
             "calibration CSV remain the default. Set DRONE_EMISSION_BEIJING_OD_ROOT."
         )
-    from calibration import cali_elm
+    from drone_emission.calibration import cali_elm
 
     cali_elm.elm_data_dir = str(raw_root)
     distances = cali_elm.load_all_eleme_distances(
@@ -87,9 +86,9 @@ def command_cities(args: argparse.Namespace) -> None:
     problems = _input_problems(config)
     if problems:
         raise FileNotFoundError("Missing city input(s): " + ", ".join(problems))
-    from main import run_all, run_region_analysis
-    from utils.config import configure_cache
-    from utils.region_config import init_registry
+    from drone_emission.main import has_city_results, run_all, run_region_analysis
+    from drone_emission.utils.config import configure_cache
+    from drone_emission.utils.region_config import init_registry
 
     if args.no_fetch:
         config["fetch_buildings"] = False
@@ -100,7 +99,11 @@ def command_cities(args: argparse.Namespace) -> None:
     )
     if args.region:
         for region_key in args.region:
-            if not args.force and region_key in registry and "total_ebike_lifecycle" in registry[region_key].stats:
+            if (
+                not args.force
+                and region_key in registry
+                and has_city_results(registry[region_key], config)
+            ):
                 print(f"Skipping {region_key} (restored completed result)")
                 continue
             run_region_analysis(region_key, config)
@@ -116,42 +119,38 @@ def command_aggregate(args: argparse.Namespace) -> None:
         data_dir / "all_region_stats.json",
         data_dir / "all_region_stats.csv",
         data_dir / "all_region_stats_enriched.csv",
-        data_dir / "all_sensitivity_named.csv",
     ]
     if not args.force and all(path.exists() for path in outputs):
         print("Restored existing nationwide aggregates")
         return
-    from tools.consolidate_sensitivity import consolidate as consolidate_sensitivity
-    from tools.consolidate_stats import consolidate
-    from tools.enrich_stats import enrich
+    from drone_emission.tools.consolidate_stats import consolidate
+    from drone_emission.tools.enrich_stats import enrich
 
     consolidate(config["data_dir"])
     enrich(config["data_dir"], config["sales_path"], config["gef_path"])
-    consolidate_sensitivity(config["data_dir"], level_filter="city")
 
 
 def command_analyze(args: argparse.Namespace) -> None:
-    """Audit the nationwide paper-analysis inputs without plotting."""
+    """Build or restore all retained non-plot paper analyses."""
     config = _config(args.env)
-    data_dir = Path(config["data_dir"])
-    candidates = {
-        "region_stats": data_dir / "all_region_stats.csv",
-        "region_stats_enriched": data_dir / "all_region_stats_enriched.csv",
-        "named_scenarios": data_dir / "all_sensitivity_named.csv",
-        "threshold_resilience": data_dir / "all_threshold_resilience.csv",
-        "distance_threshold": data_dir / "all_city_distance_threshold_summary.csv",
-    }
-    report = {name: path.exists() for name, path in candidates.items()}
-    output = Path(config["work_dir"]) / "analysis" / "input_status.json"
-    output.parent.mkdir(parents=True, exist_ok=True)
-    output.write_text(json.dumps(report, indent=2), encoding="utf-8")
-    if not report["region_stats"]:
-        raise FileNotFoundError(f"Missing required nationwide input: {candidates['region_stats']}")
-    print(output)
+    required = [
+        Path(config["data_dir"]) / "all_region_stats.csv",
+        Path(config["data_dir"]) / "all_region_stats_enriched.csv",
+    ]
+    missing = [str(path) for path in required if not path.exists()]
+    if missing:
+        raise FileNotFoundError("Missing aggregate input(s): " + ", ".join(missing))
+    from .analysis_workflow import analyze
+
+    print(json.dumps(analyze(config, force=args.force), indent=2))
 
 
 def command_render(args: argparse.Namespace) -> None:
     config = _config(args.env)
+    from .analysis_workflow import analysis_data_dir, prepare_analysis_data_view
+
+    prepare_analysis_data_view(config)
+    config = dict(config, data_dir=str(analysis_data_dir(config)))
     staged = render(config, only=_split_ids(args.only))
     if staged:
         print("Staged direct figures:")
@@ -214,7 +213,7 @@ def build_parser() -> argparse.ArgumentParser:
     aggregate.add_argument("--force", action="store_true")
     aggregate.set_defaults(func=command_aggregate)
 
-    analyze = subparsers.add_parser("analyze", help="prepare and audit paper analysis inputs")
+    analyze = subparsers.add_parser("analyze", help="build retained paper analyses")
     analyze.add_argument("--force", action="store_true")
     analyze.set_defaults(func=command_analyze)
 

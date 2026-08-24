@@ -6,6 +6,7 @@
     {
       "id": "fig1_allocation_framework_national",
       "mode": "inkscape",
+      "required_inputs": ["all_region_stats.csv", "gef_china.csv", "city/shanghai/*_sales.csv", "city/shanghai/*_buildings.*", "city/shanghai/*_roadnet.graphml", "city/beijing/*_roadnet.graphml", "city/beijing/*_od_pairs.csv"],
       "render_requests": ["shanghai_merchant_monthly_sales", "shanghai_building_footprint_heatmap", "province_gef_china_map", "beijing_road_network_subfigure", "shanghai_building_height_merchant", "distance_comparison_single_panel", "detour_ratio_concept", "median_trip_production_emissions", "median_trip_use_phase_emissions", "median_trip_eol_emissions", "province_total_ebike_lifecycle"],
       "required_subfigures": ["shanghai_merchant_monthly_sales.pdf", "shanghai_building_footprint_heatmap.pdf", "province_gef_china_map.pdf", "beijing_road_network_subfigure.pdf", "shanghai_building_height_merchant.pdf", "distance_comparison_single_panel.pdf", "detour_ratio_concept.pdf", "median_trip_production_emissions.pdf", "median_trip_use_phase_emissions.pdf", "median_trip_eol_emissions.pdf", "province_total_ebike_lifecycle.pdf"],
       "report_inputs": ["figures/paper/report/fig1_allocation_framework_national.sources.json"],
@@ -16,6 +17,7 @@
     {
       "id": "fig2_city_mitigation_priorities",
       "mode": "inkscape",
+      "required_inputs": ["all_region_stats.csv"],
       "render_requests": ["regions_map_oracle_reduction_rank_map_only", "city_annual_absolute_reduction_distribution", "city_relative_lifecycle_reduction_distribution", "city_reduction_rank_all_macro_region"],
       "required_subfigures": ["regions_map_oracle_reduction_rank_map_only.pdf", "city_annual_absolute_reduction_distribution.pdf", "city_relative_lifecycle_reduction_distribution.pdf", "city_reduction_rank_all_macro_region.pdf"],
       "report_inputs": ["figures/paper/report/fig2_city_mitigation_priorities.sources.json"],
@@ -26,6 +28,7 @@
     {
       "id": "fig3_city_deployment_screening",
       "mode": "inkscape",
+      "required_inputs": ["cache:drone_spatial_concentration/city_drone_spatial_concentration.csv"],
       "render_requests": ["city_reduction_concentration_scatter"],
       "required_subfigures": ["city_reduction_potential_scatter.pdf", "city_concentration_distribution.pdf"],
       "report_inputs": ["figures/paper/report/fig3_city_deployment_screening.sources.json"],
@@ -36,6 +39,7 @@
     {
       "id": "fig4_gef_distance_detour",
       "mode": "direct",
+      "required_inputs": ["all_region_stats.csv", "all_region_stats_enriched.csv", "gef_china.csv"],
       "render_requests": ["city_gef_context_detour_summary"],
       "source_output": "city_gef_context_detour_summary.pdf",
       "required_subfigures": ["city_gef_context_detour_summary.pdf"],
@@ -47,6 +51,7 @@
     {
       "id": "fig5_contribution_decomposition",
       "mode": "direct",
+      "required_inputs": ["all_region_stats.csv", "all_region_stats_enriched.csv", "all_sensitivity_named.csv", "city/*/*_od_pairs.csv"],
       "render_requests": ["contribution_decomposition_city_b"],
       "source_output": "contribution_decomposition_city_b.pdf",
       "required_subfigures": ["contribution_decomposition_city_b.pdf"],
@@ -58,6 +63,7 @@
     {
       "id": "fig6_future_scenarios",
       "mode": "inkscape",
+      "required_inputs": ["all_region_stats.csv", "all_sensitivity_named.csv"],
       "render_requests": ["regions_map_pathway_scenarios"],
       "required_subfigures": ["regions_map_pathway_scenarios_today.pdf", "regions_map_pathway_scenarios_halved_gef.pdf", "regions_map_pathway_scenarios_operator_bundling.pdf", "regions_map_pathway_scenarios_halved_gef_bundling.pdf", "regions_map_pathway_scenarios_colorbar.pdf"],
       "report_inputs": ["figures/paper/report/fig6_future_scenarios.sources.json"],
@@ -68,6 +74,7 @@
     {
       "id": "candidate_probability_positive_reduction_maps",
       "mode": "inkscape",
+      "required_inputs": ["all_threshold_resilience.csv"],
       "render_requests": ["threshold_resilience_national_overview"],
       "required_subfigures": ["threshold_resilience_national_overview_independent.pdf", "threshold_resilience_national_overview_stress.pdf", "threshold_resilience_national_overview_independent_kde.pdf", "threshold_resilience_national_overview_stress_kde.pdf", "threshold_resilience_national_overview_colorbar.pdf"],
       "report_inputs": ["figures/paper/report/candidate_probability_positive_reduction_maps.sources.json"],
@@ -78,6 +85,7 @@
     {
       "id": "extended_data_fig1_population_reduction_contrast",
       "mode": "inkscape",
+      "required_inputs": ["all_region_stats_enriched.csv", "work:analysis/city_attribution/r2_city_attribution_analysis_report.json"],
       "render_requests": ["r2_population_reduction_contrast"],
       "required_subfigures": ["r2_population_absolute_reduction.pdf", "r2_population_relative_reduction.pdf"],
       "report_inputs": ["figures/paper/report/extended_data_fig1_population_reduction_contrast.sources.json"],
@@ -88,6 +96,7 @@
     {
       "id": "extended_data_fig3_break_even_operating_envelope",
       "mode": "inkscape",
+      "required_inputs": ["all_sensitivity_named.csv", "experiment.toml"],
       "render_requests": ["break_even_contribution_decomposition_marching_cubes_subfigures"],
       "required_subfigures": ["break_even_contribution_decomposition_marching_cubes_a.pdf", "break_even_contribution_decomposition_marching_cubes_b.pdf", "break_even_contribution_decomposition_marching_cubes_c.pdf"],
       "report_inputs": ["figures/paper/report/extended_data_fig3_break_even_operating_envelope.sources.json"],
@@ -98,6 +107,7 @@
     {
       "id": "extended_data_fig4_road_distance_rule",
       "mode": "inkscape",
+      "required_inputs": ["all_city_distance_threshold_summary.csv", "city/*/analysis/distance_threshold/summary.csv"],
       "render_requests": ["distance_threshold_policy_comparison"],
       "required_subfigures": ["distance_threshold_city_landscape.pdf", "distance_threshold_oracle_performance.pdf"],
       "report_inputs": ["figures/paper/report/extended_data_fig4_road_distance_rule.sources.json"],
@@ -108,6 +118,7 @@
     {
       "id": "extended_data_fig5_pathway_curves",
       "mode": "inkscape",
+      "required_inputs": ["all_region_stats.csv", "all_sensitivity_named.csv"],
       "render_requests": ["regions_map_pathway_scenario_maps"],
       "required_subfigures": ["regions_map_pathway_scenario_maps_g_gef_pathway.pdf", "regions_map_pathway_scenario_maps_h_kappa_pathway.pdf"],
       "report_inputs": ["figures/paper/report/extended_data_fig5_pathway_curves.sources.json"],
@@ -118,6 +129,7 @@
     {
       "id": "extended_data_fig6_delivery_distance_distribution",
       "mode": "direct",
+      "required_inputs": ["raw/即时配送数据/疫情期间北京饿了么/eleme_round1_train_20200313/order/*.txt"],
       "render_requests": ["observed_delivery_distance_distribution"],
       "source_output": "observed_delivery_distance_distribution.pdf",
       "required_subfigures": ["observed_delivery_distance_distribution.pdf"],

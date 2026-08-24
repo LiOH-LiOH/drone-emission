@@ -22,7 +22,7 @@ PROJECT_ROOT = os.path.dirname(
 )
 REGIONS_JSON_PATH = os.path.join(PROJECT_ROOT, "regions.json")
 
-from utils import load_config
+from drone_emission.utils import load_config
 
 
 def stats_path_for(data_dir: str, level: str, name_en: str) -> str:

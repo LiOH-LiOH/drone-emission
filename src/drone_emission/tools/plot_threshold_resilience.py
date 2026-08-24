@@ -18,13 +18,12 @@ matplotlib.use("Agg")
 import pandas as pd  # noqa: E402
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
-sys.path.insert(0, str(PROJECT_ROOT / "src" / "drone_emission"))
 
-from utils import load_config  # noqa: E402
-from sensitivity.threshold_resilience import (  # noqa: E402
+from drone_emission.utils import load_config  # noqa: E402
+from drone_emission.sensitivity.threshold_resilience import (  # noqa: E402
     derive_threshold_resilience_typology,
 )
-from visualization.sensitivity import (  # noqa: E402
+from drone_emission.visualization.sensitivity import (  # noqa: E402
     THRESHOLD_RESILIENCE_TYPICAL_CITIES,
     plot_threshold_resilience_driver_forest,
     plot_threshold_resilience_national_overview,

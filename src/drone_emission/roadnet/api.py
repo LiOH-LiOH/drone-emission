@@ -2,7 +2,7 @@ import os
 
 import numpy as np
 import pandas as pd
-from utils.boundaries import graphml_covers_bbox, resolve_enlarged_boundaries
+from drone_emission.utils.boundaries import graphml_covers_bbox, resolve_enlarged_boundaries
 
 from ._compat import load_networkx_graph
 from .osm_roadnet import fetch_bikeable_roadnet

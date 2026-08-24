@@ -495,7 +495,7 @@ def _prepare_reduction_detour_city_stats(city_df):
 
 def _prepare_contribution_decomposition_city_stats(city_df, gef_df, exp_config):
     """Return Part-1-scope city stats for contribution decomposition."""
-    from visualization.macro_regions import normalize_province_name
+    from drone_emission.visualization.macro_regions import normalize_province_name
 
     required = {
         "region_key",
@@ -574,10 +574,10 @@ def _build_reduction_detour_binned_by_city(
 
     import numpy as np
 
-    from emission.cal_single_delivery import create_ebike_params, get_emission_params
-    from sensitivity.vectorized_lca import EbikeScenario, compute_ebike_per_order_g
-    from utils.config import get_cache_dir
-    from visualization.analysis import _bin_reduction_and_detour
+    from drone_emission.emission.cal_single_delivery import create_ebike_params, get_emission_params
+    from drone_emission.sensitivity.vectorized_lca import EbikeScenario, compute_ebike_per_order_g
+    from drone_emission.utils.config import get_cache_dir
+    from drone_emission.visualization.analysis import _bin_reduction_and_detour
 
     if exp_config is None:
         print(f"{figure_name}: exp_config missing; cannot apply configured kappa")
@@ -761,7 +761,7 @@ def _render_reduction_detour_grid_variant(
     min_air_km=0.0,
 ):
     """Load selected city OD data and render a reduction-detour grid."""
-    from visualization.analysis import plot_reduction_detour_grid_binned
+    from drone_emission.visualization.analysis import plot_reduction_detour_grid_binned
 
     built = _build_reduction_detour_binned_by_city(
         data_dir=data_dir,
@@ -869,7 +869,7 @@ def _render_shanghai_heatmap(
         print(f"Shanghai heatmap skipped — missing {sales_path}")
         return
 
-    from visualization.sales import plot_sales_heatmap
+    from drone_emission.visualization.sales import plot_sales_heatmap
 
     if compact:
         lng_range = (121.25, 121.65)
@@ -911,7 +911,7 @@ def _render_comparable_sales_heatmaps(
     import numpy as np
     from matplotlib.colors import Normalize
 
-    from visualization.sales import (
+    from drone_emission.visualization.sales import (
         COMPARABLE_SALES_SMOOTHING_KM,
         _prepare_comparable_sales_heatmap,
         plot_sales_heatmap,
@@ -1086,7 +1086,7 @@ def _render_shanghai_merchant_monthly_sales(
         return
 
     import geopandas as gpd
-    from visualization.sales import plot_merchant_monthly_sales_map
+    from drone_emission.visualization.sales import plot_merchant_monthly_sales_map
 
     stores_df = pd.read_csv(sales_path)
     buildings_gdf = gpd.read_file(building_path)
@@ -1102,12 +1102,12 @@ def _render_shanghai_merchant_monthly_sales(
 
 
 def _get_cached_sparse_graph(graphml_path, graph_cache=None):
-    """Load a SparseGraph once per render_all call."""
+    """Load a SparseGraph once per locked render call."""
     if not os.path.exists(graphml_path):
         return None
     graph_cache = graph_cache if graph_cache is not None else {}
     if graphml_path not in graph_cache:
-        from roadnet.sparse_graph import SparseGraph
+        from drone_emission.roadnet.sparse_graph import SparseGraph
 
         graph_cache[graphml_path] = SparseGraph.from_graphml(graphml_path)
     else:
@@ -1116,12 +1116,12 @@ def _get_cached_sparse_graph(graphml_path, graph_cache=None):
 
 
 def _get_cached_tile_router(graphml_path, graph, router_cache=None):
-    """Create a TileRouter once per render_all call."""
+    """Create a TileRouter once per locked render call."""
     if graph is None:
         return None
     router_cache = router_cache if router_cache is not None else {}
     if graphml_path not in router_cache:
-        from roadnet.tile_router import TileRouter
+        from drone_emission.roadnet.tile_router import TileRouter
 
         router_cache[graphml_path] = TileRouter(graph)
     else:
@@ -1166,7 +1166,7 @@ def _render_shanghai_building_height_merchant(
         return
 
     import geopandas as gpd
-    from visualization.buildings import plot_building_height_merchant_map
+    from drone_emission.visualization.buildings import plot_building_height_merchant_map
 
     stores_df = pd.read_csv(sales_path)
     od_df = None
@@ -1236,7 +1236,7 @@ def _render_shanghai_building_footprint_heatmap(
         return
 
     import geopandas as gpd
-    from visualization.buildings import plot_building_footprint_heatmap
+    from drone_emission.visualization.buildings import plot_building_footprint_heatmap
 
     stores_df = pd.read_csv(sales_path)
     buildings_gdf = gpd.read_file(building_path)
@@ -1337,7 +1337,7 @@ def _render_beijing_road_network_subfigure(
         )
         return
 
-    from visualization.roadnet import plot_road_network_subfigure
+    from drone_emission.visualization.roadnet import plot_road_network_subfigure
 
     road_graph = _get_cached_sparse_graph(roadnet_path, graph_cache=graph_cache)
     buildings_gdf = None
@@ -1384,7 +1384,7 @@ def _render_beijing_road_network_candidate_grid(
         )
         return
 
-    from visualization.roadnet import plot_road_network_candidate_grid
+    from drone_emission.visualization.roadnet import plot_road_network_candidate_grid
 
     road_graph = _get_cached_sparse_graph(roadnet_path, graph_cache=graph_cache)
     plot_road_network_candidate_grid(
@@ -1419,10 +1419,10 @@ def _render_beijing_road_network_subfigure_option3(
         "beijing_road_network_subfigure_option3_all_highways.graphml",
     )
 
-    from roadnet._compat import load_networkx_graph
-    from roadnet.osm_roadnet import fetch_all_highway_roadnet
-    from utils.boundaries import graphml_covers_bbox
-    from visualization.roadnet import (
+    from drone_emission.roadnet._compat import load_networkx_graph
+    from drone_emission.roadnet.osm_roadnet import fetch_all_highway_roadnet
+    from drone_emission.utils.boundaries import graphml_covers_bbox
+    from drone_emission.visualization.roadnet import (
         get_road_network_subfigure_frame,
         plot_road_type_subfigure,
     )
@@ -1496,7 +1496,7 @@ def _paper_pdf_path(out, figure_name, plot_title=False):
     """Return the expected PDF path for a paper figure."""
     path = os.path.join(out, f"{figure_name}.pdf")
     if plot_title:
-        from visualization._utils import _add_title_suffix
+        from drone_emission.visualization._utils import _add_title_suffix
 
         path = _add_title_suffix(path)
     return path
@@ -1753,7 +1753,7 @@ def _render_figure1_framework(out, plot_title):
 
     from pypdf import PdfReader, PdfWriter
 
-    from visualization._utils import _add_title_suffix
+    from drone_emission.visualization._utils import _add_title_suffix
 
     canvas_w, canvas_h = 561.0, 481.0
     page_w, page_h = 7.0 * 72.0, 6.0 * 72.0
@@ -1861,7 +1861,7 @@ def _render_figure2_framework(out, plot_title):
 
     from pypdf import PdfReader, PdfWriter
 
-    from visualization._utils import _add_title_suffix
+    from drone_emission.visualization._utils import _add_title_suffix
 
     canvas_w, canvas_h = 525.0, 281.0
     page_w = 7.0 * 72.0
@@ -1963,7 +1963,7 @@ def _render_figure3_framework(out, plot_title):
 
     from pypdf import PdfReader, PdfWriter
 
-    from visualization._utils import _add_title_suffix
+    from drone_emission.visualization._utils import _add_title_suffix
 
     canvas_w, canvas_h = 331.0, 421.0
     page_w = 7.0 * 72.0
@@ -2068,7 +2068,7 @@ def _render_figure4_framework(out, plot_title):
 
     from pypdf import PdfReader, PdfWriter
 
-    from visualization._utils import _add_title_suffix
+    from drone_emission.visualization._utils import _add_title_suffix
 
     canvas_w, canvas_h = 362.0, 331.0
     page_w = 7.0 * 72.0
@@ -2256,8 +2256,8 @@ def _render_city_context(
 
     import matplotlib.pyplot as plt
 
-    from visualization._utils import _add_title_suffix
-    from visualization.analysis import (
+    from drone_emission.visualization._utils import _add_title_suffix
+    from drone_emission.visualization.analysis import (
         _plot_reduction_absolute_scatter_panel,
         _plot_reduction_detour_panel,
     )
@@ -2355,7 +2355,7 @@ def _plot_city_context_combined_ab_panel(
     """Draw percent reduction and absolute reduction on one city-context panel."""
     import numpy as np
 
-    from visualization.analysis import _plot_reduction_detour_panel
+    from drone_emission.visualization.analysis import _plot_reduction_detour_panel
 
     _, ax_left, _ = _plot_reduction_detour_panel(
         fig,
@@ -4243,7 +4243,7 @@ def _render_city_context_group(
 
     import matplotlib.pyplot as plt
 
-    from visualization._utils import _add_title_suffix
+    from drone_emission.visualization._utils import _add_title_suffix
 
     fig = plt.figure(figsize=(24.0, 8.2))
     gs = fig.add_gridspec(1, 1)
@@ -4353,8 +4353,8 @@ def _render_city_gef_context_detour_summary(
     import matplotlib.pyplot as plt
     from matplotlib.colors import to_hex
 
-    from visualization._utils import _add_title_suffix
-    from visualization.analysis import (
+    from drone_emission.visualization._utils import _add_title_suffix
+    from drone_emission.visualization.analysis import (
         _plot_city_gef_scatter_components_axes,
         _plot_grouped_scatter_split_panels_axes,
         _weighted_reduction_column,
@@ -4587,7 +4587,7 @@ def _render_shanghai_road_air_distance(data_dir, out, for_latex, plot_title):
         print(f"Road air distance skipped — missing {od_path}")
         return
 
-    from visualization.emission import plot_road_air_distance_distribution
+    from drone_emission.visualization.emission import plot_road_air_distance_distribution
 
     df = pd.read_csv(od_path)
     plot_road_air_distance_distribution(
@@ -4608,7 +4608,7 @@ def _render_shanghai_road_detour(data_dir, out, for_latex, plot_title):
         print(f"Road detour distribution skipped — missing {od_path}")
         return
 
-    from visualization.emission import plot_road_detour_distribution
+    from drone_emission.visualization.emission import plot_road_detour_distribution
 
     df = pd.read_csv(od_path)
     plot_road_detour_distribution(
@@ -4629,7 +4629,7 @@ def _render_shanghai_air_detour(data_dir, out, for_latex, plot_title):
         print(f"Air detour distribution skipped — missing {od_path}")
         return
 
-    from visualization.emission import plot_air_detour_distribution
+    from drone_emission.visualization.emission import plot_air_detour_distribution
 
     df = pd.read_csv(od_path)
     plot_air_detour_distribution(
@@ -4650,7 +4650,7 @@ def _render_shanghai_emission_reduction(data_dir, out, for_latex, plot_title):
         print(f"Emission reduction skipped — missing {od_path}")
         return
 
-    from visualization.emission import plot_emission_reduction_vs_drone_ratio
+    from drone_emission.visualization.emission import plot_emission_reduction_vs_drone_ratio
 
     df = pd.read_csv(od_path)
     required = {"road_distance_m", "drone_lifecycle_g", "ebike_lifecycle_g", "annual_sales"}
@@ -4677,7 +4677,7 @@ def _render_shanghai_emission_by_distance(data_dir, out, for_latex, plot_title):
         print(f"Emission by distance skipped — missing {od_path}")
         return
 
-    from visualization.emission import plot_emission_by_road_distance_bar
+    from drone_emission.visualization.emission import plot_emission_by_road_distance_bar
 
     df = pd.read_csv(od_path)
     required = {"road_distance_m", "drone_lifecycle_g", "ebike_lifecycle_g", "annual_sales"}
@@ -4704,7 +4704,7 @@ def _render_shanghai_reduction_detour_by_distance(data_dir, out, for_latex, plot
         print(f"Reduction detour by distance skipped — missing {od_path}")
         return
 
-    from visualization.emission import plot_reduction_pct_and_detour_by_distance
+    from drone_emission.visualization.emission import plot_reduction_pct_and_detour_by_distance
 
     df = pd.read_csv(od_path)
     required = {"road_distance_m", "distance_km", "drone_lifecycle_g",
@@ -4732,7 +4732,7 @@ def _render_beijing_median_trip_emission_process(data_dir, out, for_latex, plot_
         print(f"Beijing median trip emission process skipped — missing {od_path}")
         return
 
-    from visualization.emission import plot_median_trip_emission_process
+    from drone_emission.visualization.emission import plot_median_trip_emission_process
 
     df = pd.read_csv(od_path)
     required = {
@@ -4774,11 +4774,11 @@ def _render_beijing_median_trip_phase_emissions(
         print(f"Beijing median trip phase emissions skipped — missing {od_path}")
         return
 
-    from visualization.analysis import (
+    from drone_emission.visualization.analysis import (
         _save_median_trip_lifecycle_subfigures,
         _selected_trip_phase_parts,
     )
-    from visualization.emission import _select_median_trip_emission_sample
+    from drone_emission.visualization.emission import _select_median_trip_emission_sample
 
     df = pd.read_csv(od_path)
     required = {
@@ -4833,7 +4833,7 @@ def _render_shanghai_air_road_joint(data_dir, out, for_latex, plot_title):
         print(f"Air road joint skipped — missing {od_path}")
         return
 
-    from visualization.emission import plot_air_road_joint
+    from drone_emission.visualization.emission import plot_air_road_joint
 
     df = pd.read_csv(od_path)
     plot_air_road_joint(
@@ -4854,7 +4854,7 @@ def _render_contribution_decomposition(
     exp_config,
 ):
     """Render the sampled contribution-decomposition paper figure."""
-    from visualization.emission import (
+    from drone_emission.visualization.emission import (
         plot_contribution_decomposition,
         prepare_contribution_decomposition_data,
     )
@@ -4895,7 +4895,7 @@ def _render_contribution_decomposition_city_b(
     exp_config,
 ):
     """Render the full-data selected-city contribution-decomposition figure."""
-    from visualization.emission import (
+    from drone_emission.visualization.emission import (
         CONTRIBUTION_CITY_B_REGION_KEYS,
         plot_contribution_decomposition_city_b,
     )
@@ -5109,7 +5109,7 @@ def _render_break_even_contribution_decomposition_marching_cubes_de(
     exp_config,
 ):
     """Render the extracted contribution panels from the marching-cubes figure."""
-    from visualization.emission import (
+    from drone_emission.visualization.emission import (
         plot_break_even_contribution_decomposition_marching_cubes_de,
     )
 
@@ -5148,7 +5148,7 @@ def _prepare_break_even_phase_diagram(
     exp_config,
 ):
     """Prepare lifecycle break-even / phase-diagram data with cache."""
-    from visualization.emission import (
+    from drone_emission.visualization.emission import (
         CONTRIBUTION_SAMPLE_LIMIT,
         CONTRIBUTION_SAMPLE_SEED,
         prepare_break_even_phase_diagram_data,
@@ -5179,7 +5179,7 @@ def _prepare_break_even_phase_diagram(
             "panel c will show a placeholder"
         )
 
-    from utils.config import get_cache_dir
+    from drone_emission.utils.config import get_cache_dir
 
     figure_name = "break_even_phase_diagram"
     gef_path = os.path.join(data_dir, "gef_china.csv")
@@ -5234,7 +5234,7 @@ def _render_break_even_phase_diagram(
     exp_config,
 ):
     """Render the lifecycle break-even / phase-diagram paper figure."""
-    from visualization.emission import plot_break_even_phase_diagram
+    from drone_emission.visualization.emission import plot_break_even_phase_diagram
 
     prepared = _prepare_break_even_phase_diagram(
         data_dir=data_dir,
@@ -5256,12 +5256,12 @@ def _prepare_contribution_decomposition_full(
     exp_config,
 ):
     """Prepare full-data contribution decomposition with cache."""
-    from visualization.emission import (
+    from drone_emission.visualization.emission import (
         CONTRIBUTION_SAMPLE_SEED,
         _resolve_contribution_od_path,
         prepare_contribution_decomposition_data,
     )
-    from utils.config import get_cache_dir
+    from drone_emission.utils.config import get_cache_dir
 
     stats_path = os.path.join(data_dir, "all_region_stats.csv")
     gef_path = os.path.join(data_dir, "gef_china.csv")
@@ -5355,7 +5355,7 @@ def _render_break_even_contribution_decomposition(
     render_marching_cubes=False,
 ):
     """Render the stacked break-even and contribution-decomposition figure."""
-    from visualization.emission import (
+    from drone_emission.visualization.emission import (
         plot_break_even_contribution_decomposition,
         plot_break_even_contribution_decomposition_marching_cubes,
     )
@@ -5413,7 +5413,7 @@ def _render_break_even_marching_cubes_subfigures(
     only,
 ):
     """Render selected standalone panels from the marching-cubes composite."""
-    from visualization.emission import (
+    from drone_emission.visualization.emission import (
         plot_break_even_contribution_decomposition_marching_cubes_subfigures,
     )
 
@@ -5456,9 +5456,9 @@ def _render_distance_comparison_grid(data_dir, out, for_latex, plot_title, extre
         print(f"Distance comparison grid ({extreme}) skipped — missing data for {region_key}")
         return
 
-    from roadnet.sparse_graph import SparseGraph
-    from roadnet.tile_router import TileRouter
-    from visualization.roadnet import plot_distance_comparison_grid
+    from drone_emission.roadnet.sparse_graph import SparseGraph
+    from drone_emission.roadnet.tile_router import TileRouter
+    from drone_emission.visualization.roadnet import plot_distance_comparison_grid
 
     od_df = pd.read_csv(od_path)
     graph = SparseGraph.from_graphml(graphml_path)
@@ -5556,7 +5556,7 @@ def _render_distance_comparison_single_panel(
         )
         return
 
-    from visualization.roadnet import plot_distance_comparison_single_panel
+    from drone_emission.visualization.roadnet import plot_distance_comparison_single_panel
 
     od_df = pd.read_csv(od_path)
     graph = _get_cached_sparse_graph(graphml_path, graph_cache=graph_cache)
@@ -5589,8 +5589,8 @@ def _render_tanner_impedance_fit_panel_a(data_dir, out, for_latex, plot_title):
         print(f"tanner_impedance_fit_panel_a skipped — missing {order_dir}")
         return
 
-    from calibration import cali_elm
-    from visualization.calibration import plot_tanner_distance_histogram
+    from drone_emission.calibration import cali_elm
+    from drone_emission.visualization.calibration import plot_tanner_distance_histogram
 
     cali_elm.elm_data_dir = order_dir + os.sep
     distances = cali_elm.load_all_eleme_distances(min_orders_per_shop=50)
@@ -5616,8 +5616,8 @@ def _render_tanner_impedance_fit(data_dir, out, for_latex, plot_title):
         print(f"tanner_impedance_fit skipped — missing {order_dir}")
         return
 
-    from calibration import cali_elm
-    from visualization.calibration import plot_tanner_impedance_fit
+    from drone_emission.calibration import cali_elm
+    from drone_emission.visualization.calibration import plot_tanner_impedance_fit
 
     cali_elm.elm_data_dir = order_dir + os.sep
     distances = cali_elm.load_all_eleme_distances(min_orders_per_shop=50)
@@ -5651,8 +5651,8 @@ def _render_observed_delivery_distance_distribution(
         )
         return
 
-    from calibration import cali_elm
-    from visualization.calibration import (
+    from drone_emission.calibration import cali_elm
+    from drone_emission.visualization.calibration import (
         plot_observed_delivery_distance_distribution,
     )
 
@@ -5693,7 +5693,7 @@ def _render_alpha_calibration_5km(out, for_latex, plot_title):
         print(f"alpha_calibration_5km skipped — missing {csv_path}")
         return
 
-    from visualization.calibration import plot_alpha_calibration_5km
+    from drone_emission.visualization.calibration import plot_alpha_calibration_5km
 
     df = pd.read_csv(csv_path)
     plot_alpha_calibration_5km(
@@ -5719,11 +5719,11 @@ def _render_city_reduction_concentration_scatter(data_dir, out, for_latex):
         )
         return
 
-    from analysis.drone_spatial_concentration import (
+    from drone_emission.analysis.drone_spatial_concentration import (
         ABSOLUTE_REDUCTION_COLUMN,
         RELATIVE_REDUCTION_COLUMN,
     )
-    from visualization.analysis import plot_city_reduction_concentration_scatter
+    from drone_emission.visualization.analysis import plot_city_reduction_concentration_scatter
 
     results = pd.read_csv(cache_path)
     required = {
@@ -5781,11 +5781,11 @@ def _render_city_reduction_5km_drone_orders_scatter(
         )
         return
 
-    from analysis.drone_spatial_concentration import (
+    from drone_emission.analysis.drone_spatial_concentration import (
         ABSOLUTE_REDUCTION_COLUMN,
         RELATIVE_REDUCTION_COLUMN,
     )
-    from visualization.analysis import (
+    from drone_emission.visualization.analysis import (
         plot_city_reduction_5km_drone_orders_scatter,
     )
 
@@ -5825,15 +5825,18 @@ def _render_city_reduction_5km_drone_orders_scatter(
     )
 
 
-def render_all(
+def render_locked_requests(
     data_dir: str,
     figures_dir: str,
     for_latex: bool = False,
     plot_title: bool = False,
-    only: set = None,
+    only: set,
     exp_config: dict = None,
     profile: bool = False,
 ):
+    """Render only the request names selected by the formal figure manifest."""
+    if not only:
+        raise ValueError("formal rendering requires explicit manifest requests")
     framework_out = os.path.join(figures_dir, "paper")
     out = os.path.join(framework_out, "subfigure")
     os.makedirs(framework_out, exist_ok=True)
@@ -5872,7 +5875,7 @@ def render_all(
                 f"{summary_path}; run threshold resilience first"
             )
         else:
-            from visualization.sensitivity import (
+            from drone_emission.visualization.sensitivity import (
                 plot_threshold_resilience_national_subfigures,
             )
 
@@ -5885,7 +5888,7 @@ def render_all(
                 for_latex=for_latex,
                 plot_title=plot_title,
             )
-            from visualization.sensitivity import plot_threshold_resilience_national_kdes
+            from drone_emission.visualization.sensitivity import plot_threshold_resilience_national_kdes
             plot_threshold_resilience_national_kdes(pd.read_csv(summary_path), out)
 
     def _figure1_needs_vector_source(name):
@@ -6033,14 +6036,14 @@ def render_all(
         "detour_lifecycle_distance",
     }
     if only is None or only & concept_figures:
-        from visualization.concepts import (
+        from drone_emission.visualization.concepts import (
             plot_detour_and_lifecycle,
             plot_detour_lifecycle_distance,
             plot_detour_ratio_concept,
             plot_emission_model_flowchart,
             plot_production_detour_eol_panels,
         )
-        from visualization.emission import (
+        from drone_emission.visualization.emission import (
             plot_end_of_life_phase_per_km,
             plot_production_phase_per_km,
         )
@@ -6098,8 +6101,8 @@ def render_all(
         od_df = pd.read_csv(od_path) if os.path.exists(od_path) else None
         graph, router = None, None
         if os.path.exists(graphml_path) and od_df is not None:
-            from roadnet.sparse_graph import SparseGraph
-            from roadnet.tile_router import TileRouter
+            from drone_emission.roadnet.sparse_graph import SparseGraph
+            from drone_emission.roadnet.tile_router import TileRouter
             graph = SparseGraph.from_graphml(graphml_path)
             router = TileRouter(graph)
         else:
@@ -6118,7 +6121,7 @@ def render_all(
         if not os.path.exists(od_path):
             print(f"lifecycle_distance_detour_boxplot skipped — missing {od_path}")
         else:
-            from visualization.emission import plot_lifecycle_distance_detour_boxplot
+            from drone_emission.visualization.emission import plot_lifecycle_distance_detour_boxplot
 
             od_df = pd.read_csv(od_path)
             required = {"distance_km", "road_distance_m"}
@@ -6144,7 +6147,7 @@ def render_all(
                 missing = required - set(od_df.columns)
                 print(f"lifecycle_distance_route_factor skipped — {od_path} missing columns {missing}")
             else:
-                from visualization.emission import plot_lifecycle_distance_route_factor
+                from drone_emission.visualization.emission import plot_lifecycle_distance_route_factor
 
                 plot_lifecycle_distance_route_factor(
                     od_df,
@@ -6346,7 +6349,7 @@ def render_all(
     distance_comparison_requested = _want("distance_comparison")
     distance_comparison_pdf_needed = _figure1_needs_vector_source("distance_comparison")
     if distance_comparison_requested:
-        from visualization.roadnet import plot_distance_comparison
+        from drone_emission.visualization.roadnet import plot_distance_comparison
 
         _render_distance_comparison(
             data_dir=data_dir,
@@ -6358,7 +6361,7 @@ def render_all(
             router_cache=router_cache,
         )
     if distance_comparison_pdf_needed:
-        from visualization.roadnet import plot_distance_comparison
+        from drone_emission.visualization.roadnet import plot_distance_comparison
 
         _render_distance_comparison(
             data_dir=data_dir,
@@ -6401,7 +6404,7 @@ def render_all(
     # --- Cross-region stats figures ---
     province_gef_figures = {"province_gef_china_map"}
     if only is None or only & province_gef_figures:
-        from visualization.regions import plot_province_gef_china_map
+        from drone_emission.visualization.regions import plot_province_gef_china_map
 
         gef_path = (exp_config or {}).get("gef_path") or os.path.join(
             data_dir,
@@ -6505,7 +6508,7 @@ def render_all(
                 only is None or bool(only & analysis_figures) or analysis_source_needed
             )
             if needs_analysis_import:
-                from visualization.analysis import (
+                from drone_emission.visualization.analysis import (
                     _weighted_reduction_column,
                     plot_city_annual_absolute_reduction_distribution,
                     plot_city_annual_absolute_reduction_violin_distribution,
@@ -6844,7 +6847,7 @@ def render_all(
                         )
 
             if _want("regions_map"):
-                from visualization.regions import plot_regions_on_china_map
+                from drone_emission.visualization.regions import plot_regions_on_china_map
 
                 plot_regions_on_china_map(
                     csv_path=stats_path,
@@ -6941,8 +6944,8 @@ def render_all(
                     )
                 beijing_graph, beijing_router = None, None
                 if os.path.exists(beijing_graphml_path):
-                    from roadnet.sparse_graph import SparseGraph
-                    from roadnet.tile_router import TileRouter
+                    from drone_emission.roadnet.sparse_graph import SparseGraph
+                    from drone_emission.roadnet.tile_router import TileRouter
 
                     beijing_graph = SparseGraph.from_graphml(beijing_graphml_path)
                     beijing_router = TileRouter(beijing_graph)
@@ -7046,7 +7049,7 @@ def render_all(
                     df_enriched = pd.read_csv(enriched_path)
                     df_enriched = _attach_enrichment_columns(df, df_enriched)
                     if only is None or only & R2_ATTRIBUTION_FIGURES:
-                        from analysis.city_attribution import (
+                        from drone_emission.analysis.city_attribution import (
                             build_r2_city_attribution,
                             write_r2_city_attribution_report,
                         )
@@ -7269,7 +7272,7 @@ def render_all(
     # all_region_stats.csv; only need all_sensitivity_oat.csv. Kept outside
     # the stats-gated block so --only oat_tornado_* works standalone.
     if _want("oat_tornado_story") or _want("oat_tornado_full"):
-        from visualization.sensitivity import OAT_FEATURES_STORY, plot_oat_tornado
+        from drone_emission.visualization.sensitivity import OAT_FEATURES_STORY, plot_oat_tornado
         oat_path = os.path.join(data_dir, "all_sensitivity_oat.csv")
         if not os.path.exists(oat_path):
             print(f"oat_tornado skipped — missing {oat_path}; run sensitivity first")
@@ -7301,7 +7304,7 @@ def render_all(
         "mc_uncertainty", "mc_anchor_forest", "mc_anchor_scatter",
     }
     if only is None or only & sobol_figures:
-        from visualization.sensitivity import (
+        from drone_emission.visualization.sensitivity import (
             plot_drone_tech_sensitivity_panels,
             plot_mc_anchor_forest, plot_mc_anchor_scatter, plot_mc_uncertainty,
             plot_sobol_by_mechanism, plot_sobol_grouped, plot_sobol_indices,

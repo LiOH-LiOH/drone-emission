@@ -5,8 +5,8 @@ import numpy as np
 import pandas as pd
 from haversine import Unit, haversine, haversine_vector
 from sklearn.neighbors import BallTree
-from utils.coordinates import gcj02_to_wgs84, haversine_distance
-from utils.tools import get_epsg_from_bounds
+from drone_emission.utils.coordinates import gcj02_to_wgs84, haversine_distance
+from drone_emission.utils.tools import get_epsg_from_bounds
 
 from .cal_area import preprocess_buildings
 

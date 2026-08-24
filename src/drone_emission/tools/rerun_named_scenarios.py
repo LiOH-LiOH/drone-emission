@@ -27,18 +27,17 @@ import pandas as pd
 PROJECT_ROOT = os.path.dirname(
     os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 )
-sys.path.insert(0, os.path.join(PROJECT_ROOT, "src", "drone_emission"))
 
-from emission.cal_single_delivery import (  # noqa: E402
+from drone_emission.emission.cal_single_delivery import (  # noqa: E402
     create_drone_params,
     create_ebike_params,
     get_emission_params,
 )
-from sensitivity.named_scenarios import run_named_scenarios_for_region  # noqa: E402
-from utils import load_config  # noqa: E402
-from utils.grid_emission_factor import fetch_factor, normalize_province_name  # noqa: E402
-from utils.province import get_province_from_district  # noqa: E402
-from utils.region_config import RegionConfig, init_registry  # noqa: E402
+from drone_emission.sensitivity.named_scenarios import run_named_scenarios_for_region  # noqa: E402
+from drone_emission.utils import load_config  # noqa: E402
+from drone_emission.utils.grid_emission_factor import fetch_factor, normalize_province_name  # noqa: E402
+from drone_emission.utils.province import get_province_from_district  # noqa: E402
+from drone_emission.utils.region_config import RegionConfig, init_registry  # noqa: E402
 
 REGIONS_JSON = os.path.join(PROJECT_ROOT, "regions.json")
 REQUIRED_OD_COLUMNS = ("road_distance_m", "distance_km")
@@ -192,7 +191,7 @@ def main():
     print(f"Summary: {counts}  total {elapsed_total:.1f}s")
 
     print("Consolidating named CSVs ...")
-    from tools.consolidate_sensitivity import consolidate
+    from drone_emission.tools.consolidate_sensitivity import consolidate
     consolidate(config["data_dir"])
 
 

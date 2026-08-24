@@ -1,12 +1,12 @@
 import traceback
 from pathlib import Path
 
-from buildings import load_buildings
-from demand import generate_od_pairs
-from emission import cal_emission
-from preprocessing import prepare_sales
-from roadnet import load_roadnet
-from utils.region_config import get_registry
+from drone_emission.buildings import load_buildings
+from drone_emission.demand import generate_od_pairs
+from drone_emission.emission import cal_emission
+from drone_emission.preprocessing import prepare_sales
+from drone_emission.roadnet import load_roadnet
+from drone_emission.utils.region_config import get_registry
 
 # Project root directory
 PROJECT_ROOT = Path(__file__).parent.parent.parent
@@ -19,8 +19,7 @@ def run_region_analysis(region_key: str, config: dict):
     registry = get_registry()
 
     if region_key not in registry:
-        print(f"Region '{region_key}' not found in configuration.")
-        return
+        raise KeyError(f"Region '{region_key}' not found in configuration")
 
     print(f"Running analysis for {region_key}...")
     region = registry[region_key]
@@ -51,9 +50,24 @@ def run_region_analysis(region_key: str, config: dict):
     # registry.save()
 
 
-def has_emission_results(region_config) -> bool:
-    """Check if a region already has emission results in stats."""
-    return "total_ebike_lifecycle" in region_config.stats
+def has_city_results(region_config, config: dict) -> bool:
+    """Check the completion marker and required reusable city artifacts."""
+    if "total_ebike_lifecycle" not in region_config.stats:
+        return False
+    name = region_config.region_name_en.lower()
+    root = Path(config["data_dir"]) / region_config.region_level / name
+    buildings = (root / f"{name}_buildings.gpkg").exists() or (
+        root / f"{name}_buildings.geojson"
+    ).exists()
+    return buildings and all(
+        (root / filename).exists()
+        for filename in (
+            f"{name}_sales.csv",
+            f"{name}_od_pairs.csv",
+            f"{name}_roadnet.graphml",
+            "region_stats.json",
+        )
+    )
 
 
 def run_all(config: dict, level: str = "city", skip_completed: bool = False):
@@ -79,7 +93,7 @@ def run_all(config: dict, level: str = "city", skip_completed: bool = False):
         print(f"Processing {level} {i}/{total}: {region_key} ({region_config.region_name_cn})")
         print(f"{'='*60}")
 
-        if skip_completed and has_emission_results(region_config):
+        if skip_completed and has_city_results(region_config, config):
             print(f"Skipping {region_key} (already has emission results)")
             skipped += 1
             continue
@@ -103,3 +117,6 @@ def run_all(config: dict, level: str = "city", skip_completed: bool = False):
     print(f"  Failed:    {len(failed)}")
     if failed:
         print(f"  Failed regions: {', '.join(failed)}")
+        raise RuntimeError(
+            f"{len(failed)} city experiment(s) failed: {', '.join(failed)}"
+        )

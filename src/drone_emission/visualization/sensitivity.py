@@ -1,4 +1,4 @@
-"""Exploratory plots from the consolidated sensitivity outputs.
+"""Retained threshold-resilience plots and archived-era plot implementations.
 
 Reads ``data/all_sensitivity_oat.csv``, ``data/all_sensitivity_shapley.csv``,
 ``data/all_sensitivity_sobol.csv``, and ``data/all_sensitivity_named.csv``.
@@ -12,8 +12,7 @@ Each plot function follows the project's standard signature
   + supplementary text. Otherwise titles are suppressed (for clean
   paper-figure exports).
 
-Run with:
-    cd src/drone_emission && ../../.venv/bin/python -m visualization.sensitivity
+Formal rendering is available only through ``python -m drone_emission render``.
 """
 
 from __future__ import annotations
@@ -38,7 +37,7 @@ from matplotlib.patches import Patch
 from matplotlib.ticker import FuncFormatter
 from scipy.stats import gaussian_kde
 
-from sensitivity.threshold_resilience import (
+from drone_emission.sensitivity.threshold_resilience import (
     THRESHOLD_RESILIENCE_MEGACITIES,
     THRESHOLD_RESILIENCE_QUADRANT_IDS,
     THRESHOLD_RESILIENCE_QUADRANT_LABELS,
@@ -319,8 +318,6 @@ def _oat_panels(
         fig.suptitle(ylabel + " — OAT response (median ± IQR across cities)")
     fig.tight_layout()
     return _finalize(save_path, dpi, for_latex, plot_title)
-
-
 def plot_oat_reduction_panels(oat, save_path=None, dpi=150, for_latex=False, plot_title=False):
     return _oat_panels(oat, "reduction_vs_anchor_ebike_pct", "Reduction vs anchor (%)",
                         save_path, dpi, for_latex, plot_title)
@@ -1468,7 +1465,7 @@ def plot_threshold_resilience_national_overview(
         for_latex: If True, save as PDF.
         plot_title: If True, show title.
     """
-    from visualization.regions import (
+    from drone_emission.visualization.regions import (
         _batch_city_to_adcode,
         plot_regions_on_china_map,
     )
@@ -1604,7 +1601,7 @@ def plot_threshold_resilience_national_subfigures(
             untitled by design.
     """
     del plot_title
-    from visualization.regions import _batch_city_to_adcode, plot_regions_on_china_map
+    from drone_emission.visualization.regions import _batch_city_to_adcode, plot_regions_on_china_map
 
     wide = validate_threshold_resilience_summary(summary, expected_cities=314)
     unresolved = sorted(
@@ -2193,7 +2190,7 @@ def plot_threshold_adjusted_resistance_national(
         for_latex: If True, save as PDF.
         plot_title: If True, show title.
     """
-    from visualization.regions import (
+    from drone_emission.visualization.regions import (
         plot_regions_on_china_map,
     )
 
@@ -2648,7 +2645,7 @@ def plot_threshold_baseline_retention_national(
         for_latex: If True, save as PDF.
         plot_title: If True, show title.
     """
-    from visualization.regions import _batch_city_to_adcode, plot_regions_on_china_map
+    from drone_emission.visualization.regions import _batch_city_to_adcode, plot_regions_on_china_map
 
     wide = validate_threshold_baseline_retention_summary(summary, expected_cities=314)
     unresolved = sorted(
@@ -3042,119 +3039,3 @@ def plot_named_2030_2060_scatter(
 # ---------------------------------------------------------------------------
 # Driver
 # ---------------------------------------------------------------------------
-
-def render_all(data_dir: str, figures_dir: str,
-               for_latex: bool = False, plot_title: bool = False, dpi: int = 150) -> None:
-    out = os.path.join(figures_dir, "sensitivity")
-    os.makedirs(out, exist_ok=True)
-
-    oat_path = os.path.join(data_dir, "all_sensitivity_oat.csv")
-    sh_path = os.path.join(data_dir, "all_sensitivity_shapley.csv")
-    nm_path = os.path.join(data_dir, "all_sensitivity_named.csv")
-    sb_path = os.path.join(data_dir, "all_sensitivity_sobol.csv")
-
-    if os.path.exists(oat_path):
-        oat = pd.read_csv(oat_path)
-        print(f"OAT: {len(oat)} rows from {oat_path}")
-        # Full tornado (all drone-tech features) — for supplementary material.
-        plot_oat_tornado(oat, save_path=_resolve_path(out, "oat_tornado_full", for_latex),
-                         figsize=(8, 6.5), for_latex=for_latex, plot_title=plot_title)
-        # Story tornado (curated subset) — for main-text Fig. 5a.
-        plot_oat_tornado(oat, save_path=_resolve_path(out, "oat_tornado_story", for_latex),
-                         figsize=(8, 5.5), for_latex=for_latex, plot_title=plot_title,
-                         feature_whitelist=OAT_FEATURES_STORY)
-        plot_oat_reduction_panels(oat, save_path=_resolve_path(out, "oat_reduction_panels", for_latex),
-                                   dpi=dpi, for_latex=for_latex, plot_title=plot_title)
-        plot_oat_threshold_panels(oat, save_path=_resolve_path(out, "oat_threshold_panels", for_latex),
-                                   dpi=dpi, for_latex=for_latex, plot_title=plot_title)
-        plot_oat_drone_ratio_panels(oat, save_path=_resolve_path(out, "oat_drone_ratio_panels", for_latex),
-                                     dpi=dpi, for_latex=for_latex, plot_title=plot_title)
-        plot_oat_beneficial_share_panels(oat, save_path=_resolve_path(out, "oat_beneficial_share", for_latex),
-                                          dpi=dpi, for_latex=for_latex, plot_title=plot_title)
-    else:
-        print(f"  missing {oat_path}; skipping OAT plots")
-
-    if os.path.exists(sh_path):
-        sh = pd.read_csv(sh_path)
-        print(f"Shapley: {len(sh)} rows from {sh_path}")
-        plot_shapley_aggregate_stacked(sh, save_path=_resolve_path(out, "shapley_aggregate_stacked", for_latex),
-                                        dpi=dpi, for_latex=for_latex, plot_title=plot_title)
-        plot_shapley_boxplot(sh, save_path=_resolve_path(out, "shapley_boxplot", for_latex),
-                              dpi=dpi, for_latex=for_latex, plot_title=plot_title)
-        plot_shapley_per_city_stacked(
-            sh,
-            save_path_top=_resolve_path(out, "shapley_per_city_top", for_latex),
-            save_path_bottom=_resolve_path(out, "shapley_per_city_bottom", for_latex),
-            top_n=50, dpi=dpi, for_latex=for_latex, plot_title=plot_title,
-        )
-        plot_shapley_dominance_scatter(sh, save_path=_resolve_path(out, "shapley_dominance_scatter", for_latex),
-                                        dpi=dpi, for_latex=for_latex, plot_title=plot_title)
-    else:
-        print(f"  missing {sh_path}; skipping Shapley plots")
-
-    if os.path.exists(sb_path):
-        sb = pd.read_csv(sb_path)
-        print(f"Sobol: {len(sb)} rows from {sb_path}")
-        plot_drone_tech_sensitivity_panels(
-            sb, save_path=_resolve_path(out, "drone_tech_sensitivity", for_latex),
-            dpi=dpi, for_latex=for_latex, plot_title=plot_title)
-        plot_sobol_indices(sb, save_path=_resolve_path(out, "sobol_indices", for_latex),
-                            dpi=dpi, for_latex=for_latex, plot_title=plot_title)
-        plot_sobol_by_mechanism(sb, save_path=_resolve_path(out, "sobol_by_mechanism", for_latex),
-                                 dpi=dpi, for_latex=for_latex, plot_title=plot_title)
-        plot_sobol_strip(sb, save_path=_resolve_path(out, "sobol_strip", for_latex),
-                          dpi=dpi, for_latex=for_latex, plot_title=plot_title)
-        plot_mc_uncertainty(sb, save_path=_resolve_path(out, "mc_uncertainty", for_latex),
-                             dpi=dpi, for_latex=for_latex, plot_title=plot_title)
-        plot_mc_anchor_forest(sb, save_path=_resolve_path(out, "mc_anchor_forest", for_latex),
-                               dpi=dpi, for_latex=for_latex, plot_title=plot_title)
-        plot_mc_anchor_scatter(sb, save_path=_resolve_path(out, "mc_anchor_scatter", for_latex),
-                                dpi=dpi, for_latex=for_latex, plot_title=plot_title)
-    else:
-        print(f"  missing {sb_path}; skipping Sobol/MC plots")
-
-    if os.path.exists(nm_path):
-        nm = pd.read_csv(nm_path)
-        print(f"Named: {len(nm)} rows from {nm_path}")
-        plot_named_boxplot(nm, save_path=_resolve_path(out, "named_boxplot", for_latex),
-                            dpi=dpi, for_latex=for_latex, plot_title=plot_title)
-        plot_named_cdf(nm, save_path=_resolve_path(out, "named_cdf", for_latex),
-                        dpi=dpi, for_latex=for_latex, plot_title=plot_title)
-        plot_named_2030_2060_scatter(nm, save_path=_resolve_path(out, "named_2030_2060_scatter", for_latex),
-                                      dpi=dpi, for_latex=for_latex, plot_title=plot_title)
-    else:
-        print(f"  missing {nm_path}; skipping named-scenario plots")
-
-
-def _bootstrap_paths():
-    here = os.path.dirname(os.path.abspath(__file__))
-    src = os.path.normpath(os.path.join(here, ".."))
-    if src not in sys.path:
-        sys.path.insert(0, src)
-
-
-def main():
-    _bootstrap_paths()
-    from utils import load_config
-
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--env", type=str, default=None)
-    parser.add_argument("--png", action="store_true",
-                         help="Force PNG output (overrides experiment.toml for_latex)")
-    parser.add_argument("--titled", action="store_true",
-                         help="Force titled output with _t suffix (overrides experiment.toml plot_title)")
-    args = parser.parse_args()
-
-    project_root = os.path.dirname(
-        os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    )
-    config = load_config(os.path.join(project_root, "experiment.toml"), env=args.env)
-    for_latex = (not args.png) and config.get("for_latex", False)
-    plot_title = args.titled or config.get("plot_title", False)
-    print(f"for_latex={for_latex}, plot_title={plot_title}")
-    render_all(config["data_dir"], config["figures_dir"],
-                for_latex=for_latex, plot_title=plot_title)
-
-
-if __name__ == "__main__":
-    main()

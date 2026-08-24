@@ -25,15 +25,14 @@ from pathlib import Path
 import pandas as pd
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
-sys.path.insert(0, str(PROJECT_ROOT / "src" / "drone_emission"))
 
-from analysis.distance_threshold import (  # noqa: E402
+from drone_emission.analysis.distance_threshold import (  # noqa: E402
     ANALYSIS_VERSION,
     analyze_city_inputs,
     validate_inputs,
 )
-from utils import load_config  # noqa: E402
-from utils.region_config import RegionConfig, init_registry  # noqa: E402
+from drone_emission.utils import load_config  # noqa: E402
+from drone_emission.utils.region_config import RegionConfig, init_registry  # noqa: E402
 
 REGIONS_JSON = PROJECT_ROOT / "regions.json"
 REQUIRED_COLUMNS = (

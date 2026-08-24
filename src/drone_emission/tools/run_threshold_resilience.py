@@ -21,14 +21,13 @@ from pathlib import Path
 import pandas as pd
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
-sys.path.insert(0, str(PROJECT_ROOT / "src" / "drone_emission"))
 
-from emission.cal_single_delivery import (  # noqa: E402
+from drone_emission.emission.cal_single_delivery import (  # noqa: E402
     create_drone_params,
     create_ebike_params,
     get_emission_params,
 )
-from sensitivity.threshold_resilience import (  # noqa: E402
+from drone_emission.sensitivity.threshold_resilience import (  # noqa: E402
     ANALYSIS_VERSION,
     aggregate_fixed_threshold,
     evaluate_samples,
@@ -38,10 +37,10 @@ from sensitivity.threshold_resilience import (  # noqa: E402
     spearman_drivers,
     summarize_samples,
 )
-from utils import load_config  # noqa: E402
-from utils.grid_emission_factor import fetch_factor, normalize_province_name  # noqa: E402
-from utils.province import get_province_from_district  # noqa: E402
-from utils.region_config import RegionConfig, init_registry  # noqa: E402
+from drone_emission.utils import load_config  # noqa: E402
+from drone_emission.utils.grid_emission_factor import fetch_factor, normalize_province_name  # noqa: E402
+from drone_emission.utils.province import get_province_from_district  # noqa: E402
+from drone_emission.utils.region_config import RegionConfig, init_registry  # noqa: E402
 
 REGIONS_JSON = PROJECT_ROOT / "regions.json"
 OD_COLUMNS = ("distance_km", "road_distance_m", "annual_sales")

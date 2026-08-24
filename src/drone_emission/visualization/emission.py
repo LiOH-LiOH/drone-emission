@@ -390,7 +390,7 @@ def _sample_threshold_sweep(
     order_weight: np.ndarray = None,
 ) -> tuple[float, dict]:
     """Select the sampled optimal threshold using the standard vectorized sweep."""
-    from sensitivity.vectorized_lca import threshold_sweep_km
+    from drone_emission.sensitivity.vectorized_lca import threshold_sweep_km
 
     if order_weight is None:
         order_weight = np.ones_like(road_km, dtype=float)
@@ -620,12 +620,12 @@ def prepare_contribution_decomposition_data(
     """Prepare current-mechanism contribution data for the paper figure."""
     from dataclasses import replace
 
-    from emission.cal_single_delivery import (
+    from drone_emission.emission.cal_single_delivery import (
         create_drone_params,
         create_ebike_params,
         get_emission_params,
     )
-    from sensitivity.vectorized_lca import (
+    from drone_emission.sensitivity.vectorized_lca import (
         DroneScenario,
         EbikeScenario,
         compute_drone_per_order_parts_g,
@@ -2507,12 +2507,12 @@ def plot_break_even_contribution_decomposition_marching_cubes_de(
 
 def _build_break_even_scenarios(exp_config: dict = None):
     """Create shared LCA params and scenarios for break-even calculations."""
-    from emission.cal_single_delivery import (
+    from drone_emission.emission.cal_single_delivery import (
         create_drone_params,
         create_ebike_params,
         get_emission_params,
     )
-    from sensitivity.vectorized_lca import DroneScenario, EbikeScenario
+    from drone_emission.sensitivity.vectorized_lca import DroneScenario, EbikeScenario
 
     emission_cfg = get_emission_params(exp_config)
     ebike_params = create_ebike_params(exp_config)
@@ -2539,7 +2539,7 @@ def _break_even_linear_coefficients(
     """Return delta_g intercept and GEF slope for one air distance."""
     from dataclasses import replace
 
-    from sensitivity.vectorized_lca import (
+    from drone_emission.sensitivity.vectorized_lca import (
         compute_drone_per_order_g,
         compute_ebike_per_order_g,
     )
@@ -2626,7 +2626,7 @@ def _sample_break_even_observed_context(
     """Sample observed OD/city contexts for the phase-diagram panel."""
     from dataclasses import replace
 
-    from sensitivity.vectorized_lca import (
+    from drone_emission.sensitivity.vectorized_lca import (
         compute_drone_per_order_g,
         compute_ebike_per_order_g,
     )
@@ -2820,7 +2820,7 @@ def _break_even_mesh_coefficients(
     """Return delta_g intercept and GEF slope over a distance-detour mesh."""
     from dataclasses import replace
 
-    from sensitivity.vectorized_lca import (
+    from drone_emission.sensitivity.vectorized_lca import (
         compute_drone_per_order_g,
         compute_ebike_per_order_g,
     )
@@ -4514,7 +4514,7 @@ def _draw_median_trip_emission_process(ax, od_df: pd.DataFrame, plot_title: bool
     def _drone_delivery_leg_profile(distance_km, use_cycle_total_g):
         """Scale modeled drone use-phase shares to the cached OD total."""
         try:
-            from emission.cal_single_delivery import DroneEnergyModel
+            from drone_emission.emission.cal_single_delivery import DroneEnergyModel
 
             energy = DroneEnergyModel().calculate_energy_consumption(
                 distance_km,
@@ -4556,7 +4556,7 @@ def _draw_median_trip_emission_process(ax, od_df: pd.DataFrame, plot_title: bool
     def _ebike_delivery_leg_profile(distance_km, use_cycle_total_g):
         """Scale modeled e-bike outbound use-phase share to the cached OD total."""
         try:
-            from emission.cal_single_delivery import EbikeEnergyModel
+            from drone_emission.emission.cal_single_delivery import EbikeEnergyModel
 
             energy = EbikeEnergyModel().calculate_energy_consumption(
                 distance_km,
@@ -6375,7 +6375,7 @@ def _draw_lifecycle_distance_route_factor(
         contour_percentiles = (0.20, 0.40, 0.60, 0.80)
 
     if draw_heatmap:
-        from emission.cal_single_delivery import LifeCycleEmissions
+        from drone_emission.emission.cal_single_delivery import LifeCycleEmissions
 
         lca = LifeCycleEmissions()
         emission_diff_matrix = np.zeros((len(detour_ratios), len(distances)))
@@ -6524,7 +6524,7 @@ def plot_lifecycle_distance_route_factor(
 
 def _production_phase_parts_per_km(distance_km: float):
     """Return body/battery production amortization per round-trip vehicle-km."""
-    from emission.cal_single_delivery import LifeCycleEmissions
+    from drone_emission.emission.cal_single_delivery import LifeCycleEmissions
 
     lca = LifeCycleEmissions()
     rows = []
@@ -6668,7 +6668,7 @@ def plot_production_phase_per_km(
 
 def _end_of_life_phase_parts_per_km(distance_km: float):
     """Return body/battery end-of-life amortization per round-trip vehicle-km."""
-    from emission.cal_single_delivery import LifeCycleEmissions
+    from drone_emission.emission.cal_single_delivery import LifeCycleEmissions
 
     lca = LifeCycleEmissions()
     rows = []
@@ -6828,7 +6828,7 @@ def plot_lifecycle_distance_detour_boxplot(
         plot_title: If True, show title.
         bin_width_km: Width of each shared air-distance bin in km.
     """
-    from emission.cal_single_delivery import LifeCycleEmissions
+    from drone_emission.emission.cal_single_delivery import LifeCycleEmissions
 
     lca = LifeCycleEmissions()
 

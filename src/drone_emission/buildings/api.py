@@ -4,7 +4,7 @@ import subprocess
 
 import geopandas as gpd
 import numpy as np
-from utils.boundaries import resolve_enlarged_boundaries
+from drone_emission.utils.boundaries import resolve_enlarged_boundaries
 
 from .load_gba import get_gba_tile_infos, load_buildings_from_gba
 

@@ -21,7 +21,7 @@ from statsmodels.stats.diagnostic import het_breuschpagan, linear_reset
 from statsmodels.stats.multitest import multipletests
 from statsmodels.stats.outliers_influence import OLSInfluence
 
-from analysis.regression import compute_vif, run_hierarchical_regression
+from drone_emission.analysis.regression import compute_vif, run_hierarchical_regression
 
 
 R2_OUTCOME = "oracle_min_reduction_vs_ebike_pct"

@@ -20,13 +20,13 @@ matplotlib.use("Agg")
 
 import pandas as pd  # noqa: E402
 
-from analysis.drone_spatial_concentration import (  # noqa: E402
+from drone_emission.analysis.drone_spatial_concentration import (  # noqa: E402
     ABSOLUTE_REDUCTION_COLUMN,
     RELATIVE_REDUCTION_COLUMN,
     load_representative_payloads,
 )
-from utils import load_config  # noqa: E402
-from visualization.analysis import (  # noqa: E402
+from drone_emission.utils import load_config  # noqa: E402
+from drone_emission.visualization.analysis import (  # noqa: E402
     plot_city_reduction_5km_drone_orders_scatter,
     plot_city_reduction_concentration_scatter,
     plot_representative_city_drone_heatmaps,

@@ -16,9 +16,9 @@ import pandas as pd
 import requests
 from pypinyin import lazy_pinyin, Style
 
-from utils.config import get_cache_dir
-from utils.coordinates import gcj02_to_wgs84
-from utils import load_config
+from drone_emission.utils.config import get_cache_dir
+from drone_emission.utils.coordinates import gcj02_to_wgs84
+from drone_emission.utils import load_config
 
 PROJECT_ROOT = os.path.dirname(
     os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -241,7 +241,7 @@ def generate_configs(sales_path: str, dry_run: bool = False, data_dir: str = Non
         english_name = city_to_english(city_cn)
         province = city_province[city_cn]
         # Normalize to gef_china.csv format (e.g. 广西壮族自治区 -> 广西)
-        from utils.grid_emission_factor import normalize_province_name
+        from drone_emission.utils.grid_emission_factor import normalize_province_name
         province_short = normalize_province_name(province)
 
         # Build region entry, preserving existing stats/cache if present
@@ -310,7 +310,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     config = load_config(EXP_CONFIG_PATH, env=args.env)
-    from utils.config import configure_cache
+    from drone_emission.utils.config import configure_cache
     configure_cache(config)
     sales_path = args.sales_path or config.get("sales_path")
     generate_configs(sales_path, args.dry_run, data_dir=config.get("data_dir"))

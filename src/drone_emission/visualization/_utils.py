@@ -8,8 +8,8 @@ import numpy as np
 import requests
 from matplotlib import patheffects
 from matplotlib.colors import LinearSegmentedColormap
-from utils.config import get_cache_dir
-from utils.coordinates import gcj02_to_wgs84
+from drone_emission.utils.config import get_cache_dir
+from drone_emission.utils.coordinates import gcj02_to_wgs84
 
 # Global padding coefficient for plotting
 PADDING_COEFF = 0.1

@@ -5,7 +5,7 @@ import geopandas as gpd
 import pandas as pd
 from shapely.geometry import box
 
-from utils.coordinates import wgs84_to_3857
+from drone_emission.utils.coordinates import wgs84_to_3857
 
 
 def get_gba_tile_infos(boundaries_dict: dict) -> list[tuple[str, str]]:

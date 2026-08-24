@@ -673,7 +673,7 @@ def plot_regions_on_china_map(
     all_areas = _ensure_all_china_city_areas()
 
     # --- Colour mapping ---------------------------------------------------------
-    from analysis.constants import VARIABLE_LABELS
+    from drone_emission.analysis.constants import VARIABLE_LABELS
 
     if cmap is None:
         cmap = LinearSegmentedColormap.from_list("green_diverging", [

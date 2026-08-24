@@ -6,7 +6,7 @@ import pandas as pd
 from matplotlib.colors import LinearSegmentedColormap
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 from scipy.ndimage import gaussian_filter
-from utils.coordinates import convert_coords_array
+from drone_emission.utils.coordinates import convert_coords_array
 
 from ._utils import (
     add_basemap_and_boundaries,

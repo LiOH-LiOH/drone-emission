@@ -21,7 +21,7 @@ import statsmodels.api as sm
 from scipy import stats
 from statsmodels.stats.multitest import multipletests
 
-from analysis.correlation import load_region_stats
+from drone_emission.analysis.correlation import load_region_stats
 
 
 BOOTSTRAP_REPLICATES = 5000
@@ -401,7 +401,7 @@ def run_demand_distance_analysis(
     correlations.to_csv(correlation_path, index=False)
     regressions.to_csv(regression_path, index=False)
 
-    from visualization.analysis import (
+    from drone_emission.visualization.analysis import (
         plot_demand_distance_feature_correlations,
         plot_demand_distance_key_scatters,
     )

@@ -25,18 +25,16 @@ import pandas as pd
 PROJECT_ROOT = os.path.dirname(
     os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 )
-sys.path.insert(0, os.path.join(PROJECT_ROOT, "src", "drone_emission"))
-sys.path.insert(0, os.path.join(PROJECT_ROOT, "src", "drone_emission", "emission"))
 
 from cal_single_delivery import (  # noqa: E402
     LifeCycleEmissions,
     create_ebike_params,
     get_emission_params,
 )
-from utils import load_config  # noqa: E402
-from utils.grid_emission_factor import fetch_factor, normalize_province_name  # noqa: E402
-from utils.province import get_province_from_district  # noqa: E402
-from utils.region_config import RegionConfig, init_registry  # noqa: E402
+from drone_emission.utils import load_config  # noqa: E402
+from drone_emission.utils.grid_emission_factor import fetch_factor, normalize_province_name  # noqa: E402
+from drone_emission.utils.province import get_province_from_district  # noqa: E402
+from drone_emission.utils.region_config import RegionConfig, init_registry  # noqa: E402
 
 REGIONS_JSON = os.path.join(PROJECT_ROOT, "regions.json")
 STALE_THRESHOLD_STATS = (
@@ -283,11 +281,11 @@ def _select_regions(registry, level: str, region: str | None) -> list[tuple[str,
 
 
 def _maybe_consolidate(exp_config: dict, run_enrich: bool) -> None:
-    from tools.consolidate_stats import consolidate
+    from drone_emission.tools.consolidate_stats import consolidate
 
     consolidate(exp_config["data_dir"])
     if run_enrich:
-        from tools.enrich_stats import enrich
+        from drone_emission.tools.enrich_stats import enrich
 
         enrich(
             data_dir=exp_config["data_dir"],

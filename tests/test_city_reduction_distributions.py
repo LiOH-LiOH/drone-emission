@@ -15,10 +15,8 @@ import pandas as pd
 os.environ.setdefault("MPLBACKEND", "Agg")
 HERE = os.path.dirname(os.path.abspath(__file__))
 SRC = os.path.normpath(os.path.join(HERE, "..", "src", "drone_emission"))
-if SRC not in sys.path:
-    sys.path.insert(0, SRC)
 
-from visualization.analysis import (  # noqa: E402
+from drone_emission.visualization.analysis import (  # noqa: E402
     ORACLE_REDUCTION_LABEL_CITIES,
     _city_reduction_box_statistics,
     _city_reduction_violin_highlight_offsets,

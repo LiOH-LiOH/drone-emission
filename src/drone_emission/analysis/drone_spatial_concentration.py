@@ -33,9 +33,9 @@ from scipy.ndimage import maximum_filter
 from scipy.signal import fftconvolve
 from scipy.spatial import cKDTree
 
-from analysis.constants import DRONE_SPATIAL_SCATTER_LABELED_CITIES
-from utils import load_config
-from utils.tools import get_epsg_from_bounds
+from drone_emission.analysis.constants import DRONE_SPATIAL_SCATTER_LABELED_CITIES
+from drone_emission.utils import load_config
+from drone_emission.utils.tools import get_epsg_from_bounds
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]

@@ -28,8 +28,8 @@ PROJECT_ROOT = os.path.dirname(
     os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 )
 
-from utils import load_config
-from utils.region_config import RegionRegistry
+from drone_emission.utils import load_config
+from drone_emission.utils.region_config import RegionRegistry
 
 # Marker stat used to check whether metrics have been computed
 _CACHE_KEY = "orientation_entropy"

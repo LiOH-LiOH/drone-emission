@@ -19,23 +19,23 @@ plt.rcParams.update({
     "pdf.fonttype": 42,
 })
 
-from visualization._utils import (
+from drone_emission.visualization._utils import (
     _add_title_suffix,
     saved_tight_axis_report,
     write_figure_report,
 )
-from visualization.macro_regions import (
+from drone_emission.visualization.macro_regions import (
     CHINA_MACRO_REGION_SPECS,
     macro_region_for_province,
 )
 
 # Import from constants module (no circular dependency)
-from analysis.constants import (
+from drone_emission.analysis.constants import (
     DRONE_SPATIAL_SCATTER_LABELED_CITIES,
     PROVINCE_NAME_EN,
     VARIABLE_LABELS,
 )
-from analysis.city_attribution import R2_ABSOLUTE_OUTCOME, R2_OUTCOME
+from drone_emission.analysis.city_attribution import R2_ABSOLUTE_OUTCOME, R2_OUTCOME
 
 
 WEIGHTED_REDUCTION_COLUMNS = (
@@ -482,7 +482,7 @@ def _bubble_sizes_from_values(values, size_min=6.0, size_max=130.0):
 
 def _regions_oracle_bubble_df(map_df, reduction_col, reduction_pct_col):
     """Build bubble positions and encodings for study cities on the China map."""
-    from visualization.regions import _batch_city_to_adcode, _ensure_all_china_city_areas
+    from drone_emission.visualization.regions import _batch_city_to_adcode, _ensure_all_china_city_areas
 
     required = ["region_name_cn", reduction_col, reduction_pct_col]
     missing = [col for col in required if col not in map_df.columns]
@@ -780,7 +780,7 @@ def _evaluate_pathway_optimal_curve_point(
     """Evaluate sampled annual CO2 savings and drone share for one pathway point."""
     from dataclasses import replace
 
-    from sensitivity.vectorized_lca import (
+    from drone_emission.sensitivity.vectorized_lca import (
         DroneScenario,
         EbikeScenario,
         compute_drone_per_order_g,
@@ -848,7 +848,7 @@ def _evaluate_pathway_oracle_city(
     """Evaluate a city-level per-OD oracle-min allocation for one pathway scenario."""
     from dataclasses import replace
 
-    from sensitivity.vectorized_lca import (
+    from drone_emission.sensitivity.vectorized_lca import (
         DroneScenario,
         EbikeScenario,
         compute_drone_per_order_g,
@@ -925,8 +925,8 @@ def _build_pathway_oracle_panel_rows(
     baseline_kappa: float,
 ) -> pd.DataFrame:
     """Build per-city oracle-min rows for the pathway scenario map panels."""
-    from emission.cal_single_delivery import create_drone_params, create_ebike_params
-    from utils.grid_emission_factor import fetch_factor
+    from drone_emission.emission.cal_single_delivery import create_drone_params, create_ebike_params
+    from drone_emission.utils.grid_emission_factor import fetch_factor
 
     if not data_dir:
         return pd.DataFrame()
@@ -1020,8 +1020,8 @@ def _build_pathway_curve_data(
     random_state: int = PATHWAY_CURVE_RANDOM_STATE,
 ) -> dict:
     """Build sampled nationwide kappa and GEF pathway curves."""
-    from emission.cal_single_delivery import create_drone_params, create_ebike_params
-    from utils.grid_emission_factor import fetch_factor
+    from drone_emission.emission.cal_single_delivery import create_drone_params, create_ebike_params
+    from drone_emission.utils.grid_emission_factor import fetch_factor
 
     if not data_dir:
         return {}
@@ -1221,7 +1221,7 @@ def _build_pathway_prepared_data_with_cache(
     baseline_kappa: float,
 ):
     """Return oracle panel rows and curve data with a prepared-data cache."""
-    from utils.config import get_cache_dir
+    from drone_emission.utils.config import get_cache_dir
 
     if not data_dir:
         return (
@@ -2665,7 +2665,7 @@ def plot_regions_map_and_gef_scatter(
         named_csv_path: Path to all_sensitivity_named.csv. Required when
             gef_scenario != "current".
     """
-    from visualization.regions import plot_regions_on_china_map
+    from drone_emission.visualization.regions import plot_regions_on_china_map
 
     valid_scenarios = ("current", "2030", "2060")
     if gef_scenario not in valid_scenarios:
@@ -2765,7 +2765,7 @@ def plot_regions_map_optimal_drone_share(
         for_latex: If True, save as PDF.
         plot_title: If True, show title.
     """
-    from visualization.regions import plot_regions_on_china_map
+    from drone_emission.visualization.regions import plot_regions_on_china_map
 
     try:
         drone_share_col = _weighted_drone_share_column(df)
@@ -2874,7 +2874,7 @@ def plot_regions_map_kappa_panels(
     from matplotlib.colors import LinearSegmentedColormap, TwoSlopeNorm
     from matplotlib.patches import Patch
 
-    from visualization.regions import plot_regions_on_china_map
+    from drone_emission.visualization.regions import plot_regions_on_china_map
 
     named = pd.read_csv(named_csv_path)
     base = pd.read_csv(stats_csv_path)
@@ -3172,7 +3172,7 @@ def plot_regions_map_pathway_scenarios(
         for_latex: If True, save as PDF.
         plot_title: If True, show the scenario title in each subfigure.
     """
-    from visualization.regions import plot_regions_on_china_map
+    from drone_emission.visualization.regions import plot_regions_on_china_map
 
     scenario_data = _prepare_pathway_scenario_data(
         named_csv_path=named_csv_path,
@@ -3444,7 +3444,7 @@ def plot_regions_map_city_province_ranks(
         for_latex: If True, save as PDF.
         plot_title: If True, show titles on panels.
     """
-    from visualization.regions import plot_regions_on_china_map
+    from drone_emission.visualization.regions import plot_regions_on_china_map
 
     map_df = pd.read_csv(stats_csv_path)
     reduction_col = _weighted_reduction_column(map_df)
@@ -3614,7 +3614,7 @@ def plot_annual_emissions_comparison(
         top_n: Show only top-N and bottom-N cities by reduction. Required if >20 cities.
     """
     if df is None:
-        from analysis.correlation import load_annual_emissions
+        from drone_emission.analysis.correlation import load_annual_emissions
         df = load_annual_emissions(csv_path)
 
     if df.empty:
@@ -5516,7 +5516,7 @@ def plot_regions_map_city_rank_inset(
         for_latex: If True, save as PDF.
         plot_title: If True, show titles on panels.
     """
-    from visualization.regions import plot_regions_on_china_map
+    from drone_emission.visualization.regions import plot_regions_on_china_map
 
     map_df = pd.read_csv(stats_csv_path)
     for col in ("oracle_min_lifecycle_kg",):
@@ -5728,7 +5728,7 @@ def plot_regions_map_oracle_reduction_rank(
         label_offsets: Optional in-memory city label offsets, overriding the layout file.
         return_label_artists: If True, return figure and annotation artists without saving.
     """
-    from visualization.regions import plot_regions_on_china_map
+    from drone_emission.visualization.regions import plot_regions_on_china_map
 
     map_df = pd.read_csv(stats_csv_path)
     for col in ("oracle_min_lifecycle_kg",):
@@ -6785,7 +6785,7 @@ def _draw_trip_phase_barplot(
 
 def _model_phase_component_shares(distance_km, vehicle, phase):
     """Return body/battery shares for a vehicle phase at the selected trip distance."""
-    from emission.cal_single_delivery import LifeCycleEmissions
+    from drone_emission.emission.cal_single_delivery import LifeCycleEmissions
 
     lca = LifeCycleEmissions()
     if vehicle == "E-bike":
@@ -7207,7 +7207,7 @@ def _save_median_trip_lifecycle_subfigures(
     only=None,
 ):
     """Save production, use-phase, and EOL median-trip subfigures."""
-    from visualization.emission import _draw_median_trip_emission_process
+    from drone_emission.visualization.emission import _draw_median_trip_emission_process
 
     mm_per_inch = 25.4
     extension = ".pdf" if for_latex else ".png"
@@ -7487,12 +7487,12 @@ def plot_regions_map_city_rank_and_drone_share(
         beijing_router: Deprecated alias for median_trip_router.
         subfigure_save_dir: Directory for standalone median-trip phase panels.
     """
-    from visualization.concepts import _draw_detour_ratio_concept
-    from visualization.emission import (
+    from drone_emission.visualization.concepts import _draw_detour_ratio_concept
+    from drone_emission.visualization.emission import (
         _draw_median_trip_emission_process,
         _select_median_trip_emission_sample,
     )
-    from visualization.regions import plot_regions_on_china_map
+    from drone_emission.visualization.regions import plot_regions_on_china_map
 
     if median_trip_od_df is None and beijing_od_df is not None:
         median_trip_od_df = beijing_od_df
@@ -7658,7 +7658,7 @@ def plot_regions_map_city_rank_and_drone_share(
     )
     d_target_aspect = 2.0
     if distance_comparison_sample is not None and median_trip_graph is not None:
-        from visualization.roadnet import _draw_distance_panel
+        from drone_emission.visualization.roadnet import _draw_distance_panel
 
         _draw_distance_panel(
             ax_d,
@@ -12345,7 +12345,7 @@ def _pilot_projected_density(od_df, point_prefix, resolution_m=500.0):
     """Return a physically scaled density raster for eligible OD endpoints."""
     from pyproj import Transformer
     from scipy.ndimage import gaussian_filter
-    from utils.tools import get_epsg_from_bounds
+    from drone_emission.utils.tools import get_epsg_from_bounds
 
     all_lat = np.concatenate(
         [od_df["from_lat"].to_numpy(), od_df["to_lat"].to_numpy()]

@@ -14,10 +14,8 @@ import pandas as pd
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 SRC = os.path.normpath(os.path.join(HERE, "..", "src", "drone_emission"))
-if SRC not in sys.path:
-    sys.path.insert(0, SRC)
 
-from visualization.analysis import (  # noqa: E402
+from drone_emission.visualization.analysis import (  # noqa: E402
     PILOT_CAPTURED_5KM_ORDERS_COL,
     _prepare_city_reduction_5km_order_scatter,
     plot_city_reduction_5km_drone_orders_scatter,

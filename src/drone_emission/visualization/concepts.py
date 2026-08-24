@@ -11,7 +11,7 @@ import numpy as np
 from matplotlib import patheffects as pe
 from matplotlib.patches import Circle, FancyArrowPatch, FancyBboxPatch, Polygon, Rectangle
 
-from visualization._utils import _add_title_suffix, write_figure_report
+from drone_emission.visualization._utils import _add_title_suffix, write_figure_report
 
 Point = tuple[float, float]
 
@@ -724,7 +724,7 @@ def plot_production_detour_eol_panels(
         plot_title: If True, show title.
         distance_km: One-way delivery distance used for phase-emission amortization.
     """
-    from visualization.emission import (
+    from drone_emission.visualization.emission import (
         _end_of_life_phase_parts_per_km,
         _production_phase_parts_per_km,
     )
@@ -1139,7 +1139,7 @@ def plot_detour_and_lifecycle(
         for_latex: If True, save as PDF.
         plot_title: If True, show titles.
     """
-    from visualization.emission import _draw_lifecycle_distance_route_factor
+    from drone_emission.visualization.emission import _draw_lifecycle_distance_route_factor
 
     fig = plt.figure(figsize=figsize, constrained_layout=True)
     fig.set_constrained_layout_pads(hspace=0.02, h_pad=0.02, wspace=0.02, w_pad=0.02)
@@ -1201,7 +1201,7 @@ def plot_detour_lifecycle_distance(
         for_latex: If True, save as PDF.
         plot_title: If True, show titles.
     """
-    from visualization.emission import (
+    from drone_emission.visualization.emission import (
         _draw_emission_reduction_vs_drone_ratio,
         _draw_lifecycle_distance_route_factor,
     )
@@ -1222,7 +1222,7 @@ def plot_detour_lifecycle_distance(
     ax_b.set_box_aspect(0.5)
 
     if graph is not None and router is not None and od_df is not None:
-        from visualization.roadnet import _compute_distance_samples, _draw_distance_panel
+        from drone_emission.visualization.roadnet import _compute_distance_samples, _draw_distance_panel
         sample_paths = _compute_distance_samples(od_df, router, n_samples=1)
         _draw_distance_panel(ax_c, sample_paths[0], graph, show_legend=True)
         if for_latex:

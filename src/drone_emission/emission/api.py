@@ -2,8 +2,8 @@ import os
 
 import numpy as np
 import pandas as pd
-from utils.province import get_province_from_district
-from utils.grid_emission_factor import fetch_factor, normalize_province_name
+from drone_emission.utils.province import get_province_from_district
+from drone_emission.utils.grid_emission_factor import fetch_factor, normalize_province_name
 
 from .cal_single_delivery import (
     LifeCycleEmissions,

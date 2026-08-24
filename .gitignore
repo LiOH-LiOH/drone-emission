@@ -16,7 +16,9 @@ src/drone_emission/tools/archive/
 notes/
 .DS_Store
 backup_*
-scripts/
+scripts/*
+!scripts/setup.sh
+!scripts/remote_isolated_validation.sh
 regions.json
 regions.template.json
 build/

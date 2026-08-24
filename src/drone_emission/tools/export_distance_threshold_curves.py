@@ -10,13 +10,13 @@ from __future__ import annotations
 import argparse
 import sys
 
-from tools.run_distance_threshold_analysis import (
+from drone_emission.tools.run_distance_threshold_analysis import (
     PROJECT_ROOT,
     _city_regions,
     _lookup_region,
     analyze_region,
 )
-from utils import load_config
+from drone_emission.utils import load_config
 
 
 def main() -> None:

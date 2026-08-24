@@ -11,10 +11,8 @@ import pandas as pd
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 SRC = os.path.normpath(os.path.join(HERE, "..", "src", "drone_emission"))
-if SRC not in sys.path:
-    sys.path.insert(0, SRC)
 
-from analysis.drone_spatial_concentration import (  # noqa: E402
+from drone_emission.analysis.drone_spatial_concentration import (  # noqa: E402
     _assign_classes_and_representatives,
     _eligible_mask,
     compute_city_pilot_capture,

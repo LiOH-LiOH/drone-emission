@@ -15,7 +15,7 @@ import numpy as np
 import pandas as pd
 from scipy.stats import norm, spearmanr
 
-from emission.cal_single_delivery import DroneParams, EbikeParams
+from drone_emission.emission.cal_single_delivery import DroneParams, EbikeParams
 
 from .vectorized_lca import (
     DroneScenario,
