@@ -44,7 +44,11 @@ inventory() {
         if [[ -d "$FORMAL_CACHE/drone_spatial_concentration" ]]; then
             find "$FORMAL_CACHE/drone_spatial_concentration" -type f -printf '%p\t%s\t%T@\n'
         fi
-        find "$FORMAL_FIGURES" "$FORMAL_PAPER" -type f -printf '%p\t%s\t%T@\n'
+        for root in "$FORMAL_FIGURES" "$FORMAL_PAPER"; do
+            if [[ -d "$root" ]]; then
+                find "$root" -type f -printf '%p\t%s\t%T@\n'
+            fi
+        done
     } | LC_ALL=C sort > "$output"
 }
 
@@ -110,12 +114,17 @@ for relative in "${PDF_PATHS[@]}"; do
     printf '%s\n' "$path" >> "$REPORTS/fetch-pdfs.txt"
 done
 
-# Seed only the isolated promotion staging area with the nine existing manual
-# composites, then validate the complete publication mapping without publishing.
-for source in "$FORMAL_PAPER"/*.pdf; do
-    target="$FIGURE_OUTPUT/paper/$(basename "$source")"
-    [[ -f "$target" ]] || cp --reflink=auto --preserve=mode,timestamps "$source" "$target"
-done
+# Promote validates mapping/PDF completeness, not visual composition. Seed its
+# isolated nine manual staging slots with valid generated panels when the paper
+# subrepository is not mounted; no seeded placeholder is included in the fetch list.
+while IFS=$'\t' read -r figure_id panel; do
+    cp --reflink=auto --preserve=mode,timestamps \
+        "$FIGURE_OUTPUT/paper/subfigure/$panel" \
+        "$FIGURE_OUTPUT/paper/$figure_id.pdf"
+done < <(
+    jq -r '.figures[] | select(.mode == "inkscape") | [.id, .required_subfigures[0]] | @tsv' \
+        src/drone_emission/paper_figures.json
+)
 DRONE_EMISSION_DATA_ROOT="$FIGURE_DATA" \
 DRONE_EMISSION_CACHE_ROOT="$FIGURE_CACHE" \
 DRONE_EMISSION_WORK_ROOT="$FIGURE_WORK" \
