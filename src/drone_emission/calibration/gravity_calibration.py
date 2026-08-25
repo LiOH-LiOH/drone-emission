@@ -14,6 +14,7 @@ import shutil
 import numpy as np
 import pandas as pd
 from sklearn.neighbors import BallTree
+from scipy.special import logsumexp
 
 from .gravity_model import (
     building_order_fit,
@@ -632,36 +633,49 @@ def _write_full_fit_plot_sources(
     output_dir: Path,
 ) -> None:
     """Write full-sample distance and endpoint sources for audit plots."""
-    _, _, components = evaluate_model(
-        parameters, candidates, full, return_components=True
-    )
-    distance_bins = np.floor(components["observed_values"] / 0.05) * 0.05
-    predicted_bins = np.floor(components["predicted_values"] / 0.05) * 0.05
+    observed_bins = np.zeros(101, dtype=float)
+    predicted_bins = np.zeros(101, dtype=float)
+    for shop_index, (positions, counts) in _group_observations(full).items():
+        start, stop = candidates.bounds(shop_index)
+        distances = np.asarray(candidates.distance_km[start:stop])
+        observed_indices = np.floor(distances[positions - start] / 0.05).astype(int)
+        observed_bins += np.bincount(
+            np.clip(observed_indices, 0, 100), weights=counts, minlength=101
+        )
+        utilities = utility_features(candidates, start, stop) @ parameters
+        probabilities = np.exp(utilities - logsumexp(utilities))
+        predicted_indices = np.floor(distances / 0.05).astype(int)
+        predicted_bins += np.bincount(
+            np.clip(predicted_indices, 0, 100),
+            weights=probabilities * float(counts.sum()),
+            minlength=101,
+        )
     distance_source = pd.concat(
         [
-            pd.DataFrame(
-                {
-                    "series": "observed",
-                    "distance_bin_km": distance_bins,
-                    "order_weight": components["observed_weights"],
-                }
-            ),
-            pd.DataFrame(
-                {
-                    "series": "joint_three_parameter",
-                    "distance_bin_km": predicted_bins,
-                    "order_weight": components["predicted_weights"],
-                }
-            ),
-        ],
-        ignore_index=True,
+            pd.DataFrame({
+                "series": "observed",
+                "distance_bin_km": np.arange(101) * 0.05,
+                "order_weight": observed_bins,
+            }),
+            pd.DataFrame({
+                "series": "joint_three_parameter",
+                "distance_bin_km": np.arange(101) * 0.05,
+                "order_weight": predicted_bins,
+            }),
+        ], ignore_index=True,
     )
     distance_source.to_csv(
         output_dir / "full_order_distance_source.csv.gz",
         index=False,
         compression="gzip",
     )
-    endpoint_source, _ = building_order_fit(parameters, candidates, full)
+    endpoint_path = output_dir / "endpoint_building_order_source.csv.gz"
+    if endpoint_path.is_file():
+        endpoint_source = pd.read_csv(endpoint_path)
+    elif (output_dir / "building_order_fit_source.csv.gz").is_file():
+        endpoint_source = pd.read_csv(output_dir / "building_order_fit_source.csv.gz")
+    else:
+        endpoint_source, _ = building_order_fit(parameters, candidates, full)
     centroids = pd.read_csv(cache_dir / "building_centroids.csv.gz")
     endpoint_source = endpoint_source.merge(
         centroids, on="building_index", how="left", validate="one_to_one"
