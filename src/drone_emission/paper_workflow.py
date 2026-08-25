@@ -41,6 +41,23 @@ def load_manifest() -> dict:
             raise ValueError(f"Direct figure has no source_output: {figure['id']}")
         if figure["mode"] == "inkscape" and not figure.get("inkscape_source"):
             raise ValueError(f"Inkscape figure has no source: {figure['id']}")
+    manifest_requests = [
+        request
+        for figure in figures
+        for request in figure["render_requests"]
+    ]
+    if len(manifest_requests) != len(set(manifest_requests)):
+        raise ValueError("Each manifest render request must be declared exactly once")
+    from .visualization.formal_registry import REQUEST_RENDERERS
+
+    registered = set(REQUEST_RENDERERS)
+    declared = set(manifest_requests)
+    if declared != registered:
+        raise ValueError(
+            "Manifest/renderer registry mismatch: "
+            f"missing={sorted(declared - registered)}, "
+            f"unused={sorted(registered - declared)}"
+        )
     return manifest
 
 
@@ -94,43 +111,45 @@ def _write_source_report(figure: dict, config: dict, outputs: list[Path]) -> Pat
     return report_path
 
 
-def _render_distance_threshold(config: dict) -> None:
-    """Render the two locked distance-policy panels from compact tables."""
-    from drone_emission.tools.plot_distance_threshold_analysis import (
-        _load_oracle_results,
-        _load_summary,
-        _resolve_summary_path,
-    )
-    from drone_emission.visualization.analysis import (
-        plot_distance_threshold_city_landscape,
-        plot_distance_threshold_oracle_performance,
-    )
-
-    data_dir = Path(config["data_dir"])
-    out = Path(config["figures_dir"]) / "paper" / "subfigure"
-    out.mkdir(parents=True, exist_ok=True)
-    summary_path = _resolve_summary_path(data_dir, None)
-    summary = _load_summary(summary_path, data_dir)
-    oracle = _load_oracle_results(data_dir)
-    plot_distance_threshold_city_landscape(
-        summary,
-        oracle,
-        save_path=str(out / "distance_threshold_city_landscape.pdf"),
-        for_latex=True,
-        plot_title=False,
-    )
-    plot_distance_threshold_oracle_performance(
-        summary,
-        oracle,
-        save_path=str(out / "distance_threshold_oracle_performance.pdf"),
-        for_latex=True,
-        plot_title=False,
-    )
+def _validate_render_inputs(figures: list[dict], config: dict) -> None:
+    """Fail before rendering when any manifest-declared input is absent."""
+    package_root = PROJECT_ROOT / "src" / "drone_emission"
+    roots = {
+        "cache": Path(config["cache_dir"]),
+        "work": Path(config["work_dir"]),
+        "package": package_root,
+    }
+    missing: list[tuple[str, str]] = []
+    for figure in figures:
+        for declaration in figure["required_inputs"]:
+            prefix, separator, relative = declaration.partition(":")
+            if separator and prefix in roots:
+                root = roots[prefix]
+                pattern = relative
+            elif declaration == "experiment.toml":
+                root = PROJECT_ROOT
+                pattern = declaration
+            else:
+                root = Path(config["data_dir"])
+                pattern = declaration
+            matches = list(root.glob(pattern))
+            if not matches:
+                missing.append((figure["id"], str(root / pattern)))
+    if missing:
+        details = "\n".join(
+            f"- {figure_id}: {path}" for figure_id, path in missing
+        )
+        raise FileNotFoundError(
+            "Missing manifest render input(s):\n"
+            f"{details}\nRun `python -m drone_emission analyze` for derived "
+            "inputs, or run the indicated cities/aggregate stage first."
+        )
 
 
 def render(config: dict, only: list[str] | None = None) -> list[Path]:
     """Render required sources and stage direct figures without publishing."""
     selected = select_figures(only)
+    _validate_render_inputs(selected, config)
     figures_root = Path(config["figures_dir"])
     paper_dir = figures_root / "paper"
     subfigure_dir = paper_dir / "subfigure"
@@ -143,26 +162,13 @@ def render(config: dict, only: list[str] | None = None) -> list[Path]:
         request
         for figure in selected
         for request in figure.get("render_requests", [])
-        if request != "distance_threshold_policy_comparison"
     }
-    if requests:
-        from drone_emission.utils.config import configure_cache
-        from drone_emission.visualization.paper import render_locked_requests
+    from drone_emission.utils.config import configure_cache
+    from drone_emission.visualization.formal_registry import render_requests
+    from drone_emission.visualization.render_context import RenderContext
 
-        configure_cache(config)
-        render_locked_requests(
-            config["data_dir"],
-            config["figures_dir"],
-            for_latex=True,
-            plot_title=False,
-            only=requests,
-            exp_config=config,
-        )
-    if any(
-        "distance_threshold_policy_comparison" in figure.get("render_requests", [])
-        for figure in selected
-    ):
-        _render_distance_threshold(config)
+    configure_cache(config)
+    render_requests(RenderContext.from_config(config), requests)
 
     missing: list[str] = []
     staged: list[Path] = []

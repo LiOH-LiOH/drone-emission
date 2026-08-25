@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 
 from drone_emission.paper_workflow import load_manifest, select_figures
+from drone_emission.visualization.formal_registry import REQUEST_RENDERERS
 
 
 def test_manifest_has_exact_locked_set():
@@ -19,6 +20,29 @@ def test_manifest_has_exact_locked_set():
     assert sum(figure["mode"] == "direct" for figure in manifest["figures"]) == 3
     assert all(figure["required_inputs"] for figure in manifest["figures"])
     assert all(len(figure["report_inputs"]) == 1 for figure in manifest["figures"])
+
+
+def test_manifest_requests_exactly_match_registry():
+    requests = [
+        request
+        for figure in load_manifest()["figures"]
+        for request in figure["render_requests"]
+    ]
+    assert len(requests) == 25
+    assert len(requests) == len(set(requests))
+    assert set(requests) == set(REQUEST_RENDERERS)
+
+
+def test_retired_visualization_interfaces_are_physically_absent():
+    package = Path(__file__).parents[1] / "src" / "drone_emission"
+    for name in ("analysis.py", "paper.py", "emission.py", "sensitivity.py"):
+        assert not (package / "visualization" / name).exists()
+    for name in (
+        "plot_distance_threshold_analysis.py",
+        "plot_drone_spatial_concentration.py",
+        "plot_threshold_resilience.py",
+    ):
+        assert not (package / "tools" / name).exists()
 
 
 def test_manifest_paths_are_one_to_one():

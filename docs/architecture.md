@@ -17,11 +17,18 @@ The active workflow has four layers:
    creates only declared sources/staging files. Publication is a separate,
    explicitly confirmed operation.
 
-`render` accepts formal manifest IDs, not historical plot-function names. The
+`paper_workflow.py` is the only formal scheduler. Before rendering it verifies
+that the 25 unique manifest requests exactly equal the explicit
+`formal_registry.REQUEST_RENDERERS` keys. Every renderer receives one immutable
+context containing the configured data, figures, cache, and work roots.
+
+`render` accepts formal manifest IDs, not internal plot-function names. The
 nine `inkscape` entries generate required panels and reports only. The three
 `direct` entries additionally copy their renderer output to the formal staging
-filename. Missing derived inputs are produced by `analyze` or reported;
-rendering never rewrites city OD files or per-region statistics. The manifest
+filename. Missing inputs fail with a prerequisite-stage hint; render never
+invokes `analyze`, creates placeholders, or silently skips them. Derived inputs
+are produced only by an explicit prior `analyze` command. Formal rendering
+never rewrites city OD files or per-region statistics. The manifest
 records input contracts, render requests, required outputs, source reports,
 Inkscape sources, staging paths, and publication paths.
 
@@ -44,6 +51,8 @@ reserve and a 12GB scheduling reservation per city, no more than four workers
 start concurrently. Later stages remain inside the same scope. Direct Python
 invocations do not claim this hard-limit guarantee.
 
-The active package uses fully qualified `drone_emission.*` imports. Pipeline
-stages cannot import visualization modules, active code cannot import archive
-modules, and package initialization performs no path injection.
+The active visualization package is split by evidence theme. The pre-split
+generic modules and candidate CLIs exist only under `archive/code/`; no facade
+preserves their imports. Pipeline stages cannot import visualization modules,
+active code cannot import archive modules, and package initialization performs
+no path injection or filesystem writes.

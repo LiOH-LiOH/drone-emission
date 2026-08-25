@@ -11,7 +11,7 @@ Usage:
         --env remote --workers 8
 
 This module only computes and persists the city-level concentration cache.
-Render figures from that cache with ``tools.plot_drone_spatial_concentration``.
+The formal manifest registry reads that cache during ``render``.
 """
 
 from __future__ import annotations

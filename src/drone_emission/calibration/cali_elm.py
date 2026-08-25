@@ -653,78 +653,9 @@ def export_alpha_calibration_sweep_csv(
 
 def calibrate_alpha(target_mean_distance=2.23, delivery_radius_km=None,
                     save_path=None, for_latex=False, plot_title=False):
-    """Calibrate building volume exponent α by matching target mean delivery distance.
-
-    Two-stage sweep: coarse (step 0.5) then fine (step 0.1) around the best.
-
-    Args:
-        target_mean_distance: Target weighted mean distance in km (default 2.23).
-        delivery_radius_km: Override delivery radius (default: use experiment.toml).
-        save_path: Path to save the calibration plot.
-
-    Returns:
-        The calibrated α value.
-    """
-    from drone_emission.visualization.calibration import plot_alpha_calibration
-
-    sweep_df, best_alpha, best_mean = build_alpha_calibration_sweep(
+    """Calibrate α without invoking an independent plotting workflow."""
+    _sweep_df, best_alpha, _best_mean = build_alpha_calibration_sweep(
         target_mean_distance=target_mean_distance,
         delivery_radius_km=delivery_radius_km,
     )
-
-    plot_alpha_calibration(
-        sweep_df["alpha"].to_numpy(),
-        sweep_df["weighted_mean_od_distance_km"].to_numpy(),
-        target_mean_distance,
-        best_alpha,
-        best_mean,
-        float(sweep_df["delivery_radius_km"].iloc[0]),
-        save_path,
-        for_latex,
-        plot_title,
-    )
-
     return best_alpha
-
-
-if __name__ == "__main__":
-    from drone_emission.visualization.calibration import (
-        plot_delivery_coverage,
-        plot_tanner_distance_histogram,
-        plot_tanner_fit,
-    )
-
-    # Project root figures directory
-    FIGURES_DIR = os.environ.get(
-        "DRONE_EMISSION_FIGURES_ROOT",
-        os.path.join(PROJECT_ROOT, "figures"),
-    )
-
-    caliberate_elm_data()
-    shop_id, shop_loc, orders = get_eg_data()
-    save_path = os.path.join(FIGURES_DIR, "calibration", "delivery_coverage.png")
-    plot_delivery_coverage(shop_id, shop_loc, orders, save_path=save_path)
-
-    # Tanner impedance function fitting
-    print("\n=== Tanner Impedance Function Fitting ===")
-    distances = load_all_eleme_distances(min_orders_per_shop=50)
-    a, b, r_sq = fit_tanner_impedance(distances)
-    plot_tanner_fit(
-        distances, a, b,
-        save_path=os.path.join(FIGURES_DIR, "calibration", "tanner_impedance_fit.png"),
-    )
-    plot_tanner_distance_histogram(
-        distances,
-        save_path=os.path.join(
-            FIGURES_DIR, "paper", "tanner_impedance_fit_panel_a.pdf"
-        ),
-    )
-
-    # Alpha calibration
-    print("\n=== Alpha Calibration ===")
-    best_alpha = calibrate_alpha(
-        target_mean_distance=2.23,
-        save_path=os.path.join(FIGURES_DIR, "calibration", "alpha_calibration.png"),
-    )
-    print(f"\nCalibrated α = {best_alpha:.1f}")
-    print(f"Update experiment.toml: alpha = {best_alpha}")

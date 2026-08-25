@@ -1,0 +1,740 @@
+"""Visualization functions for cross-region correlation and emission analysis."""
+
+import json
+import os
+import pickle
+
+import matplotlib.pyplot as plt
+from matplotlib.patches import Patch
+from matplotlib.ticker import FuncFormatter
+import numpy as np
+import pandas as pd
+from scipy import stats
+import statsmodels.api as sm
+
+plt.rcParams.update({
+    "font.family": "sans-serif",
+    "font.sans-serif": ["Arial", "Helvetica", "DejaVu Sans", "sans-serif"],
+    "svg.fonttype": "none",
+    "pdf.fonttype": 42,
+})
+
+from drone_emission.visualization._utils import (
+    _add_title_suffix,
+    saved_tight_axis_report,
+    write_figure_report,
+)
+from drone_emission.visualization.macro_regions import (
+    CHINA_MACRO_REGION_SPECS,
+    macro_region_for_province,
+)
+
+# Import from constants module (no circular dependency)
+from drone_emission.analysis.constants import (
+    DRONE_SPATIAL_SCATTER_LABELED_CITIES,
+    PROVINCE_NAME_EN,
+    VARIABLE_LABELS,
+)
+from drone_emission.analysis.city_attribution import R2_ABSOLUTE_OUTCOME, R2_OUTCOME
+
+
+WEIGHTED_REDUCTION_COLUMNS = (
+    "oracle_min_reduction_vs_ebike_pct",
+    "max_lifecycle_reduction_pct",
+    "lifecycle_all_drone_reduction_pct",
+)
+def _first_available_column(df: pd.DataFrame, candidates: tuple[str, ...], purpose: str) -> str:
+    """Return the first available candidate column, preferring weighted metrics."""
+    for col in candidates:
+        if col in df.columns and df[col].notna().any():
+            return col
+    raise KeyError(f"No {purpose} column found; tried {', '.join(candidates)}")
+
+
+def _weighted_reduction_column(df: pd.DataFrame) -> str:
+    """Return the preferred weighted reduction metric column for city stats."""
+    if {"total_ebike_lifecycle", "oracle_min_lifecycle_kg"}.issubset(df.columns):
+        ebike = pd.to_numeric(df["total_ebike_lifecycle"], errors="coerce")
+        oracle = pd.to_numeric(df["oracle_min_lifecycle_kg"], errors="coerce")
+        df["oracle_min_reduction_vs_ebike_pct"] = np.where(
+            ebike > 0,
+            (1.0 - oracle / ebike) * 100.0,
+            np.nan,
+        )
+    return _first_available_column(df, WEIGHTED_REDUCTION_COLUMNS, "weighted reduction")
+
+
+def _plot_grouped_scatter_split_panels_axes(
+    fig,
+    subplot_spec,
+    df: pd.DataFrame,
+    feature_var: str,
+    result_var: str,
+    group_var: str,
+    threshold: float,
+    plot_title: bool = False,
+    group_labels: tuple = None,
+    panel_letters: tuple = ("a", "b"),
+    compact: bool = False,
+    horizontal_colorbar: bool = False,
+    external_colorbar_ax=None,
+    colorbar_boundaries: tuple = None,
+    colorbar_label: str = None,
+    scatter_size: float = None,
+    scatter_alpha: float = 0.68,
+    grayscale: bool = False,
+):
+    """Draw threshold-split scatter panels into a parent subplot spec."""
+    valid_mask = df[[feature_var, result_var, group_var]].notna().all(axis=1)
+    plot_df = df.loc[valid_mask].copy()
+    if plot_df.empty:
+        print("Grouped scatter split panels skipped - no valid rows")
+        return None
+
+    low_mask = plot_df[group_var] <= threshold
+    high_mask = ~low_mask
+
+    if group_labels is None:
+        group_labels = (
+            f"Low GEF ($\\leq$ {threshold})",
+            f"High GEF (> {threshold})",
+        )
+
+    x_data_min = plot_df[feature_var].min()
+    x_data_max = plot_df[feature_var].max()
+    y_data_min = plot_df[result_var].min()
+    y_data_max = plot_df[result_var].max()
+    x_pad = (x_data_max - x_data_min) * 0.03 or 0.1
+    y_pad = (y_data_max - y_data_min) * 0.06 or 1.0
+    x_global_min = x_data_min - x_pad
+    x_global_max = x_data_max + x_pad
+    y_global_min = y_data_min - y_pad
+    y_global_max = y_data_max + y_pad
+
+    from matplotlib.colors import (
+        BoundaryNorm,
+        LinearSegmentedColormap,
+        ListedColormap,
+        Normalize,
+    )
+    from matplotlib.cm import ScalarMappable
+
+    grayscale_colors = (
+        "#D9D9D9",
+        "#BDBDBD",
+        "#A1A1A1",
+        "#858585",
+        "#696969",
+        "#4D4D4D",
+        "#313131",
+    )
+    base_cmap = LinearSegmentedColormap.from_list(
+        "gef_grayscale" if grayscale else "gef",
+        grayscale_colors
+        if grayscale
+        else ["#006837", "#31A354", "#D95F0E", "#A50F15"],
+    )
+    gef_vals = plot_df[group_var].values
+    if colorbar_boundaries is not None:
+        boundaries = np.asarray(colorbar_boundaries, dtype=float)
+        if grayscale and len(boundaries) - 1 == len(grayscale_colors):
+            colors = grayscale_colors
+        else:
+            colors = base_cmap(np.linspace(0.0, 1.0, len(boundaries) - 1))
+        cmap = ListedColormap(colors, name="gef_discrete")
+        norm = BoundaryNorm(boundaries, cmap.N, clip=True)
+    else:
+        boundaries = None
+        cmap = base_cmap
+        norm = Normalize(vmin=gef_vals.min(), vmax=gef_vals.max())
+
+    if external_colorbar_ax is not None:
+        panels_grid = subplot_spec.subgridspec(1, 2, wspace=0.20)
+        cbar_ax = external_colorbar_ax
+        ax_low = fig.add_subplot(panels_grid[0, 0])
+        ax_high = fig.add_subplot(
+            panels_grid[0, 1], sharex=ax_low, sharey=ax_low
+        )
+    elif horizontal_colorbar:
+        root = subplot_spec.subgridspec(
+            2,
+            1,
+            height_ratios=[0.10, 0.90],
+            hspace=0.13,
+        )
+        cbar_grid = root[0].subgridspec(
+            1,
+            3,
+            width_ratios=[1.0, 0.72, 1.0],
+        )
+        panels_grid = root[1].subgridspec(1, 2, wspace=0.20)
+        cbar_ax = fig.add_subplot(cbar_grid[0, 1])
+        ax_low = fig.add_subplot(panels_grid[0, 0])
+        ax_high = fig.add_subplot(
+            panels_grid[0, 1], sharex=ax_low, sharey=ax_low
+        )
+    else:
+        gs = subplot_spec.subgridspec(
+            1,
+            3,
+            width_ratios=[1, 0.055, 1],
+            wspace=0.22,
+        )
+        ax_low = fig.add_subplot(gs[0, 0])
+        cbar_ax = fig.add_subplot(gs[0, 1])
+        ax_high = fig.add_subplot(gs[0, 2], sharex=ax_low, sharey=ax_low)
+    axes = [ax_low, ax_high]
+    masks = [low_mask, high_mask]
+    line_colors = (
+        ["#4D4D4D", "#4D4D4D"]
+        if grayscale
+        else ["#006837", "#A50F15"]
+    )
+
+    for ax, mask, line_color, label, panel_letter in zip(
+        axes, masks, line_colors, group_labels, panel_letters
+    ):
+        panel_df = plot_df.loc[mask]
+        ax.scatter(
+            panel_df[feature_var].values,
+            panel_df[result_var].values,
+            s=(
+                scatter_size
+                if scatter_size is not None
+                else (12 if compact else 24)
+            ),
+            alpha=scatter_alpha,
+            c=panel_df[group_var].values,
+            cmap=cmap,
+            norm=norm,
+            edgecolors="none",
+            zorder=10,
+        )
+
+        x = panel_df[feature_var].values
+        y = panel_df[result_var].values
+        if len(x) >= 3 and np.sum((x - np.mean(x)) ** 2) > 0:
+            slope, intercept, _, _, _ = stats.linregress(x, y)
+            x_line = np.linspace(x_global_min, x_global_max, 100)
+            y_line = slope * x_line + intercept
+            ax.plot(
+                x_line,
+                y_line,
+                color=line_color,
+                linewidth=1.35 if compact else 2.5,
+                alpha=0.42,
+                zorder=15,
+            )
+            n = len(x)
+            se = np.sqrt(np.sum((y - (slope * x + intercept)) ** 2) / (n - 2))
+            t_val = stats.t.ppf(0.975, n - 2)
+            x_mean = np.mean(x)
+            ci = t_val * se * np.sqrt(
+                1.0 / n + (x_line - x_mean) ** 2 / np.sum((x - x_mean) ** 2)
+            )
+            ax.fill_between(
+                x_line,
+                y_line - ci,
+                y_line + ci,
+                alpha=0.11,
+                color=line_color,
+                zorder=5,
+            )
+
+        ax.text(
+            0.0 if compact else -0.10,
+            1.01 if compact else 1.02,
+            panel_letter,
+            transform=ax.transAxes,
+            fontsize=9 if compact else 14,
+            fontweight="bold",
+            va="bottom",
+            ha="left" if compact else "right",
+        )
+        ax.text(
+            0.04,
+            0.95,
+            label,
+            transform=ax.transAxes,
+            fontsize=7 if compact else 9,
+            va="top",
+            ha="left",
+            bbox=dict(
+                boxstyle="round,pad=0.14" if compact else "round,pad=0.22",
+                facecolor="white",
+                edgecolor="0.7",
+                alpha=0.9,
+            ),
+        )
+        ax.set_xlim(x_global_min, x_global_max)
+        ax.set_ylim(y_global_min, y_global_max)
+        ax.set_xlabel(
+            VARIABLE_LABELS.get(feature_var, feature_var),
+            fontsize=7.5 if compact else 12,
+        )
+        if compact:
+            ax.tick_params(axis="both", labelsize=7, length=2.5, pad=1.5)
+        ax.grid(
+            True,
+            alpha=0.18 if compact else 0.3,
+            linestyle="--",
+            linewidth=0.45 if compact else 0.8,
+        )
+
+    ax_low.set_ylabel(
+        VARIABLE_LABELS.get(result_var, result_var),
+        fontsize=7.5 if compact else 12,
+    )
+    ax_high.set_ylabel("")
+    ax_high.tick_params(axis="y", left=False, labelleft=False)
+
+    sm = ScalarMappable(norm=norm, cmap=cmap)
+    sm.set_array([])
+    cbar = fig.colorbar(
+        sm,
+        cax=cbar_ax,
+        orientation=(
+            "horizontal"
+            if horizontal_colorbar and external_colorbar_ax is None
+            else "vertical"
+        ),
+        boundaries=boundaries,
+        ticks=boundaries,
+        spacing="uniform",
+    )
+    resolved_colorbar_label = (
+        colorbar_label
+        if colorbar_label is not None
+        else VARIABLE_LABELS.get(group_var, group_var)
+    )
+    if compact:
+        cbar.set_label(
+            (
+                "GEF (kg CO$_2$e/kWh)"
+                if (
+                    horizontal_colorbar
+                    and external_colorbar_ax is None
+                    and group_var == "grid_emission_factor"
+                )
+                else resolved_colorbar_label
+            ),
+            fontsize=7,
+            labelpad=1.5,
+        )
+        if horizontal_colorbar:
+            cbar.ax.xaxis.set_label_position("top")
+            cbar.ax.xaxis.set_ticks_position("bottom")
+        cbar.ax.tick_params(labelsize=6.8, length=2.2)
+        if boundaries is not None:
+            tick_labels = [f"{value:.1f}" for value in boundaries]
+            if horizontal_colorbar and external_colorbar_ax is None:
+                cbar.ax.set_xticklabels(tick_labels)
+            else:
+                cbar.ax.set_yticklabels(tick_labels)
+    else:
+        cbar.set_label(resolved_colorbar_label, fontsize=10)
+
+    if plot_title:
+        fig.suptitle(
+            f"{VARIABLE_LABELS.get(feature_var, feature_var)} vs "
+            f"{VARIABLE_LABELS.get(result_var, result_var)}",
+            fontsize=12,
+            fontweight="bold",
+        )
+
+    return ax_low, cbar_ax, ax_high
+
+
+def _plot_city_gef_scatter_components_axes(
+    fig,
+    subplot_spec,
+    df: pd.DataFrame,
+    plot_title: bool = False,
+    compact: bool = False,
+    show_legend: bool = True,
+    grayscale: bool = False,
+):
+    """Draw GEF-binned per-order emission components into a parent subplot spec."""
+    gef_col = None
+    for candidate in ("grid_emission_factor", "gef"):
+        if candidate in df.columns and df[candidate].notna().any():
+            gef_col = candidate
+            break
+
+    if gef_col is None:
+        print(
+            "City GEF stacked components skipped - "
+            "missing grid_emission_factor or gef column"
+        )
+        return None
+    if "total_odpair_annual_sales" not in df.columns:
+        print(
+            "City GEF stacked components skipped - "
+            "missing total_odpair_annual_sales column"
+        )
+        return None
+
+    vehicle_specs = [
+        {
+            "label": "E-bike",
+            "color": "#BDBDBD" if grayscale else "#4C8CBF",
+            "offset": -0.18,
+            "use_col": "total_ebike_use_phase_emission_kg",
+            "production_col": "total_ebike_production_emission_kg",
+            "eol_col": "total_ebike_end_of_life_emission_kg",
+        },
+        {
+            "label": "Drone",
+            "color": "#636363" if grayscale else "#E05C2B",
+            "offset": 0.18,
+            "use_col": "total_drone_use_phase_emission_kg",
+            "production_col": "total_drone_production_emission_kg",
+            "eol_col": "total_drone_end_of_life_emission_kg",
+        },
+    ]
+    required_cols = ["total_odpair_annual_sales"]
+    for spec in vehicle_specs:
+        required_cols.extend([spec["use_col"], spec["production_col"], spec["eol_col"]])
+
+    missing = [col for col in required_cols if col not in df.columns]
+    if missing:
+        print(f"City GEF stacked components skipped - missing columns {missing}")
+        return None
+
+    plot_df = df.copy()
+    if "region_level" in plot_df.columns:
+        plot_df = plot_df[plot_df["region_level"] == "city"]
+
+    numeric_cols = [gef_col] + required_cols
+    for col in numeric_cols:
+        plot_df[col] = pd.to_numeric(plot_df[col], errors="coerce")
+    plot_df = plot_df.dropna(subset=numeric_cols)
+    valid_positive = (
+        (plot_df[gef_col] > 0)
+        & (plot_df[gef_col] <= 0.9)
+        & (plot_df["total_odpair_annual_sales"] > 0)
+    )
+    for spec in vehicle_specs:
+        valid_positive = (
+            valid_positive
+            & (plot_df[spec["use_col"]] > 0)
+            & (plot_df[spec["production_col"]] >= 0)
+            & (plot_df[spec["eol_col"]] >= 0)
+        )
+    plot_df = plot_df[valid_positive]
+    if plot_df.empty:
+        print(
+            "City GEF stacked components skipped - "
+            "no valid city GEF/emission values"
+        )
+        return None
+
+    bin_width = 0.1
+    bin_edges = np.linspace(0.0, 0.9, 10)
+    labels = [f"{right:.1f}" for right in bin_edges[1:]]
+    plot_df["gef_range"] = pd.cut(
+        plot_df[gef_col],
+        bins=bin_edges,
+        labels=labels,
+        include_lowest=True,
+        right=True,
+    )
+
+    bin_groups = []
+    bin_positions = []
+    for idx, label in enumerate(labels):
+        group = plot_df[plot_df["gef_range"] == label]
+        if group.empty:
+            continue
+        bin_groups.append(group)
+        bin_positions.append(idx)
+
+    if not bin_groups:
+        print("City GEF stacked components skipped - no cities in GEF ranges")
+        return None
+
+    gs = subplot_spec.subgridspec(
+        2,
+        1,
+        height_ratios=[3.6, 1.0] if compact else [4.0, 1.0],
+        hspace=0.0,
+    )
+    ax = fig.add_subplot(gs[0])
+    ax_dist = fig.add_subplot(gs[1], sharex=ax)
+    x_all = (bin_edges[:-1] + bin_edges[1:]) / 2.0
+    tick_labels = [f"{edge:.1f}" for edge in bin_edges]
+    x = x_all[np.array(bin_positions, dtype=int)]
+    width = bin_width * 0.28
+    max_total = 0.0
+    legend_handles = [
+        plt.Rectangle(
+            (0, 0),
+            1,
+            1,
+            facecolor="#777777",
+            alpha=0.35,
+            edgecolor="#555555",
+            label="Production + EOL",
+        ),
+        plt.Rectangle(
+            (0, 0),
+            1,
+            1,
+            facecolor="#777777",
+            alpha=0.9,
+            edgecolor="#555555",
+            label="Use phase",
+        ),
+    ]
+
+    for spec in vehicle_specs:
+        positions = x + spec["offset"] * bin_width
+        fixed_values = []
+        use_values = []
+        for group in bin_groups:
+            orders_sum = group["total_odpair_annual_sales"].sum()
+            fixed_values.append(
+                (group[spec["production_col"]].sum() + group[spec["eol_col"]].sum())
+                / orders_sum
+                * 1000.0
+            )
+            use_values.append(group[spec["use_col"]].sum() / orders_sum * 1000.0)
+
+        fixed_values = np.array(fixed_values, dtype=float)
+        use_values = np.array(use_values, dtype=float)
+        totals = fixed_values + use_values
+        if totals.size:
+            max_total = max(max_total, float(totals.max()))
+
+        ax.bar(
+            positions,
+            fixed_values,
+            width=width,
+            color=spec["color"],
+            alpha=1.0 if grayscale else 0.38,
+            edgecolor="#222222" if grayscale else "white",
+            linewidth=0.45 if grayscale else 0.6,
+            hatch="////" if grayscale else None,
+            zorder=3,
+        )
+        ax.bar(
+            positions,
+            use_values,
+            width=width,
+            bottom=fixed_values,
+            color=spec["color"],
+            alpha=1.0 if grayscale else 0.88,
+            edgecolor="#222222" if grayscale else "white",
+            linewidth=0.45 if grayscale else 0.6,
+            zorder=3,
+            label=spec["label"],
+        )
+        for xpos, total in zip(positions, totals):
+            if total <= 0:
+                continue
+            ax.text(
+                xpos,
+                total,
+                f"{total:.1f}",
+                ha="center",
+                va="bottom",
+                fontsize=7,
+                color="0.25",
+                rotation=90,
+                zorder=5,
+            )
+
+    gef_label = VARIABLE_LABELS.get(gef_col, "Grid Emission Factor (kg CO2e/kWh)")
+    ax.set_ylabel(
+        "Lifecycle emission\n(g CO2e/order)",
+        fontsize=7.5 if compact else 12,
+    )
+    ax.set_xticks(bin_edges)
+    ax.tick_params(axis="x", which="both", bottom=False, labelbottom=False)
+    ax.set_xlim(0.05, 0.85)
+    ax.set_ylim(0, max_total * 1.22)
+    ax.grid(
+        True,
+        axis="y",
+        alpha=0.18 if compact else 0.3,
+        linestyle="--",
+        linewidth=0.45 if compact else 0.8,
+    )
+    if compact:
+        ax.tick_params(axis="y", labelsize=7, length=2.5, pad=1.5)
+    ax.set_axisbelow(True)
+
+    vehicle_handles = [
+        plt.Rectangle(
+            (0, 0),
+            1,
+            1,
+            facecolor=spec["color"],
+            alpha=1.0 if grayscale else 0.88,
+            edgecolor="#222222" if grayscale else "white",
+            label=spec["label"],
+        )
+        for spec in vehicle_specs
+    ]
+    if grayscale:
+        legend_handles = [
+            plt.Rectangle(
+                (0, 0),
+                1,
+                1,
+                facecolor="#BDBDBD",
+                edgecolor="#222222",
+                linewidth=0.45,
+                hatch="////",
+                label="Production + EOL",
+            ),
+            plt.Rectangle(
+                (0, 0),
+                1,
+                1,
+                facecolor="#BDBDBD",
+                edgecolor="#222222",
+                linewidth=0.45,
+                label="Use phase",
+            ),
+        ]
+    if show_legend:
+        legend1 = ax.legend(
+            handles=vehicle_handles,
+            loc="upper left",
+            fontsize=7 if compact else 9,
+            title="Vehicle",
+            title_fontsize=7 if compact else 9,
+        )
+        ax.add_artist(legend1)
+        ax.legend(
+            handles=legend_handles,
+            loc="center left",
+            fontsize=7 if compact else 9,
+            title="Component",
+            title_fontsize=7 if compact else 9,
+        )
+
+    density_x = plot_df[gef_col].to_numpy(dtype=float)
+    if len(density_x) > 5 and np.unique(density_x).size > 1:
+        from scipy.stats import gaussian_kde
+
+        x_violin = np.linspace(bin_edges[0], bin_edges[-1], 240)
+        density = gaussian_kde(density_x)(x_violin)
+    else:
+        x_violin = x_all
+        density = np.array(
+            [len(plot_df[plot_df["gef_range"] == label]) for label in labels],
+            dtype=float,
+        )
+    if density.max() > 0:
+        density = density / density.max()
+
+    ax_dist.fill_between(
+        x_violin,
+        0,
+        density,
+        color="#7A7A7A",
+        alpha=0.35,
+        linewidth=0,
+        zorder=1,
+    )
+    ax_dist.plot(x_violin, density, color="#555555", linewidth=0.8, zorder=2)
+    ax_dist.scatter(
+        density_x,
+        np.zeros_like(density_x),
+        marker="|",
+        s=16,
+        color="#333333",
+        alpha=0.35,
+        linewidths=0.6,
+        zorder=3,
+    )
+    ax_dist.axhline(0, color="#555555", linewidth=0.8, zorder=2)
+    ax_dist.set_ylim(-0.12, 1.15)
+    ax_dist.set_yticks([])
+    ax_dist.set_ylabel("Cities", fontsize=7 if compact else 10)
+    ax_dist.set_xlabel(gef_label, fontsize=7.5 if compact else 12)
+    ax_dist.set_xticks(bin_edges)
+    ax_dist.set_xticklabels(tick_labels)
+    ax_dist.tick_params(axis="x", which="both", bottom=True, labelbottom=True, pad=2)
+    if compact:
+        ax_dist.tick_params(axis="x", labelsize=7, length=2.5, pad=1.5)
+    ax_dist.set_xlim(0.05, 0.85)
+    ax_dist.spines["left"].set_visible(False)
+    ax_dist.spines["right"].set_visible(False)
+    ax_dist.grid(False)
+
+    if plot_title:
+        ax.set_title(
+            "City Per-order Emission Components by Grid Emission Factor",
+            fontsize=9 if compact else 14,
+            fontweight="bold",
+        )
+
+    return ax, ax_dist
+
+
+def _bin_reduction_and_detour(
+    od_df: pd.DataFrame,
+    bin_width_km: float,
+    absolute_reduction_metric: str = "total_t",
+):
+    """Bin OD rows by air distance.
+
+    Returns (centres, reduction_pct, reduction_abs, detour_by_bin, max_km,
+    oracle_drone_share_pct).
+    ``reduction_pct`` is (e-bike − drone) / e-bike per bin in percent,
+    negative when the drone exceeds e-bike for the bin's OD pairs.
+    ``reduction_abs`` is annual absolute emission reduction per bin in tonnes
+    CO2e when ``absolute_reduction_metric`` is ``total_t``. When it is
+    ``per_order_g``, it is (all e-bike − all drone) divided by total orders
+    in the distance range, in g CO2e/order.
+    """
+    if absolute_reduction_metric not in {"total_t", "per_order_g"}:
+        raise ValueError(
+            "absolute_reduction_metric must be 'total_t' or 'per_order_g'"
+        )
+
+    valid = od_df[(od_df["road_distance_m"] >= 0) & (od_df["distance_km"] > 0)].copy()
+    road_km = valid["road_distance_m"].values / 1000.0
+    air_km = valid["distance_km"].values
+    detour = road_km / air_km
+    drone_lc = valid["drone_lifecycle_g"].values
+    ebike_lc = valid["ebike_lifecycle_g"].values
+    sales = valid["annual_sales"].values
+
+    max_km = float(np.ceil(air_km.max() / bin_width_km) * bin_width_km)
+    edges = np.arange(0.0, max_km + bin_width_km / 2, bin_width_km)
+    n_bins = len(edges) - 1
+    centres = (edges[:-1] + edges[1:]) / 2
+
+    bin_idx = np.clip(np.digitize(air_km, edges) - 1, 0, n_bins - 1)
+    reduction_pct = np.full(n_bins, np.nan)
+    reduction_abs = np.zeros(n_bins)
+    oracle_drone_share_pct = np.full(n_bins, np.nan)
+    detour_by_bin = []
+    for k in range(n_bins):
+        m = bin_idx == k
+        if not m.any():
+            detour_by_bin.append(np.array([]))
+            continue
+        ebike_tot = (ebike_lc[m] * sales[m]).sum()
+        drone_tot = (drone_lc[m] * sales[m]).sum()
+        total_orders = sales[m].sum()
+        if total_orders > 0:
+            oracle_drone_share_pct[k] = (
+                sales[m][drone_lc[m] < ebike_lc[m]].sum() / total_orders * 100.0
+            )
+        if absolute_reduction_metric == "per_order_g":
+            reduction_abs[k] = (
+                (ebike_tot - drone_tot) / total_orders
+                if total_orders > 0
+                else np.nan
+            )
+        else:
+            reduction_abs[k] = (ebike_tot - drone_tot) / 1e6  # g -> tonnes
+        if ebike_tot > 0:
+            reduction_pct[k] = (ebike_tot - drone_tot) / ebike_tot * 100
+        detour_by_bin.append(detour[m])
+    return centres, reduction_pct, reduction_abs, detour_by_bin, max_km, oracle_drone_share_pct

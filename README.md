@@ -33,7 +33,7 @@ no username is embedded in source code.
 | `python -m drone_emission cities` | Runs merchant filtering, building preparation, OD construction, road routing, lifecycle emissions, and per-city stats. It never imports plotting code. Completed cities are restored unless `--force` is supplied. |
 | `python -m drone_emission aggregate` | Consolidates compatible `all_region_stats.{json,csv}` and `all_region_stats_enriched.csv`. |
 | `python -m drone_emission analyze` | Restores or computes named scenarios, distance thresholds, threshold resilience, spatial concentration, and city attribution. Derived files are written below cache/work through a compatibility data view; city data is read-only. |
-| `python -m drone_emission render` | Accepts only the 12 manifest IDs through `--only`. It writes necessary panels to `paper/subfigure/`, reports to `paper/report/`, and the three direct figures to `paper/`. |
+| `python -m drone_emission render` | Accepts only the 12 manifest IDs through `--only`. Its exact 25-request registry writes panels to `paper/subfigure/`, reports to `paper/report/`, and three direct figures to `paper/`. Missing inputs fail with a prerequisite-stage hint. |
 | `python -m drone_emission promote` | Validates all 12 staging PDFs and is the only command allowed to write `docs/paper/figures/`. Use `--dry-run` or explicitly confirm with `--yes`. |
 | `python -m drone_emission status` | Reports staging and required-subfigure completeness without writing. |
 | `python -m drone_emission reproduce` | Runs inputs → cities → aggregate → analyze → render. Existing results are reused; `--force` deliberately recomputes them. It never promotes. |
@@ -42,6 +42,11 @@ Nine manifest entries declare Inkscape sources and generate only the panels
 needed for manual composition. Figure 4, Figure 5, and Extended Data Figure 6
 are staged directly. `supplementary.tex` is retained but is outside this
 workflow and its publication contract.
+
+Rendering is read-only with respect to configured data and city results. It
+does not run `analyze`, generate placeholders, or silently omit panels. Outputs
+are bounded to the configured figures/cache/work roots; only `promote` may
+write the manuscript figure directory.
 
 ## Formal remote launcher and memory limit
 
@@ -75,7 +80,6 @@ and single-stage work but do not carry the formal 64GB guarantee.
 | `cd src/drone_emission && python main.py --region CITY` | `python -m drone_emission cities --region CITY` |
 | old positional `entrypoint.sh 4 --all` | `./entrypoint.sh --jobs 4 cities` |
 | `postprocess.sh` | `python -m drone_emission aggregate` then `analyze` |
-| `python -m visualization.paper` | `python -m drone_emission render` |
 | OAT/Sobol/Shapley/equity/profit/Kappa and maintenance shells | `archive/code/` or `archive/scripts/` |
 
 See [docs/architecture.md](docs/architecture.md) for the dependency and write

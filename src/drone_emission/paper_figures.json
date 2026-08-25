@@ -85,7 +85,7 @@
     {
       "id": "extended_data_fig1_population_reduction_contrast",
       "mode": "inkscape",
-      "required_inputs": ["all_region_stats_enriched.csv", "work:analysis/city_attribution/r2_city_attribution_analysis_report.json"],
+      "required_inputs": ["all_region_stats_enriched.csv", "work:analysis/city_attribution/r2_city_attribution_data.csv", "work:analysis/city_attribution/r2_city_attribution_analysis_report.json"],
       "render_requests": ["r2_population_reduction_contrast"],
       "required_subfigures": ["r2_population_absolute_reduction.pdf", "r2_population_relative_reduction.pdf"],
       "report_inputs": ["figures/paper/report/extended_data_fig1_population_reduction_contrast.sources.json"],

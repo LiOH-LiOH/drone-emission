@@ -15,12 +15,6 @@ WEIGHTED_REDUCTION_COLUMNS = (
     "lifecycle_all_drone_reduction_pct",
 )
 
-# Project root directory
-_PROJECT_ROOT = os.path.dirname(
-    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-)
-
-
 def _batch_city_to_adcode(city_names: list) -> dict:
     """Resolve Chinese city names to 6-digit adcodes using cpca (batched)."""
     adcode_map = {}
@@ -36,7 +30,9 @@ def _batch_city_to_adcode(city_names: list) -> dict:
 
 def _fetch_city_boundaries(adcode: str):
     """Fetch city boundary GeoJSON from cache or DataV API."""
-    cache_dir = os.path.join(_PROJECT_ROOT, "cache", "boundaries")
+    from drone_emission.utils.config import get_cache_dir
+
+    cache_dir = get_cache_dir("boundaries")
     os.makedirs(cache_dir, exist_ok=True)
     cache_file = os.path.join(cache_dir, f"{adcode}.json")
 
@@ -76,7 +72,9 @@ def _fetch_china_boundaries():
     """Fetch China provincial boundaries from DataV API."""
     # China adcode is 100000
     adcode = "100000"
-    cache_dir = os.path.join(_PROJECT_ROOT, "cache", "boundaries")
+    from drone_emission.utils.config import get_cache_dir
+
+    cache_dir = get_cache_dir("boundaries")
     os.makedirs(cache_dir, exist_ok=True)
     cache_file = os.path.join(cache_dir, f"{adcode}.json")
 
