@@ -1,0 +1,117 @@
+{
+  "schema_version": 1,
+  "accepted_at_utc": "2026-08-25T13:50:42.348705+00:00",
+  "source_result_sha256": "509a21234e07e5933de6006093f185bfdb77d128fab57dcf72d7fb37493a2df2",
+  "run_hash": "a1303469cb38697a",
+  "input_fingerprints": {
+    "corrected_orders": {
+      "path": "/mnt/minor_storage/jingxian/drone-emission/data/calibration/beijing_gravity/inputs/corrected_orders.csv.gz",
+      "sha256": "cf809ddad9706d5c5cd1995ea7bbe1e7b1625e6cc04817285ea406f83f595ecf"
+    },
+    "buildings": {
+      "path": "/mnt/minor_storage/jingxian/drone-emission/data/city/beijing/beijing_buildings_preprocessed.gpkg",
+      "sha256": "5e56c787aef4ee245957fdcc869fb5c92b89814b949245102c82ec2c18bff2ca"
+    },
+    "coordinate_transform": {
+      "path": "/mnt/minor_storage/jingxian/drone-emission/data/calibration/beijing_gravity/inputs/beijing_coordinate_transform.json",
+      "sha256": "c42c7ee906f3911ff341340f48269a3f873eb5a0a1229c1c8d473c4ecaa46951",
+      "raw_orders_sha256": "9ecde0dea7103d47be1584e16659b7afc435f1dbb99c7fe0de4e476bad664114"
+    }
+  },
+  "parameters": {
+    "alpha": 0.42196723657368457,
+    "beta": 0.3255233471899625,
+    "gamma": 1.6500886918893218
+  },
+  "clustered_inference": {
+    "covariance": [
+      [
+        6.269534089171951e-06,
+        -6.926420433239827e-06,
+        -5.21735492513377e-06
+      ],
+      [
+        -6.926420433239828e-06,
+        0.0003634008603722332,
+        0.00024391978658325867
+      ],
+      [
+        -5.2173549251337695e-06,
+        0.0002439197865832588,
+        0.0002143555159464751
+      ]
+    ],
+    "parameters": [
+      {
+        "parameter": "alpha",
+        "estimate": 0.42196723657368457,
+        "standard_error": 0.002503903769950425,
+        "ci95_low": 0.41705967536382765,
+        "ci95_high": 0.4268747977835415
+      },
+      {
+        "parameter": "beta",
+        "estimate": 0.3255233471899625,
+        "standard_error": 0.01906307583713167,
+        "ci95_low": 0.2881604051146287,
+        "ci95_high": 0.3628862892652963
+      },
+      {
+        "parameter": "gamma",
+        "estimate": 1.6500886918893218,
+        "standard_error": 0.014640885080707215,
+        "ci95_low": 1.6213930844293458,
+        "ci95_high": 1.6787842993492978
+      }
+    ],
+    "cluster_count": 11369
+  },
+  "final_fit": {
+    "parameters": {
+      "alpha": 0.42196723657368457,
+      "beta": 0.3255233471899625,
+      "gamma": 1.6500886918893218
+    },
+    "free_parameters": [
+      "alpha",
+      "beta",
+      "gamma"
+    ],
+    "fixed_parameters": {},
+    "success": true,
+    "status": 0,
+    "message": "CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH",
+    "iterations": 10,
+    "function_evaluations": 12,
+    "negative_log_likelihood": 2112868.65440227,
+    "gradient": [
+      -0.00023272183779710076,
+      -0.0003583820317167863,
+      0.0004238746876268351
+    ],
+    "gradient_norm": 0.0006018861065482893,
+    "hessian": [
+      [
+        848536.2077550596,
+        -19727.86411380209,
+        24919.65785004391
+      ],
+      [
+        -19727.86411380209,
+        130176.6504661281,
+        -137594.16557945256
+      ],
+      [
+        24919.657850043888,
+        -137594.16557945256,
+        178871.28724726106
+      ]
+    ],
+    "hessian_eigenvalues": [
+      14791.30768565156,
+      292440.5617067422,
+      850352.2760760549
+    ],
+    "hessian_condition_number": 57.48999981258904
+  }
+}
