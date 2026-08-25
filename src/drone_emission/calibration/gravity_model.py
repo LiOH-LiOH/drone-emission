@@ -341,3 +341,148 @@ def evaluate_model(
     return metrics, observed_rows.merge(
         predicted_rows, on="distance_bin_km", how="outer"
     ).fillna(0.0)
+
+
+def _r_squared(
+    observed: np.ndarray,
+    predicted: np.ndarray,
+    weights: np.ndarray | None = None,
+) -> float:
+    """Return predictive R-squared against the observed-mean null model."""
+    observed = np.asarray(observed, dtype=float)
+    predicted = np.asarray(predicted, dtype=float)
+    if weights is None:
+        center = float(np.mean(observed))
+        residual = float(np.sum(np.square(observed - predicted)))
+        total = float(np.sum(np.square(observed - center)))
+    else:
+        weights = np.asarray(weights, dtype=float)
+        center = float(np.average(observed, weights=weights))
+        residual = float(np.sum(weights * np.square(observed - predicted)))
+        total = float(np.sum(weights * np.square(observed - center)))
+    return float(1.0 - residual / total) if total > 0 else float("nan")
+
+
+def _sorted_support_wasserstein(
+    distances: np.ndarray,
+    observed_weights: np.ndarray,
+    predicted_weights: np.ndarray,
+) -> float:
+    """Exact W1 distance when candidate distances are already increasing."""
+    if len(distances) <= 1:
+        return 0.0
+    if np.any(np.diff(distances) < 0):
+        order = np.argsort(distances, kind="mergesort")
+        distances = distances[order]
+        observed_weights = observed_weights[order]
+        predicted_weights = predicted_weights[order]
+    observed_cdf = np.cumsum(observed_weights) / np.sum(observed_weights)
+    predicted_cdf = np.cumsum(predicted_weights) / np.sum(predicted_weights)
+    return float(
+        np.sum(np.abs(observed_cdf[:-1] - predicted_cdf[:-1]) * np.diff(distances))
+    )
+
+
+def merchant_spatial_fit(
+    parameters: Iterable[float],
+    candidates: CandidateCSR,
+    observations: pd.DataFrame,
+    scope: str,
+) -> tuple[pd.DataFrame, dict]:
+    """Compute exact merchant-level distance fit from sufficient statistics."""
+    theta = np.asarray(tuple(parameters), dtype=float)
+    rows = []
+    for shop_index, (positions, counts) in _group_observations(observations).items():
+        start, stop = candidates.bounds(shop_index)
+        distances = np.asarray(candidates.distance_km[start:stop])
+        utilities = utility_features(candidates, start, stop) @ theta
+        probabilities = np.exp(utilities - logsumexp(utilities))
+        local = positions - start
+        observed_weights = np.zeros(stop - start, dtype=float)
+        np.add.at(observed_weights, local, counts)
+        total = float(counts.sum())
+        predicted_weights = probabilities * total
+        observed_mean = float(np.average(distances, weights=observed_weights))
+        predicted_mean = float(np.average(distances, weights=predicted_weights))
+        rows.append(
+            {
+                "scope": scope,
+                "shop_index": shop_index,
+                "order_count": int(total),
+                "candidate_count": int(stop - start),
+                "observed_mean_distance_km": observed_mean,
+                "predicted_mean_distance_km": predicted_mean,
+                "absolute_mean_error_m": abs(observed_mean - predicted_mean) * 1000.0,
+                "wasserstein_m": _sorted_support_wasserstein(
+                    distances, observed_weights, predicted_weights
+                ) * 1000.0,
+            }
+        )
+    frame = pd.DataFrame(rows)
+    observed = frame["observed_mean_distance_km"].to_numpy(float)
+    predicted = frame["predicted_mean_distance_km"].to_numpy(float)
+    order_weights = frame["order_count"].to_numpy(float)
+    summary = {
+        "scope": scope,
+        "merchant_count": int(len(frame)),
+        "order_count": int(order_weights.sum()),
+        "merchant_mean_distance_r2_equal_weighted": _r_squared(observed, predicted),
+        "merchant_mean_distance_r2_order_weighted": _r_squared(
+            observed, predicted, order_weights
+        ),
+        "absolute_mean_error_m_median": float(frame["absolute_mean_error_m"].median()),
+        "absolute_mean_error_m_p90": float(frame["absolute_mean_error_m"].quantile(0.9)),
+        "wasserstein_m_median": float(frame["wasserstein_m"].median()),
+        "wasserstein_m_p90": float(frame["wasserstein_m"].quantile(0.9)),
+    }
+    return frame, summary
+
+
+def building_order_fit(
+    parameters: Iterable[float],
+    candidates: CandidateCSR,
+    observations: pd.DataFrame,
+) -> tuple[pd.DataFrame, dict]:
+    """Aggregate exact observed and expected orders over all candidate buildings."""
+    theta = np.asarray(tuple(parameters), dtype=float)
+    grouped = _group_observations(observations)
+    if not grouped:
+        raise ValueError("Building-order fit requires at least one merchant")
+    maximum_building_index = int(np.max(candidates.building_index))
+    observed = np.zeros(maximum_building_index + 1, dtype=float)
+    expected = np.zeros(maximum_building_index + 1, dtype=float)
+    included = np.zeros(maximum_building_index + 1, dtype=bool)
+    for shop_index, (positions, counts) in grouped.items():
+        start, stop = candidates.bounds(shop_index)
+        building_indices = np.asarray(candidates.building_index[start:stop])
+        utilities = utility_features(candidates, start, stop) @ theta
+        probabilities = np.exp(utilities - logsumexp(utilities))
+        included[building_indices] = True
+        expected[building_indices] += probabilities * float(counts.sum())
+        observed_buildings = np.asarray(candidates.building_index[positions])
+        np.add.at(observed, observed_buildings, counts)
+    building_indices = np.flatnonzero(included)
+    frame = pd.DataFrame(
+        {
+            "building_index": building_indices,
+            "observed_orders": observed[building_indices],
+            "expected_orders": expected[building_indices],
+        }
+    )
+    raw_r2 = _r_squared(
+        frame["observed_orders"].to_numpy(float),
+        frame["expected_orders"].to_numpy(float),
+    )
+    log_r2 = _r_squared(
+        np.log1p(frame["observed_orders"].to_numpy(float)),
+        np.log1p(frame["expected_orders"].to_numpy(float)),
+    )
+    summary = {
+        "candidate_building_count": int(len(frame)),
+        "observed_positive_building_count": int((frame["observed_orders"] > 0).sum()),
+        "observed_order_count": int(frame["observed_orders"].sum()),
+        "expected_order_count": float(frame["expected_orders"].sum()),
+        "building_order_count_r2_raw": raw_r2,
+        "building_order_count_r2_log1p": log_r2,
+    }
+    return frame, summary

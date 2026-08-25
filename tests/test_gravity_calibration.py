@@ -19,9 +19,11 @@ from drone_emission.calibration.gravity_calibration import (
     stable_shop_is_unseen,
 )
 from drone_emission.calibration.gravity_model import (
+    building_order_fit,
     CandidateCSR,
     evaluate_model,
     fit_parameters,
+    merchant_spatial_fit,
     objective_gradient_hessian,
 )
 
@@ -185,6 +187,36 @@ def test_all_models_use_identical_observation_count(tmp_path):
         assert 0 <= metrics["top_1"] <= metrics["top_10"] <= 1
         assert np.isfinite(metrics["nll_per_order"])
     assert len(set(counts)) == 1
+
+
+def test_spatial_fit_uses_exact_expectations_and_keeps_observed_zeros():
+    candidates = CandidateCSR(
+        indptr=np.array([0, 2, 4], dtype=np.int64),
+        building_index=np.array([0, 1, 1, 2], dtype=np.int64),
+        log_volume=np.zeros(4),
+        log_distance=np.log(np.array([1.0, 2.0, 1.0, 3.0])),
+        distance_km=np.array([1.0, 2.0, 1.0, 3.0]),
+    )
+    observations = pd.DataFrame(
+        {
+            "shop_index": [0, 1],
+            "candidate_position": [0, 3],
+            "count": [10, 10],
+        }
+    )
+    merchants, merchant_summary = merchant_spatial_fit(
+        (0.0, 0.0, 0.0), candidates, observations, "full_valid_sample"
+    )
+    assert merchant_summary["merchant_mean_distance_r2_equal_weighted"] == pytest.approx(0.375)
+    assert merchants["wasserstein_m"].to_list() == pytest.approx([500.0, 1000.0])
+    buildings, building_summary = building_order_fit(
+        (0.0, 0.0, 0.0), candidates, observations
+    )
+    assert buildings["building_index"].to_list() == [0, 1, 2]
+    assert buildings["observed_orders"].to_list() == pytest.approx([10.0, 0.0, 10.0])
+    assert buildings["expected_orders"].to_list() == pytest.approx([5.0, 10.0, 5.0])
+    assert building_summary["building_order_count_r2_raw"] == pytest.approx(-1.25)
+    assert building_summary["expected_order_count"] == pytest.approx(20.0)
 
 
 def test_acceptance_requires_success_and_preserves_default_config(tmp_path):

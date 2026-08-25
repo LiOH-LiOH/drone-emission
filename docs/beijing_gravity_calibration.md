@@ -39,6 +39,14 @@ python -m drone_emission --env remote calibrate \
   --memory-limit-gb 64
 ```
 
+To add or refresh only the spatial-fit metrics and third audit figure for an
+existing converged run, reuse its memory-mapped cache without refitting:
+
+```bash
+python -m drone_emission --env remote calibrate-spatial-fit \
+  --result /path/to/run/gravity_calibration.json
+```
+
 Raw customer coordinates, the order-to-building match table, and candidate CSR
 arrays are ignored runtime data. They remain in the remote run cache and must
 not be committed or copied back. The selected JSON, CSV, PDF, PNG, and task log
@@ -55,9 +63,33 @@ set, and invalid centroid distances are reported separately.
 SHA-256 of `shop_id` assigns one bucket in five to the unseen-shop test. The
 remaining shops use their first 24 global order dates for training and their
 last five dates for the temporal test. The tests are mutually exclusive. After
-out-of-sample comparison of current, uniform, volume-only, Tanner-only, and
-joint models, the final parameters are re-estimated from every retained order.
+out-of-sample model checks, the final parameters are re-estimated from every
+retained order.
 Standard errors and 95% Wald intervals use shop-clustered sandwich covariance.
+
+The primary, intuitive spatial-fit assessment also uses every retained order.
+For each merchant, it compares the observed mean delivery distance with the
+model's exact probability-weighted mean over that merchant's candidate
+buildings. The reported merchant predictive R-squared is
+
+\[
+R^2 = 1 - \frac{\sum_i (\bar d_i-\widehat{\bar d}_i)^2}
+                  {\sum_i (\bar d_i-\bar d)^2},
+\]
+
+with one equal-weighted observation per merchant; an order-weighted value is
+supplementary. This is a direct prediction score, not squared correlation or a
+post-hoc regression, and can be negative. Median and P90 first-Wasserstein
+errors in metres show how closely each merchant's full delivery-distance
+distribution is reproduced.
+
+Building-level fit compares matched order counts with exact expected counts
+`sum_i n_i P(j|i)`. It includes every building in at least one evaluated
+merchant's 5 km candidate set, including buildings with zero observed orders.
+Raw-count predictive R-squared is primary and log1p-count predictive R-squared
+is supplementary. The two held-out merchant sets repeat merchant metrics using
+training-only parameters as small validation checks; they are not the headline
+result.
 
 The cache stores candidate attributes as memory-mapped NumPy CSR arrays and
 orders as shop-building counts. `--rebuild-prepared` explicitly discards only
@@ -70,9 +102,14 @@ additional swap.
 
 `gravity_calibration.json` records input fingerprints, preparation rules,
 exclusions, split sizes, optimization diagnostics, clustered inference, and all
-test metrics. CSV tables contain parameters, model metrics, data flow, and the
-two figures' plotted sources. The audit figures are emitted as PDF and 300 dpi
-PNG but are intentionally absent from the paper figure manifest.
+fit metrics. `spatial_fit_metrics.csv` provides the concise full-sample and
+held-out merchant summaries. `merchant_spatial_fit_source.csv.gz` and
+`building_order_fit_source.csv.gz` preserve the exact source rows behind the
+spatial-fit audit. CSV tables also contain parameters, model metrics, data flow,
+and the other plotted sources. The three audit figures are emitted as PDF and
+300 dpi PNG but are intentionally absent from the paper figure manifest. The
+third figure, `merchant_and_building_spatial_fit`, contains merchant mean
+distance, merchant Wasserstein error, and raw/log1p building order-count panels.
 
 The default result is a candidate and does not modify tracked configuration.
 Passing `--accept-result` validates the live input hashes, schema, convergence,

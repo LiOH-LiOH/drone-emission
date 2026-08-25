@@ -193,8 +193,149 @@ def _plot_prediction(output_dir: Path) -> None:
         plt.close(fig)
 
 
+def _plot_spatial_fit(output_dir: Path, result: dict) -> None:
+    """Plot intuitive full-sample merchant and building predictive fit."""
+    import matplotlib.pyplot as plt
+
+    merchants = pd.read_csv(output_dir / "merchant_spatial_fit_source.csv.gz")
+    merchants = merchants.loc[merchants["scope"] == "full_valid_sample"]
+    buildings = pd.read_csv(output_dir / "building_order_fit_source.csv.gz")
+    merchant_summary = next(
+        row for row in result["spatial_fit"]["merchant_metrics"]
+        if row["scope"] == "full_valid_sample"
+    )
+    building_summary = result["spatial_fit"]["building_metrics"]
+
+    fig, axes = plt.subplots(2, 2, figsize=(11.4, 9.0))
+    mean_ax, wasserstein_ax, raw_ax, log_ax = axes.flat
+    observed_mean = merchants["observed_mean_distance_km"].to_numpy(float)
+    predicted_mean = merchants["predicted_mean_distance_km"].to_numpy(float)
+    mean_hex = mean_ax.hexbin(
+        observed_mean,
+        predicted_mean,
+        gridsize=50,
+        mincnt=1,
+        bins="log",
+        cmap="Blues",
+    )
+    mean_limit = float(max(observed_mean.max(), predicted_mean.max()))
+    mean_ax.plot([0, mean_limit], [0, mean_limit], color="#c9785d", linewidth=1.3)
+    mean_ax.set_xlim(0, mean_limit)
+    mean_ax.set_ylim(0, mean_limit)
+    mean_ax.set_aspect("equal", adjustable="box")
+    mean_ax.set_xlabel("Observed merchant mean distance (km)")
+    mean_ax.set_ylabel("Predicted merchant mean distance (km)")
+    mean_ax.set_title("a  Merchant mean delivery distance", loc="left")
+    mean_ax.text(
+        0.04,
+        0.95,
+        rf"Predictive $R^2$ = {merchant_summary['merchant_mean_distance_r2_equal_weighted']:.3f}",
+        transform=mean_ax.transAxes,
+        va="top",
+    )
+    fig.colorbar(mean_hex, ax=mean_ax, label="Merchants per hexagon")
+
+    wasserstein = merchants["wasserstein_m"].to_numpy(float)
+    wasserstein_ax.hist(
+        wasserstein,
+        bins=40,
+        color="#7fa88c",
+        edgecolor="white",
+        linewidth=0.35,
+    )
+    for value, label, color in (
+        (merchant_summary["wasserstein_m_median"], "Median", "#c9785d"),
+        (merchant_summary["wasserstein_m_p90"], "P90", "#6f8fa6"),
+    ):
+        wasserstein_ax.axvline(
+            value,
+            color=color,
+            linewidth=1.5,
+            label=f"{label}: {value:.0f} m",
+        )
+    wasserstein_ax.set_xlabel("Merchant distance-distribution error, W1 (m)")
+    wasserstein_ax.set_ylabel("Merchants")
+    wasserstein_ax.set_title("b  Distributional error by merchant", loc="left")
+    wasserstein_ax.legend(frameon=False)
+
+    observed_orders = buildings["observed_orders"].to_numpy(float)
+    expected_orders = buildings["expected_orders"].to_numpy(float)
+    raw_hex = raw_ax.hexbin(
+        observed_orders,
+        expected_orders,
+        gridsize=65,
+        mincnt=1,
+        bins="log",
+        cmap="Blues",
+    )
+    raw_limit = float(max(observed_orders.max(), expected_orders.max()))
+    raw_ax.plot([0, raw_limit], [0, raw_limit], color="#c9785d", linewidth=1.3)
+    raw_ax.set_xscale("symlog", linthresh=1.0)
+    raw_ax.set_yscale("symlog", linthresh=1.0)
+    raw_ax.set_xlim(0, raw_limit)
+    raw_ax.set_ylim(0, raw_limit)
+    raw_ax.set_xlabel("Observed building orders")
+    raw_ax.set_ylabel("Expected building orders")
+    raw_ax.set_title("c  Building order counts (raw)", loc="left")
+    raw_ax.text(
+        0.04,
+        0.95,
+        rf"Predictive $R^2$ = {building_summary['building_order_count_r2_raw']:.3f}",
+        transform=raw_ax.transAxes,
+        va="top",
+    )
+    fig.colorbar(raw_hex, ax=raw_ax, label="Buildings per hexagon")
+
+    observed_log = np.log1p(observed_orders)
+    expected_log = np.log1p(expected_orders)
+    log_hex = log_ax.hexbin(
+        observed_log,
+        expected_log,
+        gridsize=65,
+        mincnt=1,
+        bins="log",
+        cmap="Blues",
+    )
+    log_limit = float(max(observed_log.max(), expected_log.max()))
+    log_ax.plot([0, log_limit], [0, log_limit], color="#c9785d", linewidth=1.3)
+    log_ax.set_xlim(0, log_limit)
+    log_ax.set_ylim(0, log_limit)
+    log_ax.set_aspect("equal", adjustable="box")
+    log_ax.set_xlabel("log(1 + observed building orders)")
+    log_ax.set_ylabel("log(1 + expected building orders)")
+    log_ax.set_title("d  Building order counts (log scale)", loc="left")
+    log_ax.text(
+        0.04,
+        0.95,
+        rf"Predictive $R^2$ = {building_summary['building_order_count_r2_log1p']:.3f}",
+        transform=log_ax.transAxes,
+        va="top",
+    )
+    fig.colorbar(log_hex, ax=log_ax, label="Buildings per hexagon")
+
+    for ax in axes.flat:
+        ax.spines[["top", "right"]].set_visible(False)
+        ax.grid(color="0.92", linewidth=0.6)
+    fig.suptitle("Full-sample spatial fit of the joint gravity model", y=0.995)
+    fig.tight_layout()
+    try:
+        _save(
+            fig,
+            output_dir / "merchant_and_building_spatial_fit.pdf",
+            output_dir / "merchant_and_building_spatial_fit.png",
+        )
+    finally:
+        plt.close(fig)
+
+
+def render_spatial_fit_audit(output_dir: Path, result: dict) -> None:
+    """Render only the full-sample merchant/building spatial-fit audit."""
+    _plot_spatial_fit(Path(output_dir), result)
+
+
 def render_calibration_audits(output_dir: Path, result: dict, cache_dir: Path) -> None:
-    """Render the two non-manifest calibration audit figures and sources."""
+    """Render the three non-manifest calibration audit figures and sources."""
     output_dir, cache_dir = Path(output_dir), Path(cache_dir)
     _plot_data_estimation(output_dir, result, cache_dir)
     _plot_prediction(output_dir)
+    render_spatial_fit_audit(output_dir, result)

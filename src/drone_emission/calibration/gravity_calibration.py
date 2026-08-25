@@ -16,11 +16,13 @@ import pandas as pd
 from sklearn.neighbors import BallTree
 
 from .gravity_model import (
+    building_order_fit,
     CandidateCSR,
     CURRENT_PARAMETERS,
     clustered_covariance,
     evaluate_model,
     fit_parameters,
+    merchant_spatial_fit,
 )
 
 
@@ -548,6 +550,76 @@ def _evaluate_all(candidates, observations, model_vectors, output_dir):
     return metrics_frame
 
 
+def _write_spatial_fit_diagnostics(
+    candidates: CandidateCSR,
+    observations: pd.DataFrame,
+    training_parameters: np.ndarray,
+    final_parameters: np.ndarray,
+    output_dir: Path,
+) -> dict:
+    """Write full-sample spatial fit and small held-out validation summaries."""
+    full = observations.groupby(
+        ["shop_index", "candidate_position"], as_index=False
+    )["count"].sum()
+    merchant_frames = []
+    merchant_summaries = []
+    full_frame, full_summary = merchant_spatial_fit(
+        final_parameters, candidates, full, "full_valid_sample"
+    )
+    merchant_frames.append(full_frame)
+    merchant_summaries.append(full_summary)
+    for split in ("test_unseen_shops_all_29_days", "test_seen_shops_last_5_days"):
+        test = _split_observations(observations, split)
+        frame, summary = merchant_spatial_fit(
+            training_parameters, candidates, test, split
+        )
+        merchant_frames.append(frame)
+        merchant_summaries.append(summary)
+    merchant_source = pd.concat(merchant_frames, ignore_index=True)
+    merchant_source.to_csv(
+        output_dir / "merchant_spatial_fit_source.csv.gz",
+        index=False,
+        compression="gzip",
+    )
+    building_source, building_summary = building_order_fit(
+        final_parameters, candidates, full
+    )
+    building_source.to_csv(
+        output_dir / "building_order_fit_source.csv.gz",
+        index=False,
+        compression="gzip",
+    )
+    summary_frame = pd.DataFrame(merchant_summaries)
+    for key, value in building_summary.items():
+        summary_frame.loc[summary_frame["scope"] == "full_valid_sample", key] = value
+    summary_frame.to_csv(output_dir / "spatial_fit_metrics.csv", index=False)
+    return {
+        "primary_scope": "full_valid_sample",
+        "merchant_metrics": merchant_summaries,
+        "building_metrics": building_summary,
+        "definitions": {
+            "merchant_mean_distance_r2_equal_weighted": (
+                "1 - sum_i((observed_mean_i - predicted_mean_i)^2) / "
+                "sum_i((observed_mean_i - mean_observed)^2); each merchant has equal weight"
+            ),
+            "merchant_mean_distance_r2_order_weighted": (
+                "The same predictive R-squared with merchant order counts as weights"
+            ),
+            "building_order_count_r2_raw": (
+                "Predictive R-squared of observed versus exact expected raw order counts "
+                "over every building in an evaluated merchant's 5 km candidate set"
+            ),
+            "building_order_count_r2_log1p": (
+                "The same building-level predictive R-squared after log1p transformation"
+            ),
+            "wasserstein_m": (
+                "Exact first Wasserstein distance between each merchant's observed and "
+                "model-predicted delivery-distance distributions"
+            ),
+        },
+    }
+
+
 def estimate_peak_memory_gb(buildings_path: Path, corrected_orders_path: Path) -> float:
     """Conservative preparation estimate used only to choose worker count."""
     input_gb = (Path(buildings_path).stat().st_size + Path(corrected_orders_path).stat().st_size) / 2**30
@@ -647,6 +719,13 @@ def run_joint_calibration(
     )["count"].sum()
     final_fit = fit_parameters(candidates, full, initial=_parameter_vector(train_fit))
     inference = clustered_covariance(_parameter_vector(final_fit), candidates, full)
+    spatial_fit = _write_spatial_fit_diagnostics(
+        candidates,
+        observations,
+        _parameter_vector(train_fit),
+        _parameter_vector(final_fit),
+        output_dir,
+    )
     parameter_table = pd.DataFrame(inference["parameters"])
     parameter_table.to_csv(output_dir / "parameter_estimates.csv", index=False)
     parameter_table.to_csv(output_dir / "parameter_table.csv", index=False)
@@ -672,6 +751,7 @@ def run_joint_calibration(
         "training_models": training_models,
         "final_fit": final_fit,
         "clustered_inference": inference,
+        "spatial_fit": spatial_fit,
         "metrics": metrics_frame.to_dict(orient="records"),
         "limitations": [
             "GBA building geometries and volumes post-date the 2020 Beijing orders.",
@@ -686,6 +766,42 @@ def run_joint_calibration(
         for path in sorted(output_dir.iterdir()) if path.is_file() and path.name != result_path.name
     }
     result_path.write_text(json.dumps(result, indent=2, ensure_ascii=False) + "\n")
+    return result
+
+
+def refresh_spatial_fit_diagnostics(result_path: Path) -> dict:
+    """Add spatial-fit metrics to an existing converged calibration run."""
+    result_path = Path(result_path)
+    result = json.loads(result_path.read_text(encoding="utf-8"))
+    if result.get("schema_version") != SCHEMA_VERSION:
+        raise ValueError("Unsupported calibration result schema")
+    if not result.get("final_fit", {}).get("success"):
+        raise ValueError("Spatial-fit diagnostics require a converged calibration result")
+    output_dir = result_path.parent
+    cache_dir = output_dir / "cache" / result["run_hash"]
+    candidates = CandidateCSR.load(cache_dir)
+    observations = pd.read_csv(cache_dir / "observations.csv.gz")
+    training_fit = result.get("training_models", {}).get("joint_three_parameter")
+    if not training_fit or not training_fit.get("success"):
+        raise ValueError("Spatial-fit diagnostics require the converged training-only fit")
+    result["spatial_fit"] = _write_spatial_fit_diagnostics(
+        candidates,
+        observations,
+        _parameter_vector(training_fit),
+        _parameter_vector(result["final_fit"]),
+        output_dir,
+    )
+    from .gravity_plots import render_spatial_fit_audit
+
+    render_spatial_fit_audit(output_dir, result)
+    result["artifacts"] = {
+        path.name: {"sha256": sha256_file(path), "bytes": path.stat().st_size}
+        for path in sorted(output_dir.iterdir())
+        if path.is_file() and path.name != result_path.name
+    }
+    result_path.write_text(
+        json.dumps(result, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
+    )
     return result
 
 

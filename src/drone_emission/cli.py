@@ -86,6 +86,25 @@ def command_calibrate(args: argparse.Namespace) -> None:
     print(json.dumps(payload, indent=2, ensure_ascii=False))
 
 
+def command_calibrate_spatial_fit(args: argparse.Namespace) -> None:
+    from drone_emission.calibration.gravity_calibration import (
+        refresh_spatial_fit_diagnostics,
+    )
+
+    result = refresh_spatial_fit_diagnostics(args.result)
+    print(
+        json.dumps(
+            {
+                "result": str(args.result.resolve()),
+                "run_hash": result["run_hash"],
+                "spatial_fit": result["spatial_fit"],
+            },
+            indent=2,
+            ensure_ascii=False,
+        )
+    )
+
+
 def command_calibrate_coordinates(args: argparse.Namespace) -> None:
     """Restore and audit the translated Beijing order coordinates."""
     config = _config(args.env)
@@ -351,6 +370,13 @@ def build_parser() -> argparse.ArgumentParser:
     calibrate.add_argument("--rebuild-prepared", action="store_true")
     calibrate.add_argument("--accept-result", action="store_true")
     calibrate.set_defaults(func=command_calibrate)
+
+    spatial_fit = subparsers.add_parser(
+        "calibrate-spatial-fit",
+        help="add full-sample spatial-fit diagnostics to a converged calibration",
+    )
+    spatial_fit.add_argument("--result", type=Path, required=True)
+    spatial_fit.set_defaults(func=command_calibrate_spatial_fit)
 
     coordinate_parser = subparsers.add_parser(
         "calibrate-coordinates",
