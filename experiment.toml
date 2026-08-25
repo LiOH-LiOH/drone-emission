@@ -11,10 +11,10 @@ roadnet_visualization = false  # Set to false to skip road network visualization
 # OD pair generation parameters
 [od_params]
 impedance_type = "tanner"   # "power_law" or "tanner"
-alpha = 0.4219672366 # Building volume exponent (shared)
+alpha = 0.4219672366 # Jointly calibrated conditional building-volume exponent
 # Tanner: f(d) = d^tanner_a * exp(-tanner_b * d), peak at tanner_a/tanner_b
-tanner_a = 0.3255233472 # Calibrated from 278K Eleme orders (29 days)
-tanner_b = 1.650088692 # Peak distance = a/b = 0.79 km, R² = 0.986
+tanner_a = 0.3255233472 # Jointly calibrated distance-power exponent
+tanner_b = 1.650088692 # Jointly calibrated exponential decay per km
 # Legacy power-law (when impedance_type = "power_law")
 g_param = [1, 1.7, 0.5]       # Gravity model parameters: [alpha, beta, gamma]
 min_distance_km = 0.05    # Minimum distance to avoid division issues
