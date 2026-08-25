@@ -6,10 +6,10 @@ Source code lives in `src/drone_emission/`. The package CLI is the active entry 
 ## Build, Test, and Development Commands
 - `bash scripts/setup.sh`: create `.venv`, copy `regions.json` from the template when missing, and install `src/drone_emission/requirements.txt`.
 - `source .venv/bin/activate`: activate the local environment before running Python commands.
-- `python -m drone_emission cities --region nanshan --env local`: run one city locally through the package CLI.
-- `python -m drone_emission aggregate --env local`: consolidate compatible city results into national stats.
-- `python -m drone_emission analyze --env local`: build derived nationwide analysis inputs required by formal figures.
-- `python -m drone_emission render --env local [--only FIGURE_ID]`: render only manifest-backed paper figures.
+- `python -m drone_emission --env local cities --region nanshan`: run one city locally through the package CLI.
+- `python -m drone_emission --env local aggregate`: consolidate compatible city results into national stats.
+- `python -m drone_emission --env local analyze`: build derived nationwide analysis inputs required by formal figures.
+- `python -m drone_emission --env local render [--only FIGURE_ID]`: render only manifest-backed paper figures.
 - `./entrypoint.sh --jobs 4 cities`: run the multi-city pipeline wrapper with four workers under the shared memory contract.
 - `bash scripts/log_summary.sh [logs/file.log]`: summarize a pipeline log.
 
@@ -17,7 +17,7 @@ Source code lives in `src/drone_emission/`. The package CLI is the active entry 
 Use Python 3.10+ and follow PEP 8 conventions: four-space indentation, `snake_case` for modules, functions, and variables, and `PascalCase` for classes. Keep stage APIs small and explicit; prefer passing `region_info` and `exp_config` rather than reading globals in new code. Use `pathlib.Path` for project-root paths when practical, and keep comments focused on non-obvious pipeline behavior.
 
 ## Testing Guidelines
-There is no single default end-to-end test command for every change. Validate with the narrowest runnable workflow that matches the touched stage, and prefer static inspection when the user does not authorize Python execution. For pipeline work, use the package CLI such as `python -m drone_emission cities --region <region> --env local --no-fetch`, `aggregate`, `analyze`, or the manifest-backed `render`. Record the region, environment, and command used in PR notes when runtime validation is performed.
+There is no single default end-to-end test command for every change. Validate with the narrowest runnable workflow that matches the touched stage, and prefer static inspection when the user does not authorize Python execution. For pipeline work, use the package CLI such as `python -m drone_emission --env local cities --region <region> --no-fetch`, `aggregate`, `analyze`, or the manifest-backed `render`. Record the region, environment, and command used in PR notes when runtime validation is performed.
 
 Agent preference: do not run Python code, Python modules, tests, or local figure rendering unless the user explicitly asks for that validation. Use only the manifest-backed `python -m drone_emission render` command for formal figures. When preparing to run Python for checks or figure generation, ask first or skip and report that validation/rendering was not run.
 

@@ -287,14 +287,14 @@ def _prepare_break_even_phase_diagram(
                 gef_df.columns = ["province", "gef"]
                 city_df = city_df.merge(gef_df, on="province", how="left")
             else:
-                print(
-                    "break_even_phase_diagram: city GEF data unavailable; "
-                    "continuing without GEF enrichment data"
+                raise RuntimeError(
+                    "Break-even render requires city GEF data. Run "
+                    "`python -m drone_emission aggregate` first."
                 )
     else:
-        print(
-            f"break_even_phase_diagram: missing {stats_path}; "
-            "continuing without city statistics"
+        raise FileNotFoundError(
+            f"Missing render input: {stats_path}. Run "
+            "`python -m drone_emission aggregate` first."
         )
 
     from drone_emission.utils.config import get_cache_dir
