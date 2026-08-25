@@ -224,6 +224,19 @@ def _materialize(path: Path) -> None:
     _atomic_copy(source, path)
 
 
+def _replace_region_rows(
+    original: pd.DataFrame,
+    replacements: pd.DataFrame,
+    region_keys: set[str],
+) -> pd.DataFrame:
+    """Replace selected city rows while preserving every unaffected result."""
+    retained = original[~original["region_key"].astype(str).isin(region_keys)].copy()
+    replacement_rows = replacements[
+        replacements["region_key"].astype(str).isin(region_keys)
+    ].copy()
+    return pd.concat([retained, replacement_rows], ignore_index=True)
+
+
 def _refresh_spatial_subset(config: dict, affected: set[str]) -> Path:
     """Recompute only fallback-GEF cities, then reclassify the full cohort."""
     from .analysis.drone_spatial_concentration import (
@@ -282,7 +295,6 @@ def migrate_fallback_gef_overlay(config: dict) -> dict:
     )
     from .tools.run_threshold_resilience import (
         analyze_region as analyze_resilience,
-        consolidate as consolidate_resilience,
     )
     from .utils.region_config import init_registry
     from .paths import PROJECT_ROOT
@@ -338,6 +350,12 @@ def migrate_fallback_gef_overlay(config: dict) -> dict:
     if not distance_complete:
         raise RuntimeError(f"cohort distance threshold is partial: {distance_path}")
 
+    resilience_summary_path = data_root / "all_threshold_resilience.csv"
+    resilience_drivers_path = data_root / "all_threshold_resilience_drivers.csv"
+    original_resilience = pd.read_csv(resilience_summary_path)
+    original_drivers = pd.read_csv(resilience_drivers_path)
+    refreshed_resilience = []
+    refreshed_drivers = []
     for region_key in sorted(affected):
         result = analyze_resilience(
             region_key, registry[region_key], config, force=True
@@ -346,7 +364,29 @@ def migrate_fallback_gef_overlay(config: dict) -> dict:
             raise RuntimeError(
                 f"GEF threshold-resilience refresh failed: {region_key}:{result['status']}"
             )
-    consolidate_resilience(config)
+        city_root = data_root / "city" / region_key / "analysis" / "threshold_resilience"
+        refreshed_resilience.append(pd.read_csv(city_root / "summary.csv"))
+        refreshed_drivers.append(pd.read_csv(city_root / "drivers.csv"))
+    merged_resilience = _replace_region_rows(
+        original_resilience,
+        pd.concat(refreshed_resilience, ignore_index=True),
+        affected,
+    )
+    merged_drivers = _replace_region_rows(
+        original_drivers,
+        pd.concat(refreshed_drivers, ignore_index=True),
+        affected,
+    )
+    if set(merged_resilience["region_key"].astype(str)) != study:
+        raise RuntimeError("threshold-resilience overlay does not cover the cohort")
+    if set(merged_drivers["region_key"].astype(str)) != study:
+        raise RuntimeError("threshold-resilience driver overlay does not cover the cohort")
+    temporary = resilience_summary_path.with_suffix(".csv.tmp")
+    merged_resilience.to_csv(temporary, index=False)
+    temporary.replace(resilience_summary_path)
+    temporary = resilience_drivers_path.with_suffix(".csv.tmp")
+    merged_drivers.to_csv(temporary, index=False)
+    temporary.replace(resilience_drivers_path)
     _refresh_spatial_subset(config, affected)
     attribution = _run_city_attribution(config, force=True)
     _filter_analysis_view(data_root, study)
@@ -409,11 +449,13 @@ def write_migration_difference_report(
         unchanged_max_abs_diff[name] = maximum
         if not np.allclose(old_values, new_values, rtol=0.0, atol=1e-9, equal_nan=True):
             raise RuntimeError(f"unaffected city metric changed during GEF overlay: {name}")
+    old_complete = old.dropna(subset=["total_ebike_lifecycle"])
     payload = {
         "schema_version": 1,
-        "old_city_count": int(len(old.dropna(subset=["total_ebike_lifecycle"]))),
+        "old_city_count": int(len(old_complete)),
         "new_city_count": int(len(new)),
-        "excluded_region_keys": sorted(set(old.index) - set(new.index)),
+        "study_sample_removed_region_keys": sorted(set(old_complete.index) - set(new.index)),
+        "configured_excluded_region_keys": sorted(set(old.index) - set(new.index)),
         "old_fallback_kg_co2e_per_kwh": 0.5600,
         "new_fallback_kg_co2e_per_kwh": contract[
             "grid_emission_factor_fallback"

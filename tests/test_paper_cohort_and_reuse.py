@@ -14,7 +14,7 @@ from drone_emission.paper_cohort import (
     locked_region_keys,
     region_keys_sha256,
 )
-from drone_emission.paper_reuse import restore_reuse_directory
+from drone_emission.paper_reuse import _replace_region_rows, restore_reuse_directory
 from drone_emission.analysis.city_attribution import write_r2_city_attribution_report
 from drone_emission.utils.grid_emission_factor import fallback_factor
 from drone_emission.visualization.distance_threshold_inputs import (
@@ -118,3 +118,16 @@ def test_city_attribution_report_serializes_undefined_diagnostics_as_null(tmp_pa
     payload = json.loads(report.read_text(encoding="utf-8"))
     assert math.isfinite(payload["defined"])
     assert payload["diagnostics"] == [None, None]
+
+
+def test_subset_refresh_preserves_unaffected_city_rows():
+    original = pd.DataFrame(
+        {"region_key": ["chengdu", "lasa", "beijing"], "value": [1, 2, 3]}
+    )
+    refreshed = pd.DataFrame({"region_key": ["lasa"], "value": [20]})
+    merged = _replace_region_rows(original, refreshed, {"lasa"})
+    assert dict(zip(merged["region_key"], merged["value"])) == {
+        "chengdu": 1,
+        "beijing": 3,
+        "lasa": 20,
+    }
