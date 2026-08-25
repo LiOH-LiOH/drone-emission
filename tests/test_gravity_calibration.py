@@ -13,6 +13,7 @@ from scipy.special import softmax
 from drone_emission.calibration.gravity_calibration import (
     accept_calibration_result,
     assign_evaluation_split,
+    build_candidate_cache,
     match_orders_to_buildings,
     sha256_file,
     stable_shop_is_unseen,
@@ -135,6 +136,7 @@ def test_contains_precedes_nearest_and_ties_are_stable():
             "stable_building_id": ["b", "a"],
             "centroid_x": [5.0, 5.0],
             "centroid_y": [5.0, 5.0],
+            "valid_volume": [False, True],
         },
         geometry=[
             Polygon([(0, 0), (10, 0), (10, 10), (0, 10)]),
@@ -151,6 +153,24 @@ def test_contains_precedes_nearest_and_ties_are_stable():
     matched = match_orders_to_buildings(orders, buildings)
     assert matched.loc[0, "match_method"] == "contains"
     assert matched.loc[0, "stable_building_id"] == "a"
+    assert bool(matched.loc[0, "valid_volume"])
+
+
+def test_candidate_cache_preserves_noncontiguous_building_ids(tmp_path):
+    shops = pd.DataFrame(
+        {"pick_lat_wgs84": [39.9], "pick_lng_wgs84": [116.4]}
+    )
+    buildings = pd.DataFrame(
+        {
+            "building_index": [3, 9],
+            "centroid_lat_wgs84": [39.901, 39.902],
+            "centroid_lng_wgs84": [116.401, 116.402],
+            "volume_m3": [100.0, 200.0],
+        }
+    )
+    build_candidate_cache(shops, buildings, tmp_path)
+    candidates = CandidateCSR.load(tmp_path, mmap_mode=None)
+    assert set(candidates.building_index) == {3, 9}
 
 
 def test_all_models_use_identical_observation_count(tmp_path):

@@ -219,7 +219,10 @@ def match_orders_to_buildings(orders: pd.DataFrame, buildings_metric) -> pd.Data
         crs="EPSG:4326",
     ).to_crs(BEIJING_METRIC_CRS)
     right = buildings_metric[
-        ["building_index", "stable_building_id", "centroid_x", "centroid_y", "geometry"]
+        [
+            "building_index", "stable_building_id", "centroid_x", "centroid_y",
+            "valid_volume", "geometry",
+        ]
     ]
     contained = gpd.sjoin(points, right, how="inner", predicate="intersects")
     contained["match_method"] = pd.Series(dtype="string")
@@ -254,7 +257,7 @@ def match_orders_to_buildings(orders: pd.DataFrame, buildings_metric) -> pd.Data
         nearest["match_method"] = "nearest_within_50m"
     columns = [
         "_order_index", "building_index", "stable_building_id", "match_method",
-        "match_distance_m",
+        "match_distance_m", "valid_volume",
     ]
     return pd.concat([contained[columns], nearest[columns]], ignore_index=True)
 
@@ -328,6 +331,7 @@ def build_candidate_cache(
         ),
     }
     volumes = buildings["volume_m3"].to_numpy(float)
+    building_ids = buildings["building_index"].to_numpy(np.int64)
     for batch_start in range(0, len(coordinates), batch_size):
         results = _query_shop_batch(
             tree, coordinates[batch_start:batch_start + batch_size], workers
@@ -335,7 +339,7 @@ def build_candidate_cache(
         for offset, (indices, distances) in enumerate(results):
             index = batch_start + offset
             start, stop = int(indptr[index]), int(indptr[index + 1])
-            arrays["candidate_building_index.npy"][start:stop] = indices
+            arrays["candidate_building_index.npy"][start:stop] = building_ids[indices]
             arrays["candidate_log_volume.npy"][start:stop] = np.log(volumes[indices])
             arrays["candidate_log_distance.npy"][start:stop] = np.log(distances)
             arrays["candidate_distance_km.npy"][start:stop] = distances
