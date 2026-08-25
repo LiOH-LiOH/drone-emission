@@ -1,9 +1,10 @@
 import numpy as np
-from coord_convert.transform import gcj2wgs
+from coord_convert.transform import gcj2wgs, wgs2gcj
 from pyproj import Transformer
 
 # Alias directly to avoid redundant function wrappers
 gcj02_to_wgs84 = gcj2wgs
+wgs84_to_gcj02 = wgs2gcj
 
 # Initialize transformer globally
 # EPSG:4326 (WGS84) -> EPSG:3857 (Web Mercator)

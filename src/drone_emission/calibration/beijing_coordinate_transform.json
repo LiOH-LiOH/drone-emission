@@ -1,0 +1,80 @@
+{
+  "schema_version": 1,
+  "status": "historical_reviewed_baseline",
+  "model": "global_constant_translation",
+  "offset": {
+    "longitude_degrees": -5.1192,
+    "latitude_degrees": 0.781,
+    "operation": "corrected = original + offset"
+  },
+  "coordinate_reference": {
+    "orders_original": "translated_gcj02",
+    "orders_corrected_native": "gcj02",
+    "orders_corrected_export": "wgs84",
+    "poi_adopted_datum": "gcj02",
+    "poi_declared_crs": "GEOGCS[\"GCS_WGS_1984\",DATUM[\"D_WGS_1984\",SPHEROID[\"WGS_1984\",6378137,298.257223563]],PRIMEM[\"Greenwich\",0],UNIT[\"Degree\",0.017453292519943295]]",
+    "declared_adopted_datum_mismatch": true,
+    "metric_crs": "EPSG:32650"
+  },
+  "inputs": {
+    "orders": {
+      "description": "29 Eleme round-1 training order files",
+      "file_count": 29,
+      "sha256": "9ecde0dea7103d47be1584e16659b7afc435f1dbb99c7fe0de4e476bad664114",
+      "files": [
+        {"path": "order_20200201.txt", "sha256": "872cf549a959df170ad7f700486b9c15f9968fc26271c36a7b516879ba9ba258"},
+        {"path": "order_20200202.txt", "sha256": "b5c2a7e5255b3fbc049807e5857e968f57337b33a09cc1926b38206c27b6d819"},
+        {"path": "order_20200203.txt", "sha256": "e97feb9cc3f74b07f6674ec23f539ff59fc1685e3c3f0a1dda48897a6551cc24"},
+        {"path": "order_20200204.txt", "sha256": "1769575e00159de56a679a4623ec9056cfdddf780a6eb3c796c6c8f610ca3011"},
+        {"path": "order_20200205.txt", "sha256": "96ae1a799802094e930cf9834962fcca9dc0ea53b805bed436a5e899ecbe86fd"},
+        {"path": "order_20200206.txt", "sha256": "30e63d63bf578500154d92a348ac2b028e57c336ed70da55c6b18f8529914eb0"},
+        {"path": "order_20200207.txt", "sha256": "b1ac4f60c59fd4f2ba9a27284dd51307ffd11052ff90e8024ed35ef16a4f2682"},
+        {"path": "order_20200208.txt", "sha256": "251ddcdb8a87cb0ef6e9644eed3562c8f34d50c5144954a2a9aba3638ee3b700"},
+        {"path": "order_20200209.txt", "sha256": "6947a31414ac8824649127f02a7b1319a33f7c450b53bad80ee4b0151b110618"},
+        {"path": "order_20200210.txt", "sha256": "306cd1fff2e727e75db7c236d3b896ad44de47584ec3fe374bfa46e5aff3bc60"},
+        {"path": "order_20200211.txt", "sha256": "3d75c998281119454ccad179160dee72031acb1a5a54ef79b4b9ee1c43dec62e"},
+        {"path": "order_20200212.txt", "sha256": "98abba3bde8c7fc63e8f46c09aa267d34082b19710894537644be6ee63b47160"},
+        {"path": "order_20200213.txt", "sha256": "3483cc78daa2aacb5d8d5be8a4fc13aed112b89f6b73778fa6c4f21d99ae1173"},
+        {"path": "order_20200214.txt", "sha256": "8f1cbe4cecd2ef9528d745805be13ff21c4d4535156e96f64907ccfec9c0ee35"},
+        {"path": "order_20200215.txt", "sha256": "390a10e9e861e216f351dbce0572f7827e3b2993dbd1bec74cff7a696b79657a"},
+        {"path": "order_20200216.txt", "sha256": "41f945a3a6874dc00e210d4125c7dff4904feb6c74917a07888dc5722c2debe3"},
+        {"path": "order_20200217.txt", "sha256": "cc473b5c3510a67210b4ada234029208abe67af385ba490c35271fdbb30ba71b"},
+        {"path": "order_20200218.txt", "sha256": "412a5392c958007cf44132d6488c4d053ddee39750eb552379f4acca360f3a9a"},
+        {"path": "order_20200219.txt", "sha256": "d24aa40f033ea5139da86f3ca85f6547787c6dbb529d4886251bda779fd08550"},
+        {"path": "order_20200220.txt", "sha256": "24f06216d681c6eb156057ee2068c19bbdea90c739b547007a6254d12ae30970"},
+        {"path": "order_20200221.txt", "sha256": "131a544608b7cd227e583a11f1121ca94d1d06e613423e5524ec8555f497767c"},
+        {"path": "order_20200222.txt", "sha256": "2d68db0ae18021bd920cfab15b4ec8f2bead8d52b9ca866c383524075caaef5a"},
+        {"path": "order_20200223.txt", "sha256": "557951c4155dcb54436d40f559be47a9075f58f2e6547a689872c7ffc699e493"},
+        {"path": "order_20200224.txt", "sha256": "ffed33711218c88deac8edc930041c58d9084879bf5baebb05386bdf723327cd"},
+        {"path": "order_20200225.txt", "sha256": "d45579e4eac5271cc7d6c64d4171abc7aa52b88c4ff151274234b38c7d2ea425"},
+        {"path": "order_20200226.txt", "sha256": "14df7635ad26bdf7228f4194401f0bdb862bf776f7457f6c0904d1867a21cfe1"},
+        {"path": "order_20200227.txt", "sha256": "73ee4e21dfbdacbd846659a449b20e76f1b75721dc98ffd0250ba46811db714c"},
+        {"path": "order_20200228.txt", "sha256": "ec1e3ea067be1294d039a1df578e6ef1dc0f75ed70b7a26029360dc1a7059f19"},
+        {"path": "order_20200229.txt", "sha256": "c35c0a72e1d447bc8ad77cc4261c3ec1f4a67c8c08bd8a87f2636ec7a2e78d4f"}
+      ]
+    },
+    "poi": {
+      "description": "Beijing 2022 Amap restaurant POI shapefile bundle",
+      "file_count": 5,
+      "sha256": "f8618b20da0af82e28e6202c11f52aed931a2bb0baa510bbe4ccbd55685b42e4"
+    }
+  },
+  "counts": {
+    "orders": 278733,
+    "unique_shops": 11633,
+    "poi": 113454
+  },
+  "metrics": {
+    "match_rates": {
+      "within_25m": null,
+      "within_50m": null,
+      "within_100m": 0.968537780452162,
+      "within_200m": null
+    },
+    "matched_within_100m": 11267,
+    "mean_nearest_distance_m": 28.8,
+    "median_nearest_distance_m": null,
+    "p95_nearest_distance_m": null
+  },
+  "review_note": "The tracked baseline preserves only values reported by the historical repository code. Null metrics must be populated by an explicit rerun; they were not inferred or fabricated."
+}
