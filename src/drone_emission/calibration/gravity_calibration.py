@@ -841,6 +841,13 @@ def refresh_spatial_fit_diagnostics(result_path: Path) -> dict:
     cache_dir = output_dir / "cache" / result["run_hash"]
     candidates = CandidateCSR.load(cache_dir)
     observations = pd.read_csv(cache_dir / "observations.csv.gz")
+    centroid_path = cache_dir / "building_centroids.csv.gz"
+    if not centroid_path.is_file():
+        buildings_path = Path(result["input_fingerprints"]["buildings"]["path"])
+        _, buildings_metric, _ = _load_buildings(buildings_path)
+        buildings_metric[["building_index", "centroid_x", "centroid_y"]].to_csv(
+            centroid_path, index=False, compression="gzip"
+        )
     training_fit = result.get("training_models", {}).get("joint_three_parameter")
     if not training_fit or not training_fit.get("success"):
         raise ValueError("Spatial-fit diagnostics require the converged training-only fit")
@@ -851,9 +858,22 @@ def refresh_spatial_fit_diagnostics(result_path: Path) -> dict:
         _parameter_vector(result["final_fit"]),
         output_dir,
     )
+    full = observations.groupby(
+        ["shop_index", "candidate_position"], as_index=False
+    )["count"].sum()
+    _write_full_fit_plot_sources(
+        candidates,
+        full,
+        _parameter_vector(result["final_fit"]),
+        cache_dir,
+        output_dir,
+    )
     from .gravity_plots import render_spatial_fit_audit
+    from .gravity_plots import _plot_endpoint_grid_heatmap, _plot_full_order_distance_distribution
 
     render_spatial_fit_audit(output_dir, result)
+    _plot_full_order_distance_distribution(output_dir)
+    _plot_endpoint_grid_heatmap(output_dir)
     result["artifacts"] = {
         path.name: {"sha256": sha256_file(path), "bytes": path.stat().st_size}
         for path in sorted(output_dir.iterdir())
