@@ -1,6 +1,5 @@
 """Formal city gef detour renderers used only by the manifest registry."""
 
-from contextlib import contextmanager
 import json
 import os
 import pickle
@@ -150,7 +149,6 @@ CITY_GEF_GRAYSCALE_BIN_COLORS = (
 CITY_GEF_GRAYSCALE_BOTTOM_SCATTER_ALPHA = 0.78
 
 
-@contextmanager
 def _get_ebike_kappa(exp_config):
     """Return the configured baseline e-bike distance factor."""
     emission_params = (exp_config or {}).get("emission_params", {})
