@@ -25,6 +25,7 @@ from .gravity_model import (
     evaluate_model,
     fit_parameters,
     merchant_spatial_fit,
+    utility_features,
 )
 
 
