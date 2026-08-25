@@ -1251,7 +1251,26 @@ def write_r2_city_attribution_report(analysis: dict, report_path: str | Path) ->
     report_path.parent.mkdir(parents=True, exist_ok=True)
     tmp_path = report_path.with_suffix(report_path.suffix + ".tmp")
     with open(tmp_path, "w", encoding="utf-8") as file:
-        json.dump(analysis, file, ensure_ascii=False, indent=2, allow_nan=False)
+        json.dump(
+            _json_compatible(analysis),
+            file,
+            ensure_ascii=False,
+            indent=2,
+            allow_nan=False,
+        )
         file.write("\n")
     os.replace(tmp_path, report_path)
     return str(report_path)
+
+
+def _json_compatible(value):
+    """Replace undefined numerical diagnostics with explicit JSON nulls."""
+    if isinstance(value, dict):
+        return {str(key): _json_compatible(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_json_compatible(item) for item in value]
+    if isinstance(value, np.generic):
+        value = value.item()
+    if isinstance(value, float) and not math.isfinite(value):
+        return None
+    return value

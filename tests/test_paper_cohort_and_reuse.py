@@ -2,6 +2,7 @@
 
 import hashlib
 import json
+import math
 from pathlib import Path
 
 import pandas as pd
@@ -14,6 +15,7 @@ from drone_emission.paper_cohort import (
     region_keys_sha256,
 )
 from drone_emission.paper_reuse import restore_reuse_directory
+from drone_emission.analysis.city_attribution import write_r2_city_attribution_report
 from drone_emission.utils.grid_emission_factor import fallback_factor
 from drone_emission.visualization.distance_threshold_inputs import (
     _resolve_summary_path,
@@ -105,3 +107,14 @@ def test_active_render_code_has_no_retired_sample_or_fallback_literals():
     combined = "\n".join(path.read_text(encoding="utf-8") for path in sources)
     assert "CONTRIBUTION_STUDY_CITY_COUNT = 314" not in combined
     assert "fallback_0.5600" not in combined
+
+
+def test_city_attribution_report_serializes_undefined_diagnostics_as_null(tmp_path):
+    report = tmp_path / "attribution.json"
+    write_r2_city_attribution_report(
+        {"defined": 1.0, "diagnostics": [float("nan"), float("inf")]},
+        report,
+    )
+    payload = json.loads(report.read_text(encoding="utf-8"))
+    assert math.isfinite(payload["defined"])
+    assert payload["diagnostics"] == [None, None]
