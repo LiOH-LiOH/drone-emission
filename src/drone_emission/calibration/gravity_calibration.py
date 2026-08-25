@@ -381,6 +381,9 @@ def prepare_calibration_data(
     cache_dir.mkdir(parents=True, exist_ok=True)
     orders = _load_orders(orders_path, transform_path)
     buildings, buildings_metric, building_quality = _load_buildings(buildings_path)
+    buildings_metric[["building_index", "centroid_x", "centroid_y"]].to_csv(
+        cache_dir / "building_centroids.csv.gz", index=False, compression="gzip"
+    )
     candidate_buildings = buildings.loc[buildings["valid_volume"]].copy().reset_index(drop=True)
     coordinate_valid = np.isfinite(
         orders[[
@@ -473,6 +476,7 @@ def _prepared_matches(cache_dir: Path, fingerprints: dict) -> bool:
     required = (
         "candidate_indptr.npy", "candidate_building_index.npy", "candidate_log_volume.npy",
         "candidate_log_distance.npy", "candidate_distance_km.npy", "observations.csv.gz",
+        "building_centroids.csv.gz",
     )
     return payload.get("input_fingerprints") == fingerprints and all(
         (Path(cache_dir) / name).is_file() for name in required
@@ -620,6 +624,55 @@ def _write_spatial_fit_diagnostics(
     }
 
 
+def _write_full_fit_plot_sources(
+    candidates: CandidateCSR,
+    full: pd.DataFrame,
+    parameters: np.ndarray,
+    cache_dir: Path,
+    output_dir: Path,
+) -> None:
+    """Write full-sample distance and endpoint sources for audit plots."""
+    _, _, components = evaluate_model(
+        parameters, candidates, full, return_components=True
+    )
+    distance_bins = np.floor(components["observed_values"] / 0.05) * 0.05
+    predicted_bins = np.floor(components["predicted_values"] / 0.05) * 0.05
+    distance_source = pd.concat(
+        [
+            pd.DataFrame(
+                {
+                    "series": "observed",
+                    "distance_bin_km": distance_bins,
+                    "order_weight": components["observed_weights"],
+                }
+            ),
+            pd.DataFrame(
+                {
+                    "series": "joint_three_parameter",
+                    "distance_bin_km": predicted_bins,
+                    "order_weight": components["predicted_weights"],
+                }
+            ),
+        ],
+        ignore_index=True,
+    )
+    distance_source.to_csv(
+        output_dir / "full_order_distance_source.csv.gz",
+        index=False,
+        compression="gzip",
+    )
+    endpoint_source, _ = building_order_fit(parameters, candidates, full)
+    centroids = pd.read_csv(cache_dir / "building_centroids.csv.gz")
+    endpoint_source = endpoint_source.merge(
+        centroids, on="building_index", how="left", validate="one_to_one"
+    )
+    endpoint_source.to_csv(
+        output_dir / "endpoint_building_order_source.csv.gz",
+        index=False,
+        compression="gzip",
+    )
+
+
 def estimate_peak_memory_gb(buildings_path: Path, corrected_orders_path: Path) -> float:
     """Conservative preparation estimate used only to choose worker count."""
     input_gb = (Path(buildings_path).stat().st_size + Path(corrected_orders_path).stat().st_size) / 2**30
@@ -719,6 +772,13 @@ def run_joint_calibration(
     )["count"].sum()
     final_fit = fit_parameters(candidates, full, initial=_parameter_vector(train_fit))
     inference = clustered_covariance(_parameter_vector(final_fit), candidates, full)
+    _write_full_fit_plot_sources(
+        candidates,
+        full,
+        _parameter_vector(final_fit),
+        cache_dir,
+        output_dir,
+    )
     spatial_fit = _write_spatial_fit_diagnostics(
         candidates,
         observations,

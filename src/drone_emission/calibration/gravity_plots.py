@@ -193,6 +193,115 @@ def _plot_prediction(output_dir: Path) -> None:
         plt.close(fig)
 
 
+def _plot_full_order_distance_distribution(output_dir: Path) -> None:
+    import matplotlib.pyplot as plt
+
+    source = pd.read_csv(output_dir / "full_order_distance_source.csv.gz")
+    observed = source.loc[source["series"] == "observed"]
+    predicted = source.loc[source["series"] == "joint_three_parameter"]
+    bins = np.arange(0.0, 5.0001, 0.1)
+    fig, axes = plt.subplots(2, 1, figsize=(8.8, 7.0), sharex=True)
+    axes[0].hist(
+        observed["distance_bin_km"], bins=bins,
+        weights=observed["order_weight"], histtype="step", linewidth=2.0,
+        color="0.2", label="Observed",
+    )
+    axes[0].hist(
+        predicted["distance_bin_km"], bins=bins,
+        weights=predicted["order_weight"], histtype="step", linewidth=1.8,
+        color=COLORS["joint_three_parameter"], label="Joint gravity model",
+    )
+    axes[0].set_ylabel("Orders per 100 m bin")
+    axes[0].set_title("a  Full-sample delivery-distance distribution", loc="left")
+    axes[0].legend(frameon=False)
+    for frame, color, label in (
+        (observed, "0.2", "Observed"),
+        (predicted, COLORS["joint_three_parameter"], "Joint gravity model"),
+    ):
+        grouped = frame.groupby("distance_bin_km", as_index=False)["order_weight"].sum()
+        distance = grouped["distance_bin_km"].to_numpy(float)
+        cumulative = np.cumsum(grouped["order_weight"].to_numpy(float))
+        cumulative /= cumulative[-1]
+        axes[1].step(distance, cumulative, where="post", color=color, linewidth=1.8, label=label)
+    axes[1].set_xlabel("Shop-to-building centroid distance (km)")
+    axes[1].set_ylabel("Cumulative probability")
+    axes[1].set_title("b  Cumulative order distribution", loc="left")
+    axes[1].set_xlim(0, 5)
+    axes[1].set_ylim(0, 1)
+    for axis in axes:
+        axis.spines[["top", "right"]].set_visible(False)
+        axis.grid(axis="y", color="0.9", linewidth=0.6)
+    fig.tight_layout()
+    try:
+        _save(
+            fig,
+            output_dir / "beijing_order_distance_distribution.pdf",
+            output_dir / "beijing_order_distance_distribution.png",
+        )
+    finally:
+        plt.close(fig)
+
+
+def _plot_endpoint_grid_heatmap(output_dir: Path, grid_size_m: float = 1000.0) -> None:
+    import matplotlib.pyplot as plt
+    from matplotlib.colors import Normalize
+    from matplotlib.ticker import FuncFormatter
+
+    source = pd.read_csv(output_dir / "endpoint_building_order_source.csv.gz")
+    source = source.dropna(subset=["centroid_x", "centroid_y"])
+    if source.empty:
+        raise ValueError("Endpoint grid source contains no finite building centroids")
+    x_min = np.floor(source["centroid_x"].min() / grid_size_m) * grid_size_m
+    y_min = np.floor(source["centroid_y"].min() / grid_size_m) * grid_size_m
+    source["grid_x"] = np.floor((source["centroid_x"] - x_min) / grid_size_m).astype(int)
+    source["grid_y"] = np.floor((source["centroid_y"] - y_min) / grid_size_m).astype(int)
+    grid = source.groupby(["grid_y", "grid_x"], as_index=False)[
+        ["observed_orders", "expected_orders"]
+    ].sum()
+    max_x = int(grid["grid_x"].max()) + 1
+    max_y = int(grid["grid_y"].max()) + 1
+    observed = np.zeros((max_y, max_x), dtype=float)
+    expected = np.zeros_like(observed)
+    observed[grid["grid_y"], grid["grid_x"]] = grid["observed_orders"]
+    expected[grid["grid_y"], grid["grid_x"]] = grid["expected_orders"]
+    plot_source = grid.copy()
+    plot_source["x_min_m"] = x_min + plot_source["grid_x"] * grid_size_m
+    plot_source["y_min_m"] = y_min + plot_source["grid_y"] * grid_size_m
+    plot_source.to_csv(output_dir / "beijing_endpoint_grid_source.csv", index=False)
+
+    transformed = np.log1p(np.maximum(np.stack([observed, expected]), 0.0))
+    norm = Normalize(vmin=0.0, vmax=max(1.0, float(transformed.max())))
+    extent = (x_min, x_min + max_x * grid_size_m, y_min, y_min + max_y * grid_size_m)
+    fig, axes = plt.subplots(1, 2, figsize=(11.2, 5.2), sharex=True, sharey=True)
+    images = []
+    for axis, values, title in (
+        (axes[0], observed, "a  Observed endpoint orders"),
+        (axes[1], expected, "b  Joint gravity-model endpoint orders"),
+    ):
+        image = axis.imshow(np.log1p(values), origin="lower", extent=extent,
+                            cmap="magma", norm=norm, interpolation="none", aspect="equal")
+        images.append(image)
+        axis.set_title(title, loc="left")
+        axis.set_xlabel("Easting (m, EPSG:32650)")
+        axis.text(0.03, 0.04, f"Total: {values.sum():,.1f} orders",
+                  transform=axis.transAxes, color="white", fontsize=9,
+                  bbox={"facecolor": "black", "alpha": 0.35, "pad": 3, "edgecolor": "none"})
+    axes[0].set_ylabel("Northing (m, EPSG:32650)")
+    colorbar = fig.colorbar(images[1], ax=axes, pad=0.02, fraction=0.035)
+    colorbar.set_label("Orders per 1 km² (log1p scale)")
+    colorbar.ax.yaxis.set_major_formatter(FuncFormatter(lambda value, _: f"{np.expm1(value):g}"))
+    fig.suptitle("Beijing endpoint order concentration on aligned 1 km grids", y=0.99)
+    fig.tight_layout()
+    try:
+        _save(
+            fig,
+            output_dir / "beijing_endpoint_grid_heatmap.pdf",
+            output_dir / "beijing_endpoint_grid_heatmap.png",
+        )
+    finally:
+        plt.close(fig)
+
+
 def _plot_spatial_fit(output_dir: Path, result: dict) -> None:
     """Plot intuitive full-sample merchant and building predictive fit."""
     import matplotlib.pyplot as plt
@@ -469,8 +578,10 @@ def render_boxcox_challenger_audit(output_dir: Path, result: dict) -> None:
 
 
 def render_calibration_audits(output_dir: Path, result: dict, cache_dir: Path) -> None:
-    """Render the three non-manifest calibration audit figures and sources."""
+    """Render calibration audit figures and their source tables."""
     output_dir, cache_dir = Path(output_dir), Path(cache_dir)
     _plot_data_estimation(output_dir, result, cache_dir)
     _plot_prediction(output_dir)
+    _plot_full_order_distance_distribution(output_dir)
+    _plot_endpoint_grid_heatmap(output_dir)
     render_spatial_fit_audit(output_dir, result)

@@ -171,3 +171,10 @@ manifest. The default command never edits `experiment.toml`. Explicit
 `--accept-result` succeeds only after every gate and fingerprint check passes;
 it activates `impedance_type = "boxcox"` and writes `boxcox_lambda` and
 `boxcox_gamma` while retaining the inactive Tanner fields.
+
+The standard Tanner calibration also writes two full-sample Beijing endpoint
+audits: `beijing_order_distance_distribution.pdf` compares observed and
+joint-model delivery-distance orders, while `beijing_endpoint_grid_heatmap.pdf`
+compares observed and joint-model expected endpoint orders on aligned 1 km
+metric grids. Both use the same valid-linked-order sample and are standalone
+calibration outputs rather than manifest figures.
