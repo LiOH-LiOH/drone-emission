@@ -10,7 +10,7 @@ roadnet_visualization = false  # Set to false to skip road network visualization
 
 # OD pair generation parameters
 [od_params]
-impedance_type = "tanner"   # "power_law" or "tanner"
+impedance_type = "tanner"   # "power_law", "tanner", or accepted "boxcox"
 alpha = 0.4219672366 # Jointly calibrated conditional building-volume exponent
 # Tanner: f(d) = d^tanner_a * exp(-tanner_b * d), peak at tanner_a/tanner_b
 tanner_a = 0.3255233472 # Jointly calibrated distance-power exponent

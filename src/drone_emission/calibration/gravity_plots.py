@@ -332,6 +332,142 @@ def render_spatial_fit_audit(output_dir: Path, result: dict) -> None:
     _plot_spatial_fit(Path(output_dir), result)
 
 
+def render_boxcox_challenger_audit(output_dir: Path, result: dict) -> None:
+    """Render the standalone Box-Cox selection and test-distribution audit."""
+    import matplotlib.pyplot as plt
+
+    output_dir = Path(output_dir)
+    grid = pd.read_csv(output_dir / "boxcox_cv_grid_metrics.csv")
+    test_metrics = pd.read_csv(output_dir / "boxcox_test_metrics.csv")
+    test_distributions = pd.read_csv(
+        output_dir / "boxcox_test_distance_source.csv.gz"
+    )
+    full_metrics = pd.read_csv(output_dir / "boxcox_full_sample_metrics.csv")
+    full_distributions = pd.read_csv(
+        output_dir / "boxcox_full_sample_distance_source.csv.gz"
+    )
+    selected = float(result["selection"]["selected_lambda"])
+    fig, axes = plt.subplots(2, 2, figsize=(10.4, 7.4))
+    axes = axes.ravel()
+
+    axes[0].plot(
+        grid["boxcox_lambda"],
+        grid["wasserstein_1_km"] * 1000.0,
+        marker="o",
+        color="#6f8fa6",
+        linewidth=1.5,
+    )
+    selected_row = grid.loc[grid["selected"]].iloc[0]
+    axes[0].scatter(
+        [selected],
+        [selected_row["wasserstein_1_km"] * 1000.0],
+        color="#c9785d",
+        s=48,
+        zorder=3,
+    )
+    axes[0].axvline(selected, color="#c9785d", linewidth=1.0, linestyle="--")
+    axes[0].set_xlabel(r"Box-Cox shape $\lambda$")
+    axes[0].set_ylabel("Pooled CV Wasserstein distance (m)")
+    axes[0].set_title("a  Grouped cross-validation", loc="left")
+    axes[0].text(
+        0.04,
+        0.95,
+        rf"Selected $\lambda$ = {selected:g}",
+        transform=axes[0].transAxes,
+        va="top",
+    )
+
+    scope_labels = {
+        "full_valid_sample": "All valid linked orders",
+        "test_unseen_shops_all_29_days": "Unseen shops",
+        "test_seen_shops_last_5_days": "Seen shops, last 5 days",
+    }
+    test_scopes = (
+        "test_unseen_shops_all_29_days",
+        "test_seen_shops_last_5_days",
+    )
+    colors = {"tanner": "#7f8c8d", "boxcox": "#c9785d"}
+    labels = {"tanner": "Tanner", "boxcox": "Box-Cox"}
+    panels = (
+        (
+            axes[1],
+            "full_valid_sample",
+            full_distributions,
+            full_metrics,
+            "scope",
+        ),
+        *(
+            (axes[index], split, test_distributions, test_metrics, "split")
+            for index, split in enumerate(test_scopes, start=2)
+        ),
+    )
+    for panel, (axis, scope, distributions, metrics, scope_column) in enumerate(
+        panels, start=1
+    ):
+        subset = distributions.loc[distributions[scope_column] == scope]
+        observed = subset.loc[subset["model"] == "boxcox"]
+        distance, cumulative = _cdf(observed, "observed_order_weight")
+        axis.step(
+            distance,
+            cumulative,
+            where="post",
+            color="0.15",
+            linewidth=2.0,
+            label="Observed",
+        )
+        for model in ("tanner", "boxcox"):
+            model_frame = subset.loc[subset["model"] == model]
+            distance, cumulative = _cdf(model_frame, "predicted_order_weight")
+            axis.step(
+                distance,
+                cumulative,
+                where="post",
+                color=colors[model],
+                linewidth=1.5,
+                label=labels[model],
+            )
+        boxcox_metric = metrics.loc[
+            (metrics[scope_column] == scope) & (metrics["model"] == "boxcox")
+        ].iloc[0]
+        axis.text(
+            0.96,
+            0.05,
+            f"Box-Cox W1: {boxcox_metric['wasserstein_1_km'] * 1000:.0f} m\n"
+            f"Mean: {boxcox_metric['predicted_mean_km']:.2f} km\n"
+            f"P95: {boxcox_metric['predicted_p95_km']:.2f} km",
+            transform=axis.transAxes,
+            ha="right",
+            va="bottom",
+            fontsize=8,
+        )
+        axis.set_xlim(0, 5)
+        axis.set_ylim(0, 1)
+        axis.set_xlabel("Shop-to-building centroid distance (km)")
+        axis.set_ylabel("Cumulative probability")
+        axis.set_title(
+            f"{chr(ord('a') + panel)}  {scope_labels[scope]}", loc="left"
+        )
+    axes[3].legend(frameon=False, loc="lower right", bbox_to_anchor=(1.0, 0.22))
+    for axis in axes:
+        axis.spines[["top", "right"]].set_visible(False)
+        axis.grid(axis="y", color="0.9", linewidth=0.6)
+    eligible = result["acceptance"]["eligible_for_acceptance"]
+    fig.suptitle(
+        "Box-Cox gravity challenger: "
+        + ("acceptance gate passed" if eligible else "acceptance gate not passed"),
+        y=1.01,
+    )
+    fig.tight_layout()
+    try:
+        _save(
+            fig,
+            output_dir / "boxcox_gravity_challenger.pdf",
+            output_dir / "boxcox_gravity_challenger.png",
+        )
+    finally:
+        plt.close(fig)
+
+
 def render_calibration_audits(output_dir: Path, result: dict, cache_dir: Path) -> None:
     """Render the three non-manifest calibration audit figures and sources."""
     output_dir, cache_dir = Path(output_dir), Path(cache_dir)

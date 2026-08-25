@@ -117,3 +117,57 @@ and parameter constraints before updating `alpha`, `tanner_a`, and `tanner_b`
 in `experiment.toml` and writing the tracked calibration summary. Better
 out-of-sample performance than the current parameters is reported but is not an
 acceptance gate.
+
+## Box-Cox distance-decay challenger
+
+The aggregate delivery-distance diagnostic can be challenged without changing
+the linked-order sample, merchant candidate sets, building-volume attraction,
+or production rounding. The challenger replaces only the Tanner impedance with
+
+\[
+P(j\mid i) \propto V_j^\alpha
+\exp\{-\gamma g_\lambda(d_{ij}/1\ \mathrm{km})\},\qquad
+g_\lambda(d)=\frac{d^\lambda-1}{\lambda},
+\]
+
+where the continuous limit at `lambda = 0` is `log(d)`. Thus `lambda = 0`
+recovers power-law decay and `lambda = 1` recovers exponential decay up to a
+shop-specific constant that cancels in the conditional probability. This
+functional-form family follows the gravity-model applications of
+[Kau and Sirmans (1979)](https://doi.org/10.1177/016001767900400202) and
+[Fik and Mulligan (1998)](https://doi.org/10.1068/a301497).
+
+Run it beside a converged Beijing calibration and its remote cache:
+
+```bash
+python -m drone_emission --env remote calibrate-boxcox \
+  --result /path/to/run/gravity_calibration.json \
+  --output /path/to/boxcox_challenger \
+  --memory-limit-gb 64
+```
+
+Three-fold stable merchant-hash cross-validation on
+`train_seen_first_24_days` evaluates the fixed grid `0, 0.25, ..., 2`. For each
+fixed shape, fitting `alpha >= 0` and `boxcox_gamma > 0` is a convex conditional
+choice problem. The selected shape minimizes the exact pooled, order-weighted
+first-Wasserstein distance; ties use lower NLL, proximity to `lambda = 1`, then
+the smaller shape. Per-fold checkpoints allow an interrupted run to resume.
+
+The selected challenger is evaluated once on the unseen-shop and final-five-day
+tests. It is eligible for acceptance only when combined Wasserstein distance
+improves by at least 10%, neither split worsens, combined absolute mean and P95
+biases do not worsen, and combined NLL per order is no more than 1% higher. The
+merchant distance R-squared/Wasserstein diagnostics and full-sample raw/log1p
+building-order R-squared remain descriptive, not gates. The final `alpha` and
+`boxcox_gamma` are then refitted on all valid linked orders, conditional on the
+cross-validated shape.
+
+`boxcox_challenger.json`, parameter, cross-validation, test, and spatial-fit
+CSV sources include the headline exact distribution metrics on all valid linked
+orders; the two held-out results remain validation checks. The
+`boxcox_gravity_challenger.pdf` plus its 300 dpi PNG are
+standalone calibration audits and are not registered in the paper figure
+manifest. The default command never edits `experiment.toml`. Explicit
+`--accept-result` succeeds only after every gate and fingerprint check passes;
+it activates `impedance_type = "boxcox"` and writes `boxcox_lambda` and
+`boxcox_gamma` while retaining the inactive Tanner fields.
