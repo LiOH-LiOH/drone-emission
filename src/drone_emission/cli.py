@@ -50,35 +50,91 @@ def command_inputs(args: argparse.Namespace) -> None:
 
 
 def command_calibrate(args: argparse.Namespace) -> None:
+    from drone_emission.calibration.gravity_calibration import (
+        accept_calibration_result,
+        run_joint_calibration,
+    )
+
+    result = run_joint_calibration(
+        corrected_orders_path=args.orders_corrected,
+        buildings_path=args.buildings,
+        transform_path=args.transform,
+        output_dir=args.output,
+        memory_limit_gb=args.memory_limit_gb,
+        workers=args.workers,
+        rebuild_prepared=args.rebuild_prepared,
+    )
+    payload = {
+        "output_dir": result["output_dir"],
+        "result": str(Path(result["output_dir"]) / "gravity_calibration.json"),
+        "run_hash": result["run_hash"],
+        "success": result["final_fit"]["success"],
+        "accepted": False,
+    }
+    if args.accept_result:
+        summary = accept_calibration_result(
+            Path(result["output_dir"]) / "gravity_calibration.json",
+            PROJECT_ROOT / "experiment.toml",
+            PROJECT_ROOT
+            / "src"
+            / "drone_emission"
+            / "calibration"
+            / "gravity_calibration_summary.json",
+        )
+        payload["accepted"] = True
+        payload["accepted_summary"] = summary
+    print(json.dumps(payload, indent=2, ensure_ascii=False))
+
+
+def command_calibrate_coordinates(args: argparse.Namespace) -> None:
+    """Restore and audit the translated Beijing order coordinates."""
     config = _config(args.env)
-    raw_root = Path(
+    orders = args.orders or Path(
         os.environ.get(
             "DRONE_EMISSION_BEIJING_OD_ROOT",
-            Path(config["data_dir"]) / "raw" / "即时配送数据" / "疫情期间北京饿了么" / "eleme_round1_train_20200313" / "order",
+            Path(config["data_dir"])
+            / "raw"
+            / "即时配送数据"
+            / "疫情期间北京饿了么"
+            / "eleme_round1_train_20200313"
+            / "order",
         )
     )
-    if not raw_root.is_dir() or not any(raw_root.glob("*.txt")):
-        raise FileNotFoundError(
-            "Beijing raw OD files are unavailable; locked experiment.toml and "
-            "calibration CSV remain the default. Set DRONE_EMISSION_BEIJING_OD_ROOT."
-        )
-    from drone_emission.calibration import cali_elm
+    poi = args.poi or (
+        Path(config["data_dir"])
+        / "raw"
+        / "即时配送数据"
+        / "北京市poi202209"
+        / "北京市_餐饮服务_202209.shp"
+    )
+    output = args.output or (
+        Path(config["work_dir"]) / "calibration" / "coordinate_restore"
+    )
+    from drone_emission.calibration.coordinate_restore import (
+        apply_coordinate_transform,
+        run_coordinate_restore,
+    )
 
-    cali_elm.elm_data_dir = str(raw_root)
-    distances = cali_elm.load_all_eleme_distances(
-        min_orders_per_shop=50, max_distance_km=10.0
+    if args.apply_transform:
+        if args.transform is None:
+            raise ValueError("--transform is required with --apply-transform")
+        output_path = output if output.suffix else output / "corrected_orders.csv.gz"
+        result = apply_coordinate_transform(orders, args.transform, output_path)
+        print(json.dumps({"output": str(output_path), **result}, indent=2, ensure_ascii=False))
+        return
+
+    result = run_coordinate_restore(
+        orders_path=orders,
+        poi_path=poi,
+        output_dir=output,
+        poi_datum=args.poi_datum,
+        match_radius_m=args.match_radius_m,
+        write_orders=args.write_orders,
+        no_basemap=args.no_basemap,
+        heatmap_gridsize=args.heatmap_gridsize,
+        cache_dir=Path(config["cache_dir"]) / "coordinate_restore",
     )
-    a_value, b_value, r_squared = cali_elm.fit_tanner_impedance(distances)
-    output = Path(config["work_dir"]) / "calibration" / "tanner_fit.json"
-    output.parent.mkdir(parents=True, exist_ok=True)
-    output.write_text(
-        json.dumps(
-            {"tanner_a": a_value, "tanner_b": b_value, "r_squared": r_squared},
-            indent=2,
-        ),
-        encoding="utf-8",
-    )
-    print(output)
+    print(json.dumps({"output": str(output), **result}, indent=2, ensure_ascii=False))
 
 
 def command_cities(args: argparse.Namespace) -> None:
@@ -283,7 +339,45 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     subparsers.add_parser("inputs", help="validate explicit input roots").set_defaults(func=command_inputs)
-    subparsers.add_parser("calibrate", help="rebuild calibration when Beijing raw OD is available").set_defaults(func=command_calibrate)
+    calibrate = subparsers.add_parser(
+        "calibrate", help="jointly calibrate the Beijing building-choice gravity model"
+    )
+    calibrate.add_argument("--orders-corrected", type=Path, required=True)
+    calibrate.add_argument("--buildings", type=Path, required=True)
+    calibrate.add_argument("--transform", type=Path, required=True)
+    calibrate.add_argument("--output", type=Path, required=True)
+    calibrate.add_argument("--memory-limit-gb", type=float, default=64.0)
+    calibrate.add_argument("--workers", type=int)
+    calibrate.add_argument("--rebuild-prepared", action="store_true")
+    calibrate.add_argument("--accept-result", action="store_true")
+    calibrate.set_defaults(func=command_calibrate)
+
+    coordinate_parser = subparsers.add_parser(
+        "calibrate-coordinates",
+        help="restore and audit translated Beijing order coordinates",
+    )
+    coordinate_parser.add_argument(
+        "--orders", type=Path, help="order CSV/TXT file or directory"
+    )
+    coordinate_parser.add_argument(
+        "--poi", type=Path, help="restaurant POI shapefile, GeoPackage, or CSV"
+    )
+    coordinate_parser.add_argument(
+        "--apply-transform", action="store_true",
+        help="only apply an audited transform; do not load POIs or make figures",
+    )
+    coordinate_parser.add_argument("--transform", type=Path)
+    coordinate_parser.add_argument(
+        "--output", type=Path, help="output directory"
+    )
+    coordinate_parser.add_argument(
+        "--poi-datum", choices=("gcj02", "wgs84"), default="gcj02"
+    )
+    coordinate_parser.add_argument("--match-radius-m", type=float, default=100.0)
+    coordinate_parser.add_argument("--write-orders", action="store_true")
+    coordinate_parser.add_argument("--no-basemap", action="store_true")
+    coordinate_parser.add_argument("--heatmap-gridsize", type=int, default=100)
+    coordinate_parser.set_defaults(func=command_calibrate_coordinates)
 
     cities = subparsers.add_parser("cities", help="run or restore city experiments")
     cities.add_argument("--region", action="append")

@@ -29,7 +29,8 @@ no username is embedded in source code.
 | Command | Function and writes |
 |---|---|
 | `python -m drone_emission inputs` | Validates the experiment, region registry, merchant-sales table, grid factors, and configured roots. It does not mutate data. |
-| `python -m drone_emission calibrate` | Rebuilds the Tanner fit only when raw Beijing OD text files are available. The locked TOML, calibration CSV, and audited Beijing distance histogram remain the normal inputs; rebuilt output goes to work. |
+| `python -m drone_emission calibrate` | Jointly estimates Beijing building-volume and Tanner-distance parameters from corrected orders and preprocessed GBA buildings. Results are candidates unless `--accept-result` is explicit. |
+| `python -m drone_emission calibrate-coordinates` | Estimates the audited global Beijing coordinate translation, or applies an existing transform with `--apply-transform` without loading POIs or regenerating audit figures. |
 | `python -m drone_emission cities` | Runs merchant filtering, building preparation, OD construction, road routing, lifecycle emissions, and per-city stats. It never imports plotting code. Completed cities are restored unless `--force` is supplied. |
 | `python -m drone_emission aggregate` | Consolidates compatible `all_region_stats.{json,csv}` and `all_region_stats_enriched.csv`. |
 | `python -m drone_emission cohort` | Audits post-aggregate city results against the tracked 313-city paper cohort. The minimum is 30 valid weighted OD pairs; the candidate audit is written below work and a changed set fails until explicitly reviewed and accepted. |
@@ -98,3 +99,9 @@ and single-stage work but do not carry the formal 64GB guarantee.
 
 See [docs/architecture.md](docs/architecture.md) for the dependency and write
 boundaries and [archive/MANIFEST.md](archive/MANIFEST.md) for recovery guidance.
+The evidence boundary, privacy rules, outputs, and interpretation of the
+Beijing coordinate audit are documented in
+[docs/beijing_coordinate_restoration.md](docs/beijing_coordinate_restoration.md).
+The joint conditional building-choice likelihood, fixed evaluation split, cache
+contract, result acceptance, and remote memory boundary are documented in
+[docs/beijing_gravity_calibration.md](docs/beijing_gravity_calibration.md).

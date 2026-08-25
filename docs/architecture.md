@@ -41,6 +41,20 @@ The observed Beijing delivery-distance panel renders from the tracked audited
 histogram by default. Raw Beijing OD is required only to rebuild and relock that
 calibration input, not for an ordinary paper render.
 
+The separate `calibrate-coordinates` command estimates the historical global
+translation of Beijing Eleme points against restaurant POIs. It is an audit
+utility below `calibration/`, writes to work/cache, and is deliberately absent
+from `reproduce`, the paper analysis scheduler, and the formal figure manifest.
+
+The `calibrate` command is likewise outside `reproduce`. It consumes only the
+fingerprinted corrected-order export, the audited transform, and one
+preprocessed Beijing GBA GeoPackage. Building matching and the 5 km candidate
+CSR are cached beneath the requested run directory. Its two English audit
+figures are calibration evidence, not formal manuscript figures, and therefore
+are not declared in `paper_figures.json` or the renderer registry. Acceptance is
+a separate explicit operation that validates convergence and all live input
+fingerprints before changing the three `od_params` values.
+
 `promote` validates all 12 staging filenames, manifest mappings, and PDF magic
 headers before copying. Neither `render` nor `reproduce` writes to the ignored
 Overleaf working tree under `docs/paper/`. `supplementary.tex` remains outside
