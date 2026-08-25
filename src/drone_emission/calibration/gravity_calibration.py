@@ -17,6 +17,7 @@ from sklearn.neighbors import BallTree
 from scipy.special import logsumexp
 
 from .gravity_model import (
+    _group_observations,
     building_order_fit,
     CandidateCSR,
     CURRENT_PARAMETERS,
