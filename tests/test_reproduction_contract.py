@@ -113,6 +113,16 @@ def test_active_package_does_not_import_archive_or_inject_paths():
     assert violations == []
 
 
+def test_active_visualization_contract_mentions_no_placeholders():
+    package = Path(__file__).parents[1] / "src" / "drone_emission" / "visualization"
+    violations = []
+    for path in package.rglob("*.py"):
+        source = path.read_text(encoding="utf-8").lower()
+        if "placeholder" in source:
+            violations.append(str(path))
+    assert violations == []
+
+
 def test_shell_declares_single_global_memory_contract():
     root = Path(__file__).parents[1]
     source = (root / "entrypoint.sh").read_text(encoding="utf-8")
@@ -140,3 +150,39 @@ def test_docs_paper_has_exact_manifest_publication_set():
             item["publish"].startswith("docs/paper/figures/")
             for item in manifest["figures"]
         )
+
+
+def test_docs_and_agent_guides_do_not_reference_retired_entry_points():
+    root = Path(__file__).parents[1]
+    targets = {
+        root / "README.md": (
+            "python -m visualization.paper",
+            "visualization.paper",
+            "visualization.analysis",
+            "visualization.emission",
+        ),
+        root / "docs" / "architecture.md": (
+            "python -m visualization.paper",
+            "visualization.paper",
+            "visualization.analysis",
+            "visualization.emission",
+        ),
+        root / "AGENTS.md": (
+            "python -m visualization.paper",
+            "visualization.paper",
+            "visualization.analysis",
+            "visualization.emission",
+            "cd src/drone_emission && python main.py --region",
+            "./entrypoint.sh 4 --all",
+            "./postprocess.sh local",
+            "./run_sensitivity.sh",
+            "python main.py --region <region> --env local --no-fetch",
+        ),
+    }
+    violations = []
+    for path, forbidden in targets.items():
+        source = path.read_text(encoding="utf-8")
+        for needle in forbidden:
+            if needle in source:
+                violations.append(f"{path}: {needle}")
+    assert violations == []

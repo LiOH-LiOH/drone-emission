@@ -289,12 +289,12 @@ def _prepare_break_even_phase_diagram(
             else:
                 print(
                     "break_even_phase_diagram: city GEF data unavailable; "
-                    "panel c will show a placeholder"
+                    "continuing without GEF enrichment data"
                 )
     else:
         print(
             f"break_even_phase_diagram: missing {stats_path}; "
-            "panel c will show a placeholder"
+            "continuing without city statistics"
         )
 
     from drone_emission.utils.config import get_cache_dir

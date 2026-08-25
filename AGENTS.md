@@ -1,23 +1,23 @@
 # Repository Guidelines
 
 ## Project Structure & Module Organization
-Source code lives in `src/drone_emission/`. `main.py` is the pipeline entry point, while stage modules are split into `preprocessing/`, `buildings/`, `demand/`, `roadnet/`, `emission/`, `equity/`, and `profit/`. Shared helpers belong in `utils/`; standalone scripts and CLIs belong in `tools/`; plotting code belongs in `visualization/`; broader analysis and calibration logic live in `analysis/` and `calibration/`. Top-level shell scripts (`entrypoint.sh`, `run_sensitivity.sh`, `run_network_metrics.sh`, `postprocess.sh`) run the pipeline or its stages; supporting utilities (setup, smoke test, log summary, surgical reruns, data sync) live under `scripts/`. Generated runtime outputs go to ignored directories such as `data/`, `figures/`, `cache/`, and `logs/`. Documentation assets are under `docs/`.
+Source code lives in `src/drone_emission/`. The package CLI is the active entry point, while stage modules are split into `preprocessing/`, `buildings/`, `demand/`, `roadnet/`, `emission/`, `analysis/`, and `calibration/`. Shared helpers belong in `utils/`; standalone support tools belong in `tools/`; formal plotting code belongs in `visualization/`; the manifest scheduler is `paper_workflow.py`. Archived candidate code and retired plotting entry points live under `archive/code/` and are not imported by active code. Generated runtime outputs go to ignored directories such as `data/`, `figures/`, `cache/`, and `logs/`. Documentation assets are under `docs/`.
 
 ## Build, Test, and Development Commands
 - `bash scripts/setup.sh`: create `.venv`, copy `regions.json` from the template when missing, and install `src/drone_emission/requirements.txt`.
 - `source .venv/bin/activate`: activate the local environment before running Python commands.
-- `cd src/drone_emission && python main.py --region nanshan --env local`: run one region locally.
-- `bash scripts/test_run.sh [region] [env]`: smoke-test the full single-region pipeline, defaulting to `changsha remote`.
-- `./entrypoint.sh 4 --all`: run the multi-region pipeline wrapper with four workers.
-- `./run_sensitivity.sh`: run the sensitivity stage across regions (after the emission stage).
-- `./postprocess.sh local`: consolidate per-region stats and run cross-region analysis.
+- `python -m drone_emission cities --region nanshan --env local`: run one city locally through the package CLI.
+- `python -m drone_emission aggregate --env local`: consolidate compatible city results into national stats.
+- `python -m drone_emission analyze --env local`: build derived nationwide analysis inputs required by formal figures.
+- `python -m drone_emission render --env local [--only FIGURE_ID]`: render only manifest-backed paper figures.
+- `./entrypoint.sh --jobs 4 cities`: run the multi-city pipeline wrapper with four workers under the shared memory contract.
 - `bash scripts/log_summary.sh [logs/file.log]`: summarize a pipeline log.
 
 ## Coding Style & Naming Conventions
 Use Python 3.10+ and follow PEP 8 conventions: four-space indentation, `snake_case` for modules, functions, and variables, and `PascalCase` for classes. Keep stage APIs small and explicit; prefer passing `region_info` and `exp_config` rather than reading globals in new code. Use `pathlib.Path` for project-root paths when practical, and keep comments focused on non-obvious pipeline behavior.
 
 ## Testing Guidelines
-There is no formal pytest suite in the current tree. Validate changes with the narrowest runnable workflow: use `bash scripts/test_run.sh <region> local` for end-to-end changes, or run the affected module/tool directly from `src/drone_emission`. For data-fetching work, use existing cached files when possible with `python main.py --region <region> --env local --no-fetch`. Record the region, environment, and command used in PR notes.
+There is no single default end-to-end test command for every change. Validate with the narrowest runnable workflow that matches the touched stage, and prefer static inspection when the user does not authorize Python execution. For pipeline work, use the package CLI such as `python -m drone_emission cities --region <region> --env local --no-fetch`, `aggregate`, `analyze`, or the manifest-backed `render`. Record the region, environment, and command used in PR notes when runtime validation is performed.
 
 Agent preference: do not run Python code, Python modules, tests, or local figure rendering unless the user explicitly asks for that validation. Use only the manifest-backed `python -m drone_emission render` command for formal figures. When preparing to run Python for checks or figure generation, ask first or skip and report that validation/rendering was not run.
 
