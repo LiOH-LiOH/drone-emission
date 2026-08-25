@@ -8,16 +8,16 @@ import time
 
 import pandas as pd
 
+from drone_emission.paper_cohort import load_cohort_contract
 
-CONTRIBUTION_STUDY_CITY_COUNT = 314
-CONTRIBUTION_EXPECTED_FALLBACK_GEF_REGION_KEYS = {
-    "aomentebiexingzhengqu",
-    "changdou",
-    "lasa",
-    "linzhi",
-    "shannan",
-    "xianggangtebiexingzhengqu",
-}
+_COHORT = load_cohort_contract()
+CONTRIBUTION_STUDY_CITY_COUNT = int(_COHORT["expected_city_count"])
+CONTRIBUTION_GEF_FALLBACK = float(
+    _COHORT["grid_emission_factor_fallback"]["kg_co2e_per_kwh"]
+)
+CONTRIBUTION_EXPECTED_FALLBACK_GEF_REGION_KEYS = set(
+    _COHORT["grid_emission_factor_fallback"]["affected_region_keys"]
+)
 BREAK_EVEN_MARCHING_CUBES_SUBFIGURE_GROUP = (
     "break_even_contribution_decomposition_marching_cubes_subfigures"
 )
@@ -223,7 +223,7 @@ def _render_contribution_decomposition_city_b(
 
     fallback_region_keys = sorted(
         city_df.loc[
-            city_df["gef_source"].eq("fallback_0.5600"),
+            city_df["gef_source"].eq("fallback_0.5366"),
             "region_key",
         ].astype(str)
     )
@@ -249,7 +249,7 @@ def _render_contribution_decomposition_city_b(
         "province_table_region_keys": table_region_keys,
         "fallback_city_count": len(fallback_region_keys),
         "fallback_region_keys": fallback_region_keys,
-        "fallback_gef_kg_co2e_per_kwh": 0.5600,
+        "fallback_gef_kg_co2e_per_kwh": CONTRIBUTION_GEF_FALLBACK,
     }
     prepared["all_study_city_gdp_range"] = all_study_gdp_range
 
@@ -398,7 +398,7 @@ def _prepare_contribution_decomposition_full(
         "od_files": od_files,
         "city_gef_values": city_gef_values,
         "kappa": _get_ebike_kappa(exp_config),
-        "gef_fallback": 0.5600,
+        "gef_fallback": CONTRIBUTION_GEF_FALLBACK,
         "max_sample_rows": None,
         "sample_seed": CONTRIBUTION_SAMPLE_SEED,
     }

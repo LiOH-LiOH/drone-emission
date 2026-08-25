@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "cohort_id": "paper-313-gef-0.5366-20260825",
+  "expected_city_count": 313,
+  "minimum_valid_weighted_od_pairs": 30,
+  "included_region_keys_sha256": "869f23b4180521d1678200648c089d4c4eb7ed98fc425f9cb71b7971af6b515f",
+  "excluded_regions": {
+    "alashanmeng": "incomplete_city_result",
+    "aleitaidiqu": "incomplete_city_result",
+    "alidiqu": "incomplete_city_result",
+    "bayinguolengmengguzizhizhou": "incomplete_city_result",
+    "chifeng": "incomplete_city_result",
+    "eerduosi": "incomplete_city_result",
+    "guoluozangzuzizhizhou": "incomplete_city_result",
+    "haiximengguzuzangzuzizhizhou": "incomplete_city_result",
+    "heihe": "incomplete_city_result",
+    "hulunbeier": "incomplete_city_result",
+    "jiuquan": "incomplete_city_result",
+    "linzhi": "insufficient_od_pairs",
+    "rikaze": "incomplete_city_result",
+    "xilinguoleimeng": "incomplete_city_result",
+    "yushuzangzuzizhizhou": "incomplete_city_result"
+  },
+  "grid_emission_factor_fallback": {
+    "kg_co2e_per_kwh": 0.5366,
+    "source": "MEE/NBS 2022 national mean",
+    "affected_region_keys": [
+      "aomentebiexingzhengqu",
+      "changdou",
+      "lasa",
+      "shannan",
+      "xianggangtebiexingzhengqu"
+    ]
+  }
+}

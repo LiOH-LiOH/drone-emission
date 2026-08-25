@@ -32,10 +32,13 @@ def _resolve_summary_path(data_dir: Path, requested: str | None) -> Path:
 
     partial = data_dir / "all_city_distance_threshold_summary.partial.csv"
     complete = data_dir / "all_city_distance_threshold_summary.csv"
-    if partial.exists():
-        return partial
     if complete.exists():
         return complete
+    if partial.exists():
+        raise FileNotFoundError(
+            f"Distance-threshold analysis is partial: {partial}. "
+            "Run `python -m drone_emission analyze` for the locked cohort."
+        )
     raise FileNotFoundError(
         "No city distance-threshold summary found. Run the standalone "
         "distance-threshold analysis first."

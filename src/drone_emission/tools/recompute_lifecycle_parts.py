@@ -38,6 +38,7 @@ from drone_emission.sensitivity.vectorized_lca import (  # noqa: E402
     compute_drone_per_order_parts_g,
     compute_ebike_per_order_parts_g,
 )
+from drone_emission.paper_cohort import load_cohort_contract  # noqa: E402
 from drone_emission.utils import load_config  # noqa: E402
 from drone_emission.utils.grid_emission_factor import fetch_factor, normalize_province_name  # noqa: E402
 from drone_emission.utils.province import get_province_from_district  # noqa: E402
@@ -332,12 +333,23 @@ def _process_region(
         )
         _write_lifecycle_columns(od_df, ebike_parts, drone_parts)
         od_df["ebike_kappa"] = ebike_kappa
+        od_df["grid_emission_factor"] = province_gef
 
         annual_sales = _annual_sales(od_df)
         if compare_existing:
             _print_existing_comparison(region_key, region_info, od_df, annual_sales)
         _update_weighted_stats(region_info, od_df, annual_sales, ebike_kappa)
         region_info.set_stat("province", province)
+        fallback_keys = set(
+            load_cohort_contract()["grid_emission_factor_fallback"][
+                "affected_region_keys"
+            ]
+        )
+        region_info.set_stat("grid_emission_factor", province_gef)
+        region_info.set_stat(
+            "gef_source",
+            "fallback_0.5366" if region_key in fallback_keys else "province_table",
+        )
 
         if not dry_run:
             if write_od:

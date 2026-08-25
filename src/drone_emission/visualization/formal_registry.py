@@ -16,6 +16,45 @@ def _city_stats(context: RenderContext) -> pd.DataFrame:
     frame = pd.read_csv(context.require_file("all_region_stats.csv", stage="aggregate"))
     if "region_level" in frame.columns:
         frame = frame[frame["region_level"].eq("city")].copy()
+    enriched_path = context.data_root / "all_region_stats_enriched.csv"
+    if enriched_path.is_file():
+        enriched = pd.read_csv(enriched_path)
+        available = [
+            name for name in ("region_key", "grid_emission_factor", "gef_source")
+            if name in enriched.columns
+        ]
+        if "region_key" in available:
+            frame = frame.drop(
+                columns=["grid_emission_factor", "gef", "gef_source"],
+                errors="ignore",
+            ).merge(
+                enriched[available].drop_duplicates("region_key"),
+                on="region_key",
+                how="left",
+            )
+    from drone_emission.paper_cohort import load_cohort_contract
+
+    fallback = load_cohort_contract()["grid_emission_factor_fallback"]
+    fallback_keys = set(fallback["affected_region_keys"])
+    fallback_mask = frame["region_key"].astype(str).isin(fallback_keys)
+    if "grid_emission_factor" not in frame:
+        frame["grid_emission_factor"] = float("nan")
+    if "gef_source" not in frame:
+        frame["gef_source"] = "province_table"
+    frame.loc[fallback_mask, "grid_emission_factor"] = float(
+        fallback["kg_co2e_per_kwh"]
+    )
+    frame.loc[fallback_mask, "gef_source"] = "fallback_0.5366"
+    frame["gef"] = pd.to_numeric(frame["grid_emission_factor"], errors="coerce")
+    from drone_emission.paper_cohort import locked_region_keys
+
+    expected = set(locked_region_keys())
+    actual = set(frame["region_key"].astype(str))
+    if actual != expected or len(frame) != len(expected):
+        raise RuntimeError(
+            "formal city statistics do not match the locked paper cohort: "
+            f"missing={sorted(expected - actual)}, extra={sorted(actual - expected)}"
+        )
     return frame
 
 
@@ -120,11 +159,17 @@ def _render_screening(context: RenderContext) -> None:
 
 
 def _render_gef_detour(context: RenderContext) -> None:
-    from .city_gef_detour import _attach_enrichment_columns, _render_city_gef_context_detour_summary
+    from .city_gef_detour import _render_city_gef_context_detour_summary
 
     stats = _city_stats(context)
     enriched = pd.read_csv(context.require_file("all_region_stats_enriched.csv", stage="aggregate"))
-    enriched = _attach_enrichment_columns(stats, enriched)
+    enriched = enriched.drop(
+        columns=["grid_emission_factor", "gef", "gef_source"], errors="ignore"
+    ).merge(
+        stats[["region_key", "grid_emission_factor", "gef", "gef_source"]],
+        on="region_key",
+        how="inner",
+    )
     _render_city_gef_context_detour_summary(
         data_dir=str(context.data_root),
         out=str(context.subfigure_dir),

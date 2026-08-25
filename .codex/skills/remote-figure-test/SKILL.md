@@ -31,9 +31,11 @@ figure staging, or paper outputs.
 5. Use `mktemp -d` for isolated figures, cache, and work roots. Export the three
    corresponding `DRONE_EMISSION_*_ROOT` variables. Reuse the existing data root
    and Chengdu results; do not recompute Chengdu or run the city pipeline.
-6. Run package import, CLI, manifest/registry equality, dependency-graph, and
-   retained fixture tests. Render only through `python -m drone_emission --env
-   remote render`. Never invoke `analyze` implicitly.
+6. Run package import, CLI, cohort/manifest/registry equality,
+   dependency-graph, and retained fixture tests. Restore retained nationwide
+   analyses only from the explicit audited reuse directory; never search
+   legacy roots. Render only through `python -m drone_emission --env remote
+   render`. Never invoke `analyze` implicitly from render.
 7. For a full test, require exactly 39 manifest subfigure PDFs, three direct
    staging PDFs, and twelve source reports. Check filenames, `%PDF-` headers,
    page counts/sizes, report inputs, and requested numeric invariants. No

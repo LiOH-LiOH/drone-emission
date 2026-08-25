@@ -8,6 +8,7 @@ Source code lives in `src/drone_emission/`. The package CLI is the active entry 
 - `source .venv/bin/activate`: activate the local environment before running Python commands.
 - `python -m drone_emission --env local cities --region nanshan`: run one city locally through the package CLI.
 - `python -m drone_emission --env local aggregate`: consolidate compatible city results into national stats.
+- `python -m drone_emission --env local cohort`: audit the tracked paper-city sample after aggregation.
 - `python -m drone_emission --env local analyze`: build derived nationwide analysis inputs required by formal figures.
 - `python -m drone_emission --env local render [--only FIGURE_ID]`: render only manifest-backed paper figures.
 - `./entrypoint.sh --jobs 4 cities`: run the multi-city pipeline wrapper with four workers under the shared memory contract.
@@ -20,6 +21,12 @@ Use Python 3.10+ and follow PEP 8 conventions: four-space indentation, `snake_ca
 There is no single default end-to-end test command for every change. Validate with the narrowest runnable workflow that matches the touched stage, and prefer static inspection when the user does not authorize Python execution. For pipeline work, use the package CLI such as `python -m drone_emission --env local cities --region <region> --no-fetch`, `aggregate`, `analyze`, or the manifest-backed `render`. Record the region, environment, and command used in PR notes when runtime validation is performed.
 
 Agent preference: do not run Python code, Python modules, tests, or local figure rendering unless the user explicitly asks for that validation. Use only the manifest-backed `python -m drone_emission render` command for formal figures. When preparing to run Python for checks or figure generation, ask first or skip and report that validation/rendering was not run.
+
+Paper analyses must use the tracked cohort contract. Do not derive the paper
+sample directly from every city in `regions.json`, silently accept a changed
+candidate set, or search legacy directories for missing analysis files. Use an
+explicit audited `--reuse-from` directory when old derived data are part of a
+remote regression test.
 
 ## Paper Citation Quality
 For `docs/paper/` work, use strong academic sources by default: Nature-family journals, Transportation Research series journals, high-quality field journals, official data sources, and mandatory method/data references. Avoid weak or low-quality venues such as MDPI journals, generic sustainability journals, proceedings-like papers, market reports, and weak reviews for scholarly claims. If a weaker source is the only available fit for a necessary claim, explicitly warn the user before relying on it and record the reason in the paper citation notes.

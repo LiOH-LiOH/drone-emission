@@ -86,7 +86,11 @@ CURVE_COLUMNS = (
 
 def _city_regions(config: dict) -> dict[str, RegionConfig]:
     registry = init_registry(str(REGIONS_JSON), data_dir=config["data_dir"])
-    return registry.list_by_level("city")
+    regions = registry.list_by_level("city")
+    requested = set(config.get("study_region_keys", ()))
+    if requested:
+        regions = {key: region for key, region in regions.items() if key in requested}
+    return regions
 
 
 def _lookup_region(

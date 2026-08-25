@@ -33,6 +33,12 @@ publish to `docs/paper/figures/`, silently skip a missing required input, or
 create a placeholder. Missing inputs must raise an error naming the prerequisite
 stage.
 
+The context data root must be the cohort-versioned analysis view and its
+`paper_cohort_view.json` hash must match the tracked `paper_cohort.json`.
+Nationwide renderers must not enumerate all configured regions or apply their
+own sample filter. Missing-GEF cities use the cohort contract's fallback value;
+do not hard-code sample counts or GEF defaults inside renderer modules.
+
 ## Plot functions
 
 Use data inputs first and the established signature where practical:

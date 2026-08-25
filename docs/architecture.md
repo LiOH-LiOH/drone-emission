@@ -6,12 +6,15 @@ The active workflow has four layers:
    grid factors, and optional raw/fetchable building and road-network inputs.
 2. **City experiments** — preprocessing, buildings, demand, road routing, and
    lifecycle emissions. These modules never import plotting code.
-3. **Nationwide aggregation and paper analysis** — `aggregate` writes compatible
-   `all_region_stats.{json,csv}` and enriched statistics. `analyze` builds named
+3. **Nationwide aggregation, cohort lock, and paper analysis** — `aggregate`
+   writes compatible `all_region_stats.{json,csv}` and enriched statistics.
+   `cohort` audits the configured cities against the tracked 313-city contract;
+   `analyze` builds named
    scenarios, city attribution, spatial concentration, distance thresholds, and
    threshold resilience in cache/work. A work-root data view symlinks immutable
    inputs but copies every replaceable derived file, so legacy-compatible
-   analysis functions cannot write through to city data.
+   analysis functions cannot write through to city data. The view is versioned
+   by the cohort SHA-256 and contains only the locked cities.
 4. **Final figures** — the machine-readable
    `src/drone_emission/paper_figures.json` declares exactly 12 assets. Rendering
    creates only declared sources/staging files. Publication is a separate,
@@ -21,6 +24,8 @@ The active workflow has four layers:
 that the 25 unique manifest requests exactly equal the explicit
 `formal_registry.REQUEST_RENDERERS` keys. Every renderer receives one immutable
 context containing the configured data, figures, cache, and work roots.
+The context also requires a matching cohort-view record. Renderers therefore
+cannot silently reintroduce excluded or newly configured cities.
 
 `render` accepts formal manifest IDs, not internal plot-function names. The
 nine `inkscape` entries generate required panels and reports only. The three
@@ -44,6 +49,18 @@ the active reproduction, validation, and publication scope.
 The remote environment resolves `/mnt/minor_storage/$USER/drone-emission`
 dynamically. All roots can be overridden independently through the environment
 variables documented in the README.
+
+`paper_cohort.json` is the source-controlled research-sample contract. The
+current lock excludes Linzhi for insufficient OD support and uses a minimum of
+30 valid weighted OD pairs. The five retained cities without a provincial GEF
+use the paper-selected 2022 national mean of 0.5366 kg CO2e/kWh. Candidate
+cohort audits are runtime files under work; accepting a changed cohort is an
+explicit source change.
+
+An optional `analyze --reuse-from DIR` restores a single audited reuse
+directory. Its manifest binds the file hashes, schemas, cohort hash, city
+coverage, and GEF fallback. There is no latest-bundle lookup or legacy-path
+discovery. A normal analyze without this option follows the compute path.
 
 Formal multi-city execution is shell-orchestrated. One parent systemd scope
 enforces the default 64GB limit over the complete process tree. With an 8GB

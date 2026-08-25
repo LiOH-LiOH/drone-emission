@@ -1,5 +1,16 @@
 import pandas as pd
 
+from drone_emission.paper_cohort import load_cohort_contract
+
+
+def fallback_factor() -> float:
+    """Return the paper-locked national-mean fallback GEF."""
+    return float(
+        load_cohort_contract()["grid_emission_factor_fallback"][
+            "kg_co2e_per_kwh"
+        ]
+    )
+
 # 省份名称映射：combined_data.csv → gef_china.csv
 PROVINCE_NAME_MAP = {
     "北京市": "北京",
@@ -36,5 +47,9 @@ def fetch_factor(province: str, gef_path: str) -> float:
     for _, row in data.iterrows():
         if province.startswith(row["城市"]):
             return float(row["因子"])
-    print(f"Warning: Province '{province}' not found in {gef_path}, using China default 0.5600 kgCO2e/kWh")
-    return 0.5600
+    fallback = fallback_factor()
+    print(
+        f"Warning: Province '{province}' not found in {gef_path}, using "
+        f"paper fallback {fallback:.4f} kgCO2e/kWh"
+    )
+    return fallback

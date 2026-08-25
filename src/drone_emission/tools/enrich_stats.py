@@ -22,6 +22,7 @@ import os
 import pandas as pd
 
 from drone_emission.utils import load_config
+from drone_emission.paper_cohort import load_cohort_contract
 from drone_emission.utils.grid_emission_factor import PROVINCE_NAME_MAP, normalize_province_name
 
 PROJECT_ROOT = os.path.dirname(
@@ -152,7 +153,25 @@ def enrich(data_dir: str, sales_path: str, gef_path: str):
 
         # Match by province column (already normalized short form in stats)
         if "province" in df.columns:
-            df["grid_emission_factor"] = df["province"].map(gef_lookup)
+            normalized = df["province"].astype(str).map(normalize_province_name)
+            df["grid_emission_factor"] = normalized.map(gef_lookup)
+            for index in df.index[df["grid_emission_factor"].isna()]:
+                province = normalized.loc[index]
+                matches = [
+                    value for name, value in gef_lookup.items()
+                    if province.startswith(str(name))
+                ]
+                if matches:
+                    df.loc[index, "grid_emission_factor"] = float(matches[0])
+            df["gef_source"] = "province_table"
+            fallback = load_cohort_contract()["grid_emission_factor_fallback"]
+            fallback_keys = set(fallback["affected_region_keys"])
+            fallback_mask = df["region_key"].astype(str).isin(fallback_keys)
+            df.loc[fallback_mask, "grid_emission_factor"] = float(
+                fallback["kg_co2e_per_kwh"]
+            )
+            df.loc[fallback_mask, "gef_source"] = "fallback_0.5366"
+            df.loc[df["grid_emission_factor"].isna(), "gef_source"] = "missing"
             matched = df["grid_emission_factor"].notna().sum()
             print(f"  Matched GEF for {matched}/{len(df)} regions")
         else:

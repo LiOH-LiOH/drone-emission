@@ -2,6 +2,7 @@ import os
 
 import numpy as np
 import pandas as pd
+from drone_emission.paper_cohort import load_cohort_contract
 from drone_emission.utils.province import get_province_from_district
 from drone_emission.utils.grid_emission_factor import fetch_factor, normalize_province_name
 
@@ -109,6 +110,23 @@ def cal_emission(region_info, exp_config):
         cached_ebike_kappas.size == len(od_df)
         and np.allclose(cached_ebike_kappas, ebike_kappa)
     )
+    fallback_region_keys = set(
+        load_cohort_contract()["grid_emission_factor_fallback"][
+            "affected_region_keys"
+        ]
+    )
+    cached_gef = (
+        pd.to_numeric(od_df["grid_emission_factor"], errors="coerce").dropna().to_numpy()
+        if "grid_emission_factor" in od_df.columns
+        else np.array([])
+    )
+    has_matching_fallback_gef = (
+        region_name_en.lower() not in fallback_region_keys
+        or (
+            cached_gef.size == len(od_df)
+            and np.allclose(cached_gef, e_use)
+        )
+    )
 
     if (
         has_emission_cols
@@ -116,6 +134,7 @@ def cal_emission(region_info, exp_config):
         and has_lifecycle_component_cols
         and has_time_cols
         and has_matching_ebike_kappa
+        and has_matching_fallback_gef
     ):
         print("Emission and time columns already exist, loading from CSV...")
         drone_emissions = od_df["drone_emission_kg"].values
@@ -233,6 +252,7 @@ def cal_emission(region_info, exp_config):
         od_df["drone_time_min"] = drone_time
         od_df["ebike_time_min"] = ebike_time
         od_df["ebike_kappa"] = ebike_kappa
+        od_df["grid_emission_factor"] = e_use
         od_df["ebike_lifecycle_production_g"] = ebike_lifecycle_production
         od_df["ebike_lifecycle_use_g"] = ebike_lifecycle_use
         od_df["ebike_lifecycle_eol_g"] = ebike_lifecycle_eol

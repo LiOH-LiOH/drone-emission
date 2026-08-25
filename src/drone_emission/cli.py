@@ -130,6 +130,34 @@ def command_aggregate(args: argparse.Namespace) -> None:
     enrich(config["data_dir"], config["sales_path"], config["gef_path"])
 
 
+def command_cohort(args: argparse.Namespace) -> None:
+    """Audit post-aggregate city eligibility against the tracked paper lock."""
+    config = _config(args.env)
+    from .paper_cohort import (
+        accept_candidate_cohort,
+        audit_city_cohort,
+        write_cohort_audit,
+    )
+
+    payload = audit_city_cohort(config)
+    path = write_cohort_audit(config, payload)
+    summary = {
+        "audit": str(path),
+        "candidate_city_count": len(payload["candidate_region_keys"]),
+        "candidate_sha256": payload["candidate_region_keys_sha256"],
+        "matches_locked": payload["matches_locked"],
+        "added_since_lock": payload["added_since_lock"],
+        "missing_since_lock": payload["missing_since_lock"],
+    }
+    print(json.dumps(summary, indent=2, ensure_ascii=False))
+    if args.accept:
+        accepted = accept_candidate_cohort(payload)
+        print(f"Accepted reviewed cohort into {accepted}")
+        return
+    if not payload["matches_locked"]:
+        raise SystemExit(2)
+
+
 def command_analyze(args: argparse.Namespace) -> None:
     """Build or restore all retained non-plot paper analyses."""
     config = _config(args.env)
@@ -140,15 +168,68 @@ def command_analyze(args: argparse.Namespace) -> None:
     missing = [str(path) for path in required if not path.exists()]
     if missing:
         raise FileNotFoundError("Missing aggregate input(s): " + ", ".join(missing))
+    from .paper_cohort import assert_locked_cohort
+    assert_locked_cohort(config)
     from .analysis_workflow import analyze
 
-    print(json.dumps(analyze(config, force=args.force), indent=2))
+    print(
+        json.dumps(
+            analyze(config, force=args.force, reuse_from=args.reuse_from), indent=2
+        )
+    )
+
+
+def command_prepare_reuse(args: argparse.Namespace) -> None:
+    """Build the one audited reuse directory without changing official data."""
+    config = _config(args.env)
+    output = args.output.resolve()
+    if output.exists() and any(output.iterdir()):
+        raise FileExistsError(f"paper reuse output is not empty: {output}")
+    from .paper_cohort import assert_locked_cohort
+    from .analysis_workflow import _view_config
+    from .paper_reuse import (
+        _atomic_copy,
+        capture_reuse_directory,
+        migrate_fallback_gef_overlay,
+        write_migration_difference_report,
+    )
+
+    assert_locked_cohort(config)
+    view = _view_config(config)
+    spatial_target = (
+        Path(view["cache_dir"])
+        / "drone_spatial_concentration"
+        / "city_drone_spatial_concentration.csv"
+    )
+    _atomic_copy(args.legacy_spatial.resolve(), spatial_target)
+    migration = migrate_fallback_gef_overlay(view)
+    manifest = capture_reuse_directory(view, output)
+    difference = write_migration_difference_report(
+        Path(config["data_dir"]) / "all_region_stats.csv",
+        Path(view["data_dir"]) / "all_region_stats.csv",
+        output / "migration_difference.json",
+    )
+    print(
+        json.dumps(
+            {
+                "manifest": str(manifest),
+                "difference_report": str(difference),
+                "migration": migration,
+            },
+            indent=2,
+        )
+    )
 
 
 def command_render(args: argparse.Namespace) -> None:
     config = _config(args.env)
-    from .analysis_workflow import analysis_data_dir, prepare_analysis_data_view
+    from .analysis_workflow import (
+        analysis_data_dir,
+        prepare_analysis_data_view,
+        require_current_analysis,
+    )
 
+    require_current_analysis(config)
     prepare_analysis_data_view(config)
     config = dict(config, data_dir=str(analysis_data_dir(config)))
     staged = render(config, only=_split_ids(args.only))
@@ -191,6 +272,7 @@ def command_reproduce(args: argparse.Namespace) -> None:
     command_inputs(args)
     command_cities(args)
     command_aggregate(args)
+    command_cohort(args)
     command_analyze(args)
     command_render(args)
 
@@ -213,9 +295,21 @@ def build_parser() -> argparse.ArgumentParser:
     aggregate.add_argument("--force", action="store_true")
     aggregate.set_defaults(func=command_aggregate)
 
+    cohort = subparsers.add_parser("cohort", help="audit the locked paper-city cohort")
+    cohort.add_argument("--accept", action="store_true")
+    cohort.set_defaults(func=command_cohort)
+
     analyze = subparsers.add_parser("analyze", help="build retained paper analyses")
     analyze.add_argument("--force", action="store_true")
+    analyze.add_argument("--reuse-from", type=Path)
     analyze.set_defaults(func=command_analyze)
+
+    prepare_reuse = subparsers.add_parser(
+        "prepare-reuse", help="build one audited paper-analysis reuse directory"
+    )
+    prepare_reuse.add_argument("--legacy-spatial", type=Path, required=True)
+    prepare_reuse.add_argument("--output", type=Path, required=True)
+    prepare_reuse.set_defaults(func=command_prepare_reuse)
 
     render_parser = subparsers.add_parser("render", help="render locked formal figure sources")
     render_parser.add_argument("--only", action="append", help="formal manifest ID; comma-separated accepted")
@@ -233,6 +327,8 @@ def build_parser() -> argparse.ArgumentParser:
     reproduce.add_argument("--only", action="append")
     reproduce.add_argument("--force", action="store_true")
     reproduce.add_argument("--no-fetch", action="store_true")
+    reproduce.add_argument("--reuse-from", type=Path)
+    reproduce.set_defaults(accept=False)
     reproduce.set_defaults(func=command_reproduce)
     return parser
 

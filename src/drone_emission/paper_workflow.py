@@ -92,6 +92,9 @@ def _write_source_report(figure: dict, config: dict, outputs: list[Path]) -> Pat
         relative = Path(*relative.parts[1:])
     report_path = figures_root / relative
     report_path.parent.mkdir(parents=True, exist_ok=True)
+    from .paper_cohort import load_cohort_contract
+
+    cohort = load_cohort_contract()
     payload = {
         "schema_version": 1,
         "figure_id": figure["id"],
@@ -104,6 +107,12 @@ def _write_source_report(figure: dict, config: dict, outputs: list[Path]) -> Pat
         "outputs": [str(path.resolve()) for path in outputs],
         "inkscape_source": figure.get("inkscape_source"),
         "publish": figure["publish"],
+        "paper_cohort_id": cohort["cohort_id"],
+        "paper_cohort_sha256": cohort["included_region_keys_sha256"],
+        "paper_city_count": cohort["expected_city_count"],
+        "grid_emission_factor_fallback": cohort[
+            "grid_emission_factor_fallback"
+        ],
     }
     temporary = report_path.with_suffix(report_path.suffix + ".tmp")
     temporary.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
