@@ -205,19 +205,26 @@ def _render_scenario(context: RenderContext, request: str) -> None:
 
 
 def _render_threshold_resilience(context: RenderContext) -> None:
+    from drone_emission.paper_cohort import locked_region_keys
     from .threshold_resilience import (
         plot_threshold_resilience_national_kdes,
         plot_threshold_resilience_national_subfigures,
     )
 
     summary = pd.read_csv(context.require_file("all_threshold_resilience.csv", stage="analyze"))
+    expected_cities = len(locked_region_keys())
     plot_threshold_resilience_national_subfigures(
         summary,
         save_path=str(context.output("threshold_resilience_national_overview.pdf")),
         for_latex=True,
         plot_title=False,
+        expected_cities=expected_cities,
     )
-    plot_threshold_resilience_national_kdes(summary, str(context.subfigure_dir))
+    plot_threshold_resilience_national_kdes(
+        summary,
+        str(context.subfigure_dir),
+        expected_cities=expected_cities,
+    )
 
 
 def _render_attribution(context: RenderContext) -> None:

@@ -98,6 +98,7 @@ def plot_threshold_resilience_national_subfigures(
     figsize: tuple = (88 / 25.4, 75 / 25.4),
     for_latex: bool = False,
     plot_title: bool = False,
+    expected_cities: int | None = None,
 ):
     """Write the two national resilience maps and a shared colorbar.
 
@@ -117,7 +118,9 @@ def plot_threshold_resilience_national_subfigures(
     del plot_title
     from drone_emission.visualization.regions import _batch_city_to_adcode, plot_regions_on_china_map
 
-    wide = validate_threshold_resilience_summary(summary, expected_cities=314)
+    wide = validate_threshold_resilience_summary(
+        summary, expected_cities=expected_cities
+    )
     unresolved = sorted(
         set(wide["region_name_cn"])
         - set(_batch_city_to_adcode(wide["region_name_cn"].tolist()))
@@ -252,9 +255,15 @@ def plot_threshold_resilience_national_subfigures(
     return output_paths
 
 
-def plot_threshold_resilience_national_kdes(summary: pd.DataFrame, save_dir: str):
+def plot_threshold_resilience_national_kdes(
+    summary: pd.DataFrame,
+    save_dir: str,
+    expected_cities: int | None = None,
+):
     """Save independent and stress city-probability KDE subfigures."""
-    wide = validate_threshold_resilience_summary(summary, expected_cities=314)
+    wide = validate_threshold_resilience_summary(
+        summary, expected_cities=expected_cities
+    )
     os.makedirs(save_dir, exist_ok=True)
     outputs = {}
     for scenario, color, suffix in (
