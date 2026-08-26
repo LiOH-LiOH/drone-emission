@@ -12,6 +12,7 @@ from scipy.special import softmax
 
 from drone_emission.calibration import gravity_plots
 from drone_emission.calibration.gravity_calibration import (
+    _merge_endpoint_centroids,
     accept_calibration_result,
     assign_evaluation_split,
     build_candidate_cache,
@@ -249,6 +250,37 @@ def test_endpoint_audit_basemap_failure_is_explicit(tmp_path, monkeypatch):
         gravity_plots._plot_endpoint_grid_heatmap(tmp_path, tmp_path / "cache")
     assert not pdf.exists()
     assert not png.exists()
+
+
+def test_endpoint_centroid_merge_is_idempotent():
+    endpoint_source = pd.DataFrame(
+        {
+            "building_index": [1, 2],
+            "observed_orders": [3.0, 4.0],
+            "expected_orders": [2.5, 4.5],
+            "centroid_x_x": [0.0, 0.0],
+            "centroid_y_x": [0.0, 0.0],
+            "centroid_x_y": [1.0, 1.0],
+            "centroid_y_y": [1.0, 1.0],
+        }
+    )
+    centroids = pd.DataFrame(
+        {
+            "building_index": [1, 2],
+            "centroid_x": [440_500.0, 441_500.0],
+            "centroid_y": [4_420_500.0, 4_421_500.0],
+        }
+    )
+    once = _merge_endpoint_centroids(endpoint_source, centroids)
+    twice = _merge_endpoint_centroids(once, centroids)
+    pd.testing.assert_frame_equal(once, twice)
+    assert list(once.columns) == [
+        "building_index",
+        "observed_orders",
+        "expected_orders",
+        "centroid_x",
+        "centroid_y",
+    ]
 
 
 def test_acceptance_requires_success_and_preserves_default_config(tmp_path):

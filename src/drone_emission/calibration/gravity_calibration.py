@@ -627,6 +627,24 @@ def _write_spatial_fit_diagnostics(
     }
 
 
+def _merge_endpoint_centroids(
+    endpoint_source: pd.DataFrame, centroids: pd.DataFrame
+) -> pd.DataFrame:
+    """Attach canonical metric centroids without accumulating merge suffixes."""
+    coordinate_columns = [
+        column
+        for column in endpoint_source.columns
+        if column.startswith("centroid_x") or column.startswith("centroid_y")
+    ]
+    endpoint_source = endpoint_source.drop(columns=coordinate_columns)
+    return endpoint_source.merge(
+        centroids[["building_index", "centroid_x", "centroid_y"]],
+        on="building_index",
+        how="left",
+        validate="one_to_one",
+    )
+
+
 def _write_full_fit_plot_sources(
     candidates: CandidateCSR,
     full: pd.DataFrame,
@@ -679,9 +697,7 @@ def _write_full_fit_plot_sources(
     else:
         endpoint_source, _ = building_order_fit(parameters, candidates, full)
     centroids = pd.read_csv(cache_dir / "building_centroids.csv.gz")
-    endpoint_source = endpoint_source.merge(
-        centroids, on="building_index", how="left", validate="one_to_one"
-    )
+    endpoint_source = _merge_endpoint_centroids(endpoint_source, centroids)
     endpoint_source.to_csv(
         output_dir / "endpoint_building_order_source.csv.gz",
         index=False,
