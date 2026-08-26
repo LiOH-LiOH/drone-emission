@@ -384,7 +384,9 @@ def run_boxcox_challenger(
     candidates = CandidateCSR.load(cache_dir)
     observations = pd.read_csv(cache_dir / "observations.csv.gz")
     candidate_pairs = int(len(candidates.building_index))
-    estimated_peak_gb = max(8.0, candidate_pairs * 24.0 / 2**30 + 4.0)
+    # Exact pooled W1 temporarily materializes several values, weights, and
+    # sorting arrays in addition to the memory-mapped candidate attributes.
+    estimated_peak_gb = max(12.0, candidate_pairs * 128.0 / 2**30 + 4.0)
     if estimated_peak_gb >= memory_limit_gb:
         raise MemoryError(
             f"Estimated Box-Cox peak {estimated_peak_gb:.1f} GB is not below "
@@ -508,6 +510,7 @@ def run_boxcox_challenger(
         "memory": {
             "limit_gb": float(memory_limit_gb),
             "estimated_peak_gb": estimated_peak_gb,
+            "estimate_basis": "128 bytes per candidate pair plus 4 GiB fixed",
         },
         "selection": {
             "lambda_grid": list(BOXCOX_LAMBDA_GRID),
