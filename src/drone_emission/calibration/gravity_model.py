@@ -12,9 +12,6 @@ import pandas as pd
 from scipy.optimize import minimize
 from scipy.special import logsumexp
 
-from drone_emission.utils.gravity import boxcox_transform
-
-
 PARAMETER_NAMES = ("alpha", "beta", "gamma")
 CURRENT_PARAMETERS = np.array([1.7, 1.1131, 1.4115], dtype=float)
 PARAMETER_INDEX = {name: index for index, name in enumerate(PARAMETER_NAMES)}
@@ -62,21 +59,6 @@ def utility_features(candidates: CandidateCSR, start: int, stop: int) -> np.ndar
     )
 
 
-def boxcox_utility_features(
-    candidates: CandidateCSR,
-    start: int,
-    stop: int,
-    shape: float,
-) -> np.ndarray:
-    """Return alpha/gamma features for one fixed Box-Cox distance shape."""
-    return np.column_stack(
-        (
-            candidates.log_volume[start:stop],
-            -boxcox_transform(candidates.distance_km[start:stop], shape),
-        )
-    )
-
-
 def _group_observations(observations: pd.DataFrame) -> dict[int, tuple[np.ndarray, np.ndarray]]:
     required = {"shop_index", "candidate_position", "count"}
     missing = required - set(observations)
@@ -107,42 +89,6 @@ def objective_gradient_hessian(
     for shop_index, (positions, counts) in _group_observations(observations).items():
         start, stop = candidates.bounds(shop_index)
         features = utility_features(candidates, start, stop)
-        if len(features) == 0:
-            raise ValueError(f"Shop {shop_index} has no candidates")
-        local = positions - start
-        if np.any(local < 0) or np.any(local >= len(features)):
-            raise ValueError(f"Observation outside candidate slice for shop {shop_index}")
-        utilities = features @ theta
-        log_normalizer = float(logsumexp(utilities))
-        total = float(counts.sum())
-        observed_sum = np.sum(features[local] * counts[:, None], axis=0)
-        probabilities = np.exp(utilities - log_normalizer)
-        expected = probabilities @ features
-        value += total * log_normalizer - float(observed_sum @ theta)
-        gradient += total * expected - observed_sum
-        if need_hessian:
-            second = (features * probabilities[:, None]).T @ features
-            hessian += total * (second - np.outer(expected, expected))
-    return float(value), gradient, hessian
-
-
-def objective_gradient_hessian_boxcox(
-    parameters: np.ndarray,
-    candidates: CandidateCSR,
-    observations: pd.DataFrame,
-    shape: float,
-    need_hessian: bool = True,
-) -> tuple[float, np.ndarray, np.ndarray | None]:
-    """Exact convex Box-Cox NLL, analytic gradient, and Hessian."""
-    theta = np.asarray(parameters, dtype=float)
-    if theta.shape != (2,) or not np.isfinite(theta).all():
-        raise ValueError("Box-Cox parameters must be two finite values")
-    value = 0.0
-    gradient = np.zeros(2, dtype=float)
-    hessian = np.zeros((2, 2), dtype=float) if need_hessian else None
-    for shop_index, (positions, counts) in _group_observations(observations).items():
-        start, stop = candidates.bounds(shop_index)
-        features = boxcox_utility_features(candidates, start, stop, shape)
         if len(features) == 0:
             raise ValueError(f"Shop {shop_index} has no candidates")
         local = positions - start
@@ -243,56 +189,6 @@ def fit_parameters(
     }
 
 
-def fit_boxcox_parameters(
-    candidates: CandidateCSR,
-    observations: pd.DataFrame,
-    shape: float,
-    initial: Iterable[float] = (0.4, 1.5),
-) -> dict:
-    """Fit non-negative volume attraction and positive Box-Cox decay."""
-    initial = np.asarray(tuple(initial), dtype=float)
-    if initial.shape != (2,):
-        raise ValueError("Box-Cox initial parameters must contain alpha and gamma")
-
-    def fun(theta):
-        value, gradient, _ = objective_gradient_hessian_boxcox(
-            theta, candidates, observations, shape, need_hessian=False
-        )
-        return value, gradient
-
-    fitted = minimize(
-        fun,
-        initial,
-        method="L-BFGS-B",
-        jac=True,
-        bounds=((0.0, None), (1e-10, None)),
-        options={"maxiter": 1000, "ftol": 1e-12, "gtol": 1e-8},
-    )
-    value, gradient, hessian = objective_gradient_hessian_boxcox(
-        fitted.x, candidates, observations, shape, need_hessian=True
-    )
-    eigenvalues = np.linalg.eigvalsh(hessian)
-    return {
-        "model_family": "boxcox",
-        "parameters": {
-            "alpha": float(fitted.x[0]),
-            "boxcox_lambda": float(shape),
-            "boxcox_gamma": float(fitted.x[1]),
-        },
-        "success": bool(fitted.success),
-        "status": int(fitted.status),
-        "message": str(fitted.message),
-        "iterations": int(fitted.nit),
-        "function_evaluations": int(fitted.nfev),
-        "negative_log_likelihood": float(value),
-        "gradient": gradient.tolist(),
-        "gradient_norm": float(np.linalg.norm(gradient)),
-        "hessian": hessian.tolist(),
-        "hessian_eigenvalues": eigenvalues.tolist(),
-        "hessian_condition_number": float(np.linalg.cond(hessian)),
-    }
-
-
 def clustered_covariance(
     parameters: Iterable[float],
     candidates: CandidateCSR,
@@ -326,49 +222,6 @@ def clustered_covariance(
             }
         )
     return {"covariance": covariance.tolist(), "parameters": rows, "cluster_count": len(scores)}
-
-
-def clustered_covariance_boxcox(
-    parameters: Iterable[float],
-    candidates: CandidateCSR,
-    observations: pd.DataFrame,
-    shape: float,
-) -> dict:
-    """Compute shop-clustered covariance conditional on the selected shape."""
-    theta = np.asarray(tuple(parameters), dtype=float)
-    _, _, bread = objective_gradient_hessian_boxcox(
-        theta, candidates, observations, shape, True
-    )
-    scores = []
-    for shop_index, (positions, counts) in _group_observations(observations).items():
-        start, stop = candidates.bounds(shop_index)
-        features = boxcox_utility_features(candidates, start, stop, shape)
-        local = positions - start
-        utilities = features @ theta
-        probabilities = np.exp(utilities - logsumexp(utilities))
-        observed = np.sum(features[local] * counts[:, None], axis=0)
-        scores.append(observed - float(counts.sum()) * (probabilities @ features))
-    score_matrix = np.asarray(scores)
-    inverse = np.linalg.pinv(bread, hermitian=True)
-    covariance = inverse @ (score_matrix.T @ score_matrix) @ inverse
-    errors = np.sqrt(np.maximum(np.diag(covariance), 0.0))
-    rows = []
-    for name, estimate, error in zip(("alpha", "boxcox_gamma"), theta, errors):
-        rows.append(
-            {
-                "parameter": name,
-                "estimate": float(estimate),
-                "standard_error": float(error),
-                "ci95_low": float(estimate - 1.959963984540054 * error),
-                "ci95_high": float(estimate + 1.959963984540054 * error),
-            }
-        )
-    return {
-        "conditional_on_boxcox_lambda": float(shape),
-        "covariance": covariance.tolist(),
-        "parameters": rows,
-        "cluster_count": len(scores),
-    }
 
 
 def model_definitions(fitted_parameters: Iterable[float]) -> dict[str, np.ndarray]:
@@ -522,27 +375,6 @@ def evaluate_model(
     )
 
 
-def evaluate_boxcox_model(
-    parameters: Iterable[float],
-    candidates: CandidateCSR,
-    observations: pd.DataFrame,
-    shape: float,
-    return_components: bool = False,
-    include_ranks: bool = True,
-):
-    """Evaluate a fixed-shape Box-Cox gravity model exactly."""
-    return _evaluate_feature_model(
-        parameters,
-        candidates,
-        observations,
-        lambda candidate_data, start, stop: boxcox_utility_features(
-            candidate_data, start, stop, shape
-        ),
-        return_components=return_components,
-        include_ranks=include_ranks,
-    )
-
-
 def _r_squared(
     observed: np.ndarray,
     predicted: np.ndarray,
@@ -651,25 +483,6 @@ def merchant_spatial_fit(
     )
 
 
-def merchant_spatial_fit_boxcox(
-    parameters: Iterable[float],
-    candidates: CandidateCSR,
-    observations: pd.DataFrame,
-    scope: str,
-    shape: float,
-) -> tuple[pd.DataFrame, dict]:
-    """Compute fixed-shape Box-Cox merchant-level spatial fit."""
-    return _merchant_spatial_fit_feature(
-        parameters,
-        candidates,
-        observations,
-        scope,
-        lambda candidate_data, start, stop: boxcox_utility_features(
-            candidate_data, start, stop, shape
-        ),
-    )
-
-
 def _building_order_fit_feature(
     parameters: Iterable[float],
     candidates: CandidateCSR,
@@ -729,21 +542,4 @@ def building_order_fit(
     """Aggregate Tanner observed and expected orders over candidate buildings."""
     return _building_order_fit_feature(
         parameters, candidates, observations, utility_features
-    )
-
-
-def building_order_fit_boxcox(
-    parameters: Iterable[float],
-    candidates: CandidateCSR,
-    observations: pd.DataFrame,
-    shape: float,
-) -> tuple[pd.DataFrame, dict]:
-    """Aggregate Box-Cox observed and expected candidate-building orders."""
-    return _building_order_fit_feature(
-        parameters,
-        candidates,
-        observations,
-        lambda candidate_data, start, stop: boxcox_utility_features(
-            candidate_data, start, stop, shape
-        ),
     )

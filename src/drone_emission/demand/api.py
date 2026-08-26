@@ -6,7 +6,6 @@ import pandas as pd
 from haversine import Unit, haversine, haversine_vector
 from sklearn.neighbors import BallTree
 from drone_emission.utils.coordinates import gcj02_to_wgs84, haversine_distance
-from drone_emission.utils.gravity import boxcox_gravity_log_weights
 from drone_emission.utils.tools import get_epsg_from_bounds
 
 from .cal_area import preprocess_buildings
@@ -202,14 +201,6 @@ def generate_one_store_od_pairs(
             tanner_a = od_params.get("tanner_a", 1.2)
             tanner_b = od_params.get("tanner_b", 0.8)
             tmp_ratio = (volume ** alpha) * (distance_km ** tanner_a) * np.exp(-tanner_b * distance_km)
-        elif impedance_type == "boxcox":
-            tmp_ratio = float(boxcox_gravity_log_weights(
-                [volume],
-                [distance_km],
-                od_params.get("alpha", 0.4),
-                od_params.get("boxcox_gamma", 1.5),
-                od_params.get("boxcox_lambda", 1.0),
-            )[0])
         else:  # power_law (default, backward compatible)
             g_param = od_params.get("g_param", [1, 1, 2])
             min_distance_km = od_params.get("min_distance_km", 0.05)
@@ -219,10 +210,6 @@ def generate_one_store_od_pairs(
                 / (distance_km + min_distance_km) ** g_param[2]
             )
         ratios[idx] = tmp_ratio
-
-    if impedance_type == "boxcox" and ratios:
-        maximum = max(ratios.values())
-        ratios = {key: float(np.exp(value - maximum)) for key, value in ratios.items()}
 
     sales_dict = {}
     total_ratio = sum(ratios.values())
@@ -292,15 +279,6 @@ def generate_one_store_od_pairs_vectorized(
         tanner_a = od_params.get("tanner_a", 1.2)
         tanner_b = od_params.get("tanner_b", 0.8)
         ratios = (volumes ** alpha) * (distances_km ** tanner_a) * np.exp(-tanner_b * distances_km)
-    elif impedance_type == "boxcox":
-        log_ratios = boxcox_gravity_log_weights(
-            volumes,
-            distances_km,
-            od_params.get("alpha", 0.4),
-            od_params.get("boxcox_gamma", 1.5),
-            od_params.get("boxcox_lambda", 1.0),
-        )
-        ratios = np.exp(log_ratios - np.max(log_ratios))
     else:  # power_law (default, backward compatible)
         g_param = od_params.get("g_param", [1, 1, 2])
         min_distance_km = od_params.get("min_distance_km", 0.05)

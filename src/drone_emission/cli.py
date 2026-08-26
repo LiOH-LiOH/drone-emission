@@ -105,44 +105,6 @@ def command_calibrate_spatial_fit(args: argparse.Namespace) -> None:
     )
 
 
-def command_calibrate_boxcox(args: argparse.Namespace) -> None:
-    """Select and evaluate the pre-registered Box-Cox gravity challenger."""
-    from drone_emission.calibration.boxcox_calibration import (
-        accept_boxcox_result,
-        run_boxcox_challenger,
-    )
-
-    result = run_boxcox_challenger(
-        calibration_result_path=args.result,
-        output_root=args.output,
-        memory_limit_gb=args.memory_limit_gb,
-    )
-    result_path = Path(result["output_dir"]) / "boxcox_challenger.json"
-    payload = {
-        "output_dir": result["output_dir"],
-        "result": str(result_path),
-        "challenge_hash": result["challenge_hash"],
-        "selected_lambda": result["selection"]["selected_lambda"],
-        "eligible_for_acceptance": result["acceptance"][
-            "eligible_for_acceptance"
-        ],
-        "accepted": False,
-    }
-    if args.accept_result:
-        summary = accept_boxcox_result(
-            result_path,
-            PROJECT_ROOT / "experiment.toml",
-            PROJECT_ROOT
-            / "src"
-            / "drone_emission"
-            / "calibration"
-            / "boxcox_calibration_summary.json",
-        )
-        payload["accepted"] = True
-        payload["accepted_summary"] = summary
-    print(json.dumps(payload, indent=2, ensure_ascii=False))
-
-
 def command_calibrate_coordinates(args: argparse.Namespace) -> None:
     """Restore and audit the translated Beijing order coordinates."""
     config = _config(args.env)
@@ -415,21 +377,6 @@ def build_parser() -> argparse.ArgumentParser:
     )
     spatial_fit.add_argument("--result", type=Path, required=True)
     spatial_fit.set_defaults(func=command_calibrate_spatial_fit)
-
-    boxcox = subparsers.add_parser(
-        "calibrate-boxcox",
-        help="cross-validate the Box-Cox distance-decay gravity challenger",
-    )
-    boxcox.add_argument(
-        "--result",
-        type=Path,
-        required=True,
-        help="converged Beijing gravity_calibration.json with its cache",
-    )
-    boxcox.add_argument("--output", type=Path, required=True)
-    boxcox.add_argument("--memory-limit-gb", type=float, default=64.0)
-    boxcox.add_argument("--accept-result", action="store_true")
-    boxcox.set_defaults(func=command_calibrate_boxcox)
 
     coordinate_parser = subparsers.add_parser(
         "calibrate-coordinates",
