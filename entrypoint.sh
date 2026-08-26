@@ -92,12 +92,18 @@ run_python_stage() {
 run_cities() {
     local args=("$@")
     local has_region=0
+    local has_batch=0
     local item
     for item in ${args[@]+"${args[@]}"}; do
         [[ "$item" == "--region" || "$item" == --region=* ]] && has_region=1
+        [[ "$item" == "--run-dir" || "$item" == --run-dir=* ]] && has_batch=1
     done
     if (( has_region )); then
         run_python_stage cities ${args[@]+"${args[@]}"}
+        return
+    fi
+    if (( has_batch )); then
+        run_python_stage cities --jobs "$JOBS" ${args[@]+"${args[@]}"}
         return
     fi
     "$PYTHON" -c 'import json, sys; registry=json.load(open(sys.argv[1], encoding="utf-8")); print("\n".join(key for key, value in registry.items() if value.get("region_level") == "city"))' regions.json \

@@ -164,6 +164,43 @@ def command_cities(args: argparse.Namespace) -> None:
     problems = _input_problems(config)
     if problems:
         raise FileNotFoundError("Missing city input(s): " + ", ".join(problems))
+
+    jobs = getattr(args, "jobs", None)
+    cohort = getattr(args, "cohort", None)
+    run_dir = getattr(args, "run_dir", None)
+    resume = bool(getattr(args, "resume", False))
+    batch_requested = any(
+        (
+            jobs is not None,
+            cohort is not None,
+            run_dir is not None,
+            resume,
+        )
+    )
+    if args.region and batch_requested:
+        raise ValueError("--region cannot be combined with audited batch options")
+    if batch_requested:
+        if jobs is None or cohort is None or run_dir is None:
+            raise ValueError(
+                "audited batch mode requires --jobs, --cohort, and --run-dir"
+            )
+        from drone_emission.city_batch import run_city_batch
+        from drone_emission.paper_cohort import cohort_hash, locked_region_keys
+
+        exit_code = run_city_batch(
+            region_keys=locked_region_keys(),
+            environment=args.env or "local",
+            jobs=jobs,
+            run_dir=run_dir,
+            force=args.force,
+            no_fetch=args.no_fetch,
+            cohort_hash=cohort_hash(),
+            resume=resume,
+        )
+        if exit_code:
+            raise SystemExit(exit_code)
+        return
+
     from drone_emission.main import has_city_results, run_all, run_region_analysis
     from drone_emission.utils.config import configure_cache
     from drone_emission.utils.region_config import init_registry
@@ -414,6 +451,10 @@ def build_parser() -> argparse.ArgumentParser:
     cities.add_argument("--region", action="append")
     cities.add_argument("--force", action="store_true")
     cities.add_argument("--no-fetch", action="store_true")
+    cities.add_argument("--jobs", type=int)
+    cities.add_argument("--cohort", choices=("locked",))
+    cities.add_argument("--run-dir", type=Path)
+    cities.add_argument("--resume", action="store_true")
     cities.set_defaults(func=command_cities)
 
     aggregate = subparsers.add_parser("aggregate", help="build nationwide compatible tables")

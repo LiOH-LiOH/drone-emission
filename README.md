@@ -70,6 +70,7 @@ It does not initiate SSH and requires an explicit stage:
 
 ```bash
 ./entrypoint.sh --jobs 4 cities
+./entrypoint.sh --jobs 4 cities --cohort locked --run-dir logs/paper-cities
 ./entrypoint.sh --jobs 4 --tmux drone-reproduce reproduce
 ./entrypoint.sh cities --region chengdu --force --no-fetch
 ```
@@ -87,6 +88,14 @@ the cap. Tmux is opt-in through `--tmux NAME`; foreground execution is default.
 
 Direct `python -m drone_emission ...` commands remain useful for development
 and single-stage work but do not carry the formal 64GB guarantee.
+
+For an audited paper-cohort batch, provide `--cohort locked` and a new
+`--run-dir`. The package scheduler records every city's start, end, exit code,
+and dedicated log while keeping all shared status writes in the parent process.
+Failures are collected without automatic retries and make the batch exit
+nonzero. An explicit `--resume` skips only cities already recorded with exit
+code zero, and only when the source commit, cohort, environment, worker count,
+and city flags match the original batch manifest.
 
 ## Retired command map
 

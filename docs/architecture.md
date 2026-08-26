@@ -82,6 +82,15 @@ reserve and a 12GB scheduling reservation per city, no more than four workers
 start concurrently. Later stages remain inside the same scope. Direct Python
 invocations do not claim this hard-limit guarantee.
 
+Audited multi-city runs pass `--cohort locked --run-dir DIR` through the shell
+launcher to the package city scheduler. The scheduler uses one parent event
+loop to own all status files and at most the requested number of city
+subprocesses; city workers write only their dedicated logs. No shared worker
+lock is used. Batch manifests bind explicit resume to the source commit,
+cohort, environment, concurrency, and city flags. A failed city is recorded
+without retry while independent cities continue, and any failure makes the
+batch exit nonzero before downstream stages.
+
 The active visualization package is split by evidence theme. The pre-split
 generic modules and candidate CLIs exist only under `archive/code/`; no facade
 preserves their imports. Pipeline stages cannot import visualization modules,
