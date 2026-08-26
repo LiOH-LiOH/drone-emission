@@ -212,19 +212,35 @@ def _plot_full_order_distance_distribution(output_dir: Path) -> None:
     source = pd.read_csv(output_dir / "full_order_distance_source.csv.gz")
     observed = source.loc[source["series"] == "observed"]
     predicted = source.loc[source["series"] == "joint_three_parameter"]
-    bins = np.arange(0.0, 5.0001, 0.1)
+    bins = np.arange(0.0, 5.0001, 0.2)
+    bin_centers = (bins[:-1] + bins[1:]) / 2
+    bar_width = 0.085
+    observed_counts, _ = np.histogram(
+        observed["distance_bin_km"],
+        bins=bins,
+        weights=observed["order_weight"],
+    )
+    predicted_counts, _ = np.histogram(
+        predicted["distance_bin_km"],
+        bins=bins,
+        weights=predicted["order_weight"],
+    )
     fig, axes = plt.subplots(2, 1, figsize=(12.5, 7.2), sharex=True)
-    axes[0].hist(
-        observed["distance_bin_km"], bins=bins,
-        weights=observed["order_weight"], histtype="step", linewidth=2.0,
-        color="0.2", label="Observed",
+    axes[0].bar(
+        bin_centers - bar_width / 2,
+        observed_counts,
+        width=bar_width,
+        color="0.2",
+        label="Observed",
     )
-    axes[0].hist(
-        predicted["distance_bin_km"], bins=bins,
-        weights=predicted["order_weight"], histtype="step", linewidth=1.8,
-        color=COLORS["joint_three_parameter"], label="Joint gravity model",
+    axes[0].bar(
+        bin_centers + bar_width / 2,
+        predicted_counts,
+        width=bar_width,
+        color=COLORS["joint_three_parameter"],
+        label="Joint gravity model",
     )
-    axes[0].set_ylabel("Orders per 100 m bin")
+    axes[0].set_ylabel("Orders per 0.2 km bin")
     axes[0].set_title("a  Full-sample delivery-distance distribution", loc="left")
     axes[0].legend(frameon=False)
     for frame, color, label in (
@@ -235,7 +251,13 @@ def _plot_full_order_distance_distribution(output_dir: Path) -> None:
         distance = grouped["distance_bin_km"].to_numpy(float)
         cumulative = np.cumsum(grouped["order_weight"].to_numpy(float))
         cumulative /= cumulative[-1]
-        axes[1].step(distance, cumulative, where="post", color=color, linewidth=1.8, label=label)
+        axes[1].plot(
+            np.concatenate(([0.0], distance)),
+            np.concatenate(([0.0], cumulative)),
+            color=color,
+            linewidth=1.8,
+            label=label,
+        )
     axes[1].set_xlabel("Shop-to-building centroid distance (km)")
     axes[1].set_ylabel("Cumulative probability")
     axes[1].set_title("b  Cumulative order distribution", loc="left")
