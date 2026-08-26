@@ -712,6 +712,7 @@ def run_joint_calibration(
     memory_limit_gb: float = 64.0,
     workers: int | None = None,
     rebuild_prepared: bool = False,
+    no_basemap: bool = False,
 ) -> dict:
     """Prepare/restore, evaluate, refit all data, and write audit artifacts."""
     fingerprints = validate_corrected_inputs(
@@ -836,7 +837,9 @@ def run_joint_calibration(
     }
     result_path = output_dir / "gravity_calibration.json"
     result_path.write_text(json.dumps(result, indent=2, ensure_ascii=False) + "\n")
-    render_calibration_audits(output_dir, result, cache_dir)
+    render_calibration_audits(
+        output_dir, result, cache_dir, no_basemap=no_basemap
+    )
     result["artifacts"] = {
         path.name: {"sha256": sha256_file(path), "bytes": path.stat().st_size}
         for path in sorted(output_dir.iterdir()) if path.is_file() and path.name != result_path.name
@@ -845,7 +848,9 @@ def run_joint_calibration(
     return result
 
 
-def refresh_spatial_fit_diagnostics(result_path: Path) -> dict:
+def refresh_spatial_fit_diagnostics(
+    result_path: Path, no_basemap: bool = False
+) -> dict:
     """Add spatial-fit metrics to an existing converged calibration run."""
     result_path = Path(result_path)
     result = json.loads(result_path.read_text(encoding="utf-8"))
@@ -889,7 +894,9 @@ def refresh_spatial_fit_diagnostics(result_path: Path) -> dict:
 
     render_spatial_fit_audit(output_dir, result)
     _plot_full_order_distance_distribution(output_dir)
-    _plot_endpoint_grid_heatmap(output_dir)
+    _plot_endpoint_grid_heatmap(
+        output_dir, cache_dir, no_basemap=no_basemap
+    )
     result["artifacts"] = {
         path.name: {"sha256": sha256_file(path), "bytes": path.stat().st_size}
         for path in sorted(output_dir.iterdir())

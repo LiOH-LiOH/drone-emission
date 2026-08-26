@@ -10,6 +10,7 @@ import pandas as pd
 import pytest
 from scipy.special import softmax
 
+from drone_emission.calibration import gravity_plots
 from drone_emission.calibration.gravity_calibration import (
     accept_calibration_result,
     assign_evaluation_split,
@@ -217,6 +218,37 @@ def test_spatial_fit_uses_exact_expectations_and_keeps_observed_zeros():
     assert buildings["expected_orders"].to_list() == pytest.approx([5.0, 10.0, 5.0])
     assert building_summary["building_order_count_r2_raw"] == pytest.approx(-1.25)
     assert building_summary["expected_order_count"] == pytest.approx(20.0)
+
+
+def test_endpoint_audit_basemap_failure_is_explicit(tmp_path, monkeypatch):
+    source = pd.DataFrame(
+        {
+            "centroid_x": [440_500.0, 441_500.0],
+            "centroid_y": [4_420_500.0, 4_421_500.0],
+            "observed_orders": [12.0, 3.0],
+            "expected_orders": [10.0, 5.0],
+        }
+    )
+    source.to_csv(
+        tmp_path / "endpoint_building_order_source.csv.gz",
+        index=False,
+        compression="gzip",
+    )
+    pdf = tmp_path / "beijing_endpoint_grid_heatmap.pdf"
+    png = tmp_path / "beijing_endpoint_grid_heatmap.png"
+    pdf.write_bytes(b"stale")
+    png.write_bytes(b"stale")
+    monkeypatch.setattr(
+        gravity_plots,
+        "_add_basemap",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            RuntimeError("OpenStreetMap basemap retrieval failed")
+        ),
+    )
+    with pytest.raises(RuntimeError, match="basemap retrieval failed"):
+        gravity_plots._plot_endpoint_grid_heatmap(tmp_path, tmp_path / "cache")
+    assert not pdf.exists()
+    assert not png.exists()
 
 
 def test_acceptance_requires_success_and_preserves_default_config(tmp_path):

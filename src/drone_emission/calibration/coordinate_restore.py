@@ -497,7 +497,7 @@ def build_transform_record(
     }
 
 
-def _add_basemap(ax, cache_dir: Path) -> None:
+def _add_basemap(ax, cache_dir: Path, crs: str = "EPSG:4326") -> None:
     try:
         import contextily as ctx
 
@@ -506,7 +506,7 @@ def _add_basemap(ax, cache_dir: Path) -> None:
         ctx.set_cache_dir(str(tile_cache))
         ctx.add_basemap(
             ax,
-            crs="EPSG:4326",
+            crs=crs,
             # The canonical Mapnik endpoint may return a 403 image while still
             # reporting a successful response to contextily.  HOT is an OSM
             # tile style with an endpoint that supports this audit workflow.

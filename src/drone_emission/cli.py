@@ -63,6 +63,7 @@ def command_calibrate(args: argparse.Namespace) -> None:
         memory_limit_gb=args.memory_limit_gb,
         workers=args.workers,
         rebuild_prepared=args.rebuild_prepared,
+        no_basemap=args.no_basemap,
     )
     payload = {
         "output_dir": result["output_dir"],
@@ -91,7 +92,9 @@ def command_calibrate_spatial_fit(args: argparse.Namespace) -> None:
         refresh_spatial_fit_diagnostics,
     )
 
-    result = refresh_spatial_fit_diagnostics(args.result)
+    result = refresh_spatial_fit_diagnostics(
+        args.result, no_basemap=args.no_basemap
+    )
     print(
         json.dumps(
             {
@@ -368,6 +371,7 @@ def build_parser() -> argparse.ArgumentParser:
     calibrate.add_argument("--memory-limit-gb", type=float, default=64.0)
     calibrate.add_argument("--workers", type=int)
     calibrate.add_argument("--rebuild-prepared", action="store_true")
+    calibrate.add_argument("--no-basemap", action="store_true")
     calibrate.add_argument("--accept-result", action="store_true")
     calibrate.set_defaults(func=command_calibrate)
 
@@ -376,6 +380,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="add full-sample spatial-fit diagnostics to a converged calibration",
     )
     spatial_fit.add_argument("--result", type=Path, required=True)
+    spatial_fit.add_argument("--no-basemap", action="store_true")
     spatial_fit.set_defaults(func=command_calibrate_spatial_fit)
 
     coordinate_parser = subparsers.add_parser(

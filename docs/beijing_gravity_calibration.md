@@ -47,6 +47,11 @@ python -m drone_emission --env remote calibrate-spatial-fit \
   --result /path/to/run/gravity_calibration.json
 ```
 
+The endpoint-concentration audit uses cached OpenStreetMap tiles and fetches
+missing tiles when needed. A basemap failure is explicit. Pass `--no-basemap`
+to either calibration command only when an unmapped audit is intentionally
+required.
+
 Raw customer coordinates, the order-to-building match table, and candidate CSR
 arrays are ignored runtime data. They remain in the remote run cache and must
 not be committed or copied back. The selected JSON, CSV, PDF, PNG, and task log
@@ -119,8 +124,10 @@ out-of-sample performance than the current parameters is reported but is not an
 acceptance gate.
 
 The standard Tanner calibration also writes two full-sample Beijing endpoint
-audits: `beijing_order_distance_distribution.pdf` compares observed and
-joint-model delivery-distance orders, while `beijing_endpoint_grid_heatmap.pdf`
-compares observed and joint-model expected endpoint orders on aligned 1 km
-metric grids. Both use the same valid-linked-order sample and are standalone
-calibration outputs rather than manifest figures.
+audits beside the other files in the fingerprinted calibration run directory:
+`beijing_order_distance_distribution.pdf` compares observed and joint-model
+delivery-distance orders, while `beijing_endpoint_grid_heatmap.pdf` compares
+observed and joint-model expected endpoint orders on aligned 1 km metric grids
+over a shared basemap and logarithmic scale. Both use the same
+valid-linked-order sample and are standalone calibration outputs rather than
+manifest figures.

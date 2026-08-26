@@ -4,8 +4,21 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import matplotlib as mpl
 import numpy as np
 import pandas as pd
+
+from .coordinate_restore import _add_basemap
+
+
+mpl.rcParams.update(
+    {
+        "font.family": "sans-serif",
+        "font.sans-serif": ["Arial", "Helvetica", "DejaVu Sans", "sans-serif"],
+        "svg.fonttype": "none",
+        "pdf.fonttype": 42,
+    }
+)
 
 
 COLORS = {
@@ -200,7 +213,7 @@ def _plot_full_order_distance_distribution(output_dir: Path) -> None:
     observed = source.loc[source["series"] == "observed"]
     predicted = source.loc[source["series"] == "joint_three_parameter"]
     bins = np.arange(0.0, 5.0001, 0.1)
-    fig, axes = plt.subplots(2, 1, figsize=(8.8, 7.0), sharex=True)
+    fig, axes = plt.subplots(2, 1, figsize=(12.5, 7.2), sharex=True)
     axes[0].hist(
         observed["distance_bin_km"], bins=bins,
         weights=observed["order_weight"], histtype="step", linewidth=2.0,
@@ -242,11 +255,19 @@ def _plot_full_order_distance_distribution(output_dir: Path) -> None:
         plt.close(fig)
 
 
-def _plot_endpoint_grid_heatmap(output_dir: Path, grid_size_m: float = 1000.0) -> None:
+def _plot_endpoint_grid_heatmap(
+    output_dir: Path,
+    cache_dir: Path,
+    no_basemap: bool = False,
+    grid_size_m: float = 1000.0,
+) -> None:
     import matplotlib.pyplot as plt
-    from matplotlib.colors import Normalize
-    from matplotlib.ticker import FuncFormatter
+    from matplotlib.colors import LogNorm
 
+    pdf_path = output_dir / "beijing_endpoint_grid_heatmap.pdf"
+    png_path = output_dir / "beijing_endpoint_grid_heatmap.png"
+    pdf_path.unlink(missing_ok=True)
+    png_path.unlink(missing_ok=True)
     source = pd.read_csv(output_dir / "endpoint_building_order_source.csv.gz")
     source = source.dropna(subset=["centroid_x", "centroid_y"])
     if source.empty:
@@ -269,34 +290,63 @@ def _plot_endpoint_grid_heatmap(output_dir: Path, grid_size_m: float = 1000.0) -
     plot_source["y_min_m"] = y_min + plot_source["grid_y"] * grid_size_m
     plot_source.to_csv(output_dir / "beijing_endpoint_grid_source.csv", index=False)
 
-    transformed = np.log1p(np.maximum(np.stack([observed, expected]), 0.0))
-    norm = Normalize(vmin=0.0, vmax=max(1.0, float(transformed.max())))
-    extent = (x_min, x_min + max_x * grid_size_m, y_min, y_min + max_y * grid_size_m)
-    fig, axes = plt.subplots(1, 2, figsize=(11.2, 5.2), sharex=True, sharey=True)
+    positive = np.stack([observed, expected])
+    positive = positive[np.isfinite(positive) & (positive > 0)]
+    if not len(positive):
+        raise ValueError("Endpoint grid source contains no positive order totals")
+    norm = LogNorm(vmin=1.0, vmax=max(1.000001, float(positive.max())))
+    extent = (
+        x_min,
+        x_min + max_x * grid_size_m,
+        y_min,
+        y_min + max_y * grid_size_m,
+    )
+    x_edges = np.arange(max_x + 1, dtype=float) * grid_size_m + x_min
+    y_edges = np.arange(max_y + 1, dtype=float) * grid_size_m + y_min
+    fig = plt.figure(figsize=(13, 6))
+    layout = fig.add_gridspec(1, 3, width_ratios=(1, 1, 0.045), wspace=0.05)
+    axes = [fig.add_subplot(layout[0, 0])]
+    axes.append(fig.add_subplot(layout[0, 1], sharex=axes[0], sharey=axes[0]))
+    colorbar_ax = fig.add_subplot(layout[0, 2])
     images = []
     for axis, values, title in (
         (axes[0], observed, "a  Observed endpoint orders"),
         (axes[1], expected, "b  Joint gravity-model endpoint orders"),
     ):
-        image = axis.imshow(np.log1p(values), origin="lower", extent=extent,
-                            cmap="magma", norm=norm, interpolation="none", aspect="equal")
+        axis.set_xlim(extent[0], extent[1])
+        axis.set_ylim(extent[2], extent[3])
+        if not no_basemap:
+            try:
+                _add_basemap(axis, cache_dir, crs="EPSG:32650")
+            except Exception:
+                plt.close(fig)
+                raise
+        image = axis.pcolormesh(
+            x_edges,
+            y_edges,
+            np.ma.masked_less_equal(values, 0.0),
+            cmap="magma",
+            norm=norm,
+            alpha=0.82,
+            shading="flat",
+            linewidth=0,
+            zorder=3,
+        )
         images.append(image)
         axis.set_title(title, loc="left")
-        axis.set_xlabel("Easting (m, EPSG:32650)")
-        axis.text(0.03, 0.04, f"Total: {values.sum():,.1f} orders",
-                  transform=axis.transAxes, color="white", fontsize=9,
-                  bbox={"facecolor": "black", "alpha": 0.35, "pad": 3, "edgecolor": "none"})
-    axes[0].set_ylabel("Northing (m, EPSG:32650)")
-    colorbar = fig.colorbar(images[1], ax=axes, pad=0.02, fraction=0.035)
-    colorbar.set_label("Orders per 1 km² (log1p scale)")
-    colorbar.ax.yaxis.set_major_formatter(FuncFormatter(lambda value, _: f"{np.expm1(value):g}"))
-    fig.suptitle("Beijing endpoint order concentration on aligned 1 km grids", y=0.99)
-    fig.tight_layout()
+        axis.set_aspect("equal", adjustable="box")
+        axis.set_axis_off()
+    fig.colorbar(
+        images[1],
+        cax=colorbar_ax,
+        label="Orders per 1 km grid cell (log scale)",
+    )
+    fig.subplots_adjust(left=0.02, right=0.96, bottom=0.03, top=0.92)
     try:
         _save(
             fig,
-            output_dir / "beijing_endpoint_grid_heatmap.pdf",
-            output_dir / "beijing_endpoint_grid_heatmap.png",
+            pdf_path,
+            png_path,
         )
     finally:
         plt.close(fig)
@@ -441,11 +491,16 @@ def render_spatial_fit_audit(output_dir: Path, result: dict) -> None:
     _plot_spatial_fit(Path(output_dir), result)
 
 
-def render_calibration_audits(output_dir: Path, result: dict, cache_dir: Path) -> None:
+def render_calibration_audits(
+    output_dir: Path,
+    result: dict,
+    cache_dir: Path,
+    no_basemap: bool = False,
+) -> None:
     """Render calibration audit figures and their source tables."""
     output_dir, cache_dir = Path(output_dir), Path(cache_dir)
     _plot_data_estimation(output_dir, result, cache_dir)
     _plot_prediction(output_dir)
     _plot_full_order_distance_distribution(output_dir)
-    _plot_endpoint_grid_heatmap(output_dir)
+    _plot_endpoint_grid_heatmap(output_dir, cache_dir, no_basemap=no_basemap)
     render_spatial_fit_audit(output_dir, result)
