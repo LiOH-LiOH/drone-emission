@@ -324,7 +324,7 @@ def _plot_endpoint_grid_heatmap(
         image = axis.pcolormesh(
             x_edges,
             y_edges,
-            np.ma.masked_less_equal(values, 0.0),
+            np.ma.masked_less(values, norm.vmin),
             cmap="magma",
             norm=norm,
             alpha=0.82,
