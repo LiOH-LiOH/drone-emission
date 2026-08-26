@@ -38,4 +38,10 @@ Recent commits use short imperative summaries such as `Fix circuity issue` and `
 Do not commit generated data, logs, caches, figures, virtual environments, or local `regions.json`. Keep experiment parameters in `experiment.toml`, and treat region stats under `data/{level}/{region}/region_stats.json` as runtime state.
 
 ## Persistent Remote Sessions
-For all work on `hku-sto`, never run a sequence of separate commands such as `ssh hku-sto '...'` that reconnect for each step. Open one background interactive SSH TTY, keep it alive, and send all remote status, pull, test, render, and verification commands through that same session. Poll and reuse the existing process until the workflow is complete; do not start duplicate SSH sessions or duplicate render jobs. File transfer with `scp` may use a separate connection after remote verification, but remote command execution must stay in the persistent TTY.
+For all work on `hku-sto`, never run a sequence of separate commands such as `ssh hku-sto '...'` that reconnect for each step. Open one background interactive SSH TTY, keep it alive, and send all remote status, pull, test, render, and verification commands through that same session. Poll and reuse the existing process until the workflow is complete; do not start duplicate SSH sessions or duplicate render jobs. File transfer may use a separate connection after remote verification, but remote command execution must stay in the persistent TTY.
+
+Prefer `rsync` over a separate connection for remote file transfers, with
+`scp` only as a fallback. Never use `rsync --delete` for review artifacts. Save
+retrieved figures to a new `figures/review/<purpose>_YYYYMMDD/` batch by default,
+using the local `Asia/Shanghai` date and a short English kebab-case purpose. Do
+not overwrite or mix with an existing batch; append `_02`, `_03`, and so on.
