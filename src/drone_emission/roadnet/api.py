@@ -4,10 +4,24 @@ import numpy as np
 import pandas as pd
 from drone_emission.utils.boundaries import graphml_covers_bbox, resolve_enlarged_boundaries
 
-from ._compat import load_networkx_graph
-from .osm_roadnet import fetch_bikeable_roadnet
-from .sparse_graph import SparseGraph
-from .tile_router import TileRouter
+
+def _fetch_bikeable_roadnet(*, bbox_4326, save_path):
+    from .osm_roadnet import fetch_bikeable_roadnet
+
+    return fetch_bikeable_roadnet(bbox_4326=bbox_4326, save_path=save_path)
+
+
+def _load_sparse_graph(path):
+    from .sparse_graph import SparseGraph
+
+    return SparseGraph.from_graphml(path)
+
+
+def _make_tile_router(graph):
+    from .tile_router import TileRouter
+
+    return TileRouter(graph)
+
 
 def load_roadnet(region_info, exp_config):
     region_config = region_info.to_dict()
@@ -30,31 +44,48 @@ def load_roadnet(region_info, exp_config):
     # Fetch road network if requested, file missing, or existing file's
     # bbox doesn't cover the expected enlarged boundaries (a stale graphml
     # from an earlier run with a smaller boundaries_dict).
-    needs_fetch = (
-        exp_config.get("fetch_roadnet", False)
-        or not os.path.exists(roadnet_data_path)
-    )
+    strict_no_fetch = exp_config.get("strict_no_fetch", False)
+    roadnet_exists = os.path.exists(roadnet_data_path)
+    if strict_no_fetch and not roadnet_exists:
+        raise FileNotFoundError(
+            f"Road network is missing and --no-fetch is active: {roadnet_data_path}"
+        )
+    needs_fetch = exp_config.get("fetch_roadnet", False) or not roadnet_exists
     if not needs_fetch and large_bounds_dict is not None:
         try:
-            if not graphml_covers_bbox(roadnet_data_path, large_bounds_dict):
+            covers_expected = graphml_covers_bbox(
+                roadnet_data_path, large_bounds_dict
+            )
+        except Exception as e:
+            if strict_no_fetch:
+                raise RuntimeError(
+                    "Could not verify road network bbox while --no-fetch is active: "
+                    f"{roadnet_data_path}"
+                ) from e
+            print(f"Could not verify existing roadnet bbox ({e}); refetching.")
+            needs_fetch = True
+        else:
+            if not covers_expected:
+                if strict_no_fetch:
+                    raise RuntimeError(
+                        "Existing road network bbox does not cover expected bounds "
+                        f"and --no-fetch is active: {roadnet_data_path}"
+                    )
                 print(
                     f"Existing roadnet bbox does not cover expected bounds; "
                     f"refetching for {region_name_en}."
                 )
                 needs_fetch = True
-        except Exception as e:
-            print(f"Could not verify existing roadnet bbox ({e}); refetching.")
-            needs_fetch = True
 
     if needs_fetch:
-        fetch_bikeable_roadnet(
+        _fetch_bikeable_roadnet(
             bbox_4326=large_bounds_dict,
             save_path=roadnet_data_path,
         )
 
     # Build sparse graph (NetworkX loaded temporarily then freed)
     try:
-        graph = SparseGraph.from_graphml(roadnet_data_path)
+        graph = _load_sparse_graph(roadnet_data_path)
     except Exception as e:
         print(f"Error loading road network: {e}")
         return
@@ -76,9 +107,14 @@ def load_roadnet(region_info, exp_config):
     )
     od_df = pd.read_csv(od_save_path)
     print(f"Loaded {len(od_df)} OD pairs")
+    region_info.set_stat("odpair_count", len(od_df))
+    if "annual_sales" in od_df.columns:
+        region_info.set_stat(
+            "total_odpair_annual_sales", float(od_df["annual_sales"].sum())
+        )
 
     # Build tile router
-    router = TileRouter(graph)
+    router = _make_tile_router(graph)
 
     # Only compute road distances for rows with NaN values
     if "road_distance_m" not in od_df.columns:

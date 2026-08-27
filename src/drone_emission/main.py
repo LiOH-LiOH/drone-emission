@@ -50,6 +50,18 @@ def run_region_analysis(region_key: str, config: dict):
     # registry.save()
 
 
+def run_region_from_roadnet(region_key: str, config: dict):
+    """Resume one city from its existing OD pairs through final emissions."""
+    registry = get_registry()
+    if region_key not in registry:
+        raise KeyError(f"Region '{region_key}' not found in configuration")
+
+    print(f"Resuming analysis from roadnet for {region_key}...")
+    region = registry[region_key]
+    load_roadnet(region_info=region, exp_config=config)
+    cal_emission(region_info=region, exp_config=config)
+
+
 def has_city_results(region_config, config: dict) -> bool:
     """Check the completion marker and required reusable city artifacts."""
     if "total_ebike_lifecycle" not in region_config.stats:

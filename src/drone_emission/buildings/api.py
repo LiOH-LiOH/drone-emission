@@ -158,7 +158,15 @@ def load_buildings(region_info, exp_config):
     # Prefer .gpkg, fall back to legacy .geojson
     buildings_file = gpkg_file if os.path.exists(gpkg_file) else geojson_file
 
-    # Fetch buildings if requested or no file exists
+    # Fetch buildings if requested or no file exists. An explicit CLI
+    # --no-fetch must never fall through to the missing-input download path.
+    if (
+        exp_config.get("strict_no_fetch", False)
+        and not os.path.exists(buildings_file)
+    ):
+        raise FileNotFoundError(
+            f"Building input is missing and --no-fetch is active: {buildings_file}"
+        )
     if exp_config.get("fetch_buildings", False) or not os.path.exists(buildings_file):
         gba_data_paths = _resolve_gba_data_paths(boundaries_dict, exp_config)
 

@@ -169,6 +169,7 @@ def command_cities(args: argparse.Namespace) -> None:
     cohort = getattr(args, "cohort", None)
     run_dir = getattr(args, "run_dir", None)
     resume = bool(getattr(args, "resume", False))
+    start_at = getattr(args, "start_at", None)
     batch_requested = any(
         (
             jobs is not None,
@@ -179,6 +180,10 @@ def command_cities(args: argparse.Namespace) -> None:
     )
     if args.region and batch_requested:
         raise ValueError("--region cannot be combined with audited batch options")
+    if start_at and not args.region:
+        raise ValueError("--start-at requires at least one --region")
+    if start_at and batch_requested:
+        raise ValueError("--start-at cannot be combined with audited batch options")
     if batch_requested:
         if jobs is None or cohort is None or run_dir is None:
             raise ValueError(
@@ -201,19 +206,29 @@ def command_cities(args: argparse.Namespace) -> None:
             raise SystemExit(exit_code)
         return
 
-    from drone_emission.main import has_city_results, run_all, run_region_analysis
+    from drone_emission.main import (
+        has_city_results,
+        run_all,
+        run_region_analysis,
+        run_region_from_roadnet,
+    )
     from drone_emission.utils.config import configure_cache
     from drone_emission.utils.region_config import init_registry
 
     if args.no_fetch:
         config["fetch_buildings"] = False
         config["fetch_roadnet"] = False
+        config["strict_no_fetch"] = True
     configure_cache(config)
     registry = init_registry(
         str(PROJECT_ROOT / "regions.json"), data_dir=config["data_dir"]
     )
     if args.region:
         for region_key in args.region:
+            if start_at == "roadnet":
+                run_region_from_roadnet(region_key, config)
+                registry.save_region(region_key)
+                continue
             if (
                 not args.force
                 and region_key in registry
@@ -455,6 +470,7 @@ def build_parser() -> argparse.ArgumentParser:
     cities.add_argument("--cohort", choices=("locked",))
     cities.add_argument("--run-dir", type=Path)
     cities.add_argument("--resume", action="store_true")
+    cities.add_argument("--start-at", choices=("roadnet",))
     cities.set_defaults(func=command_cities)
 
     aggregate = subparsers.add_parser("aggregate", help="build nationwide compatible tables")

@@ -97,6 +97,18 @@ nonzero. An explicit `--resume` skips only cities already recorded with exit
 code zero, and only when the source commit, cohort, environment, worker count,
 and city flags match the original batch manifest.
 
+An interrupted city that already wrote valid OD pairs can resume without
+repeating sales, building, or demand preparation:
+
+```bash
+python -m drone_emission --env remote cities \
+  --region chongqing --start-at roadnet --no-fetch
+```
+
+Explicit `--no-fetch` is strict: missing building inputs and missing,
+unreadable, or undersized road-network inputs fail instead of initiating a
+download.
+
 ## Retired command map
 
 | Retired entry point | Replacement |
