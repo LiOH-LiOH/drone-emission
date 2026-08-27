@@ -15,7 +15,7 @@ import pandas as pd
 from .paper_cohort import cohort_hash, load_cohort_contract, locked_region_keys
 
 
-REUSE_SCHEMA_VERSION = 1
+REUSE_SCHEMA_VERSION = 2
 GLOBAL_DATA_ARTIFACTS = (
     "all_region_stats.json",
     "all_region_stats.csv",
@@ -29,9 +29,6 @@ GLOBAL_DATA_ARTIFACTS = (
 WORK_ARTIFACTS = (
     "analysis/city_attribution/r2_city_attribution_data.csv",
     "analysis/city_attribution/r2_city_attribution_analysis_report.json",
-)
-CACHE_ARTIFACTS = (
-    "drone_spatial_concentration/city_drone_spatial_concentration.csv",
 )
 
 
@@ -81,7 +78,6 @@ def capture_reuse_directory(config: dict, output_root: str | Path) -> Path:
     payload_root = output_root / "payload"
     payload_root.mkdir(parents=True, exist_ok=True)
     data_root = Path(config["data_dir"])
-    cache_root = Path(config["cache_dir"])
     work_root = Path(config["work_dir"])
     contract = load_cohort_contract()
     affected = contract["grid_emission_factor_fallback"]["affected_region_keys"]
@@ -109,7 +105,6 @@ def capture_reuse_directory(config: dict, output_root: str | Path) -> Path:
 
     declarations: list[tuple[Path, str]] = []
     declarations.extend((data_root / name, f"data:{name}") for name in GLOBAL_DATA_ARTIFACTS)
-    declarations.extend((cache_root / name, f"cache:{name}") for name in CACHE_ARTIFACTS)
     declarations.extend((work_root / name, f"work:{name}") for name in WORK_ARTIFACTS)
     for region_key in affected:
         city_root = data_root / "city" / region_key
@@ -237,50 +232,6 @@ def _replace_region_rows(
     return pd.concat([retained, replacement_rows], ignore_index=True)
 
 
-def _refresh_spatial_subset(config: dict, affected: set[str]) -> Path:
-    """Recompute only fallback-GEF cities, then reclassify the full cohort."""
-    from .analysis.drone_spatial_concentration import (
-        _analyze_city,
-        _assign_classes_and_representatives,
-        _attach_oracle_reduction_metrics,
-    )
-
-    output = (
-        Path(config["cache_dir"])
-        / "drone_spatial_concentration"
-        / "city_drone_spatial_concentration.csv"
-    )
-    if not output.is_file():
-        raise FileNotFoundError(
-            f"legacy spatial-concentration seed missing: {output}"
-        )
-    existing = pd.read_csv(output)
-    stats = pd.read_csv(Path(config["data_dir"]) / "all_region_stats.csv")
-    stats = stats[stats["region_key"].astype(str).isin(locked_region_keys())].copy()
-    refreshed_rows = [
-        _analyze_city((row, str(config["data_dir"])))
-        for row in stats[stats["region_key"].astype(str).isin(affected)].to_dict("records")
-    ]
-    retained = existing[
-        existing["region_key"].astype(str).isin(set(locked_region_keys()) - affected)
-    ].copy()
-    merged = pd.concat([retained, pd.DataFrame(refreshed_rows)], ignore_index=True)
-    merged = merged.sort_values("region_key").reset_index(drop=True)
-    merged = _assign_classes_and_representatives(merged)
-    reduction_columns = (
-        "oracle_absolute_reduction_t_co2e",
-        "oracle_relative_reduction_pct",
-    )
-    merged = merged.drop(columns=list(reduction_columns), errors="ignore")
-    merged = _attach_oracle_reduction_metrics(merged, stats)
-    if set(merged["region_key"].astype(str)) != set(locked_region_keys()):
-        raise RuntimeError("partial spatial refresh did not cover the locked cohort")
-    temporary = output.with_suffix(".csv.tmp")
-    merged.to_csv(temporary, index=False)
-    temporary.replace(output)
-    return output
-
-
 def migrate_fallback_gef_overlay(config: dict) -> dict:
     """Refresh only the five fallback-GEF cities inside an isolated data view."""
     from .analysis_workflow import _filter_analysis_view, _run_city_attribution
@@ -393,7 +344,6 @@ def migrate_fallback_gef_overlay(config: dict) -> dict:
     temporary = resilience_drivers_path.with_suffix(".csv.tmp")
     merged_drivers.to_csv(temporary, index=False)
     temporary.replace(resilience_drivers_path)
-    _refresh_spatial_subset(config, affected)
     attribution = _run_city_attribution(config, force=True)
     _filter_analysis_view(data_root, study)
     return {

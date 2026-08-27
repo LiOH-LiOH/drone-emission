@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import os
 import shutil
 from pathlib import Path
 
@@ -266,23 +265,6 @@ def _run_threshold_resilience(config: dict, *, force: bool) -> Path:
     return output
 
 
-def _run_spatial_concentration(config: dict, *, force: bool) -> Path:
-    from .analysis.drone_spatial_concentration import run_drone_spatial_concentration
-
-    results_dir = Path(config["cache_dir"]) / "drone_spatial_concentration"
-    output = results_dir / "city_drone_spatial_concentration.csv"
-    if output.exists() and not force:
-        return output
-    run_drone_spatial_concentration(
-        stats_path=Path(config["data_dir"]) / "all_region_stats.csv",
-        data_dir=config["data_dir"],
-        results_dir=results_dir,
-        workers=int(os.environ.get("DRONE_EMISSION_ANALYSIS_WORKERS", "1")),
-        force=force,
-    )
-    return output
-
-
 def _run_city_attribution(config: dict, *, force: bool) -> Path:
     from .analysis.city_attribution import (
         build_r2_city_attribution,
@@ -327,7 +309,6 @@ def analyze(
             "named_scenarios": Path(view["data_dir"]) / "all_sensitivity_named.csv",
             "distance_threshold": Path(view["data_dir"]) / "all_city_distance_threshold_summary.csv",
             "threshold_resilience": Path(view["data_dir"]) / "all_threshold_resilience.csv",
-            "spatial_concentration": Path(config["cache_dir"]) / "drone_spatial_concentration" / "city_drone_spatial_concentration.csv",
             "city_attribution": analysis_root(config) / "city_attribution" / "r2_city_attribution_analysis_report.json",
         }
         missing = [str(path) for path in outputs.values() if not path.is_file()]
@@ -341,7 +322,6 @@ def analyze(
             "named_scenarios": _run_named_scenarios(view, force=force),
             "distance_threshold": _run_distance_threshold(view, force=force),
             "threshold_resilience": _run_threshold_resilience(view, force=force),
-            "spatial_concentration": _run_spatial_concentration(config, force=force),
             "city_attribution": _run_city_attribution(config, force=force),
         }
     payload = {name: str(path) for name, path in outputs.items()}

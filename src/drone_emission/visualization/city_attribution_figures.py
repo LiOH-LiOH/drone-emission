@@ -31,7 +31,6 @@ from drone_emission.visualization.macro_regions import (
 
 # Import from constants module (no circular dependency)
 from drone_emission.analysis.constants import (
-    DRONE_SPATIAL_SCATTER_LABELED_CITIES,
     PROVINCE_NAME_EN,
     VARIABLE_LABELS,
 )

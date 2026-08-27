@@ -9,7 +9,7 @@ from pathlib import Path
 
 from .paths import PROJECT_ROOT
 
-EXPECTED_FIGURE_COUNT = 12
+EXPECTED_FIGURE_COUNT = 11
 
 
 def load_manifest() -> dict:
@@ -21,9 +21,11 @@ def load_manifest() -> dict:
     if manifest.get("schema_version") != 1:
         raise ValueError("Unsupported paper figure manifest schema")
     if manifest.get("figure_count") != EXPECTED_FIGURE_COUNT:
-        raise ValueError("Manifest figure_count must be exactly 12")
+        raise ValueError(f"Manifest figure_count must be exactly {EXPECTED_FIGURE_COUNT}")
     if len(figures) != EXPECTED_FIGURE_COUNT or len(set(ids)) != len(ids):
-        raise ValueError("Manifest must contain 12 uniquely identified figures")
+        raise ValueError(
+            f"Manifest must contain {EXPECTED_FIGURE_COUNT} uniquely identified figures"
+        )
     for figure in figures:
         if figure.get("mode") not in {"direct", "inkscape"}:
             raise ValueError(f"Invalid render mode for {figure.get('id')}")

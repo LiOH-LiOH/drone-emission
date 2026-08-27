@@ -11,8 +11,8 @@ from drone_emission.visualization.formal_registry import REQUEST_RENDERERS
 
 def test_manifest_has_exact_locked_set():
     manifest = load_manifest()
-    assert manifest["figure_count"] == 12
-    assert len(manifest["figures"]) == 12
+    assert manifest["figure_count"] == 11
+    assert len(manifest["figures"]) == 11
     assert {figure["mode"] for figure in manifest["figures"]} == {
         "direct",
         "inkscape",
@@ -28,7 +28,7 @@ def test_manifest_requests_exactly_match_registry():
         for figure in load_manifest()["figures"]
         for request in figure["render_requests"]
     ]
-    assert len(requests) == 25
+    assert len(requests) == 24
     assert len(requests) == len(set(requests))
     assert set(requests) == set(REQUEST_RENDERERS)
 
@@ -60,7 +60,7 @@ def test_manifest_paths_are_one_to_one():
     figures = load_manifest()["figures"]
     staging = [Path(figure["staging"]).name for figure in figures]
     publish = [Path(figure["publish"]).name for figure in figures]
-    assert len(set(staging)) == 12
+    assert len(set(staging)) == 11
     assert staging == publish
     assert staging == [f"{figure['id']}.pdf" for figure in figures]
 
@@ -146,7 +146,7 @@ def test_shell_declares_single_global_memory_contract():
     assert "command -v jq" not in source
 
 
-def test_docs_paper_has_exact_manifest_publication_set():
+def test_docs_paper_preserves_deferred_fig3_outside_manifest():
     root = Path(__file__).parents[1]
     manifest = json.loads(
         (root / "src" / "drone_emission" / "paper_figures.json").read_text()
@@ -155,7 +155,8 @@ def test_docs_paper_has_exact_manifest_publication_set():
     paper_dir = root / "docs" / "paper" / "figures"
     if paper_dir.is_dir():
         existing = {path.name for path in paper_dir.glob("*.pdf")}
-        assert declared == existing
+        assert declared <= existing
+        assert existing - declared == {"fig3_city_deployment_screening.pdf"}
     else:
         assert all(
             item["publish"].startswith("docs/paper/figures/")

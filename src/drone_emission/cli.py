@@ -318,7 +318,6 @@ def command_prepare_reuse(args: argparse.Namespace) -> None:
     from .paper_cohort import assert_locked_cohort
     from .analysis_workflow import _view_config
     from .paper_reuse import (
-        _atomic_copy,
         capture_reuse_directory,
         migrate_fallback_gef_overlay,
         write_migration_difference_report,
@@ -326,12 +325,6 @@ def command_prepare_reuse(args: argparse.Namespace) -> None:
 
     assert_locked_cohort(config)
     view = _view_config(config)
-    spatial_target = (
-        Path(view["cache_dir"])
-        / "drone_spatial_concentration"
-        / "city_drone_spatial_concentration.csv"
-    )
-    _atomic_copy(args.legacy_spatial.resolve(), spatial_target)
     migration = migrate_fallback_gef_overlay(view)
     manifest = capture_reuse_directory(view, output)
     difference = write_migration_difference_report(
@@ -489,7 +482,6 @@ def build_parser() -> argparse.ArgumentParser:
     prepare_reuse = subparsers.add_parser(
         "prepare-reuse", help="build one audited paper-analysis reuse directory"
     )
-    prepare_reuse.add_argument("--legacy-spatial", type=Path, required=True)
     prepare_reuse.add_argument("--output", type=Path, required=True)
     prepare_reuse.set_defaults(func=command_prepare_reuse)
 

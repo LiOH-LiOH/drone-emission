@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "paper_scope": "main_text_and_locked_extended_data",
-  "figure_count": 12,
+  "figure_count": 11,
   "figures": [
     {
       "id": "fig1_allocation_framework_national",
@@ -24,17 +24,6 @@
       "inkscape_source": "figures/inkscape/figure5.svg",
       "staging": "figures/paper/fig2_city_mitigation_priorities.pdf",
       "publish": "docs/paper/figures/fig2_city_mitigation_priorities.pdf"
-    },
-    {
-      "id": "fig3_city_deployment_screening",
-      "mode": "inkscape",
-      "required_inputs": ["cache:drone_spatial_concentration/city_drone_spatial_concentration.csv"],
-      "render_requests": ["city_reduction_concentration_scatter"],
-      "required_subfigures": ["city_reduction_potential_scatter.pdf", "city_concentration_distribution.pdf"],
-      "report_inputs": ["figures/paper/report/fig3_city_deployment_screening.sources.json"],
-      "inkscape_source": "figures/inkscape/figure8.svg",
-      "staging": "figures/paper/fig3_city_deployment_screening.pdf",
-      "publish": "docs/paper/figures/fig3_city_deployment_screening.pdf"
     },
     {
       "id": "fig4_gef_distance_detour",

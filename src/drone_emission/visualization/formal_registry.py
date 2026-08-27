@@ -142,22 +142,6 @@ def _render_priority(context: RenderContext, request: str) -> None:
         function(frame, **kwargs)
 
 
-def _render_screening(context: RenderContext) -> None:
-    from .city_screening import plot_city_reduction_concentration_scatter
-
-    path = context.cache_root / "drone_spatial_concentration" / "city_drone_spatial_concentration.csv"
-    if not path.is_file():
-        raise FileNotFoundError(
-            f"Missing render input: {path}. Run `python -m drone_emission analyze` first."
-        )
-    plot_city_reduction_concentration_scatter(
-        pd.read_csv(path),
-        scatter_save_path=str(context.output("city_reduction_potential_scatter.pdf")),
-        distribution_save_path=str(context.output("city_concentration_distribution.pdf")),
-        for_latex=True,
-    )
-
-
 def _render_gef_detour(context: RenderContext) -> None:
     from .city_gef_detour import _render_city_gef_context_detour_summary
 
@@ -304,7 +288,6 @@ REQUEST_RENDERERS: dict[str, Renderer] = {
     "city_annual_absolute_reduction_distribution": lambda c: _render_priority(c, "city_annual_absolute_reduction_distribution"),
     "city_relative_lifecycle_reduction_distribution": lambda c: _render_priority(c, "city_relative_lifecycle_reduction_distribution"),
     "city_reduction_rank_all_macro_region": lambda c: _render_priority(c, "city_reduction_rank_all_macro_region"),
-    "city_reduction_concentration_scatter": _render_screening,
     "city_gef_context_detour_summary": _render_gef_detour,
     "contribution_decomposition_city_b": _render_contribution,
     "regions_map_pathway_scenarios": lambda c: _render_scenario(c, "regions_map_pathway_scenarios"),
