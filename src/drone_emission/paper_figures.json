@@ -40,7 +40,7 @@
     {
       "id": "fig5_contribution_decomposition",
       "mode": "direct",
-      "required_inputs": ["all_region_stats.csv", "city/*/*_od_pairs.csv", "experiment.toml"],
+      "required_inputs": ["all_city_contribution_decomposition.csv"],
       "render_requests": ["contribution_decomposition_city_b"],
       "source_output": "contribution_decomposition_city_b.pdf",
       "required_subfigures": ["contribution_decomposition_city_b.pdf"],

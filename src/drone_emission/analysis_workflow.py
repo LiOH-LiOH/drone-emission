@@ -20,6 +20,9 @@ DERIVED_GLOBAL_NAMES = {
     "all_city_distance_threshold_summary.csv",
     "all_city_distance_threshold_summary.partial.csv",
     "all_city_distance_threshold_status.csv",
+    "all_city_contribution_decomposition.csv",
+    "all_city_contribution_decomposition.partial.csv",
+    "all_city_contribution_decomposition_status.csv",
     "all_threshold_resilience.csv",
     "all_threshold_resilience_drivers.csv",
 }
@@ -221,6 +224,22 @@ def _run_distance_threshold(config: dict, *, force: bool) -> Path:
     return output
 
 
+def _run_contribution_decomposition(
+    config: dict,
+    *,
+    force: bool,
+    chunk_rows: int,
+) -> Path:
+    from .analysis.contribution_decomposition import run_contribution_analysis
+
+    output, _ = run_contribution_analysis(
+        config,
+        force=force,
+        chunk_rows=chunk_rows,
+    )
+    return output
+
+
 def _run_threshold_resilience(config: dict, *, force: bool) -> Path:
     from .tools.run_threshold_resilience import (
         _city_regions,
@@ -291,8 +310,28 @@ def analyze(
     *,
     force: bool = False,
     reuse_from: str | Path | None = None,
+    only: list[str] | None = None,
+    contribution_chunk_rows: int = 250_000,
 ) -> dict[str, str]:
     """Build or restore every retained non-plot paper analysis."""
+    runners = {
+        "named-scenarios": lambda view: _run_named_scenarios(view, force=force),
+        "distance-threshold": lambda view: _run_distance_threshold(view, force=force),
+        "threshold-resilience": lambda view: _run_threshold_resilience(view, force=force),
+        "city-attribution": lambda view: _run_city_attribution(config, force=force),
+        "contribution-decomposition": lambda view: _run_contribution_decomposition(
+            view,
+            force=force,
+            chunk_rows=contribution_chunk_rows,
+        ),
+    }
+    selected = list(runners) if only is None else list(dict.fromkeys(only))
+    unknown = sorted(set(selected) - set(runners))
+    if unknown:
+        raise ValueError(
+            f"unknown analysis selection(s): {unknown}; "
+            f"choose from {sorted(runners)}"
+        )
     view = _view_config(config)
     reuse_payload = None
     if reuse_from is not None:
@@ -307,9 +346,19 @@ def analyze(
         validate_reused_region_sets(view)
         outputs = {
             "named_scenarios": Path(view["data_dir"]) / "all_sensitivity_named.csv",
-            "distance_threshold": Path(view["data_dir"]) / "all_city_distance_threshold_summary.csv",
-            "threshold_resilience": Path(view["data_dir"]) / "all_threshold_resilience.csv",
-            "city_attribution": analysis_root(config) / "city_attribution" / "r2_city_attribution_analysis_report.json",
+            "distance_threshold": Path(view["data_dir"])
+            / "all_city_distance_threshold_summary.csv",
+            "threshold_resilience": Path(view["data_dir"])
+            / "all_threshold_resilience.csv",
+            "city_attribution": analysis_root(config)
+            / "city_attribution"
+            / "r2_city_attribution_analysis_report.json",
+            "contribution_decomposition": Path(view["data_dir"])
+            / "all_city_contribution_decomposition.csv",
+        }
+        selected_outputs = {name.replace("-", "_") for name in selected}
+        outputs = {
+            name: path for name, path in outputs.items() if name in selected_outputs
         }
         missing = [str(path) for path in outputs.values() if not path.is_file()]
         if missing:
@@ -318,12 +367,7 @@ def analyze(
                 + "\n- ".join(missing)
             )
     else:
-        outputs = {
-            "named_scenarios": _run_named_scenarios(view, force=force),
-            "distance_threshold": _run_distance_threshold(view, force=force),
-            "threshold_resilience": _run_threshold_resilience(view, force=force),
-            "city_attribution": _run_city_attribution(config, force=force),
-        }
+        outputs = {name.replace("-", "_"): runners[name](view) for name in selected}
     payload = {name: str(path) for name, path in outputs.items()}
     payload["analysis_data_dir"] = str(analysis_data_dir(config))
     payload["paper_cohort_sha256"] = cohort_hash()

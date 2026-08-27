@@ -535,122 +535,38 @@ def _full_city_contribution_aggregates(
     drone_scenario,
     sample_seed: int,
 ) -> tuple[dict | None, str | None]:
-    """Aggregate one full OD CSV in bounded-memory chunks."""
-    from drone_emission.sensitivity.vectorized_lca import (
-        compute_drone_per_order_parts_g,
-        compute_ebike_per_order_parts_g,
+    """Compatibility adapter around the analysis-layer streaming reducer."""
+    from drone_emission.analysis.contribution_decomposition import (
+        aggregate_od_contributions,
     )
 
-    usecols = lambda col: col in {
-        "distance_km",
-        "annual_sales",
-        "road_distance_m",
-    }
-    columns = pd.read_csv(od_path, nrows=0, usecols=usecols).columns
-    if "distance_km" not in columns or "annual_sales" not in columns:
-        return None, "missing_required_od_columns"
-    has_road_distance = "road_distance_m" in columns
-    component_kg = {key: 0.0 for key in CONTRIBUTION_COMPONENT_KEYS}
-    valid_rows = 0
-    assigned_rows = 0
-    max_abs_error_g = 0.0
-    aggregate_error_kg = 0.0
-
-    for chunk in pd.read_csv(
-        od_path,
-        usecols=usecols,
-        chunksize=CONTRIBUTION_FULL_CHUNK_ROWS,
-    ):
-        chunk["distance_km"] = pd.to_numeric(
-            chunk["distance_km"], errors="coerce"
+    try:
+        aggregate = aggregate_od_contributions(
+            od_path,
+            ebike_params=ebike_params,
+            drone_params=drone_params,
+            ebike_scenario=ebike_scenario,
+            drone_scenario=drone_scenario,
+            chunk_rows=CONTRIBUTION_FULL_CHUNK_ROWS,
         )
-        chunk["annual_sales"] = pd.to_numeric(
-            chunk["annual_sales"], errors="coerce"
-        )
-        if has_road_distance:
-            chunk["road_distance_m"] = pd.to_numeric(
-                chunk["road_distance_m"], errors="coerce"
-            )
-            chunk["_road_km"] = chunk["road_distance_m"] / 1000.0
-        else:
-            chunk["_road_km"] = chunk["distance_km"]
-        valid = chunk[
-            chunk["distance_km"].notna()
-            & (chunk["distance_km"] > 0)
-            & chunk["_road_km"].notna()
-            & (chunk["_road_km"] > 0)
-            & chunk["annual_sales"].notna()
-            & (chunk["annual_sales"] > 0)
-        ]
-        if valid.empty:
-            continue
-
-        road_km = valid["_road_km"].to_numpy(dtype=float)
-        air_km = valid["distance_km"].to_numpy(dtype=float)
-        annual_weight = valid["annual_sales"].to_numpy(dtype=float)
-        ebike_parts = compute_ebike_per_order_parts_g(
-            road_km, ebike_params, ebike_scenario
-        )
-        drone_parts = compute_drone_per_order_parts_g(
-            air_km, drone_params, drone_scenario
-        )
-        use_drone = drone_parts["total_g"] < ebike_parts["total_g"]
-        embodied_balance_g = (
-            ebike_parts["production_g"]
-            + ebike_parts["end_of_life_g"]
-            - drone_parts["production_g"]
-            - drone_parts["end_of_life_g"]
-        )
-        component_values = {
-            "embodied_balance": embodied_balance_g,
-            "avoided_ebike_road_use": ebike_parts["use_g"],
-            "drone_fixed_flight_penalty": -drone_parts["fixed_use_g"],
-            "drone_cruise_penalty": -drone_parts["cruise_use_g"],
-        }
-        net_saving_g = ebike_parts["total_g"] - drone_parts["total_g"]
-        sum_check_g = sum(component_values.values()) - net_saving_g
-
-        valid_rows += len(valid)
-        assigned_rows += int(use_drone.sum())
-        selected_weight = annual_weight[use_drone]
-        for key, values in component_values.items():
-            component_kg[key] += float(
-                np.sum(
-                    values[use_drone] * selected_weight,
-                    dtype=np.float64,
-                )
-                / 1000.0
-            )
-        if use_drone.any():
-            selected_error = sum_check_g[use_drone]
-            max_abs_error_g = max(
-                max_abs_error_g,
-                float(np.max(np.abs(selected_error))),
-            )
-            aggregate_error_kg += float(
-                np.sum(
-                    selected_error * selected_weight,
-                    dtype=np.float64,
-                )
-                / 1000.0
-            )
-
-    if valid_rows == 0:
-        return None, "no_valid_od_rows"
+    except ValueError as exc:
+        return None, str(exc)
     return {
-        "has_road_distance_m": has_road_distance,
+        "has_road_distance_m": True,
         "sample": {
-            "valid_rows": int(valid_rows),
-            "sampled_rows": int(valid_rows),
+            "valid_rows": int(aggregate["valid_od_rows"]),
+            "sampled_rows": int(aggregate["valid_od_rows"]),
             "distance_strata": [],
             "sample_seed": int(sample_seed),
             "sampling_mode": "full",
         },
-        "assigned_rows": assigned_rows,
-        "assigned_ratio_pct": assigned_rows / valid_rows * 100.0,
-        "component_kg": component_kg,
-        "max_abs_error_g_per_order": max_abs_error_g,
-        "aggregate_error_kg": aggregate_error_kg,
+        "assigned_rows": int(aggregate["drone_assigned_rows"]),
+        "assigned_ratio_pct": float(aggregate["drone_assigned_ratio_pct"]),
+        "component_kg": aggregate["component_kg"],
+        "max_abs_error_g_per_order": float(
+            aggregate["max_abs_identity_error_g_per_order"]
+        ),
+        "aggregate_error_kg": float(aggregate["aggregate_identity_error_kg"]),
     }, None
 
 

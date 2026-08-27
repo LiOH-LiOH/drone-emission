@@ -1,7 +1,7 @@
-"""Formal contribution renderers renderers used only by the manifest registry."""
+"""Formal contribution renderers used only by the manifest registry."""
 
 from contextlib import contextmanager
-import json
+import math
 import os
 import pickle
 import time
@@ -9,6 +9,7 @@ import time
 import pandas as pd
 
 from drone_emission.paper_cohort import load_cohort_contract
+from drone_emission.visualization.render_context import RenderContext
 
 _COHORT = load_cohort_contract()
 CONTRIBUTION_STUDY_CITY_COUNT = int(_COHORT["expected_city_count"])
@@ -22,7 +23,6 @@ BREAK_EVEN_MARCHING_CUBES_SUBFIGURE_GROUP = (
     "break_even_contribution_decomposition_marching_cubes_subfigures"
 )
 BREAK_EVEN_PHASE_CACHE_VERSION = 9
-CONTRIBUTION_DECOMPOSITION_FULL_CACHE_VERSION = 8
 
 
 def _get_ebike_kappa(exp_config):
@@ -49,67 +49,182 @@ def _optional_file_cache_signature(path):
     return _file_cache_signature(path)
 
 
-def _render_contribution_decomposition_city_b(
-    data_dir,
-    out,
-    for_latex,
-    plot_title,
-    city_df,
-    exp_config,
-):
-    """Render the full-data selected-city contribution-decomposition figure."""
+def _prepared_contribution_decomposition(summary: pd.DataFrame) -> dict:
+    """Validate the compact analysis table and adapt it for plotting."""
+    from drone_emission.analysis.contribution_decomposition import (
+        ANALYSIS_VERSION,
+        COMPONENT_KEYS,
+        CONSERVATION_RTOL,
+        SUMMARY_COLUMNS,
+    )
+    from drone_emission.paper_cohort import cohort_hash, locked_region_keys
+
+    missing = sorted(set(SUMMARY_COLUMNS) - set(summary.columns))
+    if missing:
+        raise ValueError(f"contribution analysis table missing columns: {missing}")
+    region_keys = summary["region_key"].astype(str)
+    duplicates = sorted(region_keys[region_keys.duplicated()].unique())
+    actual = set(region_keys)
+    expected = set(locked_region_keys())
+    if len(summary) != len(expected) or actual != expected or duplicates:
+        raise RuntimeError(
+            "contribution analysis table does not match the locked cohort: "
+            f"rows={len(summary)}, missing={sorted(expected - actual)}, "
+            f"extra={sorted(actual - expected)}, duplicates={duplicates}"
+        )
+    if set(summary["analysis_version"].astype(str)) != {ANALYSIS_VERSION}:
+        raise RuntimeError("contribution analysis version is stale; rerun analyze")
+    if set(summary["paper_cohort_sha256"].astype(str)) != {cohort_hash()}:
+        raise RuntimeError("contribution analysis belongs to a different cohort")
+
+    numeric_columns = [
+        "gef",
+        "baseline_ebike_lifecycle_kg",
+        "valid_od_rows",
+        "drone_assigned_rows",
+        "decomposition_net_kg",
+        "oracle_net_kg",
+        "max_abs_identity_error_g_per_order",
+        "aggregate_identity_error_kg",
+        *(f"{key}_kg" for key in COMPONENT_KEYS),
+    ]
+    values = summary.copy()
+    for column in numeric_columns:
+        values[column] = pd.to_numeric(values[column], errors="coerce")
+    if values[numeric_columns].isna().any().any():
+        raise ValueError("contribution analysis table contains non-numeric values")
+    component_net = values[[f"{key}_kg" for key in COMPONENT_KEYS]].sum(axis=1)
+    scale = values["oracle_net_kg"].abs().clip(lower=1.0)
+    if (
+        (component_net - values["oracle_net_kg"]).abs()
+        > CONSERVATION_RTOL * scale
+    ).any():
+        raise RuntimeError("contribution analysis table fails the ledger identity")
+
+    cities = []
+    for row in values.sort_values("region_key").itertuples(index=False):
+        component_kg = {
+            key: float(getattr(row, f"{key}_kg")) for key in COMPONENT_KEYS
+        }
+        baseline = float(row.baseline_ebike_lifecycle_kg)
+        cities.append(
+            {
+                "region_key": str(row.region_key),
+                "region_name_en": str(row.region_name_en),
+                "province": str(row.province),
+                "gef": float(row.gef),
+                "baseline_ebike_lifecycle_kg": baseline,
+                "drone_assigned_sampled_rows": int(row.drone_assigned_rows),
+                "sampled_drone_ratio_pct": float(row.drone_assigned_ratio_pct),
+                "component_kg": component_kg,
+                "component_pct_points": {
+                    key: component_kg[key] / baseline * 100.0 for key in COMPONENT_KEYS
+                },
+                "net_saving_kg": float(row.oracle_net_kg),
+                "net_saving_pct_points": float(row.oracle_net_kg) / baseline * 100.0,
+                "sample": {
+                    "valid_rows": int(row.valid_od_rows),
+                    "sampled_rows": int(row.valid_od_rows),
+                    "sampling_mode": "full",
+                },
+                "sum_check": {
+                    "max_abs_error_g_per_order": float(
+                        row.max_abs_identity_error_g_per_order
+                    ),
+                    "aggregate_error_kg": float(row.aggregate_identity_error_kg),
+                },
+            }
+        )
+
+    baseline_kg = float(
+        math.fsum(city["baseline_ebike_lifecycle_kg"] for city in cities)
+    )
+    national = {
+        f"{key}_kg": float(math.fsum(city["component_kg"][key] for city in cities))
+        for key in COMPONENT_KEYS
+    }
+    for key in COMPONENT_KEYS:
+        national[f"{key}_pp"] = national[f"{key}_kg"] / baseline_kg * 100.0
+    national.update(
+        {
+            "baseline_ebike_lifecycle_kg": baseline_kg,
+            "total_net_kg": float(math.fsum(city["net_saving_kg"] for city in cities)),
+            "drone_assigned_sampled_rows": sum(
+                city["drone_assigned_sampled_rows"] for city in cities
+            ),
+            "sum_check": {
+                "max_abs_error_g_per_order": max(
+                    city["sum_check"]["max_abs_error_g_per_order"] for city in cities
+                ),
+                "aggregate_error_kg": float(
+                    math.fsum(city["sum_check"]["aggregate_error_kg"] for city in cities)
+                ),
+            },
+        }
+    )
+    national["total_net_pp"] = national["total_net_kg"] / baseline_kg * 100.0
+    national_component_net = math.fsum(
+        national[f"{key}_kg"] for key in COMPONENT_KEYS
+    )
+    if abs(national_component_net - national["total_net_kg"]) > (
+        CONSERVATION_RTOL * max(1.0, abs(national["total_net_kg"]))
+    ):
+        raise RuntimeError("national contribution table fails the ledger identity")
+    fallback_keys = sorted(
+        values.loc[values["gef_source"].eq("fallback_0.5366"), "region_key"].astype(str)
+    )
+    if set(fallback_keys) != CONTRIBUTION_EXPECTED_FALLBACK_GEF_REGION_KEYS:
+        raise RuntimeError(
+            "contribution fallback-GEF coverage changed: "
+            f"expected={sorted(CONTRIBUTION_EXPECTED_FALLBACK_GEF_REGION_KEYS)}, "
+            f"actual={fallback_keys}"
+        )
+    table_keys = sorted(
+        values.loc[values["gef_source"].eq("province_table"), "region_key"].astype(str)
+    )
+    return {
+        "cities": cities,
+        "national": national,
+        "sampling": {
+            "max_sample_rows_per_city": None,
+            "mode": "full_real_data",
+            "distance_stratification": None,
+        },
+        "runtime": {
+            "city_count_input": len(values),
+            "city_count_processed": len(cities),
+            "city_count_skipped": 0,
+        },
+        "skipped_cities": [],
+        "study_scope": {
+            "label": f"All {CONTRIBUTION_STUDY_CITY_COUNT} study cities",
+            "expected_city_count": CONTRIBUTION_STUDY_CITY_COUNT,
+            "region_keys": sorted(expected),
+        },
+        "gef_coverage": {
+            "province_table_city_count": len(table_keys),
+            "province_table_region_keys": table_keys,
+            "fallback_city_count": len(fallback_keys),
+            "fallback_region_keys": fallback_keys,
+            "fallback_gef_kg_co2e_per_kwh": CONTRIBUTION_GEF_FALLBACK,
+        },
+    }
+
+
+def render_contribution_decomposition_city_b(context: RenderContext) -> None:
+    """Render Fig. 5 from the compact cohort contribution analysis."""
     from drone_emission.visualization.contribution_break_even import (
         CONTRIBUTION_CITY_B_REGION_KEYS,
         plot_contribution_decomposition_city_b,
     )
-
-    input_region_keys = city_df["region_key"].astype(str)
-    duplicate_input_keys = sorted(
-        input_region_keys[input_region_keys.duplicated()].unique()
+    path = context.require_file(
+        "all_city_contribution_decomposition.csv",
+        stage="analyze --only contribution-decomposition",
     )
-    study_region_keys = set(input_region_keys)
-    if (
-        len(city_df) != CONTRIBUTION_STUDY_CITY_COUNT
-        or len(study_region_keys) != CONTRIBUTION_STUDY_CITY_COUNT
-        or duplicate_input_keys
-    ):
-        raise RuntimeError(
-            "contribution_decomposition_city_b requires exactly "
-            f"{CONTRIBUTION_STUDY_CITY_COUNT} unique study cities; "
-            f"received rows={len(city_df)}, unique={len(study_region_keys)}, "
-            f"duplicate_keys={duplicate_input_keys}"
-        )
-
-    prepared = _prepare_contribution_decomposition_full(
-        city_df=city_df,
-        data_dir=data_dir,
-        exp_config=exp_config,
-    )
-    if prepared is None:
-        raise RuntimeError(
-            "contribution_decomposition_city_b preparation returned no data"
-        )
-    sampling = prepared.get("sampling", {})
-    if (
-        sampling.get("max_sample_rows_per_city") is not None
-        or sampling.get("mode") != "full_real_data"
-    ):
-        raise RuntimeError(
-            "contribution_decomposition_city_b requires full OD data; "
-            f"sampling={sampling}"
-        )
-
+    prepared = _prepared_contribution_decomposition(pd.read_csv(path))
     processed_region_keys = {
         str(city["region_key"]) for city in prepared.get("cities", [])
     }
-    if processed_region_keys != study_region_keys:
-        raise RuntimeError(
-            "contribution_decomposition_city_b processed-city coverage does "
-            f"not match the {CONTRIBUTION_STUDY_CITY_COUNT}-city study scope; "
-            f"missing={sorted(study_region_keys - processed_region_keys)}, "
-            f"extra={sorted(processed_region_keys - study_region_keys)}, "
-            f"skipped={prepared.get('skipped_cities', [])}"
-        )
     missing_selected_region_keys = sorted(
         set(CONTRIBUTION_CITY_B_REGION_KEYS) - processed_region_keys
     )
@@ -119,41 +234,11 @@ def _render_contribution_decomposition_city_b(
             f"is incomplete; missing={missing_selected_region_keys}"
         )
 
-    fallback_region_keys = sorted(
-        city_df.loc[
-            city_df["gef_source"].eq("fallback_0.5366"),
-            "region_key",
-        ].astype(str)
-    )
-    if set(fallback_region_keys) != CONTRIBUTION_EXPECTED_FALLBACK_GEF_REGION_KEYS:
-        raise RuntimeError(
-            "contribution_decomposition_city_b fallback-GEF coverage changed; "
-            f"expected={sorted(CONTRIBUTION_EXPECTED_FALLBACK_GEF_REGION_KEYS)}, "
-            f"actual={fallback_region_keys}"
-        )
-    table_region_keys = sorted(
-        city_df.loc[
-            city_df["gef_source"].eq("province_table"),
-            "region_key",
-        ].astype(str)
-    )
-    prepared["study_scope"] = {
-        "label": f"All {CONTRIBUTION_STUDY_CITY_COUNT} study cities",
-        "expected_city_count": CONTRIBUTION_STUDY_CITY_COUNT,
-        "region_keys": sorted(study_region_keys),
-    }
-    prepared["gef_coverage"] = {
-        "province_table_city_count": len(table_region_keys),
-        "province_table_region_keys": table_region_keys,
-        "fallback_city_count": len(fallback_region_keys),
-        "fallback_region_keys": fallback_region_keys,
-        "fallback_gef_kg_co2e_per_kwh": CONTRIBUTION_GEF_FALLBACK,
-    }
     plot_contribution_decomposition_city_b(
         prepared,
-        save_path=os.path.join(out, "contribution_decomposition_city_b.png"),
-        for_latex=for_latex,
-        plot_title=plot_title,
+        save_path=str(context.output("contribution_decomposition_city_b.pdf")),
+        for_latex=True,
+        plot_title=False,
     )
 
 
@@ -236,101 +321,6 @@ def _prepare_break_even_phase_diagram(
                 protocol=pickle.HIGHEST_PROTOCOL,
             )
         print(f"{figure_name}: wrote prepared data cache {cache_path}")
-
-    return prepared
-
-
-def _prepare_contribution_decomposition_full(
-    data_dir,
-    city_df,
-    exp_config,
-):
-    """Prepare full-data contribution decomposition with cache."""
-    from drone_emission.visualization.contribution_break_even import (
-        CONTRIBUTION_SAMPLE_SEED,
-        _resolve_contribution_od_path,
-        prepare_contribution_decomposition_data,
-    )
-    from drone_emission.utils.config import get_cache_dir
-
-    stats_path = os.path.join(data_dir, "all_region_stats.csv")
-    gef_path = os.path.join(data_dir, "gef_china.csv")
-    city_rows = city_df.copy()
-    required_cols = {"region_key", "total_ebike_lifecycle", "gef"}
-    od_files = {}
-    city_gef_values = []
-    if required_cols.issubset(city_rows.columns):
-        for col in ("total_ebike_lifecycle", "gef"):
-            city_rows[col] = pd.to_numeric(city_rows[col], errors="coerce")
-        city_rows = city_rows[
-            city_rows["total_ebike_lifecycle"].notna()
-            & (city_rows["total_ebike_lifecycle"] > 0)
-            & city_rows["gef"].notna()
-        ].copy()
-        city_gef_values = [
-            (str(row.region_key), float(row.gef))
-            for row in city_rows.sort_values("region_key")[
-                ["region_key", "gef"]
-            ].itertuples(index=False)
-        ]
-        for region_key in sorted(city_rows["region_key"].dropna().astype(str).unique()):
-            od_path = _resolve_contribution_od_path(data_dir, region_key)
-            if od_path:
-                od_files[region_key] = _file_cache_signature(od_path)
-
-    figure_name = "break_even_contribution_decomposition"
-    cache_path = os.path.join(
-        get_cache_dir("visualization", "paper"),
-        f"{figure_name}_contribution_full_prepared.pkl",
-    )
-    cache_meta = {
-        "version": CONTRIBUTION_DECOMPOSITION_FULL_CACHE_VERSION,
-        "figure_name": figure_name,
-        "stats_file": _optional_file_cache_signature(stats_path),
-        "gef_file": _optional_file_cache_signature(gef_path),
-        "od_files": od_files,
-        "city_gef_values": city_gef_values,
-        "emission_params": json.dumps(
-            (exp_config or {}).get("emission_params", {}),
-            sort_keys=True,
-            separators=(",", ":"),
-        ),
-        "gef_fallback": CONTRIBUTION_GEF_FALLBACK,
-        "max_sample_rows": None,
-        "sample_seed": CONTRIBUTION_SAMPLE_SEED,
-    }
-    prepared = None
-    if os.path.exists(cache_path):
-        try:
-            with open(cache_path, "rb") as f:
-                cache = pickle.load(f)
-            if cache.get("meta") == cache_meta:
-                print(f"{figure_name}: loading full contribution cache {cache_path}")
-                prepared = cache["prepared"]
-            else:
-                print(f"{figure_name}: full contribution cache is stale; rebuilding")
-        except Exception as exc:
-            print(
-                f"{figure_name}: failed to load full contribution cache "
-                f"({exc}); rebuilding"
-            )
-
-    if prepared is None:
-        prepared = prepare_contribution_decomposition_data(
-            city_df=city_df,
-            data_dir=data_dir,
-            exp_config=exp_config,
-            max_sample_rows=None,
-        )
-        if prepared is None:
-            return None
-        with open(cache_path, "wb") as f:
-            pickle.dump(
-                {"meta": cache_meta, "prepared": prepared},
-                f,
-                protocol=pickle.HIGHEST_PROTOCOL,
-            )
-        print(f"{figure_name}: wrote full contribution cache {cache_path}")
 
     return prepared
 

@@ -166,13 +166,9 @@ def _render_gef_detour(context: RenderContext) -> None:
 
 
 def _render_contribution(context: RenderContext) -> None:
-    from .contribution_renderers import _render_contribution_decomposition_city_b
+    from .contribution_renderers import render_contribution_decomposition_city_b
 
-    _render_contribution_decomposition_city_b(
-        data_dir=str(context.data_root), out=str(context.subfigure_dir),
-        for_latex=True, plot_title=False, city_df=_city_stats(context),
-        exp_config=context.experiment,
-    )
+    render_contribution_decomposition_city_b(context)
 
 
 def _render_scenario(context: RenderContext, request: str) -> None:

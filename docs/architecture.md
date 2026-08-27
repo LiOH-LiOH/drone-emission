@@ -9,26 +9,26 @@ The active workflow has four layers:
 3. **Nationwide aggregation, cohort lock, and paper analysis** — `aggregate`
    writes compatible `all_region_stats.{json,csv}` and enriched statistics.
    `cohort` audits the configured cities against the tracked 313-city contract;
-   `analyze` builds named
-   scenarios, city attribution, spatial concentration, distance thresholds, and
-   threshold resilience in cache/work. A work-root data view symlinks immutable
+   `analyze` builds named scenarios, city attribution, distance thresholds,
+   threshold resilience, and the full-OD contribution decomposition in
+   cache/work. A work-root data view symlinks immutable
    inputs but copies every replaceable derived file, so legacy-compatible
    analysis functions cannot write through to city data. The view is versioned
    by the cohort SHA-256 and contains only the locked cities.
 4. **Final figures** — the machine-readable
-   `src/drone_emission/paper_figures.json` declares exactly 12 assets. Rendering
+   `src/drone_emission/paper_figures.json` declares exactly 11 assets. Rendering
    creates only declared sources/staging files. Publication is a separate,
    explicitly confirmed operation.
 
 `paper_workflow.py` is the only formal scheduler. Before rendering it verifies
-that the 25 unique manifest requests exactly equal the explicit
+that the 24 unique manifest requests exactly equal the explicit
 `formal_registry.REQUEST_RENDERERS` keys. Every renderer receives one immutable
 context containing the configured data, figures, cache, and work roots.
 The context also requires a matching cohort-view record. Renderers therefore
 cannot silently reintroduce excluded or newly configured cities.
 
 `render` accepts formal manifest IDs, not internal plot-function names. The
-nine `inkscape` entries generate required panels and reports only. The three
+eight `inkscape` entries generate required panels and reports only. The three
 `direct` entries additionally copy their renderer output to the formal staging
 filename. Missing inputs fail with a prerequisite-stage hint; render never
 invokes `analyze`, creates placeholders, or silently skips them. Derived inputs
@@ -36,6 +36,13 @@ are produced only by an explicit prior `analyze` command. Formal rendering
 never rewrites city OD files or per-region statistics. The manifest
 records input contracts, render requests, required outputs, source reports,
 Inkscape sources, staging paths, and publication paths.
+
+Contribution decomposition is a paper-analysis stage rather than a renderer
+side effect. It hashes and streams the three required OD columns, persists one
+atomic summary per city, and writes a nationwide final table only when all 313
+locked cities pass schema, fingerprint, and ledger-identity checks. Interrupted
+or partial runs retain successful city summaries but cannot satisfy the Figure
+5 manifest input.
 
 The observed Beijing delivery-distance panel renders from the tracked audited
 histogram by default. Raw Beijing OD is required only to rebuild and relock that
@@ -55,7 +62,7 @@ are not declared in `paper_figures.json` or the renderer registry. Acceptance is
 a separate explicit operation that validates convergence and all live input
 fingerprints before changing the three `od_params` values.
 
-`promote` validates all 12 staging filenames, manifest mappings, and PDF magic
+`promote` validates all 11 staging filenames, manifest mappings, and PDF magic
 headers before copying. Neither `render` nor `reproduce` writes to the ignored
 Overleaf working tree under `docs/paper/`. `supplementary.tex` remains outside
 the active reproduction, validation, and publication scope.

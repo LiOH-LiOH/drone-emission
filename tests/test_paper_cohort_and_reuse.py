@@ -14,7 +14,11 @@ from drone_emission.paper_cohort import (
     locked_region_keys,
     region_keys_sha256,
 )
-from drone_emission.paper_reuse import _replace_region_rows, restore_reuse_directory
+from drone_emission.paper_reuse import (
+    REUSE_SCHEMA_VERSION,
+    _replace_region_rows,
+    restore_reuse_directory,
+)
 from drone_emission.analysis.city_attribution import write_r2_city_attribution_report
 from drone_emission.utils.grid_emission_factor import fallback_factor
 from drone_emission.visualization.distance_threshold_inputs import (
@@ -57,7 +61,7 @@ def test_explicit_reuse_directory_verifies_and_restores_hash(tmp_path):
     digest = hashlib.sha256(source.read_bytes()).hexdigest()
     contract = load_cohort_contract()
     manifest = {
-        "schema_version": 1,
+        "schema_version": REUSE_SCHEMA_VERSION,
         "cohort_sha256": cohort_hash(),
         "city_count": 313,
         "grid_emission_factor_fallback": contract[

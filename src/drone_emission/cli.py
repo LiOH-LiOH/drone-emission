@@ -304,7 +304,16 @@ def command_analyze(args: argparse.Namespace) -> None:
 
     print(
         json.dumps(
-            analyze(config, force=args.force, reuse_from=args.reuse_from), indent=2
+            analyze(
+                config,
+                force=args.force,
+                reuse_from=args.reuse_from,
+                only=_split_ids(getattr(args, "analysis_only", None)),
+                contribution_chunk_rows=getattr(
+                    args, "contribution_chunk_rows", 250_000
+                ),
+            ),
+            indent=2,
         )
     )
 
@@ -477,6 +486,18 @@ def build_parser() -> argparse.ArgumentParser:
     analyze = subparsers.add_parser("analyze", help="build retained paper analyses")
     analyze.add_argument("--force", action="store_true")
     analyze.add_argument("--reuse-from", type=Path)
+    analyze.add_argument(
+        "--only",
+        action="append",
+        dest="analysis_only",
+        help="analysis ID; comma-separated accepted",
+    )
+    analyze.add_argument(
+        "--contribution-chunk-rows",
+        type=int,
+        default=250_000,
+        help="OD rows per contribution-decomposition chunk",
+    )
     analyze.set_defaults(func=command_analyze)
 
     prepare_reuse = subparsers.add_parser(

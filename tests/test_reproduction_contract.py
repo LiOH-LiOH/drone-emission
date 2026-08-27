@@ -65,6 +65,17 @@ def test_manifest_paths_are_one_to_one():
     assert staging == [f"{figure['id']}.pdf" for figure in figures]
 
 
+def test_contribution_figure_consumes_only_prepared_analysis():
+    figure = next(
+        item
+        for item in load_manifest()["figures"]
+        if item["id"] == "fig5_contribution_decomposition"
+    )
+    assert figure["required_inputs"] == [
+        "all_city_contribution_decomposition.csv"
+    ]
+
+
 def test_render_selection_rejects_internal_plot_names():
     try:
         select_figures(["city_gef_context_detour_summary"])

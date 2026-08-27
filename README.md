@@ -1,7 +1,7 @@
 # Drone-delivery emission paper reproduction
 
 This repository reproduces the city experiments, nationwide analysis, and the
-12 locked figures used by the active manuscript. Commands are run from the
+11 locked figures used by the active manuscript. Commands are run from the
 repository root through the installed `drone_emission` package.
 
 ## Setup and mutable roots
@@ -34,13 +34,13 @@ no username is embedded in source code.
 | `python -m drone_emission cities` | Runs merchant filtering, building preparation, OD construction, road routing, lifecycle emissions, and per-city stats. It never imports plotting code. Completed cities are restored unless `--force` is supplied. |
 | `python -m drone_emission aggregate` | Consolidates compatible `all_region_stats.{json,csv}` and `all_region_stats_enriched.csv`. |
 | `python -m drone_emission cohort` | Audits post-aggregate city results against the tracked 313-city paper cohort. The minimum is 30 valid weighted OD pairs; the candidate audit is written below work and a changed set fails until explicitly reviewed and accepted. |
-| `python -m drone_emission analyze` | Restores or computes named scenarios, distance thresholds, threshold resilience, spatial concentration, and city attribution for the locked cohort. `--reuse-from DIR` restores one explicit SHA-256-audited directory without automatically discovering legacy files. |
-| `python -m drone_emission render` | Accepts only the 12 manifest IDs through `--only`. Its exact 25-request registry writes panels to `paper/subfigure/`, reports to `paper/report/`, and three direct figures to `paper/`. Missing inputs fail with a prerequisite-stage hint. |
-| `python -m drone_emission promote` | Validates all 12 staging PDFs and is the only command allowed to write `docs/paper/figures/`. Use `--dry-run` or explicitly confirm with `--yes`. |
+| `python -m drone_emission analyze` | Restores or computes named scenarios, distance thresholds, threshold resilience, city attribution, and the full-OD contribution decomposition for the locked cohort. Use `--only contribution-decomposition` for that analysis alone and `--contribution-chunk-rows` to tune its bounded-memory reader. `--reuse-from DIR` restores one explicit SHA-256-audited directory without automatically discovering legacy files. |
+| `python -m drone_emission render` | Accepts only the 11 manifest IDs through `--only`. Its exact 24-request registry writes panels to `paper/subfigure/`, reports to `paper/report/`, and three direct figures to `paper/`. Missing inputs fail with a prerequisite-stage hint. |
+| `python -m drone_emission promote` | Validates all 11 staging PDFs and is the only command allowed to write `docs/paper/figures/`. Use `--dry-run` or explicitly confirm with `--yes`. |
 | `python -m drone_emission status` | Reports staging and required-subfigure completeness without writing. |
 | `python -m drone_emission reproduce` | Runs inputs → cities → aggregate → cohort → analyze → render. Existing compatible results are reused; `--force` deliberately recomputes them. It never promotes. |
 
-Nine manifest entries declare Inkscape sources and generate only the panels
+Eight manifest entries declare Inkscape sources and generate only the panels
 needed for manual composition. Figure 4, Figure 5, and Extended Data Figure 6
 are staged directly. `supplementary.tex` is retained but is outside this
 workflow and its publication contract.
@@ -49,6 +49,12 @@ Rendering is read-only with respect to configured data and city results. It
 does not run `analyze`, generate placeholders, or silently omit panels. Outputs
 are bounded to the configured figures/cache/work roots; only `promote` may
 write the manuscript figure directory.
+
+The contribution decomposition is reduced serially, one city and one CSV
+chunk at a time, into a cohort-complete 313-row analysis table. Per-city
+results are content-fingerprinted and resumable. Figure 5 reads only that
+compact table; it never scans OD files or performs lifecycle analysis while
+rendering.
 
 The paper cohort is declared in `src/drone_emission/paper_cohort.json`. It
 contains 313 cities: the previously retained 314-city set with Linzhi excluded
