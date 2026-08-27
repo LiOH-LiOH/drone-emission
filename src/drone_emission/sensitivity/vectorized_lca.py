@@ -220,7 +220,7 @@ def compute_drone_per_order_parts_g(
     drone_params: DroneParams,
     scenario: DroneScenario,
 ) -> dict[str, np.ndarray]:
-    """Vectorized drone lifecycle components per order (g CO2e)."""
+    """Return embodied, fixed-flight, cruise and total emissions per order."""
     p = drone_params
     s = scenario
     lifespan = s.lifespan_yr if s.lifespan_yr is not None else p.lifespan
@@ -254,10 +254,18 @@ def compute_drone_per_order_parts_g(
         + P_takeoff_empty * t_takeoff_h
         + P_landing_empty * t_landing_h
     )
-    energy_kwh = (E_const + (P_level_loaded + P_level_empty) * d / p.v_level) * s.energy_mult
-    use_g = energy_kwh * p.e_use * s.gef_mult * 1000.0
+    fixed_energy_kwh = E_const * s.energy_mult
+    cruise_energy_kwh = (
+        (P_level_loaded + P_level_empty) * d / p.v_level * s.energy_mult
+    )
+    fixed_use_g = np.full_like(
+        d,
+        fixed_energy_kwh * p.e_use * s.gef_mult * 1000.0,
+    )
+    cruise_use_g = cruise_energy_kwh * p.e_use * s.gef_mult * 1000.0
     if not s.include_use:
-        use_g = np.zeros_like(d)
+        fixed_use_g = np.zeros_like(d)
+        cruise_use_g = np.zeros_like(d)
 
     delivery_time_min = 2.0 * d / p.v_level * 60.0 + p.loading_time_min
     deliveries_per_day = p.working_hours_per_day * 60.0 / delivery_time_min
@@ -275,10 +283,14 @@ def compute_drone_per_order_parts_g(
 
     divisor = s.n_orders_per_delivery
     prod_g = prod_g / divisor
-    use_g = use_g / divisor
+    fixed_use_g = fixed_use_g / divisor
+    cruise_use_g = cruise_use_g / divisor
+    use_g = fixed_use_g + cruise_use_g
     eol_g = eol_g / divisor
     return {
         "production_g": prod_g,
+        "fixed_use_g": fixed_use_g,
+        "cruise_use_g": cruise_use_g,
         "use_g": use_g,
         "end_of_life_g": eol_g,
         "total_g": prod_g + use_g + eol_g,

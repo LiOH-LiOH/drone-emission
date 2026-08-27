@@ -26,28 +26,28 @@ CONTRIBUTION_SAMPLE_LIMIT = 2000
 CONTRIBUTION_SAMPLE_SEED = 42
 CONTRIBUTION_COMPONENT_SPECS = (
     {
-        "key": "production_eol_advantage",
-        "label": "Production / EOL advantage",
-        "short_label": "Production / EOL",
+        "key": "embodied_balance",
+        "label": "Embodied lifecycle balance",
+        "short_label": "Embodied balance",
         "color": "#4C78A8",
     },
     {
-        "key": "road_detour_benefit",
-        "label": "Road-detour benefit",
-        "short_label": "Road detour",
+        "key": "avoided_ebike_road_use",
+        "label": "Avoided e-bike road operation",
+        "short_label": "Avoided road operation",
         "color": "#72B7B2",
     },
     {
-        "key": "drone_energy_penalty",
-        "label": "Drone energy penalty",
-        "short_label": "Drone energy",
-        "color": "#E45756",
+        "key": "drone_fixed_flight_penalty",
+        "label": "Drone take-off / landing / hover",
+        "short_label": "Fixed flight",
+        "color": "#F2A65A",
     },
     {
-        "key": "bundling_penalty",
-        "label": "Bundling penalty",
-        "short_label": "Bundling",
-        "color": "#B279A2",
+        "key": "drone_cruise_penalty",
+        "label": "Drone cruise",
+        "short_label": "Cruise",
+        "color": "#E45756",
     },
 )
 CONTRIBUTION_COMPONENT_KEYS = tuple(
@@ -482,9 +482,6 @@ def _selected_city_component_rows(
                     "sampled_drone_rows": int(
                         city.get("drone_assigned_sampled_rows", 0)
                     ),
-                    "gdp_100m": city.get("gdp_100m"),
-                    "gdp_source_year": city.get("gdp_source_year"),
-                    "source_url_gdp": city.get("source_url_gdp", ""),
                 }
             )
             component_kg = city.get("component_kg", {}) or {}
@@ -532,12 +529,11 @@ def _national_contribution_row(national: dict) -> dict:
 def prepare_contribution_decomposition_data(
     city_df: pd.DataFrame,
     data_dir: str,
-    named_df: pd.DataFrame = None,
     exp_config: dict = None,
     max_sample_rows: int | None = CONTRIBUTION_SAMPLE_LIMIT,
     sample_seed: int = CONTRIBUTION_SAMPLE_SEED,
 ) -> Dict:
-    """Prepare current-mechanism contribution data for the paper figure."""
+    """Prepare the four-part lifecycle-emissions ledger for the paper figure."""
     from dataclasses import replace
 
     from drone_emission.emission.cal_single_delivery import (
@@ -594,11 +590,6 @@ def prepare_contribution_decomposition_data(
     drone_params = create_drone_params(exp_config)
     ebike_actual_scenario = EbikeScenario(
         kappa=baseline_kappa,
-        rider_weight=emission_cfg["rider_weight"],
-        payload_kg=emission_cfg["payload_kg"],
-    )
-    ebike_no_bundle_scenario = EbikeScenario(
-        kappa=1.0,
         rider_weight=emission_cfg["rider_weight"],
         payload_kg=emission_cfg["payload_kg"],
     )
@@ -693,16 +684,6 @@ def prepare_contribution_decomposition_data(
             ebike_pp,
             ebike_actual_scenario,
         )
-        ebike_no_bundle_road_parts = compute_ebike_per_order_parts_g(
-            road_km,
-            ebike_pp,
-            ebike_no_bundle_scenario,
-        )
-        ebike_no_bundle_air_parts = compute_ebike_per_order_parts_g(
-            air_km,
-            ebike_pp,
-            ebike_no_bundle_scenario,
-        )
         drone_actual_parts = compute_drone_per_order_parts_g(
             air_km,
             drone_pp,
@@ -718,38 +699,31 @@ def prepare_contribution_decomposition_data(
             ),
         }
 
-        production_eol_advantage_g = (
-            ebike_no_bundle_air_parts["production_g"]
-            + ebike_no_bundle_air_parts["end_of_life_g"]
+        embodied_balance_g = (
+            ebike_actual_parts["production_g"]
+            + ebike_actual_parts["end_of_life_g"]
             - drone_actual_parts["production_g"]
             - drone_actual_parts["end_of_life_g"]
         )
-        road_detour_benefit_g = (
-            ebike_no_bundle_road_parts["total_g"]
-            - ebike_no_bundle_air_parts["total_g"]
-        )
-        drone_energy_penalty_g = (
-            ebike_no_bundle_air_parts["use_g"] - drone_actual_parts["use_g"]
-        )
-        bundling_penalty_g = (
-            ebike_actual_parts["total_g"] - ebike_no_bundle_road_parts["total_g"]
-        )
+        avoided_ebike_road_use_g = ebike_actual_parts["use_g"]
+        drone_fixed_flight_penalty_g = -drone_actual_parts["fixed_use_g"]
+        drone_cruise_penalty_g = -drone_actual_parts["cruise_use_g"]
         net_saving_g = ebike_actual_parts["total_g"] - drone_actual_parts["total_g"]
         sum_check_g = (
-            production_eol_advantage_g
-            + road_detour_benefit_g
-            + drone_energy_penalty_g
-            + bundling_penalty_g
+            embodied_balance_g
+            + avoided_ebike_road_use_g
+            + drone_fixed_flight_penalty_g
+            + drone_cruise_penalty_g
             - net_saving_g
         )
 
         assigned = sampled.loc[use_drone].copy()
         assigned["_annual_weight"] = annual_weight[use_drone]
         for key, values in (
-            ("production_eol_advantage", production_eol_advantage_g),
-            ("road_detour_benefit", road_detour_benefit_g),
-            ("drone_energy_penalty", drone_energy_penalty_g),
-            ("bundling_penalty", bundling_penalty_g),
+            ("embodied_balance", embodied_balance_g),
+            ("avoided_ebike_road_use", avoided_ebike_road_use_g),
+            ("drone_fixed_flight_penalty", drone_fixed_flight_penalty_g),
+            ("drone_cruise_penalty", drone_cruise_penalty_g),
         ):
             assigned[f"{key}_kg"] = values[use_drone] * annual_weight[use_drone] / 1000.0
         assigned["net_saving_kg"] = net_saving_g[use_drone] * annual_weight[use_drone] / 1000.0
@@ -771,23 +745,6 @@ def prepare_contribution_decomposition_data(
                 "region_name_en": str(city_row.region_name_en),
                 "province": str(city_row.province),
                 "gef": gef,
-                "gdp_100m": (
-                    float(city_row.gdp_100m)
-                    if hasattr(city_row, "gdp_100m")
-                    and pd.notna(city_row.gdp_100m)
-                    else None
-                ),
-                "gdp_source_year": (
-                    int(city_row.gdp_source_year)
-                    if hasattr(city_row, "gdp_source_year")
-                    and pd.notna(city_row.gdp_source_year)
-                    else None
-                ),
-                "source_url_gdp": str(
-                    getattr(city_row, "source_url_gdp", "")
-                    if pd.notna(getattr(city_row, "source_url_gdp", ""))
-                    else ""
-                ),
                 "baseline_ebike_lifecycle_kg": city_baseline_kg,
                 "assignment_rule": assignment_meta["rule"],
                 "assignment_meta": assignment_meta,
@@ -1001,7 +958,10 @@ def _plot_selected_city_contribution_bars(ax, rows: list[dict]):
     if tick_labels and rows[0].get("row_type") == "overall":
         tick_labels[0].set_fontweight("bold")
         tick_labels[0].set_color("#222222")
-    ax.set_xlabel("Contribution to all-e-bike baseline (pp)", fontsize=9.5)
+    ax.set_xlabel(
+        "Contribution to all-e-bike baseline (percentage points)",
+        fontsize=9.5,
+    )
     ax.grid(axis="x", alpha=0.25)
     ax.tick_params(axis="both", labelsize=8.2)
 
@@ -1148,121 +1108,6 @@ def _plot_selected_city_absolute_reduction_points(
     ax.set_xlim(-negative_limit, positive_limit)
 
 
-def _plot_selected_city_gdp_profile(
-    ax,
-    rows: list[dict],
-    y: np.ndarray,
-    all_study_gdp_range: dict | None = None,
-):
-    """Draw city GDP as a horizontal profile aligned with contribution rows."""
-    city_indices = [
-        idx
-        for idx, row in enumerate(rows)
-        if row.get("row_type") == "city"
-        and row.get("gdp_100m") is not None
-        and np.isfinite(float(row["gdp_100m"]))
-        and float(row["gdp_100m"]) > 0
-    ]
-    if not city_indices:
-        ax.text(
-            0.5,
-            0.5,
-            "GDP unavailable",
-            transform=ax.transAxes,
-            ha="center",
-            va="center",
-            fontsize=8.2,
-            color="#777777",
-        )
-        ax.tick_params(left=False, labelleft=False, bottom=False, labelbottom=False)
-        return
-
-    gdp_trillion_cny = np.array(
-        [float(rows[idx]["gdp_100m"]) / 10_000.0 for idx in city_indices],
-        dtype=float,
-    )
-    ax.plot(
-        gdp_trillion_cny,
-        y[city_indices],
-        color="#B07A1C",
-        linewidth=1.2,
-        marker="o",
-        markersize=3.8,
-        markerfacecolor="white",
-        markeredgecolor="#B07A1C",
-        markeredgewidth=1.0,
-        zorder=4,
-    )
-    all_study_max_trillion = (
-        float(all_study_gdp_range.get("gdp_max_100m", 0.0)) / 10_000.0
-        if all_study_gdp_range
-        else 0.0
-    )
-    gdp_max_trillion = max(
-        float(np.max(gdp_trillion_cny)),
-        all_study_max_trillion,
-    )
-    ax.set_xlim(0.0, gdp_max_trillion * 1.08)
-    ax.set_xlabel("GDP (¥ trillion)", fontsize=8.2)
-    ax.grid(axis="x", color="#DDDDDD", linewidth=0.6, alpha=0.8)
-    ax.tick_params(axis="x", labelsize=8.2)
-    ax.tick_params(axis="y", left=False, labelleft=False)
-    ax.spines["left"].set_color("#B8B8B8")
-    ax.spines["left"].set_linewidth(0.8)
-    ax.spines["right"].set_visible(False)
-    ax.spines["top"].set_visible(False)
-
-
-def _plot_all_study_city_gdp_range(
-    ax,
-    all_study_gdp_range: dict,
-    overall_y: float,
-):
-    """Draw the all-study-city GDP min-max range on the overall row."""
-    if not all_study_gdp_range:
-        ax.tick_params(top=False, labeltop=False, bottom=False, labelbottom=False)
-        return
-
-    gdp_min = float(all_study_gdp_range["gdp_min_100m"]) / 10_000.0
-    gdp_max = float(all_study_gdp_range["gdp_max_100m"]) / 10_000.0
-    cap_half_height = 0.20
-    ax.hlines(
-        overall_y,
-        gdp_min,
-        gdp_max,
-        color="#B07A1C",
-        linewidth=2.0,
-        zorder=5,
-    )
-    ax.vlines(
-        [gdp_min, gdp_max],
-        overall_y - cap_half_height,
-        overall_y + cap_half_height,
-        color="#B07A1C",
-        linewidth=1.4,
-        zorder=5,
-    )
-    ax.set_xlabel(
-        "All study cities\nGDP range (¥ trillion)",
-        fontsize=8.2,
-        color="#8A5E12",
-    )
-    ax.tick_params(
-        axis="x",
-        top=True,
-        labeltop=True,
-        bottom=False,
-        labelbottom=False,
-        labelsize=8.2,
-        colors="#8A5E12",
-    )
-    ax.tick_params(axis="y", left=False, labelleft=False)
-    ax.spines["top"].set_color("#B07A1C")
-    ax.spines["bottom"].set_visible(False)
-    ax.spines["left"].set_visible(False)
-    ax.spines["right"].set_visible(False)
-
-
 def _write_contribution_decomposition_city_b_report(
     prepared: Dict,
     save_path: str,
@@ -1271,7 +1116,7 @@ def _write_contribution_decomposition_city_b_report(
     rows: list[dict],
 ):
     """Write compact JSON report for the selected-city contribution figure."""
-    ax_main, ax_top, ax_gdp, ax_gdp_top = axes
+    ax_main, ax_top = axes
     report_path = save_path.rsplit(".", 1)[0] + "_report.json"
     macro_region_by_key = {
         spec["key"]: spec
@@ -1293,21 +1138,6 @@ def _write_contribution_decomposition_city_b_report(
         None,
     )
     city_rows = [row for row in rows if row.get("row_type") == "city"]
-    gdp_source_years = [
-        int(row["gdp_source_year"])
-        for row in city_rows
-        if row.get("gdp_source_year") is not None
-    ]
-    gdp_source_year_range = (
-        [min(gdp_source_years), max(gdp_source_years)]
-        if gdp_source_years
-        else None
-    )
-    gdp_source_year_label = (
-        f"{gdp_source_year_range[0]}–{gdp_source_year_range[1]}"
-        if gdp_source_year_range
-        else "unavailable"
-    )
     plotted_region_keys = {row.get("region_key") for row in city_rows}
     payload = {
         "figure": "contribution_decomposition_city_b",
@@ -1316,8 +1146,6 @@ def _write_contribution_decomposition_city_b_report(
         "axes": {
             "bottom_relative_contribution_decomposition": _report_axis(ax_main),
             "top_absolute_net_reduction": _report_axis(ax_top),
-            "right_city_gdp": _report_axis(ax_gdp),
-            "top_all_study_city_gdp_range": _report_axis(ax_gdp_top),
         },
         "selected_region_keys": list(CONTRIBUTION_CITY_B_REGION_KEYS),
         "selected_city_groups": selected_city_groups,
@@ -1346,14 +1174,36 @@ def _write_contribution_decomposition_city_b_report(
             "zero to the left, and a black point marks total net reduction "
             "on the bottom percentage-point axis. White circles with dark "
             "green outlines mark city absolute net reduction on the top kt "
-            "CO2e/yr axis; the overall row is excluded from that axis. A "
-            "continuous gold line on the right shows city GDP in the same "
-            "macro-region and representative-city order. GDP uses latest "
-            f"available source years ({gdp_source_year_label}), and the overall row is "
-            "excluded from the GDP profile. A gold min-max range line on the "
-            "overall row uses all city-level study regions and shares the "
-            "representative-city GDP scale."
+            "CO2e/yr axis; the overall row is excluded from that axis."
         ),
+        "decomposition_contract": {
+            "scope": "OD pairs assigned to drones by the lifecycle-minimum rule",
+            "denominator": "complete all-e-bike lifecycle baseline",
+            "identity": (
+                "embodied_balance + avoided_ebike_road_use + "
+                "drone_fixed_flight_penalty + drone_cruise_penalty "
+                "= e-bike lifecycle emissions - drone lifecycle emissions"
+            ),
+            "fixed_flight_definition": (
+                "loaded and empty take-off and landing, plus loaded hover"
+            ),
+            "cruise_definition": "loaded outbound and empty return level flight",
+            "bundling_treatment": (
+                "configured e-bike kappa is embedded in avoided road operation; "
+                "bundling is not an independent contribution"
+            ),
+            "driver_mapping": {
+                "grid_carbon_intensity": "all use-phase components",
+                "air_distance": (
+                    "drone cruise, fixed-flight dilution and embodied "
+                    "amortization through delivery time"
+                ),
+                "road_detour": (
+                    "avoided e-bike road operation and embodied amortization "
+                    "through delivery time"
+                ),
+            },
+        },
         "component_specs": _json_safe(CONTRIBUTION_COMPONENT_SPECS),
         "net_marker": {"label": "Net reduction", "color": "#111111"},
         "absolute_marker": {
@@ -1362,24 +1212,6 @@ def _write_contribution_decomposition_city_b_report(
             "edgecolor": "#1B5E20",
             "scope": "Representative city rows only",
         },
-        "gdp_profile": {
-            "label": "GDP",
-            "source_column": "gdp_100m",
-            "display_unit": "trillion CNY",
-            "conversion": "gdp_100m / 10000",
-            "scale": "linear from zero",
-            "line_color": "#B07A1C",
-            "scope": "Representative city rows only",
-            "connection_order": (
-                "One continuous line in the displayed China macro-region and "
-                "representative-city order; it is not a temporal trend."
-            ),
-            "source_year_policy": "Latest available city value",
-            "source_year_range": gdp_source_year_range,
-        },
-        "all_study_city_gdp_range": _json_safe(
-            prepared.get("all_study_city_gdp_range", {})
-        ),
         "export": {
             "bbox_inches": "tight",
             "pad_inches": 0.03,
@@ -1405,7 +1237,7 @@ def plot_contribution_decomposition_city_b(
     for_latex: bool = False,
     plot_title: bool = False,
 ):
-    """Selected-city contribution decomposition extracted from panel b.
+    """Plot the lifecycle-emissions balance for selected study cities.
 
     Args:
         prepared: Output of ``prepare_contribution_decomposition_data``.
@@ -1421,9 +1253,7 @@ def plot_contribution_decomposition_city_b(
     city_rows = _selected_city_component_rows(prepared.get("cities", []))
     rows = [_national_contribution_row(prepared.get("national", {})), *city_rows]
     fig = plt.figure(figsize=figsize)
-    gs = fig.add_gridspec(1, 2, width_ratios=[2.8, 1.0], wspace=0.16)
-    ax = fig.add_subplot(gs[0, 0])
-    ax_gdp = fig.add_subplot(gs[0, 1], sharey=ax)
+    ax = fig.add_subplot(1, 1, 1)
     fig.subplots_adjust(left=0.375, right=0.98, bottom=0.09, top=0.80)
     y = _plot_selected_city_contribution_bars(ax, rows)
     ax_top = ax.twiny()
@@ -1431,22 +1261,6 @@ def plot_contribution_decomposition_city_b(
     zero_fraction = (0.0 - bottom_xlim[0]) / (bottom_xlim[1] - bottom_xlim[0])
     _plot_selected_city_absolute_reduction_points(ax_top, rows, y, zero_fraction)
     ax_top.set_ylim(ax.get_ylim())
-    all_study_gdp_range = prepared.get("all_study_city_gdp_range", {})
-    _plot_selected_city_gdp_profile(
-        ax_gdp,
-        rows,
-        y,
-        all_study_gdp_range=all_study_gdp_range,
-    )
-    ax_gdp.set_ylim(ax.get_ylim())
-    ax_gdp_top = ax_gdp.twiny()
-    ax_gdp_top.set_xlim(ax_gdp.get_xlim())
-    ax_gdp_top.set_ylim(ax.get_ylim())
-    _plot_all_study_city_gdp_range(
-        ax_gdp_top,
-        all_study_gdp_range,
-        overall_y=float(y[0]),
-    )
 
     legend_handles = [
         plt.Rectangle(
@@ -1496,7 +1310,7 @@ def plot_contribution_decomposition_city_b(
     )
     if plot_title:
         ax.set_title(
-            "Contribution decomposition and GDP by representative city",
+            "Lifecycle-emissions balance by representative city",
             fontsize=13,
         )
 
@@ -1516,7 +1330,7 @@ def plot_contribution_decomposition_city_b(
             prepared,
             save_path,
             figsize,
-            axes=(ax, ax_top, ax_gdp, ax_gdp_top),
+            axes=(ax, ax_top),
             rows=rows,
         )
         plt.close(fig)
