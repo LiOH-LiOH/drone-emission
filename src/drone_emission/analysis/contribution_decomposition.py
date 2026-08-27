@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import csv
 from dataclasses import asdict, replace
 from datetime import datetime, timezone
 import hashlib
@@ -71,6 +72,17 @@ SUMMARY_COLUMNS = (
     "paper_cohort_sha256",
     "generated_at_utc",
 )
+STATUS_COLUMNS = (
+    "region_key",
+    "region_name_en",
+    "status",
+    "elapsed_seconds",
+    "message",
+    "updated_at_utc",
+    "od_sha256",
+    "semantic_sha256",
+    "summary_current",
+)
 
 
 def _sha256_file(path: Path) -> str:
@@ -105,6 +117,24 @@ def _atomic_csv(frame: pd.DataFrame, path: Path) -> None:
             os.unlink(temporary)
 
 
+def _atomic_rows(rows: list[dict], columns: tuple[str, ...], path: Path) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, temporary = tempfile.mkstemp(
+        prefix=f".{path.name}.", suffix=".tmp", dir=path.parent
+    )
+    os.close(fd)
+    try:
+        with open(temporary, "w", encoding="utf-8", newline="") as handle:
+            writer = csv.DictWriter(handle, fieldnames=list(columns))
+            writer.writeheader()
+            for row in rows:
+                writer.writerow({column: row.get(column, "") for column in columns})
+        os.replace(temporary, path)
+    finally:
+        if os.path.exists(temporary):
+            os.unlink(temporary)
+
+
 def _atomic_json(payload: dict, path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     fd, temporary = tempfile.mkstemp(
@@ -119,6 +149,22 @@ def _atomic_json(payload: dict, path: Path) -> None:
     finally:
         if os.path.exists(temporary):
             os.unlink(temporary)
+
+
+def _read_summary_row(summary_path: Path) -> dict | None:
+    try:
+        with summary_path.open("r", encoding="utf-8", newline="") as handle:
+            reader = csv.DictReader(handle)
+            if not reader.fieldnames or not set(SUMMARY_COLUMNS).issubset(
+                reader.fieldnames
+            ):
+                return None
+            rows = list(reader)
+    except OSError:
+        return None
+    if len(rows) != 1:
+        return None
+    return rows[0]
 
 
 def _status(
@@ -346,13 +392,9 @@ def _summary_is_current(
 ) -> bool:
     if not summary_path.is_file():
         return False
-    try:
-        frame = pd.read_csv(summary_path)
-    except (OSError, pd.errors.ParserError):
+    row = _read_summary_row(summary_path)
+    if row is None:
         return False
-    if len(frame) != 1 or not set(SUMMARY_COLUMNS).issubset(frame.columns):
-        return False
-    row = frame.iloc[0]
     fingerprints_match = bool(
         str(row["od_sha256"]) == od_sha256
         and str(row["semantic_sha256"]) == semantic_sha256
@@ -368,17 +410,22 @@ def _summary_is_current(
         "valid_od_rows",
         "drone_assigned_rows",
     ]
-    numeric = pd.to_numeric(row[numeric_columns], errors="coerce")
-    if numeric.isna().any() or not np.isfinite(numeric.to_numpy(dtype=float)).all():
+    try:
+        numeric = [float(row[column]) for column in numeric_columns]
+    except (TypeError, ValueError):
+        return False
+    if not all(math.isfinite(value) for value in numeric):
         return False
     component_net = math.fsum(float(row[f"{key}_kg"]) for key in COMPONENT_KEYS)
     oracle_net = float(row["oracle_net_kg"])
     if abs(component_net - oracle_net) > CONSERVATION_RTOL * max(1.0, abs(oracle_net)):
         return False
-    return bool(
-        int(row["valid_od_rows"]) >= 0
-        and 0 <= int(row["drone_assigned_rows"]) <= int(row["valid_od_rows"])
-    )
+    try:
+        valid_od_rows = int(float(row["valid_od_rows"]))
+        drone_assigned_rows = int(float(row["drone_assigned_rows"]))
+    except (TypeError, ValueError):
+        return False
+    return bool(valid_od_rows >= 0 and 0 <= drone_assigned_rows <= valid_od_rows)
 
 
 def analyze_city(
@@ -564,7 +611,7 @@ def consolidate(
 ) -> tuple[Path, bool]:
     """Write partial/final cohort tables from this run's city statuses."""
     result_by_key = {row["region_key"]: row for row in results}
-    frames = []
+    rows = []
     statuses = []
     complete = True
     for city in cities:
@@ -585,15 +632,15 @@ def consolidate(
                 semantic_sha256=str(result.get("semantic_sha256", "")),
             )
         )
+        row = _read_summary_row(summary_path) if current else None
         if current:
-            frame = pd.read_csv(summary_path)
             current = (
-                len(frame) == 1
-                and str(frame.iloc[0]["region_key"]) == city["region_key"]
-                and str(frame.iloc[0]["paper_cohort_sha256"]) == cohort_hash()
+                row is not None
+                and str(row["region_key"]) == city["region_key"]
+                and str(row["paper_cohort_sha256"]) == cohort_hash()
             )
             if current:
-                frames.append(frame.loc[:, list(SUMMARY_COLUMNS)])
+                rows.append({column: row.get(column, "") for column in SUMMARY_COLUMNS})
         complete = complete and current
         statuses.append({**result, "summary_current": bool(current)})
 
@@ -601,24 +648,23 @@ def consolidate(
     final_path = data_dir / "all_city_contribution_decomposition.csv"
     partial_path = data_dir / "all_city_contribution_decomposition.partial.csv"
     status_path = data_dir / "all_city_contribution_decomposition_status.csv"
-    _atomic_csv(pd.DataFrame(statuses), status_path)
-    if not frames:
+    _atomic_rows(statuses, STATUS_COLUMNS, status_path)
+    if not rows:
         if final_path.exists():
             final_path.unlink()
         raise RuntimeError("no current city contribution summaries found")
-    merged = pd.concat(frames, ignore_index=True).sort_values("region_key")
-    merged = merged.loc[:, list(SUMMARY_COLUMNS)]
+    merged = sorted(rows, key=lambda row: str(row["region_key"]))
     expected = set(locked_region_keys())
-    keys = set(merged["region_key"].astype(str))
+    keys = {str(row["region_key"]) for row in merged}
     complete = complete and len(merged) == len(expected) and keys == expected
     if complete:
-        _atomic_csv(merged, final_path)
+        _atomic_rows(merged, SUMMARY_COLUMNS, final_path)
         if partial_path.exists():
             partial_path.unlink()
         return final_path, True
     if final_path.exists():
         final_path.unlink()
-    _atomic_csv(merged, partial_path)
+    _atomic_rows(merged, SUMMARY_COLUMNS, partial_path)
     return partial_path, False
 
 
