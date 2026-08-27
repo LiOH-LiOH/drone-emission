@@ -174,11 +174,19 @@ def _render_contribution(context: RenderContext) -> None:
 def _render_scenario(context: RenderContext, request: str) -> None:
     from . import national_scenarios as renderer
 
-    named = context.require_file("all_sensitivity_named.csv", stage="analyze")
     stats = context.require_file("all_region_stats.csv", stage="aggregate")
+    scenarios = context.require_file(
+        "all_pathway_scenario_city.csv", stage="analyze"
+    )
+    curves = context.require_file("all_pathway_curve_points.csv", stage="analyze")
+    report = context.require_file(
+        "all_pathway_scenarios_report.json", stage="analyze"
+    )
     getattr(renderer, f"plot_{request}")(
-        named_csv_path=str(named), stats_csv_path=str(stats),
-        data_dir=str(context.data_root), exp_config=context.experiment,
+        stats_csv_path=str(stats),
+        scenario_csv_path=str(scenarios),
+        curve_csv_path=str(curves),
+        analysis_report_path=str(report),
         save_path=str(context.output(f"{request}.pdf")),
         for_latex=True, plot_title=False,
     )
@@ -296,10 +304,10 @@ REQUEST_RENDERERS: dict[str, Renderer] = {
 }
 
 
-def render_requests(context: RenderContext, requests: set[str]) -> None:
-    """Render a manifest-derived request set with no implicit analysis."""
-    unknown = requests.difference(REQUEST_RENDERERS)
-    if unknown:
-        raise ValueError(f"Unregistered formal render request(s): {sorted(unknown)}")
-    for request in sorted(requests):
-        REQUEST_RENDERERS[request](context)
+def render_request(context: RenderContext, request: str) -> None:
+    """Render one exact manifest request with no implicit analysis."""
+    try:
+        renderer = REQUEST_RENDERERS[request]
+    except KeyError as exc:
+        raise ValueError(f"Unregistered formal render request: {request}") from exc
+    renderer(context)

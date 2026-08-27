@@ -1,11 +1,10 @@
 """Formal config city inputs renderers used only by the manifest registry."""
 
-from contextlib import contextmanager
+import hashlib
 import json
 import os
-import pickle
-import time
 
+import numpy as np
 import pandas as pd
 
 
@@ -15,6 +14,85 @@ def _find_first_existing_path(paths):
         if os.path.exists(path):
             return path
     return None
+
+
+def _merchant_center(stores_df, *, require_nonnegative_sales=False):
+    """Return the deterministic paper merchant center in WGS84."""
+    from drone_emission.utils.coordinates import gcj02_to_wgs84
+    from drone_emission.visualization.buildings import (
+        MERCHANT_MAP_RANDOM_SEED,
+        MERCHANT_MAP_TOP_SALES_FRACTION,
+    )
+
+    required = ["lat", "lng", "month_sales"]
+    valid = stores_df.dropna(subset=required).copy()
+    for column in required:
+        valid[column] = pd.to_numeric(valid[column], errors="coerce")
+    valid = valid.dropna(subset=required)
+    if require_nonnegative_sales:
+        valid = valid[valid["month_sales"] >= 0]
+    if valid.empty:
+        raise ValueError("no valid merchant sales rows")
+    top_n = max(
+        1,
+        int(np.ceil(len(valid) * MERCHANT_MAP_TOP_SALES_FRACTION)),
+    )
+    merchant = valid.nlargest(top_n, "month_sales").sample(
+        n=1,
+        random_state=MERCHANT_MAP_RANDOM_SEED,
+    ).iloc[0]
+    return gcj02_to_wgs84(float(merchant["lng"]), float(merchant["lat"]))
+
+
+def _merchant_bbox(stores_df, *, figsize, lat_span, layout="full"):
+    """Match a paper merchant panel's geographic frame before geometry I/O."""
+    center_lng, center_lat = _merchant_center(
+        stores_df,
+        require_nonnegative_sales=(layout == "sales"),
+    )
+    if layout == "height":
+        lng_span = 0.01
+    elif layout == "sales":
+        map_rect = (0.03, 0.23, 0.94, 0.74)
+        physical_ratio = (
+            float(figsize[0]) * map_rect[2]
+            / (float(figsize[1]) * map_rect[3])
+        )
+        lng_span = physical_ratio * lat_span / np.cos(np.radians(center_lat))
+    else:
+        lng_span = (
+            float(figsize[0]) / float(figsize[1])
+            * lat_span
+            / np.cos(np.radians(center_lat))
+        )
+    return (
+        center_lng - lng_span / 2,
+        center_lat - lat_span / 2,
+        center_lng + lng_span / 2,
+        center_lat + lat_span / 2,
+    )
+
+
+def _read_buildings_bbox(path, bbox, columns=None):
+    """Read only building features intersecting a WGS84 display window."""
+    import geopandas as gpd
+    from pyproj import CRS, Transformer
+
+    probe = gpd.read_file(path, rows=slice(0, 1))
+    source_crs = probe.crs
+    if source_crs is None:
+        raise ValueError(f"building geometry has no CRS: {path}")
+    source_bbox = bbox
+    if CRS(source_crs) != CRS("EPSG:4326"):
+        source_bbox = Transformer.from_crs(
+            "EPSG:4326",
+            source_crs,
+            always_xy=True,
+        ).transform_bounds(*bbox)
+    frame = gpd.read_file(path, bbox=source_bbox, columns=columns)
+    if frame.crs is not None and CRS(frame.crs) != CRS("EPSG:4326"):
+        frame = frame.to_crs(epsg=4326)
+    return frame
 
 
 def _render_shanghai_merchant_monthly_sales(
@@ -45,31 +123,68 @@ def _render_shanghai_merchant_monthly_sales(
         )
         return
 
-    import geopandas as gpd
     from drone_emission.visualization.sales import plot_merchant_monthly_sales_map
 
     stores_df = pd.read_csv(sales_path)
-    buildings_gdf = gpd.read_file(building_path)
+    figsize = (1.25, 1.17)
+    bbox = _merchant_bbox(
+        stores_df,
+        figsize=figsize,
+        lat_span=0.01,
+        layout="sales",
+    )
+    buildings_gdf = _read_buildings_bbox(building_path, bbox)
     plot_merchant_monthly_sales_map(
         stores_df,
         buildings_gdf,
         "Shanghai",
         save_path=os.path.join(out, "shanghai_merchant_monthly_sales.png"),
-        figsize=(1.25, 1.17),
+        figsize=figsize,
         for_latex=for_latex,
         plot_title=plot_title,
     )
 
 
 def _get_cached_sparse_graph(graphml_path, graph_cache=None):
-    """Load a SparseGraph once per locked render call."""
+    """Load a SparseGraph from a persistent GraphML-signature cache."""
     if not os.path.exists(graphml_path):
         return None
     graph_cache = graph_cache if graph_cache is not None else {}
     if graphml_path not in graph_cache:
         from drone_emission.roadnet.sparse_graph import SparseGraph
+        from drone_emission.utils.config import get_cache_dir
 
-        graph_cache[graphml_path] = SparseGraph.from_graphml(graphml_path)
+        source = os.path.realpath(graphml_path)
+        stat = os.stat(source)
+        key = hashlib.sha256(source.encode("utf-8")).hexdigest()[:16]
+        cache_root = get_cache_dir("visualization", "roadnet")
+        os.makedirs(cache_root, exist_ok=True)
+        cache_path = os.path.join(cache_root, f"{key}.npz")
+        meta_path = os.path.join(cache_root, f"{key}.json")
+        signature = {
+            "source": source,
+            "size": stat.st_size,
+            "mtime_ns": stat.st_mtime_ns,
+        }
+        cached = None
+        if os.path.exists(cache_path) and os.path.exists(meta_path):
+            try:
+                with open(meta_path, "r", encoding="utf-8") as handle:
+                    metadata = json.load(handle)
+                if metadata == signature:
+                    cached = SparseGraph.from_npz(cache_path)
+                    print(f"Loading cached SparseGraph: {cache_path}")
+            except (OSError, ValueError, json.JSONDecodeError):
+                cached = None
+        if cached is None:
+            cached = SparseGraph.from_graphml(graphml_path)
+            cached.to_npz(cache_path)
+            temporary = f"{meta_path}.tmp"
+            with open(temporary, "w", encoding="utf-8") as handle:
+                json.dump(signature, handle, indent=2)
+                handle.write("\n")
+            os.replace(temporary, meta_path)
+        graph_cache[graphml_path] = cached
     else:
         print(f"Reusing cached SparseGraph: {graphml_path}")
     return graph_cache[graphml_path]
@@ -125,13 +240,15 @@ def _render_shanghai_building_height_merchant(
         )
         return
 
-    import geopandas as gpd
     from drone_emission.visualization.buildings import plot_building_height_merchant_map
 
     stores_df = pd.read_csv(sales_path)
     od_df = None
     if os.path.exists(od_path):
-        od_df = pd.read_csv(od_path)
+        od_df = pd.read_csv(
+            od_path,
+            usecols=["from_lat", "from_lng", "to_lat", "to_lng", "annual_sales"],
+        )
     else:
         print(
             "Shanghai building height merchant map OD overlay skipped - "
@@ -145,7 +262,18 @@ def _render_shanghai_building_height_merchant(
             "Shanghai building height merchant map roadnet background "
             f"skipped - missing {roadnet_path}"
         )
-    buildings_gdf = gpd.read_file(building_path)
+    figsize = (2.56, 2.56)
+    bbox = _merchant_bbox(
+        stores_df,
+        figsize=figsize,
+        lat_span=0.007,
+        layout="height",
+    )
+    buildings_gdf = _read_buildings_bbox(
+        building_path,
+        bbox,
+        columns=["height"],
+    )
     plot_building_height_merchant_map(
         buildings_gdf,
         stores_df,
@@ -154,7 +282,7 @@ def _render_shanghai_building_height_merchant(
         od_df=od_df,
         road_graph=road_graph,
         save_path=os.path.join(out, "shanghai_building_height_merchant.png"),
-        figsize=(2.56, 2.56),
+        figsize=figsize,
         for_latex=for_latex,
         plot_title=plot_title,
         lat_span=0.007,
@@ -195,18 +323,28 @@ def _render_shanghai_building_footprint_heatmap(
         )
         return
 
-    import geopandas as gpd
     from drone_emission.visualization.buildings import plot_building_footprint_heatmap
 
     stores_df = pd.read_csv(sales_path)
-    buildings_gdf = gpd.read_file(building_path)
+    figsize = (1.25, 1.11)
+    bbox = _merchant_bbox(
+        stores_df,
+        figsize=figsize,
+        lat_span=0.008,
+        layout="footprint",
+    )
+    buildings_gdf = _read_buildings_bbox(
+        building_path,
+        bbox,
+        columns=["height"],
+    )
     plot_building_footprint_heatmap(
         buildings_gdf,
         stores_df,
         "Shanghai",
         "上海市",
         save_path=os.path.join(out, "shanghai_building_footprint_heatmap.png"),
-        figsize=(1.25, 1.11),
+        figsize=figsize,
         for_latex=for_latex,
         plot_title=plot_title,
         lat_span=0.008,
@@ -217,6 +355,8 @@ def _render_shanghai_building_footprint_heatmap(
 BEIJING_ROAD_NETWORK_CENTER = (116.337, 39.914)
 BEIJING_ROAD_NETWORK_FIGSIZE = (1.25, 1.11)
 BEIJING_ROAD_NETWORK_LAT_SPAN = 0.018
+
+
 def _render_beijing_road_network_subfigure(
     data_dir,
     out,
@@ -259,9 +399,26 @@ def _render_beijing_road_network_subfigure(
             f"missing Beijing building geometry in {region_dir}"
         )
     else:
-        import geopandas as gpd
+        from drone_emission.visualization.roadnet import (
+            get_road_network_subfigure_frame,
+        )
 
-        buildings_gdf = gpd.read_file(building_path)
+        frame = get_road_network_subfigure_frame(
+            BEIJING_ROAD_NETWORK_CENTER[0],
+            BEIJING_ROAD_NETWORK_CENTER[1],
+            figsize=BEIJING_ROAD_NETWORK_FIGSIZE,
+            lat_span=BEIJING_ROAD_NETWORK_LAT_SPAN,
+        )
+        bounds = frame["bounds"]
+        buildings_gdf = _read_buildings_bbox(
+            building_path,
+            (
+                bounds["min_lng"],
+                bounds["min_lat"],
+                bounds["max_lng"],
+                bounds["max_lat"],
+            ),
+        )
     plot_road_network_subfigure(
         road_graph,
         "Beijing",
@@ -304,7 +461,21 @@ def _render_beijing_median_trip_phase_emissions(
     )
     from drone_emission.visualization.city_input_support import _select_median_trip_emission_sample
 
-    df = pd.read_csv(od_path)
+    desired = {
+        "distance_km",
+        "road_distance_m",
+        "drone_emission_kg",
+        "ebike_emission_kg",
+        "annual_sales",
+        "ebike_kappa",
+    }
+    if "median_trip_production_emissions" in only:
+        desired.update(
+            {"drone_lifecycle_production_g", "ebike_lifecycle_production_g"}
+        )
+    if "median_trip_eol_emissions" in only:
+        desired.update({"drone_lifecycle_eol_g", "ebike_lifecycle_eol_g"})
+    df = pd.read_csv(od_path, usecols=lambda column: column in desired)
     required = {
         "distance_km",
         "road_distance_m",
@@ -380,7 +551,17 @@ def _render_distance_comparison_single_panel(
 
     from drone_emission.visualization.roadnet import plot_distance_comparison_single_panel
 
-    od_df = pd.read_csv(od_path)
+    od_df = pd.read_csv(
+        od_path,
+        usecols=[
+            "road_distance_m",
+            "distance_km",
+            "from_lat",
+            "from_lng",
+            "to_lat",
+            "to_lng",
+        ],
+    )
     graph = _get_cached_sparse_graph(graphml_path, graph_cache=graph_cache)
     router = _get_cached_tile_router(
         graphml_path,

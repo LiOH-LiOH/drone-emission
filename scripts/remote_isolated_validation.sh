@@ -17,6 +17,7 @@ fi
 REMOTE_STORAGE_ROOT="${DRONE_EMISSION_REMOTE_STORAGE_ROOT:-/mnt/minor_storage/$USER/drone-emission}"
 FORMAL_DATA="${DRONE_EMISSION_FORMAL_DATA_ROOT:-$REMOTE_STORAGE_ROOT/data}"
 FORMAL_CACHE="${DRONE_EMISSION_FORMAL_CACHE_ROOT:-$REMOTE_STORAGE_ROOT/cache}"
+FORMAL_WORK="${DRONE_EMISSION_FORMAL_WORK_ROOT:-$REMOTE_STORAGE_ROOT/work}"
 FORMAL_FIGURES="${DRONE_EMISSION_FORMAL_FIGURES_ROOT:-$PWD/figures}"
 FORMAL_PAPER="$PWD/docs/paper/figures"
 VALIDATION_ROOT="$(mktemp -d "$REMOTE_STORAGE_ROOT/validation.XXXXXX")"
@@ -26,11 +27,11 @@ CITY_WORK="$VALIDATION_ROOT/city/work"
 CITY_FIGURES="$VALIDATION_ROOT/city/figures"
 FIGURE_DATA="$FORMAL_DATA"
 FIGURE_CACHE="$VALIDATION_ROOT/figures/cache"
-FIGURE_WORK="$VALIDATION_ROOT/figures/work"
+FIGURE_WORK="$FORMAL_WORK"
 FIGURE_OUTPUT="$VALIDATION_ROOT/figures/output"
 REPORTS="$VALIDATION_ROOT/reports"
 mkdir -p "$CITY_DATA/city/chengdu" "$CITY_CACHE" "$CITY_WORK" "$CITY_FIGURES" \
-    "$FIGURE_CACHE" "$FIGURE_WORK" "$FIGURE_OUTPUT" "$REPORTS"
+    "$FIGURE_CACHE" "$FIGURE_OUTPUT" "$REPORTS"
 
 inventory() {
     local output="$1"
@@ -41,9 +42,6 @@ inventory() {
                 find "$FORMAL_DATA/$level" -maxdepth 2 -type f -printf '%p\t%s\t%T@\n'
             fi
         done
-        if [[ -d "$FORMAL_CACHE/drone_spatial_concentration" ]]; then
-            find "$FORMAL_CACHE/drone_spatial_concentration" -type f -printf '%p\t%s\t%T@\n'
-        fi
         for root in "$FORMAL_FIGURES" "$FORMAL_PAPER"; do
             if [[ -d "$root" ]]; then
                 find "$root" -type f -printf '%p\t%s\t%T@\n'
@@ -88,21 +86,8 @@ DRONE_EMISSION_FIGURES_ROOT="$CITY_FIGURES" \
     "$FORMAL_DATA/city/chengdu" "$CITY_DATA/city/chengdu" \
     --report "$REPORTS/chengdu-comparison.json"
 
-# Render treats the formal data tree as a read-only source. The CLI first builds
-# its compatibility view under FIGURE_WORK: mutable derived inputs are copied,
-# while large immutable inputs are linked for reads only. Copy the one cache
-# family named by the manifest so all writable cache state remains isolated.
-SPATIAL_CACHE_SOURCE="$FORMAL_CACHE/drone_spatial_concentration"
-if [[ ! -d "$SPATIAL_CACHE_SOURCE" ]]; then
-    # Compatibility with the existing remote cache layout; the active workflow
-    # writes future results to cache, but validation must reuse what is present.
-    SPATIAL_CACHE_SOURCE="$FORMAL_DATA/analysis/drone_spatial_concentration"
-fi
-[[ -f "$SPATIAL_CACHE_SOURCE/city_drone_spatial_concentration.csv" ]] || {
-    echo "Authoritative spatial-concentration result is missing" >&2
-    exit 1
-}
-cp -a "$SPATIAL_CACHE_SOURCE" "$FIGURE_CACHE/drone_spatial_concentration"
+# Render treats the formal data tree as a read-only source and reuses the
+# authoritative cohort-versioned analysis view under the formal work root.
 
 DRONE_EMISSION_DATA_ROOT="$FIGURE_DATA" \
 DRONE_EMISSION_CACHE_ROOT="$FIGURE_CACHE" \
@@ -113,15 +98,18 @@ DRONE_EMISSION_FIGURES_ROOT="$FIGURE_OUTPUT" \
 mapfile -t PDF_PATHS < <(
     "$PWD/.venv/bin/python" -c '
 import json, sys
-for figure in json.load(open(sys.argv[1], encoding="utf-8"))["figures"]:
+manifest = json.load(open(sys.argv[1], encoding="utf-8"))
+requests = {request["id"]: request for request in manifest["requests"]}
+for figure in manifest["figures"]:
     if figure["mode"] == "direct":
         print("paper/" + figure["id"] + ".pdf")
     else:
-        for name in figure["required_subfigures"]:
-            print("paper/subfigure/" + name)
+        for request_id in figure["render_requests"]:
+            for name in requests[request_id]["outputs"]:
+                print("paper/subfigure/" + name)
 ' src/drone_emission/paper_figures.json
 )
-[[ "${#PDF_PATHS[@]}" -eq 39 ]] || { echo "Expected 39 review PDFs, found ${#PDF_PATHS[@]}" >&2; exit 1; }
+[[ "${#PDF_PATHS[@]}" -eq 37 ]] || { echo "Expected 37 review PDFs, found ${#PDF_PATHS[@]}" >&2; exit 1; }
 : > "$REPORTS/fetch-pdfs.txt"
 for relative in "${PDF_PATHS[@]}"; do
     path="$FIGURE_OUTPUT/$relative"
@@ -140,9 +128,12 @@ while IFS=$'\t' read -r figure_id panel; do
 done < <(
     "$PWD/.venv/bin/python" -c '
 import json, sys
-for figure in json.load(open(sys.argv[1], encoding="utf-8"))["figures"]:
+manifest = json.load(open(sys.argv[1], encoding="utf-8"))
+requests = {request["id"]: request for request in manifest["requests"]}
+for figure in manifest["figures"]:
     if figure["mode"] == "inkscape":
-        print(figure["id"] + "\t" + figure["required_subfigures"][0])
+        first_request = requests[figure["render_requests"][0]]
+        print(figure["id"] + "\t" + first_request["outputs"][0])
 ' src/drone_emission/paper_figures.json
 )
 DRONE_EMISSION_DATA_ROOT="$FIGURE_DATA" \

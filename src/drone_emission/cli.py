@@ -7,7 +7,12 @@ import json
 import os
 from pathlib import Path
 
-from .paper_workflow import load_manifest, promote, render
+from .paper_workflow import (
+    figure_required_outputs,
+    load_manifest,
+    promote,
+    render,
+)
 from .paths import PROJECT_ROOT
 
 
@@ -364,7 +369,12 @@ def command_render(args: argparse.Namespace) -> None:
     require_current_analysis(config)
     prepare_analysis_data_view(config)
     config = dict(config, data_dir=str(analysis_data_dir(config)))
-    staged = render(config, only=_split_ids(args.only))
+    staged = render(
+        config,
+        only=_split_ids(getattr(args, "only", None)),
+        requests=_split_ids(getattr(args, "request", None)),
+        force=bool(getattr(args, "force", False)),
+    )
     if staged:
         print("Staged direct figures:")
         for path in staged:
@@ -393,7 +403,7 @@ def command_status(args: argparse.Namespace) -> None:
                 "staged": staging.exists(),
                 "subfigures_ready": all(
                     (figures_root / "paper" / "subfigure" / name).exists()
-                    for name in figure.get("required_subfigures", [])
+                    for name in figure_required_outputs(figure, manifest)
                 ),
             }
         )
@@ -507,7 +517,22 @@ def build_parser() -> argparse.ArgumentParser:
     prepare_reuse.set_defaults(func=command_prepare_reuse)
 
     render_parser = subparsers.add_parser("render", help="render locked formal figure sources")
-    render_parser.add_argument("--only", action="append", help="formal manifest ID; comma-separated accepted")
+    render_selection = render_parser.add_mutually_exclusive_group()
+    render_selection.add_argument(
+        "--only",
+        action="append",
+        help="formal manifest figure ID; comma-separated accepted",
+    )
+    render_selection.add_argument(
+        "--request",
+        action="append",
+        help="formal render request ID; comma-separated accepted",
+    )
+    render_parser.add_argument(
+        "--force",
+        action="store_true",
+        help="ignore fresh render-request receipts",
+    )
     render_parser.set_defaults(func=command_render)
 
     promote_parser = subparsers.add_parser("promote", help="publish all staged PDFs to docs/paper")

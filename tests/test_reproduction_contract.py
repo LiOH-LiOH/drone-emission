@@ -5,7 +5,12 @@ import csv
 import json
 from pathlib import Path
 
-from drone_emission.paper_workflow import load_manifest, select_figures
+from drone_emission.paper_workflow import (
+    figure_required_inputs,
+    load_manifest,
+    request_index,
+    select_figures,
+)
 from drone_emission.visualization.formal_registry import REQUEST_RENDERERS
 
 
@@ -18,7 +23,13 @@ def test_manifest_has_exact_locked_set():
         "inkscape",
     }
     assert sum(figure["mode"] == "direct" for figure in manifest["figures"]) == 3
-    assert all(figure["required_inputs"] for figure in manifest["figures"])
+    assert manifest["render_request_count"] == 24
+    assert len(manifest["requests"]) == 24
+    assert sum(len(request["outputs"]) for request in manifest["requests"]) == 37
+    assert all(
+        figure_required_inputs(figure, manifest)
+        for figure in manifest["figures"]
+    )
     assert all(len(figure["report_inputs"]) == 1 for figure in manifest["figures"])
 
 
@@ -66,14 +77,26 @@ def test_manifest_paths_are_one_to_one():
 
 
 def test_contribution_figure_consumes_only_prepared_analysis():
-    figure = next(
-        item
-        for item in load_manifest()["figures"]
-        if item["id"] == "fig5_contribution_decomposition"
-    )
-    assert figure["required_inputs"] == [
+    request = request_index()["contribution_decomposition_city_b"]
+    assert request["required_inputs"] == [
         "all_city_contribution_decomposition.csv"
     ]
+
+
+def test_pathway_renderers_consume_only_prepared_analysis():
+    requests = request_index()
+    expected = {
+        "all_region_stats.csv",
+        "all_pathway_scenario_city.csv",
+        "all_pathway_curve_points.csv",
+        "all_pathway_scenarios_report.json",
+        "project:experiment.toml",
+    }
+    for request_id in (
+        "regions_map_pathway_scenarios",
+        "regions_map_pathway_scenario_maps",
+    ):
+        assert set(requests[request_id]["required_inputs"]) == expected
 
 
 def test_render_selection_rejects_internal_plot_names():
@@ -98,12 +121,8 @@ def test_locked_observed_distance_histogram_is_complete():
         rows = list(csv.DictReader(handle))
     assert len(rows) == 90
     assert sum(int(row["count"]) for row in rows) == 278688
-    figure = next(
-        item
-        for item in load_manifest()["figures"]
-        if item["id"] == "extended_data_fig6_delivery_distance_distribution"
-    )
-    assert figure["required_inputs"] == [
+    request = request_index()["observed_delivery_distance_distribution"]
+    assert request["required_inputs"] == [
         "package:calibration/observed_delivery_distance_histogram.csv"
     ]
 

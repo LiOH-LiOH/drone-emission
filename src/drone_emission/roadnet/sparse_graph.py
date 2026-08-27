@@ -5,6 +5,8 @@ KD-tree spatial indexing. The NetworkX graph is loaded temporarily
 during construction and then freed.
 """
 
+import os
+
 import numpy as np
 import osmnx as ox
 import pandas as pd
@@ -97,6 +99,42 @@ class SparseGraph:
             f" + coords: {node_coords.nbytes / 1e6:.1f} MB"
         )
         return graph
+
+    @classmethod
+    def from_npz(cls, path: str) -> "SparseGraph":
+        """Load a previously serialized sparse routing graph."""
+        with np.load(path, allow_pickle=False) as payload:
+            shape = tuple(int(value) for value in payload["shape"])
+            dist_matrix = csr_matrix(
+                (
+                    payload["data"],
+                    payload["indices"],
+                    payload["indptr"],
+                ),
+                shape=shape,
+            )
+            node_coords = payload["node_coords"]
+            idx_to_osmid = payload["idx_to_osmid"]
+        osmid_to_idx = {
+            int(osmid): index for index, osmid in enumerate(idx_to_osmid)
+        }
+        return cls(dist_matrix, node_coords, idx_to_osmid, osmid_to_idx)
+
+    def to_npz(self, path: str) -> None:
+        """Atomically serialize the arrays required for routing and plotting."""
+        temporary = f"{path}.tmp"
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(temporary, "wb") as handle:
+            np.savez(
+                handle,
+                data=self._dist_matrix.data,
+                indices=self._dist_matrix.indices,
+                indptr=self._dist_matrix.indptr,
+                shape=np.asarray(self._dist_matrix.shape, dtype=np.int64),
+                node_coords=self._node_coords,
+                idx_to_osmid=self._idx_to_osmid,
+            )
+        os.replace(temporary, path)
 
     def find_nearest_node(self, lat: float, lng: float) -> int:
         """Find nearest graph node. Returns matrix index."""

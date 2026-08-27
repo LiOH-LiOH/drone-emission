@@ -2,7 +2,6 @@
 
 import json
 import os
-import pickle
 
 import matplotlib.pyplot as plt
 from matplotlib.patches import Patch
@@ -37,10 +36,6 @@ from drone_emission.analysis.constants import (
 from drone_emission.analysis.city_attribution import R2_ABSOLUTE_OUTCOME, R2_OUTCOME
 
 
-PATHWAY_SCENARIOS_CACHE_VERSION = 2
-PATHWAY_CURVE_N_POINTS = 21
-PATHWAY_CURVE_MAX_ROWS_PER_CITY = 1500
-PATHWAY_CURVE_RANDOM_STATE = 42
 def _first_available_column(df: pd.DataFrame, candidates: tuple[str, ...], purpose: str) -> str:
     """Return the first available candidate column, preferring weighted metrics."""
     for col in candidates:
@@ -100,34 +95,6 @@ def _draw_discrete_reduction_colorbar(fig, cbar_ax, cmap, norm, bin_edges,
     return cbar, len(bin_edges) - 1
 
 
-def _named_baseline_kappa(named: pd.DataFrame) -> float:
-    """Infer the configured baseline kappa from a named-scenario table."""
-    kappas = np.array(sorted(named["kappa"].dropna().unique()), dtype=float)
-    if kappas.size == 0:
-        return 1.0
-    non_comparison = kappas[~np.isclose(kappas, 0.65)]
-    if non_comparison.size:
-        return float(non_comparison.max())
-    return float(kappas.max())
-
-
-def _baseline_kappa_for_pathway(named: pd.DataFrame, stats_df: pd.DataFrame) -> float:
-    """Infer the pathway baseline kappa, preferring weighted city stats."""
-    named_kappas = np.array(sorted(named["kappa"].dropna().unique()), dtype=float)
-    if "ebike_kappa" in stats_df.columns:
-        stats_kappas = pd.to_numeric(stats_df["ebike_kappa"], errors="coerce").dropna()
-        if not stats_kappas.empty:
-            stats_kappa = float(stats_kappas.median())
-            if named_kappas.size and np.any(np.isclose(named_kappas, stats_kappa)):
-                return stats_kappa
-            fallback = _named_baseline_kappa(named)
-            print(
-                "plot_regions_map_pathway_scenarios: named scenarios do not "
-                f"include weighted stats kappa={stats_kappa:.6g}; using "
-                f"kappa={fallback:.6g}. Re-run named scenarios for the updated baseline."
-            )
-            return fallback
-    return _named_baseline_kappa(named)
 
 
 def _format_kappa_value(value: float) -> str:
@@ -149,603 +116,6 @@ def _scenario_drone_share_column(df: pd.DataFrame) -> str:
     )
 
 
-def _pathway_anchor_annual_kg(
-    named: pd.DataFrame,
-    stats_df: pd.DataFrame,
-    baseline_kappa: float,
-) -> pd.DataFrame:
-    """Return region-level all-ebike annual lifecycle anchor in kg CO2e."""
-    if {"region_key", "total_ebike_lifecycle"}.issubset(stats_df.columns):
-        stats_anchor = stats_df[["region_key", "total_ebike_lifecycle"]].copy()
-        stats_anchor["anchor_annual_kg"] = pd.to_numeric(
-            stats_anchor["total_ebike_lifecycle"], errors="coerce"
-        )
-        if "ebike_kappa" in stats_df.columns:
-            stats_anchor["ebike_kappa"] = pd.to_numeric(
-                stats_df["ebike_kappa"], errors="coerce"
-            )
-            stats_anchor = stats_anchor[
-                stats_anchor["ebike_kappa"].isna()
-                | np.isclose(stats_anchor["ebike_kappa"], baseline_kappa)
-            ]
-        stats_anchor = stats_anchor[["region_key", "anchor_annual_kg"]].dropna()
-        if not stats_anchor.empty:
-            return stats_anchor
-
-    if "annual_lifecycle_kg" not in named.columns:
-        return pd.DataFrame(columns=["region_key", "anchor_annual_kg"])
-
-    return named[
-        np.isclose(named["kappa"], baseline_kappa)
-        & np.isclose(named["gef_mult"], 1.0)
-        & (named["strategy"] == "all_ebike")
-    ][["region_key", "annual_lifecycle_kg"]].rename(
-        columns={"annual_lifecycle_kg": "anchor_annual_kg"}
-    )
-
-
-def _sample_od_for_pathway_curve(
-    od_df: pd.DataFrame,
-    max_rows: int,
-    random_state: int,
-) -> tuple[pd.DataFrame, float]:
-    """Return sampled OD rows and the annual-sales expansion factor."""
-    required = {"road_distance_m", "distance_km", "annual_sales"}
-    missing = required - set(od_df.columns)
-    if missing:
-        raise KeyError(f"missing OD columns {sorted(missing)}")
-
-    valid = od_df[list(required)].copy()
-    for col in required:
-        valid[col] = pd.to_numeric(valid[col], errors="coerce")
-    valid = valid[
-        (valid["road_distance_m"] >= 0)
-        & (valid["distance_km"] > 0)
-        & (valid["annual_sales"] > 0)
-    ].dropna()
-    if valid.empty:
-        return valid, 1.0
-
-    total_sales = float(valid["annual_sales"].sum())
-    if len(valid) > max_rows:
-        valid = valid.sample(n=max_rows, random_state=random_state)
-    sample_sales = float(valid["annual_sales"].sum())
-    scale = total_sales / sample_sales if sample_sales > 0 else 1.0
-    return valid, scale
-
-
-def _evaluate_pathway_optimal_curve_point(
-    od_df: pd.DataFrame,
-    scale: float,
-    ebike_params,
-    drone_params,
-    province_gef_kwh: float,
-    kappa: float,
-    gef_mult: float,
-    rider_weight: float,
-    payload_kg: float,
-    anchor_kappa: float = None,
-    anchor_gef_mult: float = 1.0,
-) -> dict:
-    """Evaluate sampled annual CO2 savings and drone share for one pathway point."""
-    from dataclasses import replace
-
-    from drone_emission.sensitivity.vectorized_lca import (
-        DroneScenario,
-        EbikeScenario,
-        compute_drone_per_order_g,
-        compute_ebike_per_order_g,
-    )
-
-    road_km = od_df["road_distance_m"].to_numpy(dtype=float) / 1000.0
-    air_km = od_df["distance_km"].to_numpy(dtype=float)
-    annual_sales = od_df["annual_sales"].to_numpy(dtype=float)
-
-    ebike_pp = replace(ebike_params, e_use=province_gef_kwh)
-    drone_pp = replace(drone_params, e_use=province_gef_kwh)
-    ebike_g = compute_ebike_per_order_g(
-        road_km,
-        ebike_pp,
-        EbikeScenario(
-            kappa=kappa,
-            gef_mult=gef_mult,
-            payload_kg=payload_kg,
-            rider_weight=rider_weight,
-        ),
-    )
-    drone_g = compute_drone_per_order_g(
-        air_km,
-        drone_pp,
-        DroneScenario(gef_mult=gef_mult, payload_kg=payload_kg),
-    )
-    anchor_ebike_g = ebike_g
-    if anchor_kappa is not None or not np.isclose(anchor_gef_mult, gef_mult):
-        anchor_ebike_g = compute_ebike_per_order_g(
-            road_km,
-            ebike_pp,
-            EbikeScenario(
-                kappa=kappa if anchor_kappa is None else anchor_kappa,
-                gef_mult=anchor_gef_mult,
-                payload_kg=payload_kg,
-                rider_weight=rider_weight,
-            ),
-        )
-
-    use_drone = drone_g < ebike_g
-    oracle_total_g = float((np.where(use_drone, drone_g, ebike_g) * annual_sales).sum())
-
-    anchor_g = float((anchor_ebike_g * annual_sales).sum())
-    drone_orders = float(annual_sales[use_drone].sum())
-    total_orders = float(annual_sales.sum())
-    return {
-        "saved_kg": (anchor_g - oracle_total_g) * scale / 1000.0,
-        "drone_share_pct": drone_orders / total_orders * 100.0 if total_orders > 0 else np.nan,
-    }
-
-
-def _evaluate_pathway_oracle_city(
-    od_df: pd.DataFrame,
-    ebike_params,
-    drone_params,
-    province_gef_kwh: float,
-    kappa: float,
-    gef_mult: float,
-    rider_weight: float,
-    payload_kg: float,
-    anchor_kappa: float,
-    anchor_gef_mult: float = 1.0,
-) -> dict:
-    """Evaluate a city-level per-OD oracle-min allocation for one pathway scenario."""
-    from dataclasses import replace
-
-    from drone_emission.sensitivity.vectorized_lca import (
-        DroneScenario,
-        EbikeScenario,
-        compute_drone_per_order_g,
-        compute_ebike_per_order_g,
-    )
-
-    required = {"road_distance_m", "distance_km", "annual_sales"}
-    missing = required - set(od_df.columns)
-    if missing:
-        raise KeyError(f"missing OD columns {sorted(missing)}")
-
-    valid = od_df[list(required)].copy()
-    for col in required:
-        valid[col] = pd.to_numeric(valid[col], errors="coerce")
-    valid = valid[
-        (valid["road_distance_m"] >= 0)
-        & (valid["distance_km"] > 0)
-        & (valid["annual_sales"] > 0)
-    ].dropna()
-    if valid.empty:
-        raise ValueError("no valid OD rows with positive annual sales")
-
-    road_km = valid["road_distance_m"].to_numpy(dtype=float) / 1000.0
-    air_km = valid["distance_km"].to_numpy(dtype=float)
-    annual_sales = valid["annual_sales"].to_numpy(dtype=float)
-
-    ebike_pp = replace(ebike_params, e_use=province_gef_kwh)
-    drone_pp = replace(drone_params, e_use=province_gef_kwh)
-    ebike_g = compute_ebike_per_order_g(
-        road_km,
-        ebike_pp,
-        EbikeScenario(
-            kappa=kappa,
-            gef_mult=gef_mult,
-            payload_kg=payload_kg,
-            rider_weight=rider_weight,
-        ),
-    )
-    drone_g = compute_drone_per_order_g(
-        air_km,
-        drone_pp,
-        DroneScenario(gef_mult=gef_mult, payload_kg=payload_kg),
-    )
-    anchor_ebike_g = compute_ebike_per_order_g(
-        road_km,
-        ebike_pp,
-        EbikeScenario(
-            kappa=anchor_kappa,
-            gef_mult=anchor_gef_mult,
-            payload_kg=payload_kg,
-            rider_weight=rider_weight,
-        ),
-    )
-
-    use_drone = drone_g < ebike_g
-    oracle_lifecycle_kg = float(np.sum(np.where(use_drone, drone_g, ebike_g) * annual_sales) / 1000.0)
-    anchor_lifecycle_kg = float(np.sum(anchor_ebike_g * annual_sales) / 1000.0)
-    scenario_ebike_lifecycle_kg = float(np.sum(ebike_g * annual_sales) / 1000.0)
-    drone_orders = float(annual_sales[use_drone].sum())
-    total_orders = float(annual_sales.sum())
-    return {
-        "annual_lifecycle_kg": oracle_lifecycle_kg,
-        "anchor_annual_kg": anchor_lifecycle_kg,
-        "scenario_ebike_annual_kg": scenario_ebike_lifecycle_kg,
-        "drone_ratio_pct": drone_orders / total_orders * 100.0 if total_orders > 0 else np.nan,
-    }
-
-
-def _build_pathway_oracle_panel_rows(
-    stats_df: pd.DataFrame,
-    panels: list[tuple],
-    data_dir: str,
-    exp_config: dict | None,
-    baseline_kappa: float,
-) -> pd.DataFrame:
-    """Build per-city oracle-min rows for the pathway scenario map panels."""
-    from drone_emission.emission.cal_single_delivery import create_drone_params, create_ebike_params
-    from drone_emission.utils.grid_emission_factor import fetch_factor
-
-    if not data_dir:
-        return pd.DataFrame()
-
-    ebike_params = create_ebike_params(exp_config)
-    drone_params = create_drone_params(exp_config)
-    emission_cfg = (exp_config or {}).get("emission_params", {})
-    rider_weight = float(emission_cfg.get("rider_weight", 70.0))
-    payload_kg = float(emission_cfg.get("payload_kg", 1.0))
-    gef_path = (exp_config or {}).get("gef_path")
-    if "region_level" in stats_df.columns:
-        city_rows = stats_df[stats_df["region_level"] == "city"].copy()
-    else:
-        city_rows = stats_df.copy()
-    if city_rows.empty or not {"region_key", "province"}.issubset(city_rows.columns):
-        return pd.DataFrame()
-
-    rows = []
-    skipped = []
-    for _, city in city_rows.iterrows():
-        region_key = city["region_key"]
-        province = city["province"]
-        od_path = os.path.join(data_dir, "city", region_key, f"{region_key}_od_pairs.csv")
-        if not os.path.exists(od_path):
-            skipped.append(region_key)
-            continue
-        try:
-            od_df = pd.read_csv(
-                od_path,
-                usecols=["road_distance_m", "distance_km", "annual_sales"],
-            )
-            province_gef = (
-                fetch_factor(province, gef_path)
-                if gef_path
-                else float(emission_cfg.get("e_use", 0.6))
-            )
-            for label, _title, kappa, gef_mult, _strategy in panels:
-                metrics = _evaluate_pathway_oracle_city(
-                    od_df,
-                    ebike_params,
-                    drone_params,
-                    province_gef,
-                    kappa=kappa,
-                    gef_mult=gef_mult,
-                    rider_weight=rider_weight,
-                    payload_kg=payload_kg,
-                    anchor_kappa=baseline_kappa,
-                    anchor_gef_mult=1.0,
-                )
-                rows.append(
-                    {
-                        "panel_label": label,
-                        "region_key": region_key,
-                        "province": province,
-                        "kappa": kappa,
-                        "strategy": "oracle_min_mixed",
-                        "gef_mult": gef_mult,
-                        "threshold_km": np.nan,
-                        "drone_ratio_pct": metrics["drone_ratio_pct"],
-                        "annual_lifecycle_kg": metrics["annual_lifecycle_kg"],
-                        "anchor_annual_kg": metrics["anchor_annual_kg"],
-                        "scenario_ebike_annual_kg": metrics["scenario_ebike_annual_kg"],
-                        "reduction_vs_anchor_ebike_pct": (
-                            (1.0 - metrics["annual_lifecycle_kg"] / metrics["anchor_annual_kg"]) * 100.0
-                            if metrics["anchor_annual_kg"] > 0
-                            else np.nan
-                        ),
-                    }
-                )
-        except Exception:
-            skipped.append(region_key)
-            continue
-
-    if rows:
-        print(
-            "plot_regions_map_pathway_scenarios: built oracle-min mixed panels "
-            f"from {len({row['region_key'] for row in rows})} cities "
-            f"(skipped {len(set(skipped))})"
-        )
-    return pd.DataFrame(rows)
-
-
-def _build_pathway_curve_data(
-    stats_df: pd.DataFrame,
-    data_dir: str,
-    exp_config: dict | None,
-    baseline_kappa: float,
-    kappa_end: float = 0.65,
-    n_points: int = PATHWAY_CURVE_N_POINTS,
-    max_rows_per_city: int = PATHWAY_CURVE_MAX_ROWS_PER_CITY,
-    random_state: int = PATHWAY_CURVE_RANDOM_STATE,
-) -> dict:
-    """Build sampled nationwide kappa and GEF pathway curves."""
-    from drone_emission.emission.cal_single_delivery import create_drone_params, create_ebike_params
-    from drone_emission.utils.grid_emission_factor import fetch_factor
-
-    if not data_dir:
-        return {}
-
-    ebike_params = create_ebike_params(exp_config)
-    drone_params = create_drone_params(exp_config)
-    emission_cfg = (exp_config or {}).get("emission_params", {})
-    rider_weight = float(emission_cfg.get("rider_weight", 70.0))
-    payload_kg = float(emission_cfg.get("payload_kg", 1.0))
-    gef_path = (exp_config or {}).get("gef_path")
-    if "region_level" in stats_df.columns:
-        city_rows = stats_df[stats_df["region_level"] == "city"].copy()
-    else:
-        city_rows = stats_df.copy()
-    required_stats = {"region_key", "province"}
-    if city_rows.empty or not required_stats.issubset(city_rows.columns):
-        return {}
-
-    sampled = []
-    skipped = []
-    for idx, row in city_rows.iterrows():
-        region_key = row["region_key"]
-        province = row["province"]
-        od_path = os.path.join(data_dir, "city", region_key, f"{region_key}_od_pairs.csv")
-        if not os.path.exists(od_path):
-            skipped.append(region_key)
-            continue
-        try:
-            od_df = pd.read_csv(
-                od_path,
-                usecols=["road_distance_m", "distance_km", "annual_sales"],
-            )
-            od_sample, scale = _sample_od_for_pathway_curve(
-                od_df,
-                max_rows=max_rows_per_city,
-                random_state=random_state + int(idx),
-            )
-            if od_sample.empty:
-                skipped.append(region_key)
-                continue
-            province_gef = (
-                fetch_factor(province, gef_path)
-                if gef_path
-                else float(emission_cfg.get("e_use", 0.6))
-            )
-        except Exception:
-            skipped.append(region_key)
-            continue
-        sampled.append((od_sample, scale, float(province_gef)))
-
-    if not sampled:
-        return {}
-
-    kappa_values = np.linspace(baseline_kappa, kappa_end, n_points)
-    gef_values = np.linspace(1.0, 0.5, n_points)
-
-    def aggregate(kappa_value: float, gef_mult: float) -> dict:
-        saved_kg = 0.0
-        city_shares = []
-        for od_sample, scale, province_gef in sampled:
-            result = _evaluate_pathway_optimal_curve_point(
-                od_sample,
-                scale,
-                ebike_params,
-                drone_params,
-                province_gef,
-                kappa=kappa_value,
-                gef_mult=gef_mult,
-                rider_weight=rider_weight,
-                payload_kg=payload_kg,
-                anchor_kappa=baseline_kappa,
-                anchor_gef_mult=1.0,
-            )
-            saved_kg += result["saved_kg"]
-            city_shares.append(result["drone_share_pct"])
-        return {
-            "saved_kt": saved_kg / 1e6,
-            "drone_share_pct": float(np.nanmedian(city_shares)) if city_shares else np.nan,
-        }
-
-    kappa_curve = []
-    for value in kappa_values:
-        point = aggregate(float(value), 1.0)
-        point["x"] = float(value)
-        kappa_curve.append(point)
-
-    gef_curve = []
-    for value in gef_values:
-        point = aggregate(baseline_kappa, float(value))
-        point["x"] = float(value)
-        gef_curve.append(point)
-
-    print(
-        "plot_regions_map_pathway_scenarios: sampled "
-        f"{len(sampled)} cities for pathway curves "
-        f"(max {max_rows_per_city} OD rows/city; skipped {len(skipped)})"
-    )
-    return {
-        "kappa": pd.DataFrame(kappa_curve),
-        "gef": pd.DataFrame(gef_curve),
-    }
-
-
-def _pathway_cache_file_signature(path: str):
-    """Return file metadata used to invalidate pathway figure data cache."""
-    stat = os.stat(path)
-    return {
-        "path": os.path.abspath(path),
-        "size": stat.st_size,
-        "mtime_ns": stat.st_mtime_ns,
-    }
-
-
-def _pathway_optional_cache_file_signature(path: str):
-    """Return cache signature for an optional pathway source file."""
-    if not path or not os.path.exists(path):
-        return None
-    return _pathway_cache_file_signature(path)
-
-
-def _pathway_exp_config_cache_signature(exp_config: dict | None):
-    """Return relevant experiment config fields for pathway cache invalidation."""
-    cfg = exp_config or {}
-    return {
-        "emission_params": cfg.get("emission_params", {}),
-        "gef_path": cfg.get("gef_path"),
-        "cache_dir": cfg.get("cache_dir"),
-    }
-
-
-def _pathway_city_od_cache_signatures(stats_df: pd.DataFrame, data_dir: str):
-    """Return source signatures for available city OD files used by this figure."""
-    if not data_dir:
-        return {}
-    if "region_level" in stats_df.columns:
-        city_rows = stats_df[stats_df["region_level"] == "city"].copy()
-    else:
-        city_rows = stats_df.copy()
-    if "region_key" not in city_rows.columns:
-        return {}
-
-    source_files = {}
-    for region_key in city_rows["region_key"].dropna().astype(str):
-        od_path = os.path.join(data_dir, "city", region_key, f"{region_key}_od_pairs.csv")
-        if os.path.exists(od_path):
-            source_files[region_key] = _pathway_cache_file_signature(od_path)
-    return source_files
-
-
-def _pathway_scenarios_cache_meta(
-    named_csv_path: str,
-    stats_csv_path: str,
-    stats_df: pd.DataFrame,
-    data_dir: str,
-    exp_config: dict | None,
-    panels: list[tuple],
-    baseline_kappa: float,
-):
-    """Return metadata used to invalidate regions_map_pathway_scenarios cache."""
-    return {
-        "version": PATHWAY_SCENARIOS_CACHE_VERSION,
-        "figure_name": "regions_map_pathway_scenarios",
-        "named_file": _pathway_cache_file_signature(named_csv_path),
-        "stats_file": _pathway_cache_file_signature(stats_csv_path),
-        "gef_file": _pathway_optional_cache_file_signature(
-            (exp_config or {}).get("gef_path")
-        ),
-        "data_dir": os.path.abspath(data_dir) if data_dir else None,
-        "od_files": _pathway_city_od_cache_signatures(stats_df, data_dir),
-        "exp_config": _pathway_exp_config_cache_signature(exp_config),
-        "baseline_kappa": float(baseline_kappa),
-        "curve_sampling": {
-            "n_points": PATHWAY_CURVE_N_POINTS,
-            "max_rows_per_city": PATHWAY_CURVE_MAX_ROWS_PER_CITY,
-            "random_state": PATHWAY_CURVE_RANDOM_STATE,
-        },
-        "panels": [
-            {
-                "label": label,
-                "title": title,
-                "kappa": float(kappa),
-                "gef_mult": float(gef_mult),
-                "strategy": strategy,
-            }
-            for label, title, kappa, gef_mult, strategy in panels
-        ],
-    }
-
-
-def _build_pathway_prepared_data_with_cache(
-    named_csv_path: str,
-    stats_csv_path: str,
-    stats_df: pd.DataFrame,
-    data_dir: str,
-    exp_config: dict | None,
-    panels: list[tuple],
-    baseline_kappa: float,
-):
-    """Return oracle panel rows and curve data with a prepared-data cache."""
-    from drone_emission.utils.config import get_cache_dir
-
-    if not data_dir:
-        return (
-            _build_pathway_oracle_panel_rows(
-                stats_df,
-                panels,
-                data_dir=data_dir,
-                exp_config=exp_config,
-                baseline_kappa=baseline_kappa,
-            ),
-            _build_pathway_curve_data(
-                stats_df,
-                data_dir=data_dir,
-                exp_config=exp_config,
-                baseline_kappa=baseline_kappa,
-            ),
-        )
-
-    cache_path = os.path.join(
-        get_cache_dir("visualization", "paper"),
-        "regions_map_pathway_scenarios_prepared.pkl",
-    )
-    cache_meta = _pathway_scenarios_cache_meta(
-        named_csv_path=named_csv_path,
-        stats_csv_path=stats_csv_path,
-        stats_df=stats_df,
-        data_dir=data_dir,
-        exp_config=exp_config,
-        panels=panels,
-        baseline_kappa=baseline_kappa,
-    )
-    if os.path.exists(cache_path):
-        try:
-            with open(cache_path, "rb") as f:
-                cache = pickle.load(f)
-            if cache.get("meta") == cache_meta:
-                print(
-                    "regions_map_pathway_scenarios: loading prepared data cache "
-                    f"{cache_path}"
-                )
-                return cache["oracle_rows"], cache["curve_data"]
-            print("regions_map_pathway_scenarios: prepared data cache is stale; rebuilding")
-        except Exception as exc:
-            print(
-                "regions_map_pathway_scenarios: failed to load prepared cache "
-                f"({exc}); rebuilding"
-            )
-
-    oracle_rows = _build_pathway_oracle_panel_rows(
-        stats_df,
-        panels,
-        data_dir=data_dir,
-        exp_config=exp_config,
-        baseline_kappa=baseline_kappa,
-    )
-    curve_data = _build_pathway_curve_data(
-        stats_df,
-        data_dir=data_dir,
-        exp_config=exp_config,
-        baseline_kappa=baseline_kappa,
-    )
-    with open(cache_path, "wb") as f:
-        pickle.dump(
-            {
-                "meta": cache_meta,
-                "oracle_rows": oracle_rows,
-                "curve_data": curve_data,
-            },
-            f,
-            protocol=pickle.HIGHEST_PROTOCOL,
-        )
-    print(f"regions_map_pathway_scenarios: wrote prepared data cache {cache_path}")
-    return oracle_rows, curve_data
-
 
 def _pathway_scenario_definitions(baseline_kappa: float) -> list[tuple]:
     """Return the standard pathway scenario definitions."""
@@ -758,62 +128,52 @@ def _pathway_scenario_definitions(baseline_kappa: float) -> list[tuple]:
 
 
 def _prepare_pathway_scenario_data(
-    named_csv_path: str,
     stats_csv_path: str,
-    data_dir: str = None,
-    exp_config: dict = None,
+    scenario_csv_path: str,
+    curve_csv_path: str,
+    analysis_report_path: str,
 ):
-    """Return cache-backed pathway scenario tables used by map figures."""
-    named = pd.read_csv(named_csv_path)
+    """Load cohort-bound pathway analysis tables used by map figures."""
+    from drone_emission.analysis.pathway_scenarios import PATHWAY_ANALYSIS_VERSION
+    from drone_emission.paper_cohort import cohort_hash, locked_region_keys
+
     base = pd.read_csv(stats_csv_path)
-
-    baseline_kappa = _baseline_kappa_for_pathway(named, base)
+    oracle_rows = pd.read_csv(scenario_csv_path)
+    curve_rows = pd.read_csv(curve_csv_path)
+    with open(analysis_report_path, "r", encoding="utf-8") as handle:
+        analysis_report = json.load(handle)
+    if analysis_report.get("analysis_version") != PATHWAY_ANALYSIS_VERSION:
+        raise RuntimeError("pathway analysis version is stale; rerun analyze")
+    if analysis_report.get("paper_cohort_sha256") != cohort_hash():
+        raise RuntimeError("pathway analysis belongs to a different cohort")
+    if analysis_report.get("city_count") != len(locked_region_keys()):
+        raise RuntimeError("pathway analysis has the wrong city count")
+    baseline_kappa = float(analysis_report["baseline_kappa"])
     panels = _pathway_scenario_definitions(baseline_kappa)
-
-    reduction_col = "reduction_vs_anchor_ebike_pct"
-    has_annual = "annual_lifecycle_kg" in named.columns
-    anchor_rows = _pathway_anchor_annual_kg(named, base, baseline_kappa)
-    oracle_rows, curve_data = _build_pathway_prepared_data_with_cache(
-        named_csv_path=named_csv_path,
-        stats_csv_path=stats_csv_path,
-        stats_df=base,
-        data_dir=data_dir,
-        exp_config=exp_config,
-        panels=panels,
-        baseline_kappa=baseline_kappa,
+    expected_rows = len(locked_region_keys()) * len(panels)
+    if len(oracle_rows) != expected_rows:
+        raise RuntimeError(
+            f"pathway scenario table has {len(oracle_rows)} rows; "
+            f"expected {expected_rows}"
+        )
+    curve_data = {
+        pathway: rows.drop(columns=["pathway"]).reset_index(drop=True)
+        for pathway, rows in curve_rows.groupby("pathway", sort=False)
+    }
+    anchor_rows = (
+        oracle_rows[["region_key", "anchor_annual_kg"]]
+        .dropna()
+        .drop_duplicates(subset=["region_key"])
     )
-    if not oracle_rows.empty:
-        has_annual = True
-        anchor_rows = (
-            oracle_rows[["region_key", "anchor_annual_kg"]]
-            .dropna()
-            .drop_duplicates(subset=["region_key"])
-        )
-    else:
-        print(
-            "pathway scenario maps: oracle-min panel rows unavailable; "
-            "falling back to named threshold-sweep strategies."
-        )
-    if has_annual and anchor_rows.empty:
-        print(
-            "pathway scenario maps: annual scenario totals are present "
-            "but no weighted all-ebike anchor was found; falling back to named reductions."
-        )
+    has_annual = True
 
     panel_dfs = {}
     panel_named = {}
     drone_share_median = {}
     annual_saved_total_kg = {}
     all_values = []
-    for label, _title, k, g, strat in panels:
-        if not oracle_rows.empty:
-            rows = oracle_rows[oracle_rows["panel_label"] == label].copy()
-        else:
-            rows = named[
-                np.isclose(named["kappa"], k)
-                & np.isclose(named["gef_mult"], g)
-                & (named["strategy"] == strat)
-            ].copy()
+    for label, _title, _k, _g, _strategy in panels:
+        rows = oracle_rows[oracle_rows["panel_label"] == label].copy()
         rows["province_en"] = rows["province"].map(PROVINCE_NAME_EN).fillna(
             rows["province"]
         )
@@ -823,40 +183,33 @@ def _prepare_pathway_scenario_data(
             if not rows.empty
             else "drone_ratio_pct"
         )
-        if has_annual and not anchor_rows.empty:
-            sub = rows[["region_key", "annual_lifecycle_kg"]].merge(
-                anchor_rows, on="region_key", how="left"
-            )
-            sub["max_lifecycle_reduction_pct"] = np.where(
-                sub["anchor_annual_kg"] > 0,
-                (
-                    1.0
-                    - pd.to_numeric(sub["annual_lifecycle_kg"], errors="coerce")
-                    / sub["anchor_annual_kg"]
-                ) * 100.0,
-                np.nan,
-            )
-            sub = sub[["region_key", "max_lifecycle_reduction_pct"]]
-        else:
-            sub = rows[["region_key", reduction_col]].rename(
-                columns={reduction_col: "max_lifecycle_reduction_pct"}
-            )
+        sub = rows[["region_key", "annual_lifecycle_kg"]].merge(
+            anchor_rows, on="region_key", how="left"
+        )
+        sub["max_lifecycle_reduction_pct"] = np.where(
+            sub["anchor_annual_kg"] > 0,
+            (
+                1.0
+                - pd.to_numeric(sub["annual_lifecycle_kg"], errors="coerce")
+                / sub["anchor_annual_kg"]
+            ) * 100.0,
+            np.nan,
+        )
+        sub = sub[["region_key", "max_lifecycle_reduction_pct"]]
         merged = base.drop(columns=["max_lifecycle_reduction_pct"], errors="ignore").merge(
             sub, on="region_key", how="left"
         )
         panel_dfs[label] = merged
         all_values.extend(merged["max_lifecycle_reduction_pct"].dropna().tolist())
         drone_share_median[label] = float(rows[share_col].median()) if len(rows) else float("nan")
-        if has_annual and not anchor_rows.empty:
-            joined = rows[["region_key", "annual_lifecycle_kg"]].merge(
-                anchor_rows, on="region_key", how="inner"
-            )
-            annual_saved_total_kg[label] = float(
-                (joined["anchor_annual_kg"] - joined["annual_lifecycle_kg"]).sum()
-            )
+        joined = rows[["region_key", "annual_lifecycle_kg"]].merge(
+            anchor_rows, on="region_key", how="inner"
+        )
+        annual_saved_total_kg[label] = float(
+            (joined["anchor_annual_kg"] - joined["annual_lifecycle_kg"]).sum()
+        )
 
     return {
-        "named": named,
         "base": base,
         "baseline_kappa": baseline_kappa,
         "panels": panels,
@@ -1212,7 +565,8 @@ def _write_regions_map_pathway_scenarios_report(
     output_paths: dict,
     figsize: tuple,
     colorbar_figsize: tuple,
-    named_csv_path: str,
+    scenario_csv_path: str,
+    curve_csv_path: str,
     stats_csv_path: str,
     panels: list[tuple],
     panel_dfs: dict,
@@ -1257,7 +611,8 @@ def _write_regions_map_pathway_scenarios_report(
     payload = {
         "figure_name": "regions_map_pathway_scenarios",
         "figure_paths": output_paths,
-        "source_named_csv_path": named_csv_path,
+        "source_scenario_csv_path": scenario_csv_path,
+        "source_curve_csv_path": curve_csv_path,
         "source_stats_csv_path": stats_csv_path,
         "scenario_figure_size_inches": {"width": figsize[0], "height": figsize[1]},
         "colorbar_figure_size_inches": {
@@ -1303,7 +658,8 @@ def _write_regions_map_pathway_scenario_maps_report(
     save_path: str,
     output_paths: dict,
     figsize: tuple,
-    named_csv_path: str,
+    scenario_csv_path: str,
+    curve_csv_path: str,
     stats_csv_path: str,
     curve_data: dict,
     curve_axes: list,
@@ -1314,7 +670,8 @@ def _write_regions_map_pathway_scenario_maps_report(
     payload = {
         "figure_name": "regions_map_pathway_scenario_maps",
         "figure_paths": output_paths,
-        "source_named_csv_path": named_csv_path,
+        "source_scenario_csv_path": scenario_csv_path,
+        "source_curve_csv_path": curve_csv_path,
         "source_stats_csv_path": stats_csv_path,
         "panel_size_inches": {"width": figsize[0], "height": figsize[1]},
         "panel_size_mm": {
@@ -1379,10 +736,10 @@ def _write_regions_map_pathway_scenario_maps_report(
 
 
 def plot_regions_map_pathway_scenario_maps(
-    named_csv_path: str,
     stats_csv_path: str,
-    data_dir: str = None,
-    exp_config: dict = None,
+    scenario_csv_path: str,
+    curve_csv_path: str,
+    analysis_report_path: str,
     save_path: str = None,
     figsize: tuple = (120 / 25.4, 72 / 25.4),
     for_latex: bool = False,
@@ -1396,10 +753,10 @@ def plot_regions_map_pathway_scenario_maps(
     assembly into an approximately 120 mm by 150 mm paper figure.
 
     Args:
-        named_csv_path: Path to all_sensitivity_named.csv.
         stats_csv_path: Path to all_region_stats.csv (provides region_name_cn lookup).
-        data_dir: Data root containing city OD-pair CSVs for oracle-min scenarios.
-        exp_config: Experiment config for vehicle parameters and GEF path.
+        scenario_csv_path: Prepared city-by-scenario analysis table.
+        curve_csv_path: Prepared national pathway curve table.
+        analysis_report_path: Cohort and analysis-version metadata.
         save_path: Base output path. Panel suffixes are added before extension.
             Shows plots if None.
         figsize: Size tuple for each standalone panel.
@@ -1407,10 +764,10 @@ def plot_regions_map_pathway_scenario_maps(
         plot_title: If True, show a title in each panel.
     """
     scenario_data = _prepare_pathway_scenario_data(
-        named_csv_path=named_csv_path,
         stats_csv_path=stats_csv_path,
-        data_dir=data_dir,
-        exp_config=exp_config,
+        scenario_csv_path=scenario_csv_path,
+        curve_csv_path=curve_csv_path,
+        analysis_report_path=analysis_report_path,
     )
     curve_data = scenario_data["curve_data"]
     drone_share_median = scenario_data["drone_share_median"]
@@ -1515,7 +872,8 @@ def plot_regions_map_pathway_scenario_maps(
             save_path=report_base_path,
             output_paths=output_paths,
             figsize=figsize,
-            named_csv_path=named_csv_path,
+            scenario_csv_path=scenario_csv_path,
+            curve_csv_path=curve_csv_path,
             stats_csv_path=stats_csv_path,
             curve_data=curve_data,
             curve_axes=curve_axes,
@@ -1527,10 +885,10 @@ def plot_regions_map_pathway_scenario_maps(
 
 
 def plot_regions_map_pathway_scenarios(
-    named_csv_path: str,
     stats_csv_path: str,
-    data_dir: str = None,
-    exp_config: dict = None,
+    scenario_csv_path: str,
+    curve_csv_path: str,
+    analysis_report_path: str,
     save_path: str = None,
     figsize: tuple = (3.05, 3.75),
     for_latex: bool = False,
@@ -1547,24 +905,22 @@ def plot_regions_map_pathway_scenarios(
     scenarios are assembled into a 2x2 paper figure; its height matches two
     stacked scenario canvases.
 
-    Panels use the per-OD oracle-min mixed allocation when city OD files and
-    experiment config are available. The named threshold-sweep scenarios are
-    retained as a fallback for older artifacts:
+    Panels use the cohort-bound per-OD oracle-min mixed allocation prepared by
+    the analyze stage:
         today                    baseline kappa, gef_mult=1.0
         halved GEF               baseline kappa, gef_mult=0.5
         operator bundling        kappa=0.65, gef_mult=1.0
         halved GEF + bundling    kappa=0.65, gef_mult=0.5
 
-    Reduction values (map fill) prefer annual lifecycle totals against the
-    weighted all-ebike city baseline from `all_region_stats.csv`, falling back
-    to `reduction_vs_anchor_ebike_pct` when annual scenario totals are missing.
-    Boxplot y-axis is drone order share in 0..100.
+    Reduction values (map fill) use annual lifecycle totals against the weighted
+    all-ebike city baseline from `all_region_stats.csv`. Boxplot y-axis is drone
+    order share in 0..100.
 
     Args:
-        named_csv_path: Path to all_sensitivity_named.csv.
         stats_csv_path: Path to all_region_stats.csv (provides region_name_cn lookup).
-        data_dir: Data root containing city OD-pair CSVs for oracle-min scenarios.
-        exp_config: Experiment config for vehicle parameters and GEF path.
+        scenario_csv_path: Prepared city-by-scenario analysis table.
+        curve_csv_path: Prepared national pathway curve table.
+        analysis_report_path: Cohort and analysis-version metadata.
         save_path: Base output path. Scenario suffixes are added before extension.
             Shows plots if None.
         figsize: Size tuple for each standalone scenario subfigure.
@@ -1574,10 +930,10 @@ def plot_regions_map_pathway_scenarios(
     from drone_emission.visualization.regions import plot_regions_on_china_map
 
     scenario_data = _prepare_pathway_scenario_data(
-        named_csv_path=named_csv_path,
         stats_csv_path=stats_csv_path,
-        data_dir=data_dir,
-        exp_config=exp_config,
+        scenario_csv_path=scenario_csv_path,
+        curve_csv_path=curve_csv_path,
+        analysis_report_path=analysis_report_path,
     )
     base = scenario_data["base"]
     anchor_rows = scenario_data["anchor_rows"]
@@ -1590,8 +946,9 @@ def plot_regions_map_pathway_scenarios(
     has_annual = scenario_data["has_annual"]
 
     if not all_values:
-        print("plot_regions_map_pathway_scenarios: no scenario rows matched any region in stats — "
-              "rendering empty maps. Run sensitivity --stages named first.")
+        raise RuntimeError(
+            "pathway scenario analysis contains no rows matching region stats"
+        )
         v_max = 1.0
     else:
         v_max = max(max(all_values), 0.0)
@@ -1799,7 +1156,8 @@ def plot_regions_map_pathway_scenarios(
             output_paths=output_paths,
             figsize=figsize,
             colorbar_figsize=colorbar_figsize,
-            named_csv_path=named_csv_path,
+            scenario_csv_path=scenario_csv_path,
+            curve_csv_path=curve_csv_path,
             stats_csv_path=stats_csv_path,
             panels=panels,
             panel_dfs=panel_dfs,

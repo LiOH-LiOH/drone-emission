@@ -23,11 +23,16 @@ DERIVED_GLOBAL_NAMES = {
     "all_city_contribution_decomposition.csv",
     "all_city_contribution_decomposition.partial.csv",
     "all_city_contribution_decomposition_status.csv",
+    "all_pathway_scenario_city.csv",
+    "all_pathway_curve_points.csv",
+    "all_pathway_scenarios_report.json",
     "all_threshold_resilience.csv",
     "all_threshold_resilience_drivers.csv",
 }
 
-COHORT_FILTERED_TABLES = DERIVED_GLOBAL_NAMES - {"all_region_stats.json"}
+COHORT_FILTERED_TABLES = {
+    name for name in DERIVED_GLOBAL_NAMES if name.endswith(".csv")
+}
 
 
 def analysis_root(config: dict) -> Path:
@@ -127,19 +132,21 @@ def _filter_analysis_view(target_root: Path, study_keys: set[str]) -> None:
             continue
         if "region_key" not in frame.columns:
             continue
-        frame = frame[frame["region_key"].astype(str).isin(study_keys)].copy()
-        _atomic_frame(frame, path)
+        cohort_rows = frame[frame["region_key"].astype(str).isin(study_keys)]
+        if len(cohort_rows) != len(frame):
+            _atomic_frame(cohort_rows.copy(), path)
 
     stats_json = target_root / "all_region_stats.json"
     if stats_json.is_file():
         payload = json.loads(stats_json.read_text(encoding="utf-8"))
         filtered = {key: value for key, value in payload.items() if key in study_keys}
-        temporary = stats_json.with_suffix(".json.tmp")
-        temporary.write_text(
-            json.dumps(filtered, ensure_ascii=False, indent=2) + "\n",
-            encoding="utf-8",
-        )
-        temporary.replace(stats_json)
+        if filtered != payload:
+            temporary = stats_json.with_suffix(".json.tmp")
+            temporary.write_text(
+                json.dumps(filtered, ensure_ascii=False, indent=2) + "\n",
+                encoding="utf-8",
+            )
+            temporary.replace(stats_json)
 
     partial = target_root / "all_city_distance_threshold_summary.partial.csv"
     complete = target_root / "all_city_distance_threshold_summary.csv"
@@ -157,9 +164,16 @@ def _filter_analysis_view(target_root: Path, study_keys: set[str]) -> None:
         "region_keys": sorted(study_keys),
     }
     metadata_path = target_root / "paper_cohort_view.json"
-    temporary = metadata_path.with_suffix(".json.tmp")
-    temporary.write_text(json.dumps(metadata, indent=2) + "\n", encoding="utf-8")
-    temporary.replace(metadata_path)
+    existing_metadata = None
+    if metadata_path.is_file():
+        try:
+            existing_metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            pass
+    if existing_metadata != metadata:
+        temporary = metadata_path.with_suffix(".json.tmp")
+        temporary.write_text(json.dumps(metadata, indent=2) + "\n", encoding="utf-8")
+        temporary.replace(metadata_path)
 
 
 def _view_config(config: dict) -> dict:
@@ -240,6 +254,13 @@ def _run_contribution_decomposition(
     return output
 
 
+def _run_pathway_scenarios(config: dict, *, force: bool) -> Path:
+    from .analysis.pathway_scenarios import run_pathway_analysis
+
+    _, _, report = run_pathway_analysis(config, force=force)
+    return report
+
+
 def _run_threshold_resilience(config: dict, *, force: bool) -> Path:
     from .tools.run_threshold_resilience import (
         _city_regions,
@@ -316,6 +337,9 @@ def analyze(
     """Build or restore every retained non-plot paper analysis."""
     runners = {
         "named-scenarios": lambda view: _run_named_scenarios(view, force=force),
+        "pathway-scenarios": lambda view: _run_pathway_scenarios(
+            view, force=force
+        ),
         "distance-threshold": lambda view: _run_distance_threshold(view, force=force),
         "threshold-resilience": lambda view: _run_threshold_resilience(view, force=force),
         "city-attribution": lambda view: _run_city_attribution(config, force=force),
@@ -355,6 +379,8 @@ def analyze(
             / "r2_city_attribution_analysis_report.json",
             "contribution_decomposition": Path(view["data_dir"])
             / "all_city_contribution_decomposition.csv",
+            "pathway_scenarios": Path(view["data_dir"])
+            / "all_pathway_scenarios_report.json",
         }
         selected_outputs = {name.replace("-", "_") for name in selected}
         outputs = {

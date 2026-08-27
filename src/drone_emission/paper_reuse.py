@@ -15,7 +15,7 @@ import pandas as pd
 from .paper_cohort import cohort_hash, load_cohort_contract, locked_region_keys
 
 
-REUSE_SCHEMA_VERSION = 3
+REUSE_SCHEMA_VERSION = 4
 GLOBAL_DATA_ARTIFACTS = (
     "all_region_stats.json",
     "all_region_stats.csv",
@@ -25,6 +25,9 @@ GLOBAL_DATA_ARTIFACTS = (
     "all_city_distance_threshold_status.csv",
     "all_city_contribution_decomposition.csv",
     "all_city_contribution_decomposition_status.csv",
+    "all_pathway_scenario_city.csv",
+    "all_pathway_curve_points.csv",
+    "all_pathway_scenarios_report.json",
     "all_threshold_resilience.csv",
     "all_threshold_resilience_drivers.csv",
 )
@@ -237,6 +240,7 @@ def _replace_region_rows(
 def migrate_fallback_gef_overlay(config: dict) -> dict:
     """Refresh only the five fallback-GEF cities inside an isolated data view."""
     from .analysis.contribution_decomposition import run_contribution_analysis
+    from .analysis.pathway_scenarios import run_pathway_analysis
     from .analysis_workflow import _filter_analysis_view, _run_city_attribution
     from .tools.consolidate_sensitivity import consolidate as consolidate_named
     from .tools.consolidate_stats import consolidate as consolidate_stats
@@ -349,12 +353,14 @@ def migrate_fallback_gef_overlay(config: dict) -> dict:
     temporary.replace(resilience_drivers_path)
     attribution = _run_city_attribution(config, force=True)
     contribution, _ = run_contribution_analysis(config, force=False)
+    _, _, pathway = run_pathway_analysis(config, force=True)
     _filter_analysis_view(data_root, study)
     return {
         "affected_region_keys": sorted(affected),
         "lifecycle_refreshed": lifecycle,
         "distance_threshold": str(distance_path),
         "contribution_decomposition": str(contribution),
+        "pathway_scenarios": str(pathway),
         "city_attribution": str(attribution),
     }
 
