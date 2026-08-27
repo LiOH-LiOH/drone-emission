@@ -22,7 +22,7 @@ BREAK_EVEN_MARCHING_CUBES_SUBFIGURE_GROUP = (
     "break_even_contribution_decomposition_marching_cubes_subfigures"
 )
 BREAK_EVEN_PHASE_CACHE_VERSION = 9
-CONTRIBUTION_DECOMPOSITION_FULL_CACHE_VERSION = 7
+CONTRIBUTION_DECOMPOSITION_FULL_CACHE_VERSION = 8
 
 
 def _get_ebike_kappa(exp_config):

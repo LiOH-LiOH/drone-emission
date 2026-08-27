@@ -24,6 +24,7 @@ from .macro_regions import (
 
 CONTRIBUTION_SAMPLE_LIMIT = 2000
 CONTRIBUTION_SAMPLE_SEED = 42
+CONTRIBUTION_FULL_CHUNK_ROWS = 250_000
 CONTRIBUTION_COMPONENT_SPECS = (
     {
         "key": "embodied_balance",
@@ -526,6 +527,133 @@ def _national_contribution_row(national: dict) -> dict:
     return row
 
 
+def _full_city_contribution_aggregates(
+    od_path: str,
+    ebike_params,
+    drone_params,
+    ebike_scenario,
+    drone_scenario,
+    sample_seed: int,
+) -> tuple[dict | None, str | None]:
+    """Aggregate one full OD CSV in bounded-memory chunks."""
+    from drone_emission.sensitivity.vectorized_lca import (
+        compute_drone_per_order_parts_g,
+        compute_ebike_per_order_parts_g,
+    )
+
+    usecols = lambda col: col in {
+        "distance_km",
+        "annual_sales",
+        "road_distance_m",
+    }
+    columns = pd.read_csv(od_path, nrows=0, usecols=usecols).columns
+    if "distance_km" not in columns or "annual_sales" not in columns:
+        return None, "missing_required_od_columns"
+    has_road_distance = "road_distance_m" in columns
+    component_kg = {key: 0.0 for key in CONTRIBUTION_COMPONENT_KEYS}
+    valid_rows = 0
+    assigned_rows = 0
+    max_abs_error_g = 0.0
+    aggregate_error_kg = 0.0
+
+    for chunk in pd.read_csv(
+        od_path,
+        usecols=usecols,
+        chunksize=CONTRIBUTION_FULL_CHUNK_ROWS,
+    ):
+        chunk["distance_km"] = pd.to_numeric(
+            chunk["distance_km"], errors="coerce"
+        )
+        chunk["annual_sales"] = pd.to_numeric(
+            chunk["annual_sales"], errors="coerce"
+        )
+        if has_road_distance:
+            chunk["road_distance_m"] = pd.to_numeric(
+                chunk["road_distance_m"], errors="coerce"
+            )
+            chunk["_road_km"] = chunk["road_distance_m"] / 1000.0
+        else:
+            chunk["_road_km"] = chunk["distance_km"]
+        valid = chunk[
+            chunk["distance_km"].notna()
+            & (chunk["distance_km"] > 0)
+            & chunk["_road_km"].notna()
+            & (chunk["_road_km"] > 0)
+            & chunk["annual_sales"].notna()
+            & (chunk["annual_sales"] > 0)
+        ]
+        if valid.empty:
+            continue
+
+        road_km = valid["_road_km"].to_numpy(dtype=float)
+        air_km = valid["distance_km"].to_numpy(dtype=float)
+        annual_weight = valid["annual_sales"].to_numpy(dtype=float)
+        ebike_parts = compute_ebike_per_order_parts_g(
+            road_km, ebike_params, ebike_scenario
+        )
+        drone_parts = compute_drone_per_order_parts_g(
+            air_km, drone_params, drone_scenario
+        )
+        use_drone = drone_parts["total_g"] < ebike_parts["total_g"]
+        embodied_balance_g = (
+            ebike_parts["production_g"]
+            + ebike_parts["end_of_life_g"]
+            - drone_parts["production_g"]
+            - drone_parts["end_of_life_g"]
+        )
+        component_values = {
+            "embodied_balance": embodied_balance_g,
+            "avoided_ebike_road_use": ebike_parts["use_g"],
+            "drone_fixed_flight_penalty": -drone_parts["fixed_use_g"],
+            "drone_cruise_penalty": -drone_parts["cruise_use_g"],
+        }
+        net_saving_g = ebike_parts["total_g"] - drone_parts["total_g"]
+        sum_check_g = sum(component_values.values()) - net_saving_g
+
+        valid_rows += len(valid)
+        assigned_rows += int(use_drone.sum())
+        selected_weight = annual_weight[use_drone]
+        for key, values in component_values.items():
+            component_kg[key] += float(
+                np.sum(
+                    values[use_drone] * selected_weight,
+                    dtype=np.float64,
+                )
+                / 1000.0
+            )
+        if use_drone.any():
+            selected_error = sum_check_g[use_drone]
+            max_abs_error_g = max(
+                max_abs_error_g,
+                float(np.max(np.abs(selected_error))),
+            )
+            aggregate_error_kg += float(
+                np.sum(
+                    selected_error * selected_weight,
+                    dtype=np.float64,
+                )
+                / 1000.0
+            )
+
+    if valid_rows == 0:
+        return None, "no_valid_od_rows"
+    return {
+        "has_road_distance_m": has_road_distance,
+        "sample": {
+            "valid_rows": int(valid_rows),
+            "sampled_rows": int(valid_rows),
+            "distance_strata": [],
+            "sample_seed": int(sample_seed),
+            "sampling_mode": "full",
+        },
+        "assigned_rows": assigned_rows,
+        "assigned_ratio_pct": assigned_rows / valid_rows * 100.0,
+        "component_kg": component_kg,
+        "max_abs_error_g_per_order": max_abs_error_g,
+        "aggregate_error_kg": aggregate_error_kg,
+    }, None
+
+
 def prepare_contribution_decomposition_data(
     city_df: pd.DataFrame,
     data_dir: str,
@@ -597,11 +725,13 @@ def prepare_contribution_decomposition_data(
         payload_kg=emission_cfg["payload_kg"],
     )
 
-    assigned_frames = []
     city_reports = []
     skipped_cities = []
     national_components_kg = {key: 0.0 for key in CONTRIBUTION_COMPONENT_KEYS}
     national_baseline_kg = 0.0
+    national_assigned_rows = 0
+    national_max_abs_error_g = 0.0
+    national_aggregate_error_kg = 0.0
 
     for city_row in city_rows.sort_values("region_key").itertuples(index=False):
         region_key = str(city_row.region_key)
@@ -610,6 +740,75 @@ def prepare_contribution_decomposition_data(
             skipped_cities.append(
                 {"region_key": region_key, "reason": "missing_od_csv"}
             )
+            continue
+
+        gef = float(city_row.gef)
+        ebike_pp = replace(ebike_params, e_use=gef)
+        drone_pp = replace(drone_params, e_use=gef)
+        assignment_meta = {
+            "rule": "oracle_per_od_lifecycle_minimum",
+            "description": (
+                "Assign each OD to drone only when drone lifecycle emissions "
+                "are lower than the e-bike alternative."
+            ),
+        }
+        if max_sample_rows is None:
+            full, skip_reason = _full_city_contribution_aggregates(
+                od_path,
+                ebike_pp,
+                drone_pp,
+                ebike_actual_scenario,
+                drone_actual_scenario,
+                sample_seed,
+            )
+            if full is None:
+                skipped_cities.append(
+                    {"region_key": region_key, "reason": skip_reason}
+                )
+                continue
+            city_components_kg = full["component_kg"]
+            city_net_kg = float(sum(city_components_kg.values()))
+            city_baseline_kg = float(city_row.total_ebike_lifecycle)
+            city_reports.append(
+                {
+                    "region_key": region_key,
+                    "region_name_en": str(city_row.region_name_en),
+                    "province": str(city_row.province),
+                    "gef": gef,
+                    "baseline_ebike_lifecycle_kg": city_baseline_kg,
+                    "assignment_rule": assignment_meta["rule"],
+                    "assignment_meta": assignment_meta,
+                    "od_path": od_path,
+                    "has_road_distance_m": full["has_road_distance_m"],
+                    "sample": full["sample"],
+                    "drone_assigned_sampled_rows": full["assigned_rows"],
+                    "sampled_drone_ratio_pct": full["assigned_ratio_pct"],
+                    "component_kg": city_components_kg,
+                    "component_pct_points": {
+                        key: city_components_kg[key] / city_baseline_kg * 100.0
+                        for key in CONTRIBUTION_COMPONENT_KEYS
+                    },
+                    "net_saving_kg": city_net_kg,
+                    "net_saving_pct_points": (
+                        city_net_kg / city_baseline_kg * 100.0
+                    ),
+                    "sum_check": {
+                        "max_abs_error_g_per_order": full[
+                            "max_abs_error_g_per_order"
+                        ],
+                        "aggregate_error_kg": full["aggregate_error_kg"],
+                    },
+                }
+            )
+            national_baseline_kg += city_baseline_kg
+            for key, value in city_components_kg.items():
+                national_components_kg[key] += value
+            national_assigned_rows += full["assigned_rows"]
+            national_max_abs_error_g = max(
+                national_max_abs_error_g,
+                full["max_abs_error_g_per_order"],
+            )
+            national_aggregate_error_kg += full["aggregate_error_kg"]
             continue
 
         od_df = pd.read_csv(
@@ -670,9 +869,6 @@ def prepare_contribution_decomposition_data(
             )
             continue
 
-        gef = float(city_row.gef)
-        ebike_pp = replace(ebike_params, e_use=gef)
-        drone_pp = replace(drone_params, e_use=gef)
         road_km = sampled["_road_km"].to_numpy(dtype=float)
         air_km = sampled["distance_km"].to_numpy(dtype=float)
         annual_sales = sampled["annual_sales"].to_numpy(dtype=float)
@@ -691,14 +887,6 @@ def prepare_contribution_decomposition_data(
         )
 
         use_drone = drone_actual_parts["total_g"] < ebike_actual_parts["total_g"]
-        assignment_meta = {
-            "rule": "oracle_per_od_lifecycle_minimum",
-            "description": (
-                "Assign each OD to drone only when drone lifecycle emissions "
-                "are lower than the e-bike alternative."
-            ),
-        }
-
         embodied_balance_g = (
             ebike_actual_parts["production_g"]
             + ebike_actual_parts["end_of_life_g"]
@@ -788,29 +976,19 @@ def prepare_contribution_decomposition_data(
         for key, value in city_components_kg.items():
             national_components_kg[key] += value
         if not assigned.empty:
-            assigned_frames.append(
-                assigned[
-                    [
-                        "_annual_weight",
-                        "sum_check_error_g",
-                    ]
-                ].copy()
+            national_assigned_rows += len(assigned)
+            national_max_abs_error_g = max(
+                national_max_abs_error_g,
+                float(np.abs(assigned["sum_check_error_g"]).max()),
+            )
+            national_aggregate_error_kg += float(
+                assigned["sum_check_error_g"].mul(assigned["_annual_weight"]).sum()
+                / 1000.0
             )
 
     if national_baseline_kg <= 0 or not city_reports:
         print("Contribution decomposition skipped — no city contributions available")
         return None
-
-    assigned_df = (
-        pd.concat(assigned_frames, ignore_index=True)
-        if assigned_frames
-        else pd.DataFrame(
-            columns=[
-                "_annual_weight",
-                "sum_check_error_g",
-            ]
-        )
-    )
 
     national = {
         f"{key}_kg": float(national_components_kg[key])
@@ -829,17 +1007,10 @@ def prepare_contribution_decomposition_data(
     national["total_net_pp"] = float(
         sum(national[f"{key}_pp"] for key in CONTRIBUTION_COMPONENT_KEYS)
     )
-    national["drone_assigned_sampled_rows"] = int(len(assigned_df))
+    national["drone_assigned_sampled_rows"] = int(national_assigned_rows)
     national["sum_check"] = {
-        "max_abs_error_g_per_order": float(np.abs(assigned_df["sum_check_error_g"]).max())
-        if not assigned_df.empty
-        else 0.0,
-        "aggregate_error_kg": float(
-            assigned_df["sum_check_error_g"].mul(assigned_df["_annual_weight"]).sum()
-            / 1000.0
-        )
-        if not assigned_df.empty
-        else 0.0,
+        "max_abs_error_g_per_order": float(national_max_abs_error_g),
+        "aggregate_error_kg": float(national_aggregate_error_kg),
     }
 
     runtime_seconds = time.perf_counter() - start_time
