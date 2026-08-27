@@ -29,11 +29,9 @@ from drone_emission.emission.cal_single_delivery import (  # noqa: E402
 )
 from drone_emission.sensitivity.threshold_resilience import (  # noqa: E402
     ANALYSIS_VERSION,
+    ThresholdResilienceContext,
     aggregate_fixed_threshold,
-    evaluate_samples,
-    mode_sample,
     resolve_distributions,
-    sample_parameters,
     spearman_drivers,
     summarize_samples,
 )
@@ -185,6 +183,25 @@ def _analysis_config_digest(config: dict) -> str:
         "gef_sha256": _file_digest(gef_path),
     }
     return _config_digest(payload)
+
+
+def build_execution_context(config: dict) -> ThresholdResilienceContext:
+    """Create the shared Monte Carlo state for one city batch."""
+    cfg = config.get("threshold_resilience", {}) or {}
+    ebike_params = create_ebike_params(config)
+    drone_params = create_drone_params(config)
+    specs = resolve_distributions(config, ebike_params, drone_params)
+    return ThresholdResilienceContext.create(
+        specs,
+        ebike_params,
+        drone_params,
+        float(get_emission_params(config)["rider_weight"]),
+        int(cfg.get("n_samples", 10000)),
+        int(cfg.get("seed", 42)),
+        correlated_stress=bool(cfg.get("correlated_stress", True)),
+        stress_spearman_rho=float(cfg.get("stress_spearman_rho", 0.5)),
+        config_sha256=_analysis_config_digest(config),
+    )
 
 
 def _cache_is_fresh(
@@ -350,6 +367,7 @@ def analyze_region(
     *,
     save_samples: bool = False,
     force: bool = False,
+    execution_context: ThresholdResilienceContext | None = None,
 ) -> dict:
     started = time.monotonic()
     output_dir = _output_dir(config, region)
@@ -399,6 +417,14 @@ def analyze_region(
                 _atomic_json(result, status_path)
                 return result
 
+        if execution_context is None:
+            execution_context = build_execution_context(config)
+        elif execution_context.config_sha256 != config_digest:
+            raise ValueError(
+                "threshold-resilience execution context belongs to a different "
+                "analysis configuration"
+            )
+
         frame = pd.read_csv(
             od_path,
             usecols=list(OD_COLUMNS),
@@ -414,15 +440,11 @@ def analyze_region(
 
         province = _resolve_province(region, config)
         province_gef = fetch_factor(province, config["gef_path"])
-        ebike_params = create_ebike_params(config)
-        drone_params = create_drone_params(config)
-        rider_weight = float(get_emission_params(config)["rider_weight"])
-        specs = resolve_distributions(config, ebike_params, drone_params)
+        specs = execution_context.specs
 
         tolerance = float(cfg.get("positive_tolerance_pct", 1e-9))
-        baseline_eval = evaluate_samples(
-            mode_sample(specs), aggregates, ebike_params, drone_params,
-            province_gef, rider_weight, tolerance,
+        baseline_eval = execution_context.evaluate(
+            "mode", aggregates, province_gef, tolerance
         )
         baseline_reduction = float(baseline_eval.iloc[0]["reduction_pct"])
         threshold_baseline = float(threshold_row["annual_reduction_pct"])
@@ -434,19 +456,21 @@ def analyze_region(
                 f"threshold={threshold_baseline:.6f}, gap={baseline_gap:.6f}"
             )
 
-        n_samples = int(cfg.get("n_samples", 10000))
+        independent = execution_context.samples_by_scenario["independent"]
+        n_samples = len(independent)
         seed = int(cfg.get("seed", 42))
-        independent = sample_parameters(specs, n_samples, seed)
-        independent_eval = evaluate_samples(
-            independent, aggregates, ebike_params, drone_params,
-            province_gef, rider_weight, tolerance,
+        independent_eval = execution_context.evaluate(
+            "independent", aggregates, province_gef, tolerance
         )
         summaries = [
             summarize_samples(
                 independent_eval, "independent", aggregates, baseline_reduction
             )
         ]
-        drivers = spearman_drivers(independent_eval)
+        drivers = spearman_drivers(
+            independent_eval,
+            execution_context.independent_parameter_ranks,
+        )
 
         evaluated_frames = []
         if save_samples:
@@ -456,14 +480,10 @@ def analyze_region(
             evaluated_frames.append(saved_independent)
 
         stress_rho = None
-        if bool(cfg.get("correlated_stress", True)):
+        if "correlated_adverse_stress" in execution_context.samples_by_scenario:
             stress_rho = float(cfg.get("stress_spearman_rho", 0.5))
-            stress = sample_parameters(
-                specs, n_samples, seed + 1, stress_spearman_rho=stress_rho
-            )
-            stress_eval = evaluate_samples(
-                stress, aggregates, ebike_params, drone_params,
-                province_gef, rider_weight, tolerance,
+            stress_eval = execution_context.evaluate(
+                "correlated_adverse_stress", aggregates, province_gef, tolerance
             )
             summaries.append(
                 summarize_samples(
@@ -627,12 +647,14 @@ def main() -> None:
         parser.error("provide at least one --region, or use --consolidate")
 
     failures = []
+    execution_context = build_execution_context(config)
     for requested in args.region:
         region_key, region = _lookup_region(regions, requested)
         result = analyze_region(
             region_key, region, config,
             save_samples=args.save_samples,
             force=args.force,
+            execution_context=execution_context,
         )
         print(
             f"{region_key}: {result['status']} ({result['elapsed_seconds']:.1f}s) "

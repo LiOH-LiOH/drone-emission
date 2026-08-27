@@ -13,7 +13,7 @@ from typing import Mapping
 
 import numpy as np
 import pandas as pd
-from scipy.stats import norm, spearmanr
+from scipy.stats import norm, rankdata, spearmanr, t as student_t
 
 from drone_emission.emission.cal_single_delivery import DroneParams, EbikeParams
 
@@ -25,7 +25,7 @@ from .vectorized_lca import (
 )
 
 
-ANALYSIS_VERSION = "1.1.0"
+ANALYSIS_VERSION = "1.2.0"
 THRESHOLD_RESILIENCE_SCENARIOS = (
     "independent",
     "correlated_adverse_stress",
@@ -143,6 +143,107 @@ class FixedThresholdAggregates:
         return self.drone_orders / self.total_orders * 100.0
 
 
+@dataclass
+class ThresholdResilienceContext:
+    """Shared Monte Carlo inputs and GEF-specific affine coefficients."""
+
+    specs: Mapping[str, TriangularSpec]
+    ebike_params: EbikeParams
+    drone_params: DroneParams
+    rider_weight: float
+    samples_by_scenario: dict[str, pd.DataFrame]
+    mode_samples: pd.DataFrame
+    independent_parameter_ranks: np.ndarray
+    config_sha256: str | None
+    coefficient_cache: dict[
+        tuple[float, str],
+        tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray],
+    ]
+
+    @classmethod
+    def create(
+        cls,
+        specs: Mapping[str, TriangularSpec],
+        ebike_params: EbikeParams,
+        drone_params: DroneParams,
+        rider_weight: float,
+        n_samples: int,
+        seed: int,
+        *,
+        correlated_stress: bool = True,
+        stress_spearman_rho: float = 0.5,
+        config_sha256: str | None = None,
+    ) -> "ThresholdResilienceContext":
+        independent = sample_parameters(specs, n_samples, seed)
+        samples_by_scenario = {"independent": independent}
+        if correlated_stress:
+            samples_by_scenario["correlated_adverse_stress"] = sample_parameters(
+                specs,
+                n_samples,
+                seed + 1,
+                stress_spearman_rho=stress_spearman_rho,
+            )
+        parameter_ranks = rank_parameter_samples(independent)
+        parameter_ranks.setflags(write=False)
+        return cls(
+            specs=specs,
+            ebike_params=ebike_params,
+            drone_params=drone_params,
+            rider_weight=float(rider_weight),
+            samples_by_scenario=samples_by_scenario,
+            mode_samples=mode_sample(specs),
+            independent_parameter_ranks=parameter_ranks,
+            config_sha256=config_sha256,
+            coefficient_cache={},
+        )
+
+    def affine_coefficients(
+        self,
+        province_gef_kwh: float,
+        scenario: str,
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+        """Return coefficients shared by every city with this exact GEF."""
+        gef = float(province_gef_kwh)
+        key = (gef, scenario)
+        if key not in self.coefficient_cache:
+            samples = (
+                self.mode_samples
+                if scenario == "mode"
+                else self.samples_by_scenario[scenario]
+            )
+            self.coefficient_cache[key] = _affine_coefficients(
+                samples,
+                self.ebike_params,
+                self.drone_params,
+                gef,
+                self.rider_weight,
+            )
+        return self.coefficient_cache[key]
+
+    def evaluate(
+        self,
+        scenario: str,
+        aggregates: FixedThresholdAggregates,
+        province_gef_kwh: float,
+        positive_tolerance_pct: float = 1e-9,
+    ) -> pd.DataFrame:
+        samples = (
+            self.mode_samples
+            if scenario == "mode"
+            else self.samples_by_scenario[scenario]
+        )
+        return evaluate_samples(
+            samples,
+            aggregates,
+            self.ebike_params,
+            self.drone_params,
+            province_gef_kwh,
+            self.rider_weight,
+            positive_tolerance_pct,
+            coefficients=self.affine_coefficients(province_gef_kwh, scenario),
+        )
+
+
 def resolve_distributions(
     config: Mapping,
     ebike_params: EbikeParams,
@@ -233,6 +334,14 @@ def sample_parameters(
             u = np.clip(norm.cdf(z), np.finfo(float).eps, 1.0 - np.finfo(float).eps)
             values[name] = specs[name].ppf(u)
     return pd.DataFrame(values, columns=list(PARAMETER_ORDER))
+
+
+def rank_parameter_samples(samples: pd.DataFrame) -> np.ndarray:
+    """Return per-parameter ranks in configured parameter order."""
+    return rankdata(
+        samples.loc[:, list(PARAMETER_ORDER)].to_numpy(dtype=np.float64),
+        axis=0,
+    )
 
 
 def aggregate_fixed_threshold(
@@ -346,11 +455,19 @@ def evaluate_samples(
     province_gef_kwh: float,
     rider_weight: float,
     positive_tolerance_pct: float = 1e-9,
+    *,
+    coefficients: tuple[
+        np.ndarray, np.ndarray, np.ndarray, np.ndarray
+    ] | None = None,
 ) -> pd.DataFrame:
     """Evaluate a fixed threshold for all supplied parameter samples."""
-    e0, e1, d0, d1 = _affine_coefficients(
-        samples, ebike_params, drone_params, province_gef_kwh, rider_weight
-    )
+    if coefficients is None:
+        coefficients = _affine_coefficients(
+            samples, ebike_params, drone_params, province_gef_kwh, rider_weight
+        )
+    e0, e1, d0, d1 = coefficients
+    if any(len(values) != len(samples) for values in coefficients):
+        raise ValueError("affine coefficient length does not match samples")
     all_ebike_g = (
         e0 * aggregates.total_orders + e1 * aggregates.all_road_order_km
     )
@@ -551,13 +668,45 @@ def summarize_samples(
     }
 
 
-def spearman_drivers(evaluated: pd.DataFrame) -> pd.DataFrame:
+def spearman_drivers(
+    evaluated: pd.DataFrame,
+    parameter_ranks: np.ndarray | None = None,
+) -> pd.DataFrame:
+    """Calculate all drivers after ranking the city reduction only once."""
     reduction = evaluated["reduction_pct"].to_numpy(dtype=np.float64)
-    rows = []
-    for name in PARAMETER_ORDER:
-        rho, pvalue = spearmanr(
-            evaluated[name].to_numpy(dtype=np.float64), reduction
+    if parameter_ranks is None:
+        parameter_ranks = rank_parameter_samples(evaluated)
+    parameter_ranks = np.asarray(parameter_ranks, dtype=np.float64)
+    expected_shape = (len(evaluated), len(PARAMETER_ORDER))
+    if parameter_ranks.shape != expected_shape:
+        raise ValueError(
+            f"parameter ranks must have shape {expected_shape}, "
+            f"found {parameter_ranks.shape}"
         )
+    if len(evaluated) < 3:
+        rho_values = []
+        pvalues = []
+        for name in PARAMETER_ORDER:
+            rho, pvalue = spearmanr(
+                evaluated[name].to_numpy(dtype=np.float64), reduction
+            )
+            rho_values.append(rho)
+            pvalues.append(pvalue)
+    else:
+        reduction_rank = rankdata(reduction)
+        correlation = np.corrcoef(
+            np.column_stack((parameter_ranks, reduction_rank)), rowvar=False
+        )
+        rho_values = correlation[:-1, -1]
+        degrees_of_freedom = len(evaluated) - 2
+        with np.errstate(divide="ignore", invalid="ignore"):
+            denominator = (rho_values + 1.0) * (1.0 - rho_values)
+            statistic = rho_values * np.sqrt(
+                np.clip(degrees_of_freedom / denominator, 0.0, None)
+            )
+        pvalues = 2.0 * student_t.sf(np.abs(statistic), degrees_of_freedom)
+    rows = []
+    for name, rho, pvalue in zip(PARAMETER_ORDER, rho_values, pvalues):
         rows.append(
             {
                 "parameter": name,

@@ -295,6 +295,7 @@ def migrate_fallback_gef_overlay(config: dict) -> dict:
     )
     from .tools.run_threshold_resilience import (
         analyze_region as analyze_resilience,
+        build_execution_context as build_resilience_context,
     )
     from .utils.region_config import init_registry
     from .paths import PROJECT_ROOT
@@ -356,9 +357,14 @@ def migrate_fallback_gef_overlay(config: dict) -> dict:
     original_drivers = pd.read_csv(resilience_drivers_path)
     refreshed_resilience = []
     refreshed_drivers = []
+    resilience_context = build_resilience_context(config)
     for region_key in sorted(affected):
         result = analyze_resilience(
-            region_key, registry[region_key], config, force=True
+            region_key,
+            registry[region_key],
+            config,
+            force=True,
+            execution_context=resilience_context,
         )
         if result["status"] != "ok":
             raise RuntimeError(

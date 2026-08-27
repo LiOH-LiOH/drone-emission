@@ -226,16 +226,35 @@ def _run_threshold_resilience(config: dict, *, force: bool) -> Path:
     from .tools.run_threshold_resilience import (
         _city_regions,
         analyze_region,
+        build_execution_context,
         consolidate,
+        inventory_regions,
     )
 
     output = Path(config["data_dir"]) / "all_threshold_resilience.csv"
-    if output.exists() and not force:
-        return output
-    failures = []
     regions = _city_regions(config)
+    if output.exists() and not force:
+        inventory = inventory_regions(
+            config, require_samples=False, force=False
+        )
+        all_city_caches_are_fresh = (
+            len(inventory) == len(regions)
+            and (inventory["status"] == "cached").all()
+        )
+        if all_city_caches_are_fresh:
+            summary = pd.read_csv(output, usecols=["region_key"])
+            if summary["region_key"].nunique() == len(regions):
+                return output
+    failures = []
+    execution_context = build_execution_context(config)
     for region_key, region in regions.items():
-        result = analyze_region(region_key, region, config, force=force)
+        result = analyze_region(
+            region_key,
+            region,
+            config,
+            force=force,
+            execution_context=execution_context,
+        )
         if result["status"] not in {"ok", "cached"}:
             failures.append(f"{region_key}:{result['status']}")
     if failures:

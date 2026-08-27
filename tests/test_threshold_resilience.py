@@ -24,14 +24,18 @@ from drone_emission.emission.cal_single_delivery import (  # noqa: E402
 )
 from drone_emission.sensitivity.threshold_resilience import (  # noqa: E402
     PARAMETER_ORDER,
+    ThresholdResilienceContext,
     TriangularSpec,
     aggregate_fixed_threshold,
     evaluate_samples,
     mode_sample,
     resolve_distributions,
     sample_parameters,
+    spearman_drivers,
+    summarize_samples,
     wilson_interval,
 )
+from drone_emission.sensitivity import threshold_resilience as resilience  # noqa: E402
 from drone_emission.sensitivity.vectorized_lca import (  # noqa: E402
     DroneScenario,
     EbikeScenario,
@@ -40,6 +44,7 @@ from drone_emission.sensitivity.vectorized_lca import (  # noqa: E402
     compute_ebike_per_order_parts_g,
 )
 from drone_emission.utils import load_config  # noqa: E402
+from drone_emission.utils.region_config import RegionConfig  # noqa: E402
 from drone_emission.tools import run_threshold_resilience as runner  # noqa: E402
 
 
@@ -79,6 +84,133 @@ def test_sampling_reproducible_and_bounded() -> None:
     pd.testing.assert_frame_equal(first, second)
     for name, spec in specs.items():
         assert first[name].between(spec.minimum, spec.maximum).all()
+
+
+def _context(n_samples: int = 250) -> ThresholdResilienceContext:
+    specs = _specs()
+    return ThresholdResilienceContext.create(
+        specs,
+        EbikeParams(kappa=specs["kappa"].mode),
+        DroneParams(hover_time=specs["drone_hover_s"].mode),
+        70.0,
+        n_samples,
+        42,
+        correlated_stress=True,
+        stress_spearman_rho=0.5,
+        config_sha256="test-config",
+    )
+
+
+def test_shared_context_preserves_seeded_samples_and_results() -> None:
+    context = _context()
+    pd.testing.assert_frame_equal(
+        context.samples_by_scenario["independent"],
+        sample_parameters(context.specs, 250, 42),
+    )
+    pd.testing.assert_frame_equal(
+        context.samples_by_scenario["correlated_adverse_stress"],
+        sample_parameters(
+            context.specs, 250, 43, stress_spearman_rho=0.5
+        ),
+    )
+    aggregates_by_city = (
+        aggregate_fixed_threshold(
+            [0.5, 1.0, 2.0], [0.4, 0.8, 1.5], [10.0, 20.0, 30.0], 1.0
+        ),
+        aggregate_fixed_threshold(
+            [0.7, 1.4, 3.2], [0.5, 1.0, 2.2], [7.0, 13.0, 31.0], 1.5
+        ),
+    )
+    for province_gef in (0.42, 0.71):
+        for aggregates in aggregates_by_city:
+            baseline = context.evaluate("mode", aggregates, province_gef)
+            legacy_baseline = evaluate_samples(
+                context.mode_samples,
+                aggregates,
+                context.ebike_params,
+                context.drone_params,
+                province_gef,
+                context.rider_weight,
+            )
+            pd.testing.assert_frame_equal(baseline, legacy_baseline)
+            baseline_reduction = float(baseline.iloc[0]["reduction_pct"])
+            for scenario, samples in context.samples_by_scenario.items():
+                shared = context.evaluate(scenario, aggregates, province_gef)
+                legacy = evaluate_samples(
+                    samples,
+                    aggregates,
+                    context.ebike_params,
+                    context.drone_params,
+                    province_gef,
+                    context.rider_weight,
+                )
+                pd.testing.assert_frame_equal(shared, legacy)
+                assert summarize_samples(
+                    shared, scenario, aggregates, baseline_reduction
+                ) == summarize_samples(
+                    legacy, scenario, aggregates, baseline_reduction
+                )
+
+
+def test_shared_coefficients_are_cached_by_exact_gef_and_scenario() -> None:
+    context = _context(n_samples=25)
+    aggregates = aggregate_fixed_threshold(
+        [0.5, 1.0, 2.0], [0.4, 0.8, 1.5], [10.0, 20.0, 30.0], 1.0
+    )
+    calls = []
+    original = resilience._affine_coefficients
+
+    def counted(*args, **kwargs):
+        calls.append((float(args[3]), len(args[0])))
+        return original(*args, **kwargs)
+
+    resilience._affine_coefficients = counted
+    try:
+        for province_gef in (0.42, 0.42, 0.71):
+            for scenario in (
+                "mode",
+                "independent",
+                "correlated_adverse_stress",
+            ):
+                context.evaluate(scenario, aggregates, province_gef)
+    finally:
+        resilience._affine_coefficients = original
+
+    assert len(calls) == 2 * 3
+    assert set(context.coefficient_cache) == {
+        (province_gef, scenario)
+        for province_gef in (0.42, 0.71)
+        for scenario in (
+            "mode",
+            "independent",
+            "correlated_adverse_stress",
+        )
+    }
+
+
+def test_shared_spearman_ranks_match_individual_scipy_calls() -> None:
+    context = _context()
+    aggregates = aggregate_fixed_threshold(
+        [0.5, 1.0, 2.0], [0.4, 0.8, 1.5], [10.0, 20.0, 30.0], 1.0
+    )
+    evaluated = context.evaluate("independent", aggregates, 0.42)
+    actual = spearman_drivers(
+        evaluated, context.independent_parameter_ranks
+    ).set_index("parameter")
+    for name in PARAMETER_ORDER:
+        rho, pvalue = spearmanr(evaluated[name], evaluated["reduction_pct"])
+        assert np.isclose(actual.loc[name, "spearman_rho"], rho, rtol=0.0, atol=1e-15)
+        assert np.isclose(
+            actual.loc[name, "spearman_pvalue"], pvalue, rtol=1e-13, atol=1e-300
+        )
+        assert actual.loc[name, "direction"] == (
+            "increases_reduction" if rho > 0 else "decreases_reduction"
+        )
+    expected_order = sorted(
+        PARAMETER_ORDER,
+        key=lambda name: (-abs(float(actual.loc[name, "spearman_rho"])), name),
+    )
+    assert actual.sort_values("rank").index.tolist() == expected_order
 
 
 def test_project_config_matches_runtime_modes() -> None:
@@ -292,9 +424,125 @@ def test_analysis_fingerprint_tracks_gef_and_emission_inputs() -> None:
         assert runner._analysis_config_digest(config) != baseline
 
 
+def test_runner_reuses_context_and_invalidates_old_analysis_version() -> None:
+    with tempfile.TemporaryDirectory() as temporary:
+        root = Path(temporary)
+        config = load_config(
+            os.path.join(HERE, "..", "experiment.toml"), env="local"
+        )
+        config["data_dir"] = str(root / "data")
+        config["gef_path"] = str(root / "gef.csv")
+        config["threshold_resilience"]["n_samples"] = 25
+        Path(config["gef_path"]).write_text(
+            "城市,因子\n测试,0.42\n", encoding="gbk"
+        )
+
+        regions = {
+            key: RegionConfig(
+                region_name_cn=f"测试{index}",
+                region_name_en=key.title(),
+                region_level="city",
+                stats={"province": "测试"},
+            )
+            for index, key in enumerate(("alpha", "beta"), start=1)
+        }
+        regions_path = root / "regions.json"
+        regions_path.write_text(
+            json.dumps(
+                {
+                    key: {
+                        "region_name_cn": region.region_name_cn,
+                        "region_name_en": region.region_name_en,
+                        "region_level": region.region_level,
+                        "stats": region.stats,
+                    }
+                    for key, region in regions.items()
+                }
+            ),
+            encoding="utf-8",
+        )
+        context = runner.build_execution_context(config)
+        for key, region in regions.items():
+            city_dir = Path(config["data_dir"]) / "city" / key
+            city_dir.mkdir(parents=True)
+            od_path = city_dir / f"{key}_od_pairs.csv"
+            od_frame = pd.DataFrame(
+                {
+                    "distance_km": [0.4, 0.8, 1.5],
+                    "road_distance_m": [500.0, 1000.0, 2000.0],
+                    "annual_sales": [10.0, 20.0, 30.0],
+                }
+            )
+            od_frame.to_csv(od_path, index=False)
+            aggregates = aggregate_fixed_threshold(
+                od_frame["road_distance_m"].to_numpy() / 1000.0,
+                od_frame["distance_km"].to_numpy(),
+                od_frame["annual_sales"].to_numpy(),
+                1.0,
+            )
+            baseline = float(
+                context.evaluate("mode", aggregates, 0.42).iloc[0][
+                    "reduction_pct"
+                ]
+            )
+            stat = od_path.stat()
+            threshold_dir = city_dir / "analysis" / "distance_threshold"
+            threshold_dir.mkdir(parents=True)
+            pd.DataFrame(
+                {
+                    "distance_basis": ["road"],
+                    "optimal_threshold_km": [1.0],
+                    "annual_reduction_pct": [baseline],
+                    "input_size_bytes": [stat.st_size],
+                    "input_mtime_ns": [stat.st_mtime_ns],
+                }
+            ).to_csv(threshold_dir / "summary.csv", index=False)
+
+        first = runner.analyze_region("alpha", regions["alpha"], config)
+        assert first["status"] == "ok"
+        cached = runner.analyze_region("alpha", regions["alpha"], config)
+        assert cached["status"] == "cached"
+
+        metadata_path = (
+            Path(config["data_dir"])
+            / "city"
+            / "alpha"
+            / "analysis"
+            / "threshold_resilience"
+            / "metadata.json"
+        )
+        metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+        metadata["analysis_version"] = "1.1.0"
+        metadata_path.write_text(json.dumps(metadata), encoding="utf-8")
+        refreshed = runner.analyze_region("alpha", regions["alpha"], config)
+        assert refreshed["status"] == "ok"
+
+        for key, region in regions.items():
+            result = runner.analyze_region(
+                key,
+                region,
+                config,
+                force=True,
+                execution_context=context,
+            )
+            assert result["status"] == "ok"
+        assert len(context.coefficient_cache) == 3
+        old_regions_json = runner.REGIONS_JSON
+        runner.REGIONS_JSON = regions_path
+        try:
+            summary_out, drivers_out = runner.consolidate(config)
+        finally:
+            runner.REGIONS_JSON = old_regions_json
+        assert pd.read_csv(summary_out).shape[0] == 4
+        assert pd.read_csv(drivers_out).shape[0] == 2 * len(PARAMETER_ORDER)
+
+
 def main() -> int:
     tests = (
         test_sampling_reproducible_and_bounded,
+        test_shared_context_preserves_seeded_samples_and_results,
+        test_shared_coefficients_are_cached_by_exact_gef_and_scenario,
+        test_shared_spearman_ranks_match_individual_scipy_calls,
         test_project_config_matches_runtime_modes,
         test_stress_copula_risk_directions,
         test_threshold_equality_goes_to_drone,
@@ -303,6 +551,7 @@ def main() -> int:
         test_wilson_interval_extremes,
         test_runner_inventory_classifies_and_orders_cities,
         test_analysis_fingerprint_tracks_gef_and_emission_inputs,
+        test_runner_reuses_context_and_invalidates_old_analysis_version,
     )
     for test in tests:
         test()
