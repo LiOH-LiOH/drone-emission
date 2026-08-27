@@ -21,7 +21,11 @@ from drone_emission.emission.cal_single_delivery import (
     create_ebike_params,
     get_emission_params,
 )
-from drone_emission.paper_cohort import cohort_hash, locked_region_keys
+from drone_emission.paper_cohort import (
+    cohort_hash,
+    load_cohort_contract,
+    locked_region_keys,
+)
 from drone_emission.sensitivity.vectorized_lca import (
     DroneScenario,
     EbikeScenario,
@@ -488,14 +492,44 @@ def _city_inputs(config: dict) -> list[dict]:
         "province",
         "region_level",
         "total_ebike_lifecycle",
-        "gef",
-        "gef_source",
     }
     stats = pd.read_csv(stats_path)
     missing = sorted(required - set(stats.columns))
     if missing:
         raise ValueError(f"city stats missing contribution columns: {missing}")
     stats = stats[stats["region_level"].eq("city")].copy()
+    enriched_path = Path(config["data_dir"]) / "all_region_stats_enriched.csv"
+    if enriched_path.is_file():
+        enriched = pd.read_csv(enriched_path)
+        available = [
+            name for name in ("region_key", "grid_emission_factor", "gef_source")
+            if name in enriched.columns
+        ]
+        if "region_key" in available:
+            stats = stats.drop(
+                columns=["grid_emission_factor", "gef", "gef_source"],
+                errors="ignore",
+            ).merge(
+                enriched[available].drop_duplicates("region_key"),
+                on="region_key",
+                how="left",
+            )
+    if "grid_emission_factor" not in stats.columns:
+        if "gef" in stats.columns:
+            stats["grid_emission_factor"] = stats["gef"]
+        else:
+            stats["grid_emission_factor"] = float("nan")
+    if "gef_source" not in stats.columns:
+        stats["gef_source"] = "province_table"
+    fallback = load_cohort_contract()["grid_emission_factor_fallback"]
+    fallback_mask = stats["region_key"].astype(str).isin(
+        set(fallback["affected_region_keys"])
+    )
+    stats.loc[fallback_mask, "grid_emission_factor"] = float(
+        fallback["kg_co2e_per_kwh"]
+    )
+    stats.loc[fallback_mask, "gef_source"] = "fallback_0.5366"
+    stats["gef"] = pd.to_numeric(stats["grid_emission_factor"], errors="coerce")
     expected = set(locked_region_keys())
     actual = set(stats["region_key"].astype(str))
     if len(stats) != len(expected) or actual != expected:
