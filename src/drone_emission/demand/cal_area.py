@@ -33,7 +33,11 @@ def preprocess_buildings(building_path, save_path):
         os.path.dirname(save_path), f".{os.path.basename(save_path)}.{os.getpid()}.tmp.gpkg"
     )
     try:
-        buildings_gdf.to_file(temporary_path, driver="GPKG")
+        buildings_gdf.to_file(
+            temporary_path,
+            layer=Path(save_path).stem,
+            driver="GPKG",
+        )
         atomic_replace(Path(temporary_path), Path(save_path))
     except BaseException:
         Path(temporary_path).unlink(missing_ok=True)

@@ -14,7 +14,7 @@ def _atomic_gpkg(frame, save_path: str) -> None:
     target = Path(save_path)
     temporary = target.with_name(f".{target.name}.{os.getpid()}.tmp.gpkg")
     try:
-        frame.to_file(temporary, driver="GPKG")
+        frame.to_file(temporary, layer=target.stem, driver="GPKG")
         atomic_replace(temporary, target)
     except BaseException:
         temporary.unlink(missing_ok=True)

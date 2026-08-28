@@ -30,7 +30,14 @@ def _convert_geojson_to_gpkg(geojson_path: str) -> str:
         schema = src.schema.copy()
         crs = src.crs
         n = 0
-        with fiona.open(tmp_path, "w", driver="GPKG", schema=schema, crs=crs) as dst:
+        with fiona.open(
+            tmp_path,
+            "w",
+            layer=Path(gpkg_path).stem,
+            driver="GPKG",
+            schema=schema,
+            crs=crs,
+        ) as dst:
             for feat in src:
                 dst.write(feat)
                 n += 1
