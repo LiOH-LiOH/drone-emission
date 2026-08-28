@@ -1,6 +1,7 @@
 """Regression contract for direct GraphML-to-CSR loading."""
 
 from drone_emission.roadnet.sparse_graph import SparseGraph
+from drone_emission.utils.boundaries import graphml_covers_bbox
 
 
 def test_graphml_streaming_preserves_sorted_nodes_and_min_parallel_edge(tmp_path):
@@ -11,7 +12,13 @@ def test_graphml_streaming_preserves_sorted_nodes_and_min_parallel_edge(tmp_path
   <key id="x" for="node" attr.name="x" attr.type="double"/>
   <key id="y" for="node" attr.name="y" attr.type="double"/>
   <key id="len" for="edge" attr.name="length" attr.type="double"/>
+  <key id="b0" for="graph" attr.name="requested_bbox_min_lat" attr.type="double"/>
+  <key id="b1" for="graph" attr.name="requested_bbox_max_lat" attr.type="double"/>
+  <key id="b2" for="graph" attr.name="requested_bbox_min_lng" attr.type="double"/>
+  <key id="b3" for="graph" attr.name="requested_bbox_max_lng" attr.type="double"/>
   <graph edgedefault="directed">
+    <data key="b0">22.0</data><data key="b1">22.3</data>
+    <data key="b2">114.0</data><data key="b3">114.4</data>
     <node id="20"><data key="x">114.2</data><data key="y">22.2</data></node>
     <node id="10"><data key="x">114.1</data><data key="y">22.1</data></node>
     <edge source="20" target="10"><data key="len">5</data></edge>
@@ -32,3 +39,7 @@ def test_graphml_streaming_preserves_sorted_nodes_and_min_parallel_edge(tmp_path
     assert graph._dist_matrix[1, 0] == 3.0
     assert graph._dist_matrix[0, 1] == 7.0
     assert graph.total_length == 10.0
+    assert graphml_covers_bbox(
+        str(graphml),
+        {"min_lat": 22.0, "max_lat": 22.3, "min_lng": 114.0, "max_lng": 114.4},
+    )

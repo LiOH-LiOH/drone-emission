@@ -57,6 +57,12 @@ def _fetch_roadnet(
 
     G = ox.distance.add_edge_lengths(G)
 
+    # Persist the exact successful query extent. Node extrema are not a valid
+    # coverage proxy for coastal/island regions whose requested bbox includes
+    # water with no road nodes.
+    for key in ("min_lat", "max_lat", "min_lng", "max_lng"):
+        G.graph[f"requested_bbox_{key}"] = float(bbox_4326[key])
+
     ox.save_graphml(G, save_path)
     print(f"Road network saved to {save_path}")
 

@@ -16,6 +16,10 @@ import numpy as np
 
 EARTH_RADIUS_KM = 6371.0
 _GRAPHML_NS = "{http://graphml.graphdrawing.org/xmlns}"
+_REQUESTED_BBOX_KEYS = tuple(
+    f"requested_bbox_{key}"
+    for key in ("min_lat", "max_lat", "min_lng", "max_lng")
+)
 
 
 def enlarge_boundaries(boundaries_dict: Dict[str, float], enlarge_km: float) -> Dict[str, float]:
@@ -99,6 +103,39 @@ def bbox_from_graphml(path: str) -> Tuple[float, float, float, float]:
     return lat_min, lat_max, lng_min, lng_max
 
 
+def requested_bbox_from_graphml(path: str) -> Dict[str, float] | None:
+    """Read an explicitly persisted OSM query bbox, if the graph has one."""
+    graph_keys = {}
+    values = {}
+    nested_depth = 0
+    for event, elem in ET.iterparse(path, events=("start", "end")):
+        tag = elem.tag
+        if event == "start":
+            if tag == _GRAPHML_NS + "key" and elem.get("for") == "graph":
+                name = elem.get("attr.name")
+                if name in _REQUESTED_BBOX_KEYS:
+                    graph_keys[elem.get("id")] = name
+            elif tag in (_GRAPHML_NS + "node", _GRAPHML_NS + "edge"):
+                nested_depth += 1
+        else:
+            if tag == _GRAPHML_NS + "data" and nested_depth == 0:
+                name = graph_keys.get(elem.get("key"))
+                if name:
+                    try:
+                        values[name] = float(elem.text)
+                    except (TypeError, ValueError):
+                        return None
+                    if len(values) == len(_REQUESTED_BBOX_KEYS):
+                        return {
+                            key.removeprefix("requested_bbox_"): values[key]
+                            for key in _REQUESTED_BBOX_KEYS
+                        }
+            elif tag in (_GRAPHML_NS + "node", _GRAPHML_NS + "edge"):
+                nested_depth -= 1
+            elem.clear()
+    return None
+
+
 def graphml_covers_bbox(graphml_path: str, expected: Dict[str, float],
                         tolerance_deg: float = 1e-3) -> bool:
     """True if the graphml's node bbox encloses `expected` within tolerance.
@@ -106,6 +143,15 @@ def graphml_covers_bbox(graphml_path: str, expected: Dict[str, float],
     A small tolerance absorbs nodes that fall a few meters inside the requested
     bbox due to OSMnx clipping behavior.
     """
+    requested = requested_bbox_from_graphml(graphml_path)
+    if requested is not None:
+        return (
+            requested["min_lat"] <= expected["min_lat"] + tolerance_deg and
+            requested["max_lat"] >= expected["max_lat"] - tolerance_deg and
+            requested["min_lng"] <= expected["min_lng"] + tolerance_deg and
+            requested["max_lng"] >= expected["max_lng"] - tolerance_deg
+        )
+
     lat_min, lat_max, lng_min, lng_max = bbox_from_graphml(graphml_path)
     return (
         lat_min <= expected["min_lat"] + tolerance_deg and
