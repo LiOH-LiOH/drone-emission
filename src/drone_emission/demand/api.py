@@ -14,6 +14,56 @@ from .cal_area import preprocess_buildings
 EARTH_RADIUS_KM = 6371.0
 
 
+def _allocate_integer_orders(probabilities, total_orders, stable_keys=None):
+    """Allocate integer orders with the largest-remainder method."""
+    probabilities = np.asarray(probabilities, dtype=float)
+    if probabilities.ndim != 1 or len(probabilities) == 0:
+        raise ValueError("probabilities must be a non-empty one-dimensional array")
+    if not np.isfinite(probabilities).all() or (probabilities <= 0).any():
+        raise ValueError("probabilities must be finite and positive")
+    if not isinstance(total_orders, (int, np.integer)) or total_orders <= 0:
+        raise ValueError("total_orders must be a positive integer")
+
+    probabilities = probabilities / probabilities.sum()
+    quotas = probabilities * total_orders
+    allocations = np.floor(quotas).astype(np.int64)
+    remaining = int(total_orders - allocations.sum())
+    if remaining == 0:
+        return allocations
+
+    fractions = quotas - allocations
+    threshold_index = len(fractions) - remaining
+    threshold = np.partition(fractions, threshold_index)[threshold_index]
+    above_threshold = fractions > threshold
+    allocations[above_threshold] += 1
+
+    tie_slots = remaining - int(above_threshold.sum())
+    if tie_slots:
+        tied = np.flatnonzero(fractions == threshold)
+        if stable_keys is None:
+            stable_keys = np.arange(len(fractions), dtype=np.int64)
+        stable_keys = np.asarray(stable_keys)
+        if tie_slots < len(tied):
+            selected = np.argpartition(stable_keys[tied], tie_slots - 1)[:tie_slots]
+            tied = tied[selected]
+        allocations[tied] += 1
+
+    if int(allocations.sum()) != total_orders:
+        raise RuntimeError("integer order allocation failed to conserve demand")
+    return allocations
+
+
+def _monthly_orders(month_sales):
+    """Return a valid positive integer monthly demand, or ``None``."""
+    try:
+        value = float(month_sales)
+    except (TypeError, ValueError):
+        return None
+    if not np.isfinite(value) or value <= 0 or value != np.floor(value):
+        return None
+    return int(value)
+
+
 def prepare_store_building_matching(region_info, exp_config):
     """Prepare data for store-building matching.
 
@@ -132,28 +182,67 @@ def generate_od_pairs(region_info, exp_config):
     od_params = exp_config.get("od_params", {})
     od_pairs = []
     total_sales = 0
+    allocatable_sales = 0
+    unallocatable_sales = 0
     output_total_sales = 0
+    invalid_sales_store_count = 0
+    allocatable_store_count = 0
+    unallocatable_store_count = 0
     for store_idx, building_indices in enumerate(indices_list):
-        if len(building_indices) == 0:
+        store_row = stores_df.iloc[store_idx]
+        monthly_orders = _monthly_orders(store_row["month_sales"])
+        if monthly_orders is None:
+            invalid_sales_store_count += 1
             continue
 
-        store_row = stores_df.iloc[store_idx]
+        annual_orders = monthly_orders * 12
+        total_sales += annual_orders
+        if len(building_indices) == 0:
+            unallocatable_store_count += 1
+            unallocatable_sales += annual_orders
+            continue
+
         nearby_buildings = buildings_gdf.iloc[building_indices]
         # Use WGS84 coordinates for store (converted from GCJ02)
         store_coord_wgs84 = store_coords[store_idx]  # (lat, lng)
 
         tmp_od_pairs = generate_one_store_od_pairs_vectorized(
-            nearby_buildings, store_row["month_sales"], store_coord_wgs84, od_params
+            nearby_buildings, monthly_orders, store_coord_wgs84, od_params
         )
+        if not tmp_od_pairs:
+            unallocatable_store_count += 1
+            unallocatable_sales += annual_orders
+            continue
+
+        store_output_sales = sum(pair["annual_sales"] for pair in tmp_od_pairs)
+        if store_output_sales != annual_orders:
+            raise RuntimeError(
+                "OD allocation failed to conserve store demand: "
+                f"store_index={store_idx}, expected={annual_orders}, "
+                f"actual={store_output_sales}"
+            )
         od_pairs.extend(tmp_od_pairs)
 
-        total_sales += store_row["month_sales"] * 12  # Annual sales
-        output_total_sales += sum([pair["annual_sales"] for pair in tmp_od_pairs])
+        allocatable_store_count += 1
+        allocatable_sales += annual_orders
+        output_total_sales += store_output_sales
+
+    allocation_error = output_total_sales - allocatable_sales
+    if total_sales != allocatable_sales + unallocatable_sales:
+        raise RuntimeError("store demand accounting is inconsistent")
+    if allocation_error != 0:
+        raise RuntimeError("regional OD allocation failed to conserve demand")
 
     print(f"\nTotal store annual sales: {total_sales}")
     print(f"Total output annual sales from OD pairs: {output_total_sales}")
 
     region_info.set_stat("total_store_annual_sales", total_sales)
+    region_info.set_stat("invalid_sales_store_count", invalid_sales_store_count)
+    region_info.set_stat("allocatable_store_count", allocatable_store_count)
+    region_info.set_stat("unallocatable_store_count", unallocatable_store_count)
+    region_info.set_stat("allocatable_store_annual_sales", allocatable_sales)
+    region_info.set_stat("unallocatable_store_annual_sales", unallocatable_sales)
+    region_info.set_stat("od_allocation_annual_sales_error", allocation_error)
     region_info.set_stat("total_odpair_annual_sales", output_total_sales)
     region_info.set_stat("odpair_count", len(od_pairs))
 
@@ -177,12 +266,13 @@ def generate_one_store_od_pairs(
         nearby_buildings: GeoDataFrame of nearby buildings
         month_sales: Monthly sales of the store
         store_coord_wgs84: Store coordinates in WGS84 (lat, lng)
-        od_params: Dict with g_param, min_distance_km, min_sales
+        od_params: Dict with gravity-model parameters
     """
     impedance_type = od_params.get("impedance_type", "power_law")
-    min_sales = od_params.get("min_sales", 5)
 
-    total_demand = month_sales * 12  # Annual demand
+    monthly_orders = _monthly_orders(month_sales)
+    if monthly_orders is None:
+        return []
     store_lat, store_lng = store_coord_wgs84
 
     ratios = {}
@@ -211,15 +301,28 @@ def generate_one_store_od_pairs(
             )
         ratios[idx] = tmp_ratio
 
-    sales_dict = {}
-    total_ratio = sum(ratios.values())
-    for k, v in ratios.items():
-        tmp_sales = int((v / total_ratio) * total_demand)
-        if tmp_sales >= min_sales:
-            sales_dict[k] = tmp_sales
+    valid_keys = [
+        key
+        for key, ratio in ratios.items()
+        if np.isfinite(ratio) and ratio > 0 and np.isfinite(distances[key])
+    ]
+    if not valid_keys:
+        return []
+    valid_ratios = np.array([ratios[key] for key in valid_keys], dtype=float)
+    total_ratio = valid_ratios.sum()
+    if not np.isfinite(total_ratio) or total_ratio <= 0:
+        return []
+    valid_ratios /= valid_ratios.sum()
+    monthly_sales = _allocate_integer_orders(
+        valid_ratios,
+        monthly_orders,
+        stable_keys=np.asarray(valid_keys),
+    )
 
     od_pairs = []
-    for b_idx, sales in sales_dict.items():
+    for b_idx, sales in zip(valid_keys, monthly_sales):
+        if sales == 0:
+            continue
         od_pairs.append(
             {
                 "from_lat": store_lat,
@@ -227,7 +330,7 @@ def generate_one_store_od_pairs(
                 "to_lat": nearby_buildings.loc[b_idx]["centroid"].y,
                 "to_lng": nearby_buildings.loc[b_idx]["centroid"].x,
                 "distance_km": distances[b_idx],
-                "annual_sales": sales,
+                "annual_sales": int(sales) * 12,
             }
         )
 
@@ -245,12 +348,13 @@ def generate_one_store_od_pairs_vectorized(
         nearby_buildings: GeoDataFrame of nearby buildings
         month_sales: Monthly sales of the store
         store_coord_wgs84: Store coordinates in WGS84 (lat, lng)
-        od_params: Dict with g_param, min_distance_km, min_sales
+        od_params: Dict with gravity-model parameters
     """
     impedance_type = od_params.get("impedance_type", "power_law")
-    min_sales = od_params.get("min_sales", 5)
 
-    total_demand = month_sales * 12  # Annual demand
+    monthly_orders = _monthly_orders(month_sales)
+    if monthly_orders is None:
+        return []
     store_lat, store_lng = store_coord_wgs84
 
     n_buildings = len(nearby_buildings)
@@ -274,33 +378,47 @@ def generate_one_store_od_pairs_vectorized(
     volumes = nearby_buildings["volume_m3"].values
 
     # Vectorized ratio calculation
-    if impedance_type == "tanner":
-        alpha = od_params.get("alpha", 1.7)
-        tanner_a = od_params.get("tanner_a", 1.2)
-        tanner_b = od_params.get("tanner_b", 0.8)
-        ratios = (volumes ** alpha) * (distances_km ** tanner_a) * np.exp(-tanner_b * distances_km)
-    else:  # power_law (default, backward compatible)
-        g_param = od_params.get("g_param", [1, 1, 2])
-        min_distance_km = od_params.get("min_distance_km", 0.05)
-        ratios = (
-            g_param[0]
-            * (volumes ** g_param[1])
-            / ((distances_km + min_distance_km) ** g_param[2])
-        )
+    with np.errstate(all="ignore"):
+        if impedance_type == "tanner":
+            alpha = od_params.get("alpha", 1.7)
+            tanner_a = od_params.get("tanner_a", 1.2)
+            tanner_b = od_params.get("tanner_b", 0.8)
+            ratios = (
+                (volumes**alpha)
+                * (distances_km**tanner_a)
+                * np.exp(-tanner_b * distances_km)
+            )
+        else:  # power_law (default, backward compatible)
+            g_param = od_params.get("g_param", [1, 1, 2])
+            min_distance_km = od_params.get("min_distance_km", 0.05)
+            ratios = (
+                g_param[0]
+                * (volumes ** g_param[1])
+                / ((distances_km + min_distance_km) ** g_param[2])
+            )
 
-    # Normalize and calculate sales
-    total_ratio = ratios.sum()
-    if total_ratio == 0:
-        return []
-
-    sales = (ratios / total_ratio * total_demand).astype(int)
-
-    # Filter by minimum sales threshold
-    mask = sales >= min_sales
-    valid_indices = np.where(mask)[0]
-
+    valid = (
+        np.isfinite(building_lats)
+        & np.isfinite(building_lngs)
+        & np.isfinite(distances_km)
+        & np.isfinite(volumes)
+        & (volumes > 0)
+        & np.isfinite(ratios)
+        & (ratios > 0)
+    )
+    valid_indices = np.flatnonzero(valid)
     if len(valid_indices) == 0:
         return []
+
+    valid_ratios = ratios[valid_indices]
+    total_ratio = valid_ratios.sum()
+    if not np.isfinite(total_ratio) or total_ratio <= 0:
+        return []
+    monthly_sales = _allocate_integer_orders(
+        valid_ratios / total_ratio,
+        monthly_orders,
+        stable_keys=nearby_buildings.index.to_numpy()[valid_indices],
+    )
 
     # Build result using vectorized operations
     od_pairs = [
@@ -310,9 +428,10 @@ def generate_one_store_od_pairs_vectorized(
             "to_lat": building_lats[i],
             "to_lng": building_lngs[i],
             "distance_km": distances_km[i],
-            "annual_sales": sales[i],
+            "annual_sales": int(monthly_sales[position]) * 12,
         }
-        for i in valid_indices
+        for position, i in enumerate(valid_indices)
+        if monthly_sales[position] > 0
     ]
 
     return od_pairs

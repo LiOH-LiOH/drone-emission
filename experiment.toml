@@ -18,7 +18,6 @@ tanner_b = 1.650088692 # Jointly calibrated exponential decay per km
 # Legacy power-law (when impedance_type = "power_law")
 g_param = [1, 1.7, 0.5]       # Gravity model parameters: [alpha, beta, gamma]
 min_distance_km = 0.05    # Minimum distance to avoid division issues
-min_sales = 5             # Minimum annual sales threshold per building
 
 # Fixed-threshold probabilistic robustness analysis. This is independent of
 # the legacy Sobol stage and consumes analysis/distance_threshold/summary.csv.

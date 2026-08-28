@@ -10,8 +10,9 @@ where distance is the WGS84 Haversine centroid distance in kilometres,
 `alpha >= 0`, `beta >= 0`, and `gamma > 0`. The likelihood is conditioned on
 each shop's complete set of finite-positive-volume buildings within 5 km; the
 normalizing constant is therefore shop-specific and no global constant is
-estimated. `min_sales` remains an OD-generation setting and is never applied to
-calibration orders.
+estimated. OD generation allocates each merchant's integer monthly demand with
+the largest-remainder method and annualizes the conserved allocation by a
+factor of 12; no minimum-sales filter is applied.
 
 ## Inputs and privacy boundary
 
