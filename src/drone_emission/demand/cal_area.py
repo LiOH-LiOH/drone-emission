@@ -1,5 +1,9 @@
 import os
+from pathlib import Path
+
 import geopandas as gpd
+
+from drone_emission.utils.atomic import atomic_replace
 
 
 def preprocess_buildings(building_path, save_path):
@@ -25,7 +29,15 @@ def preprocess_buildings(building_path, save_path):
 
     # === Save preprocessed data (prefer GeoPackage for performance) ===
     save_path = os.path.splitext(save_path)[0] + ".gpkg"
-    buildings_gdf.to_file(save_path, driver="GPKG")
+    temporary_path = os.path.join(
+        os.path.dirname(save_path), f".{os.path.basename(save_path)}.{os.getpid()}.tmp.gpkg"
+    )
+    try:
+        buildings_gdf.to_file(temporary_path, driver="GPKG")
+        atomic_replace(Path(temporary_path), Path(save_path))
+    except BaseException:
+        Path(temporary_path).unlink(missing_ok=True)
+        raise
     print(f"Saved preprocessed buildings to {save_path}")
 
     # Print summary statistics

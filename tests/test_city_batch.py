@@ -145,3 +145,48 @@ def test_cli_exposes_audited_batch_options():
     assert args.jobs == 4
     assert args.cohort == "locked"
     assert args.run_dir == Path("/tmp/paper-cities")
+
+
+def test_canary_failure_does_not_launch_remaining_cities(tmp_path):
+    assert _run(
+        tmp_path,
+        region_keys=["canary", "later"],
+        canary_keys=["canary"],
+        command_factory=_command_factory({"canary"}),
+    ) == 1
+    rows = _statuses(tmp_path)
+    assert rows["canary"]["status"] == "failed"
+    assert rows["later"]["status"] == "pending"
+    assert not (tmp_path / "cities" / "later.log").exists()
+
+
+def test_canary_launch_failure_closes_gate_without_deadlock(tmp_path):
+    def cannot_launch(_):
+        raise RuntimeError("injected launch failure")
+
+    assert _run(
+        tmp_path,
+        region_keys=["canary", "later"],
+        canary_keys=["canary"],
+        command_factory=cannot_launch,
+    ) == 1
+    rows = _statuses(tmp_path)
+    assert rows["canary"]["status"] == "failed"
+    assert rows["later"]["status"] == "pending"
+
+
+def test_heavy_reservation_runs_exclusively(tmp_path):
+    plan = [
+        {"region_key": "heavy", "resource_class": "heavy", "reservation_gb": 84},
+        {"region_key": "light", "resource_class": "light", "reservation_gb": 21},
+    ]
+    assert _run(
+        tmp_path,
+        region_keys=["heavy", "light"],
+        jobs=2,
+        resource_plan=plan,
+    ) == 0
+    events = (tmp_path / "run.log").read_text(encoding="utf-8").splitlines()
+    heavy_end = next(i for i, line in enumerate(events) if "city:end region=heavy" in line)
+    light_start = next(i for i, line in enumerate(events) if "city:start region=light" in line)
+    assert heavy_end < light_start

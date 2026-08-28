@@ -141,7 +141,7 @@ def test_roadnet_read_refreshes_od_statistics(tmp_path, monkeypatch):
             "to_lat": [1.1, 2.1],
             "to_lng": [1.1, 2.1],
             "distance_km": [1.0, 2.0],
-            "annual_sales": [10, 20],
+            "annual_sales": [12, 24],
             "road_distance_m": [1200.0, 2500.0],
         }
     ).to_csv(od_path, index=False)
@@ -156,17 +156,26 @@ def test_roadnet_read_refreshes_od_statistics(tmp_path, monkeypatch):
     roadnet_api.load_roadnet(region, _config(tmp_path))
 
     assert region.stats["odpair_count"] == 2
-    assert region.stats["total_odpair_annual_sales"] == 30.0
+    assert region.stats["total_odpair_annual_sales"] == 36
 
 
-def test_resume_from_roadnet_runs_only_remaining_stages(monkeypatch):
+def test_resume_from_roadnet_runs_only_remaining_stages(tmp_path, monkeypatch):
     calls = []
     region = FakeRegion()
     monkeypatch.setattr(main, "get_registry", lambda: {"testcity": region})
     monkeypatch.setattr(main, "load_roadnet", lambda **_: calls.append("roadnet"))
     monkeypatch.setattr(main, "cal_emission", lambda **_: calls.append("emission"))
+    city_dir = tmp_path / "city" / "testcity"
+    city_dir.mkdir(parents=True)
+    pd.DataFrame(
+        {
+            "from_lat": [1.0], "from_lng": [1.0],
+            "to_lat": [1.1], "to_lng": [1.1],
+            "distance_km": [1.0], "annual_sales": [12],
+        }
+    ).to_csv(city_dir / "testcity_od_pairs.csv", index=False)
 
-    main.run_region_from_roadnet("testcity", {})
+    main.run_region_from_roadnet("testcity", {"data_dir": str(tmp_path)})
 
     assert calls == ["roadnet", "emission"]
 

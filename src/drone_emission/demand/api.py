@@ -1,4 +1,5 @@
 import os
+import csv
 
 import geopandas as gpd
 import numpy as np
@@ -7,11 +8,41 @@ from haversine import Unit, haversine, haversine_vector
 from sklearn.neighbors import BallTree
 from drone_emission.utils.coordinates import gcj02_to_wgs84, haversine_distance
 from drone_emission.utils.tools import get_epsg_from_bounds
+from drone_emission.utils.atomic import atomic_open
 
 from .cal_area import preprocess_buildings
 
 # Earth radius in kilometers (for Haversine distance)
 EARTH_RADIUS_KM = 6371.0
+STORE_QUERY_BATCH_SIZE = 128
+OD_COLUMNS = (
+    "from_lat",
+    "from_lng",
+    "to_lat",
+    "to_lng",
+    "distance_km",
+    "annual_sales",
+)
+
+
+class _BatchedRadiusQueries:
+    """Re-iterable radius-query results without retaining every candidate index."""
+
+    def __init__(self, tree, coordinates, radius, batch_size=STORE_QUERY_BATCH_SIZE):
+        self.tree = tree
+        self.coordinates = coordinates
+        self.radius = radius
+        self.batch_size = batch_size
+
+    def __len__(self):
+        return len(self.coordinates)
+
+    def __iter__(self):
+        for start in range(0, len(self.coordinates), self.batch_size):
+            batch = self.tree.query_radius(
+                self.coordinates[start : start + self.batch_size], r=self.radius
+            )
+            yield from batch
 
 
 def _allocate_integer_orders(probabilities, total_orders, stable_keys=None):
@@ -148,7 +179,7 @@ def prepare_store_building_matching(region_info, exp_config):
     radius_rad = delivery_radius_km / EARTH_RADIUS_KM
 
     # Find all buildings within radius for each store
-    indices_list = tree.query_radius(store_coords_rad, r=radius_rad)
+    indices_list = _BatchedRadiusQueries(tree, store_coords_rad, radius_rad)
 
     print(f"\n=== Store-Building Matching Summary ===")
     total_pairs = sum(len(idx) for idx in indices_list)
@@ -171,8 +202,6 @@ def generate_od_pairs(region_info, exp_config):
     region_config = region_info.to_dict()
     region_name_en = region_config["region_name_en"]
     region_level = region_config["region_level"]
-    delivery_radius_km = exp_config.get("delivery_radius_km", 5.0)
-
     # Prepare store-building matching data
     indices_list, stores_df, buildings_gdf, store_coords = (
         prepare_store_building_matching(region_info, exp_config)
@@ -180,7 +209,6 @@ def generate_od_pairs(region_info, exp_config):
 
     # === Process each store and its nearby buildings ===
     od_params = exp_config.get("od_params", {})
-    od_pairs = []
     total_sales = 0
     allocatable_sales = 0
     unallocatable_sales = 0
@@ -188,50 +216,57 @@ def generate_od_pairs(region_info, exp_config):
     invalid_sales_store_count = 0
     allocatable_store_count = 0
     unallocatable_store_count = 0
-    for store_idx, building_indices in enumerate(indices_list):
-        store_row = stores_df.iloc[store_idx]
-        monthly_orders = _monthly_orders(store_row["month_sales"])
-        if monthly_orders is None:
-            invalid_sales_store_count += 1
-            continue
+    od_save_path = os.path.join(
+        exp_config["data_dir"],
+        region_level,
+        region_name_en.lower(),
+        f"{region_name_en.lower()}_od_pairs.csv",
+    )
+    odpair_count = 0
+    with atomic_open(od_save_path, "w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=OD_COLUMNS)
+        writer.writeheader()
+        for store_idx, building_indices in enumerate(indices_list):
+            store_row = stores_df.iloc[store_idx]
+            monthly_orders = _monthly_orders(store_row["month_sales"])
+            if monthly_orders is None:
+                invalid_sales_store_count += 1
+                continue
 
-        annual_orders = monthly_orders * 12
-        total_sales += annual_orders
-        if len(building_indices) == 0:
-            unallocatable_store_count += 1
-            unallocatable_sales += annual_orders
-            continue
+            annual_orders = monthly_orders * 12
+            total_sales += annual_orders
+            if len(building_indices) == 0:
+                unallocatable_store_count += 1
+                unallocatable_sales += annual_orders
+                continue
 
-        nearby_buildings = buildings_gdf.iloc[building_indices]
-        # Use WGS84 coordinates for store (converted from GCJ02)
-        store_coord_wgs84 = store_coords[store_idx]  # (lat, lng)
-
-        tmp_od_pairs = generate_one_store_od_pairs_vectorized(
-            nearby_buildings, monthly_orders, store_coord_wgs84, od_params
-        )
-        if not tmp_od_pairs:
-            unallocatable_store_count += 1
-            unallocatable_sales += annual_orders
-            continue
-
-        store_output_sales = sum(pair["annual_sales"] for pair in tmp_od_pairs)
-        if store_output_sales != annual_orders:
-            raise RuntimeError(
-                "OD allocation failed to conserve store demand: "
-                f"store_index={store_idx}, expected={annual_orders}, "
-                f"actual={store_output_sales}"
+            nearby_buildings = buildings_gdf.iloc[building_indices]
+            store_coord_wgs84 = store_coords[store_idx]
+            tmp_od_pairs = generate_one_store_od_pairs_vectorized(
+                nearby_buildings, monthly_orders, store_coord_wgs84, od_params
             )
-        od_pairs.extend(tmp_od_pairs)
+            if not tmp_od_pairs:
+                unallocatable_store_count += 1
+                unallocatable_sales += annual_orders
+                continue
 
-        allocatable_store_count += 1
-        allocatable_sales += annual_orders
-        output_total_sales += store_output_sales
-
-    allocation_error = output_total_sales - allocatable_sales
-    if total_sales != allocatable_sales + unallocatable_sales:
-        raise RuntimeError("store demand accounting is inconsistent")
-    if allocation_error != 0:
-        raise RuntimeError("regional OD allocation failed to conserve demand")
+            store_output_sales = sum(pair["annual_sales"] for pair in tmp_od_pairs)
+            if store_output_sales != annual_orders:
+                raise RuntimeError(
+                    "OD allocation failed to conserve store demand: "
+                    f"store_index={store_idx}, expected={annual_orders}, "
+                    f"actual={store_output_sales}"
+                )
+            writer.writerows(tmp_od_pairs)
+            odpair_count += len(tmp_od_pairs)
+            allocatable_store_count += 1
+            allocatable_sales += annual_orders
+            output_total_sales += store_output_sales
+        allocation_error = output_total_sales - allocatable_sales
+        if total_sales != allocatable_sales + unallocatable_sales:
+            raise RuntimeError("store demand accounting is inconsistent")
+        if allocation_error != 0:
+            raise RuntimeError("regional OD allocation failed to conserve demand")
 
     print(f"\nTotal store annual sales: {total_sales}")
     print(f"Total output annual sales from OD pairs: {output_total_sales}")
@@ -244,16 +279,7 @@ def generate_od_pairs(region_info, exp_config):
     region_info.set_stat("unallocatable_store_annual_sales", unallocatable_sales)
     region_info.set_stat("od_allocation_annual_sales_error", allocation_error)
     region_info.set_stat("total_odpair_annual_sales", output_total_sales)
-    region_info.set_stat("odpair_count", len(od_pairs))
-
-    od_df = pd.DataFrame(od_pairs)
-    od_save_path = os.path.join(
-        exp_config["data_dir"],
-        region_level,
-        region_name_en.lower(),
-        f"{region_name_en.lower()}_od_pairs.csv",
-    )
-    od_df.to_csv(od_save_path, index=False)
+    region_info.set_stat("odpair_count", odpair_count)
     print(f"Saved OD pairs to {od_save_path}")
 
 

@@ -62,8 +62,11 @@ class RegionConfig:
         path = Path(self._stats_path)
         path.parent.mkdir(parents=True, exist_ok=True)
         data = {"stats": self.stats, "cache": self.cache}
-        with open(path, "w", encoding="utf-8") as f:
+        from drone_emission.utils.atomic import atomic_open
+
+        with atomic_open(path, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
+            f.write("\n")
 
     def load_stats(self):
         """Load stats and cache from per-region stats file if it exists."""

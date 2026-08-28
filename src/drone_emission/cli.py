@@ -5,6 +5,8 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import subprocess
+import sys
 from pathlib import Path
 
 from .paper_workflow import (
@@ -36,6 +38,18 @@ def _input_problems(config: dict) -> list[str]:
         Path(config["gef_path"]),
     ]
     return [str(path) for path in required if not path.exists()]
+
+
+def _require_clean_source_commit() -> None:
+    result = subprocess.run(
+        ["git", "status", "--porcelain"],
+        cwd=PROJECT_ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    if result.stdout.strip():
+        raise RuntimeError("audited batch requires a clean committed worktree")
 
 
 def command_inputs(args: argparse.Namespace) -> None:
@@ -166,28 +180,30 @@ def command_calibrate_coordinates(args: argparse.Namespace) -> None:
 
 def command_cities(args: argparse.Namespace) -> None:
     config = _config(args.env)
-    problems = _input_problems(config)
-    if problems:
-        raise FileNotFoundError("Missing city input(s): " + ", ".join(problems))
-
     jobs = getattr(args, "jobs", None)
     cohort = getattr(args, "cohort", None)
     run_dir = getattr(args, "run_dir", None)
     resume = bool(getattr(args, "resume", False))
     start_at = getattr(args, "start_at", None)
+    source_data_root = getattr(args, "source_data_root", None)
+    staging_data_root = getattr(args, "staging_data_root", None)
+    repair_keys = getattr(args, "repair", None)
     batch_requested = any(
         (
             jobs is not None,
             cohort is not None,
             run_dir is not None,
             resume,
+            source_data_root is not None,
+            staging_data_root is not None,
+            bool(repair_keys),
         )
     )
     if args.region and batch_requested:
         raise ValueError("--region cannot be combined with audited batch options")
-    if start_at and not args.region:
+    if start_at and not args.region and not repair_keys:
         raise ValueError("--start-at requires at least one --region")
-    if start_at and batch_requested:
+    if start_at and batch_requested and not repair_keys:
         raise ValueError("--start-at cannot be combined with audited batch options")
     if batch_requested:
         if jobs is None or cohort is None or run_dir is None:
@@ -195,10 +211,82 @@ def command_cities(args: argparse.Namespace) -> None:
                 "audited batch mode requires --jobs, --cohort, and --run-dir"
             )
         from drone_emission.city_batch import run_city_batch
+        from drone_emission.city_staging import prepare_isolated_run
         from drone_emission.paper_cohort import cohort_hash, locked_region_keys
+        from drone_emission.utils.region_config import RegionRegistry
+
+        if not args.no_fetch:
+            raise ValueError("audited isolated batch requires --no-fetch")
+        if repair_keys and not resume:
+            raise ValueError("--repair requires --resume and the original --run-dir")
+        manifest_path = run_dir / "batch_manifest.json"
+        manifest = (
+            json.loads(manifest_path.read_text(encoding="utf-8"))
+            if resume and manifest_path.is_file()
+            else None
+        )
+        failed_record = run_dir / "failed_cities.txt"
+        recorded_failures = (
+            set(failed_record.read_text(encoding="utf-8").split())
+            if failed_record.is_file()
+            else set()
+        )
+        if resume and recorded_failures and not repair_keys:
+            raise ValueError(
+                "failed cities require explicit --repair entries; plain --resume "
+                "only continues interrupted work"
+            )
+        if repair_keys and not set(repair_keys) <= recorded_failures:
+            raise ValueError("--repair may select only failures recorded by this batch")
+        recorded_env = (manifest or {}).get("environment_overrides", {})
+        source_root = Path(
+            source_data_root
+            or recorded_env.get("DRONE_EMISSION_SOURCE_DATA_ROOT", "")
+        )
+        staging_root = Path(
+            staging_data_root
+            or recorded_env.get("DRONE_EMISSION_DATA_ROOT", "")
+        )
+        if not str(source_root) or str(source_root) == "." or not str(staging_root) or str(staging_root) == ".":
+            raise ValueError(
+                "audited batch requires --source-data-root and --staging-data-root"
+            )
+        registry = RegionRegistry(str(PROJECT_ROOT / "regions.json"))
+        region_keys = locked_region_keys()
+        if manifest is None:
+            _require_clean_source_commit()
+            preflight = prepare_isolated_run(
+                source_root=source_root,
+                staging_root=staging_root,
+                regions=dict(registry.items()),
+                region_keys=region_keys,
+                exp_config=config,
+            )
+            resource_plan = preflight["resource_plan"]
+        else:
+            resource_plan = manifest["resource_plan"]
+        environment_overrides = {
+            "DRONE_EMISSION_SOURCE_DATA_ROOT": str(source_root.resolve()),
+            "DRONE_EMISSION_DATA_ROOT": str(staging_root.resolve()),
+            "DRONE_EMISSION_SALES_PATH": str((staging_root / "combined_data.csv").resolve()),
+            "DRONE_EMISSION_GEF_PATH": str((staging_root / "gef_china.csv").resolve()),
+        }
+        command_factory = None
+        if start_at:
+            def command_factory(region_key: str) -> list[str]:
+                return [
+                    os.environ.get("DRONE_EMISSION_PYTHON", sys.executable),
+                    "-m", "drone_emission", "--env", args.env or "local",
+                    "cities", "--region", region_key, "--start-at", start_at,
+                    "--no-fetch",
+                ]
+        from drone_emission.city_staging import validate_staged_city
+
+        def result_validator(region_key: str) -> None:
+            validate_staged_city(staging_root, registry[region_key])
 
         exit_code = run_city_batch(
-            region_keys=locked_region_keys(),
+            region_keys=region_keys,
             environment=args.env or "local",
             jobs=jobs,
             run_dir=run_dir,
@@ -206,10 +294,30 @@ def command_cities(args: argparse.Namespace) -> None:
             no_fetch=args.no_fetch,
             cohort_hash=cohort_hash(),
             resume=resume,
+            resource_plan=resource_plan,
+            canary_keys=["anqing", "beijing", "chongqing"],
+            memory_budget_gb=args.memory_budget_gb,
+            environment_overrides=environment_overrides,
+            repair_keys=repair_keys,
+            command_factory=command_factory,
+            result_validator=result_validator,
         )
         if exit_code:
             raise SystemExit(exit_code)
+        from drone_emission.city_staging import audit_staged_results
+
+        audit_staged_results(
+            source_root=source_root,
+            staging_root=staging_root,
+            regions=dict(registry.items()),
+            region_keys=region_keys,
+            status_path=run_dir / "city_status.tsv",
+        )
         return
+
+    problems = _input_problems(config)
+    if problems:
+        raise FileNotFoundError("Missing city input(s): " + ", ".join(problems))
 
     from drone_emission.main import (
         has_city_results,
@@ -389,6 +497,22 @@ def command_promote(args: argparse.Namespace) -> None:
         print(f"{prefix}: {source} -> {target}")
 
 
+def command_city_promote(args: argparse.Namespace) -> None:
+    from drone_emission.city_staging import promote_city_results
+    from drone_emission.paper_cohort import locked_region_keys
+    from drone_emission.utils.region_config import RegionRegistry
+
+    registry = RegionRegistry(str(PROJECT_ROOT / "regions.json"))
+    operations = promote_city_results(
+        source_root=args.source_data_root,
+        staging_root=args.staging_data_root,
+        regions=dict(registry.items()),
+        region_keys=locked_region_keys(),
+        yes=args.yes,
+    )
+    print(json.dumps({"promoted": len(operations)}, indent=2))
+
+
 def command_status(args: argparse.Namespace) -> None:
     config = _config(args.env)
     manifest = load_manifest()
@@ -483,6 +607,10 @@ def build_parser() -> argparse.ArgumentParser:
     cities.add_argument("--run-dir", type=Path)
     cities.add_argument("--resume", action="store_true")
     cities.add_argument("--start-at", choices=("roadnet",))
+    cities.add_argument("--source-data-root", type=Path)
+    cities.add_argument("--staging-data-root", type=Path)
+    cities.add_argument("--memory-budget-gb", type=int, choices=(84,), default=84)
+    cities.add_argument("--repair", action="append")
     cities.set_defaults(func=command_cities)
 
     aggregate = subparsers.add_parser("aggregate", help="build nationwide compatible tables")
@@ -539,6 +667,14 @@ def build_parser() -> argparse.ArgumentParser:
     promote_parser.add_argument("--yes", action="store_true")
     promote_parser.add_argument("--dry-run", action="store_true")
     promote_parser.set_defaults(func=command_promote)
+
+    city_promote = subparsers.add_parser(
+        "city-promote", help="transactionally publish all audited city results"
+    )
+    city_promote.add_argument("--source-data-root", type=Path, required=True)
+    city_promote.add_argument("--staging-data-root", type=Path, required=True)
+    city_promote.add_argument("--yes", action="store_true")
+    city_promote.set_defaults(func=command_city_promote)
 
     subparsers.add_parser("status", help="show manifest and staging status").set_defaults(func=command_status)
 

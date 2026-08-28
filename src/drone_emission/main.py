@@ -1,4 +1,5 @@
 import traceback
+import os
 from pathlib import Path
 
 from drone_emission.buildings import load_buildings
@@ -14,6 +15,15 @@ REGIONS_CONFIG_PATH = PROJECT_ROOT / "regions.json"
 EXP_CONFIG_PATH = PROJECT_ROOT / "experiment.toml"
 
 
+def _record_stage(stage: str) -> None:
+    path = os.environ.get("DRONE_EMISSION_STAGE_FILE")
+    if path:
+        from drone_emission.utils.atomic import atomic_open
+
+        with atomic_open(path, "w", encoding="utf-8") as handle:
+            handle.write(stage + "\n")
+
+
 def run_region_analysis(region_key: str, config: dict):
     """Run region analysis"""
     registry = get_registry()
@@ -24,22 +34,27 @@ def run_region_analysis(region_key: str, config: dict):
     print(f"Running analysis for {region_key}...")
     region = registry[region_key]
 
+    _record_stage("sales")
     prepare_sales(
         region_info=region,
         exp_config=config,
     )
+    _record_stage("buildings")
     load_buildings(
         region_info=region,
         exp_config=config,
     )
+    _record_stage("demand")
     generate_od_pairs(
         region_info=region,
         exp_config=config,
     )
+    _record_stage("roadnet")
     load_roadnet(
         region_info=region,
         exp_config=config,
     )
+    _record_stage("emission")
     cal_emission(
         region_info=region,
         exp_config=config,
@@ -58,7 +73,20 @@ def run_region_from_roadnet(region_key: str, config: dict):
 
     print(f"Resuming analysis from roadnet for {region_key}...")
     region = registry[region_key]
+    region_config = region.to_dict()
+    name = region_config["region_name_en"].lower()
+    od_path = (
+        Path(config["data_dir"])
+        / region_config["region_level"]
+        / name
+        / f"{name}_od_pairs.csv"
+    )
+    from drone_emission.roadnet.api import validate_od_checkpoint
+
+    validate_od_checkpoint(od_path)
+    _record_stage("roadnet")
     load_roadnet(region_info=region, exp_config=config)
+    _record_stage("emission")
     cal_emission(region_info=region, exp_config=config)
 
 

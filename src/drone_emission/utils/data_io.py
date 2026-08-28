@@ -1,5 +1,7 @@
 import pandas as pd
 
+from drone_emission.utils.atomic import atomic_open
+
 PADDING = 0.05
 
 
@@ -55,5 +57,6 @@ def filter_region_data(
     print(f"After filtering, {region_name} has {len(valid_data)} valid entries.\n")
 
     if save_path:
-        valid_data.to_csv(save_path, index=False)
+        with atomic_open(save_path, "w", encoding="utf-8", newline="") as handle:
+            valid_data.to_csv(handle, index=False)
         print(f"Saved filtered data to {save_path}\n")

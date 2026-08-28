@@ -1,9 +1,11 @@
 import fcntl
 import os
 import subprocess
+from pathlib import Path
 
 import geopandas as gpd
 import numpy as np
+from drone_emission.utils.atomic import atomic_replace
 from drone_emission.utils.boundaries import resolve_enlarged_boundaries
 
 from .load_gba import get_gba_tile_infos, load_buildings_from_gba
@@ -34,7 +36,7 @@ def _convert_geojson_to_gpkg(geojson_path: str) -> str:
                 n += 1
                 if n % 500_000 == 0:
                     print(f"  ... {n:,} features")
-    os.rename(tmp_path, gpkg_path)
+    atomic_replace(Path(tmp_path), Path(gpkg_path))
     elapsed = time.time() - t0
     print(f"  Converted {n:,} features in {elapsed:.0f}s")
     return gpkg_path

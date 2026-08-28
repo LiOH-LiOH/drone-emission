@@ -167,9 +167,9 @@ def test_active_visualization_contract_mentions_no_placeholders():
 def test_shell_declares_single_global_memory_contract():
     root = Path(__file__).parents[1]
     source = (root / "entrypoint.sh").read_text(encoding="utf-8")
-    assert 'DRONE_EMISSION_MEMORY_MAX_GB:-64' in source
-    assert 'DRONE_EMISSION_SYSTEM_RESERVE_GB:-8' in source
-    assert 'DRONE_EMISSION_CITY_RESERVATION_GB:-12' in source
+    assert 'DRONE_EMISSION_MEMORY_MAX_GB:-96' in source
+    assert 'DRONE_EMISSION_SYSTEM_RESERVE_GB:-12' in source
+    assert 'DRONE_EMISSION_CITY_RESERVATION_GB:-21' in source
     assert source.count("systemd-run --user --scope") == 1
     assert 'MemoryMax=${MEMORY_MAX_GB}G' in source
     assert 'MemorySwapMax=0' in source

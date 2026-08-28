@@ -142,3 +142,20 @@ def test_region_statistics_separate_unallocatable_and_invalid_sales(
     assert region.stats["allocatable_store_count"] == 2
     assert region.stats["unallocatable_store_count"] == 1
     assert region.stats["od_allocation_annual_sales_error"] == 0
+
+
+def test_candidate_queries_are_bounded_and_reiterable():
+    calls = []
+
+    class Tree:
+        def query_radius(self, coordinates, r):
+            calls.append(len(coordinates))
+            return [np.array([index]) for index in range(len(coordinates))]
+
+    queries = api._BatchedRadiusQueries(
+        Tree(), np.zeros((300, 2)), 0.5, batch_size=128
+    )
+    assert len(list(queries)) == 300
+    assert calls == [128, 128, 44]
+    assert len(list(queries)) == 300
+    assert calls == [128, 128, 44, 128, 128, 44]

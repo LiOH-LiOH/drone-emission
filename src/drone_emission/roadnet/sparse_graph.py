@@ -8,10 +8,18 @@ during construction and then freed.
 import os
 
 import numpy as np
-import osmnx as ox
-import pandas as pd
-from scipy.sparse import coo_matrix, csr_matrix
+from lxml import etree as ET
+from scipy.sparse import csr_matrix
 from scipy.spatial import cKDTree
+
+
+def _clear_element(element) -> None:
+    """Release parsed XML nodes and already-consumed siblings."""
+    element.clear()
+    parent = element.getparent()
+    if parent is not None:
+        while element.getprevious() is not None:
+            del parent[0]
 
 
 class SparseGraph:
@@ -46,54 +54,107 @@ class SparseGraph:
 
     @classmethod
     def from_graphml(cls, path: str) -> "SparseGraph":
-        """Load a GraphML file and build the sparse representation.
-
-        The NetworkX graph is freed after extraction.
-        """
+        """Stream GraphML into CSR without materializing a NetworkX graph."""
         print(f"Loading GraphML: {path}")
-        G = ox.load_graphml(path)
-        n_nodes_nx = len(G.nodes)
-        n_edges_nx = len(G.edges)
-        print(f"  NetworkX graph: {n_nodes_nx:,} nodes, {n_edges_nx:,} edges")
-
-        # Build node mapping: sorted by OSM ID for reproducibility
-        node_list = sorted(G.nodes())
-        osmid_to_idx = {osmid: i for i, osmid in enumerate(node_list)}
-        idx_to_osmid = np.array(node_list, dtype=np.int64)
-
-        # Extract node coordinates (lat, lng)
-        node_coords = np.array(
-            [(G.nodes[n]["y"], G.nodes[n]["x"]) for n in node_list], dtype=np.float64
+        key_names = {}
+        node_count = 0
+        edge_count = 0
+        for _, element in ET.iterparse(path, events=("end",)):
+            tag = element.tag.rsplit("}", 1)[-1]
+            if tag == "key":
+                key_names[element.attrib["id"]] = element.attrib.get("attr.name")
+            elif tag == "node":
+                node_count += 1
+            elif tag == "edge":
+                edge_count += 1
+            _clear_element(element)
+        x_key = next((key for key, name in key_names.items() if name == "x"), None)
+        y_key = next((key for key, name in key_names.items() if name == "y"), None)
+        length_key = next(
+            (key for key, name in key_names.items() if name == "length"), None
         )
+        if x_key is None or y_key is None or length_key is None:
+            raise ValueError("GraphML is missing x, y, or length key definitions")
 
-        # Extract edges: for multi-edges keep minimum weight per (u, v)
-        rows, cols, weights = [], [], []
-        for u, v, data in G.edges(data=True):
-            length = data.get("length", 0.0)
-            rows.append(osmid_to_idx[u])
-            cols.append(osmid_to_idx[v])
-            weights.append(float(length))
+        node_ids = np.empty(node_count, dtype=np.int64)
+        coordinates = np.empty((node_count, 2), dtype=np.float64)
+        offset = 0
+        for _, element in ET.iterparse(path, events=("end",)):
+            tag = element.tag.rsplit("}", 1)[-1]
+            if tag == "data":
+                continue
+            if tag != "node":
+                _clear_element(element)
+                continue
+            data = {
+                child.attrib.get("key"): child.text
+                for child in element
+                if child.tag.rsplit("}", 1)[-1] == "data"
+            }
+            node_ids[offset] = int(element.attrib["id"])
+            coordinates[offset] = (float(data[y_key]), float(data[x_key]))
+            offset += 1
+            _clear_element(element)
+        order = np.argsort(node_ids, kind="stable")
+        idx_to_osmid = node_ids[order]
+        node_coords = coordinates[order]
+        osmid_to_idx = {
+            int(osmid): index for index, osmid in enumerate(idx_to_osmid)
+        }
 
-        # Free the NetworkX graph
-        total_length = sum(weights)
-        del G
+        rows = np.empty(edge_count, dtype=np.int64)
+        cols = np.empty(edge_count, dtype=np.int64)
+        weights = np.empty(edge_count, dtype=np.float32)
+        offset = 0
+        for _, element in ET.iterparse(path, events=("end",)):
+            tag = element.tag.rsplit("}", 1)[-1]
+            if tag == "data":
+                continue
+            if tag != "edge":
+                _clear_element(element)
+                continue
+            length = next(
+                (
+                    child.text
+                    for child in element
+                    if child.tag.rsplit("}", 1)[-1] == "data"
+                    and child.attrib.get("key") == length_key
+                ),
+                "0",
+            )
+            rows[offset] = osmid_to_idx[int(element.attrib["source"])]
+            cols[offset] = osmid_to_idx[int(element.attrib["target"])]
+            weights[offset] = max(float(length), 0.001)
+            offset += 1
+            _clear_element(element)
 
-        edge_df = pd.DataFrame({"row": rows, "col": cols, "weight": weights})
-        # Keep minimum weight for parallel edges
-        edge_df = edge_df.groupby(["row", "col"], as_index=False)["weight"].min()
-        # Clamp zero-length edges to avoid sparse storage dropping them
-        edge_df["weight"] = edge_df["weight"].clip(lower=0.001)
-
-        n = len(node_list)
-        dist_matrix = coo_matrix(
-            (edge_df["weight"].values.astype(np.float32), (edge_df["row"].values, edge_df["col"].values)),
-            shape=(n, n),
-        ).tocsr()
+        if edge_count:
+            edge_order = np.lexsort((cols, rows))
+            sorted_rows = rows[edge_order]
+            sorted_cols = cols[edge_order]
+            sorted_weights = weights[edge_order]
+            starts = np.r_[
+                0,
+                np.flatnonzero(
+                    (sorted_rows[1:] != sorted_rows[:-1])
+                    | (sorted_cols[1:] != sorted_cols[:-1])
+                )
+                + 1,
+            ]
+            rows = sorted_rows[starts]
+            cols = sorted_cols[starts]
+            weights = np.minimum.reduceat(sorted_weights, starts)
+        dist_matrix = csr_matrix(
+            (weights, (rows, cols)), shape=(node_count, node_count)
+        )
 
         graph = cls(dist_matrix, node_coords, idx_to_osmid, osmid_to_idx)
 
+        print(
+            f"  Streamed GraphML: {node_count:,} nodes, {edge_count:,} raw edges"
+        )
         print(f"  SparseGraph: {graph.num_nodes:,} nodes, {graph.num_edges:,} edges")
-        print(f"  Total road length: {total_length / 1000:.1f} km")
+        print(f"  Total road length: {graph.total_length / 1000:.1f} km")
         print(
             f"  Matrix memory: {dist_matrix.data.nbytes / 1e6:.1f} MB"
             f" + coords: {node_coords.nbytes / 1e6:.1f} MB"

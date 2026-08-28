@@ -1,11 +1,24 @@
 import math
 import os
+from pathlib import Path
 
 import geopandas as gpd
 import pandas as pd
 from shapely.geometry import box
 
 from drone_emission.utils.coordinates import wgs84_to_3857
+from drone_emission.utils.atomic import atomic_replace
+
+
+def _atomic_gpkg(frame, save_path: str) -> None:
+    target = Path(save_path)
+    temporary = target.with_name(f".{target.name}.{os.getpid()}.tmp.gpkg")
+    try:
+        frame.to_file(temporary, driver="GPKG")
+        atomic_replace(temporary, target)
+    except BaseException:
+        temporary.unlink(missing_ok=True)
+        raise
 
 
 def get_gba_tile_infos(boundaries_dict: dict) -> list[tuple[str, str]]:
@@ -101,7 +114,7 @@ def load_buildings_from_gba(
         print("  No buildings found in the specified area from any tile.")
         save_path = os.path.splitext(save_path)[0] + ".gpkg"
         os.makedirs(os.path.dirname(save_path), exist_ok=True)
-        gpd.GeoDataFrame().to_file(save_path, driver="GPKG")
+        _atomic_gpkg(gpd.GeoDataFrame(), save_path)
         return save_path
 
     # Concatenate results from all tiles
@@ -120,7 +133,7 @@ def load_buildings_from_gba(
     # Save filtered result as GeoPackage for fast subsequent reads
     save_path = os.path.splitext(save_path)[0] + ".gpkg"
     os.makedirs(os.path.dirname(save_path), exist_ok=True)
-    gdf.to_file(save_path, driver="GPKG")
+    _atomic_gpkg(gdf, save_path)
 
     file_size_mb = os.path.getsize(save_path) / (1024 * 1024)
     print(f"  Saved to {save_path} ({file_size_mb:.1f} MB)")

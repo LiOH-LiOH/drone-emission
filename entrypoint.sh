@@ -4,9 +4,9 @@ set -euo pipefail
 
 cd "$(dirname "$0")"
 
-MEMORY_MAX_GB="${DRONE_EMISSION_MEMORY_MAX_GB:-64}"
-SYSTEM_RESERVE_GB="${DRONE_EMISSION_SYSTEM_RESERVE_GB:-8}"
-CITY_RESERVATION_GB="${DRONE_EMISSION_CITY_RESERVATION_GB:-12}"
+MEMORY_MAX_GB="${DRONE_EMISSION_MEMORY_MAX_GB:-96}"
+SYSTEM_RESERVE_GB="${DRONE_EMISSION_SYSTEM_RESERVE_GB:-12}"
+CITY_RESERVATION_GB="${DRONE_EMISSION_CITY_RESERVATION_GB:-21}"
 ENVIRONMENT="remote"
 JOBS=""
 TMUX_NAME=""
@@ -14,7 +14,7 @@ ORIGINAL_ARGS=("$@")
 
 usage() {
     echo "Usage: $0 [--env ENV] [--jobs N] [--tmux NAME] STAGE [stage arguments]" >&2
-    echo "STAGE: inputs, calibrate, cities, aggregate, analyze, render, promote, status, reproduce" >&2
+    echo "STAGE: inputs, calibrate, cities, aggregate, analyze, render, promote, city-promote, status, reproduce" >&2
 }
 
 while (( $# )); do
@@ -32,7 +32,7 @@ STAGE="$1"
 shift
 STAGE_ARGS=("$@")
 case "$STAGE" in
-    inputs|calibrate|cities|aggregate|analyze|render|promote|status|reproduce) ;;
+    inputs|calibrate|cities|aggregate|analyze|render|promote|city-promote|status|reproduce) ;;
     *) echo "Unknown stage: $STAGE" >&2; usage; exit 2 ;;
 esac
 

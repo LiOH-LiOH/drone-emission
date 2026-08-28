@@ -1,8 +1,58 @@
 import os
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
 from drone_emission.utils.boundaries import graphml_covers_bbox, resolve_enlarged_boundaries
+from drone_emission.utils.atomic import atomic_open
+
+
+OD_CHUNK_ROWS = 250_000
+OD_BASE_COLUMNS = (
+    "from_lat",
+    "from_lng",
+    "to_lat",
+    "to_lng",
+    "distance_km",
+    "annual_sales",
+)
+
+
+def validate_od_checkpoint(path: str | Path, chunk_rows: int = OD_CHUNK_ROWS) -> dict:
+    """Validate the complete atomic OD checkpoint accepted by stage repair."""
+    path = Path(path)
+    if not path.is_file():
+        raise FileNotFoundError(f"OD checkpoint is missing: {path}")
+    columns = tuple(pd.read_csv(path, nrows=0).columns)
+    missing = [column for column in OD_BASE_COLUMNS if column not in columns]
+    if missing:
+        raise ValueError(f"OD checkpoint is missing columns {missing}: {path}")
+    row_count = 0
+    annual_sales_total = 0
+    for chunk in pd.read_csv(path, usecols=list(OD_BASE_COLUMNS), chunksize=chunk_rows):
+        sales = pd.to_numeric(chunk["annual_sales"], errors="coerce").to_numpy()
+        coordinates = chunk[list(OD_BASE_COLUMNS[:-1])].apply(
+            pd.to_numeric, errors="coerce"
+        ).to_numpy()
+        if not np.isfinite(coordinates).all():
+            raise ValueError(f"OD checkpoint has non-finite coordinates/distances: {path}")
+        if (
+            not np.isfinite(sales).all()
+            or (sales <= 0).any()
+            or (sales != np.floor(sales)).any()
+            or (sales % 12 != 0).any()
+        ):
+            raise ValueError(f"OD checkpoint violates annual_sales contract: {path}")
+        row_count += len(chunk)
+        annual_sales_total += int(sales.sum())
+    if row_count == 0:
+        raise ValueError(f"OD checkpoint contains no rows: {path}")
+    return {
+        "path": str(path.resolve()),
+        "rows": row_count,
+        "annual_sales": annual_sales_total,
+        "columns": list(columns),
+    }
 
 
 def _fetch_bikeable_roadnet(*, bbox_4326, save_path):
@@ -105,66 +155,73 @@ def load_roadnet(region_info, exp_config):
         region_name_en.lower(),
         f"{region_name_en.lower()}_od_pairs.csv",
     )
-    od_df = pd.read_csv(od_save_path)
-    print(f"Loaded {len(od_df)} OD pairs")
-    region_info.set_stat("odpair_count", len(od_df))
-    if "annual_sales" in od_df.columns:
-        region_info.set_stat(
-            "total_odpair_annual_sales", float(od_df["annual_sales"].sum())
-        )
+    checkpoint = validate_od_checkpoint(od_save_path)
+    print(f"Loaded {checkpoint['rows']} OD pairs")
+    region_info.set_stat("odpair_count", checkpoint["rows"])
+    region_info.set_stat("total_odpair_annual_sales", checkpoint["annual_sales"])
 
     # Build tile router
     router = _make_tile_router(graph)
 
-    # Only compute road distances for rows with NaN values
-    if "road_distance_m" not in od_df.columns:
-        od_df["road_distance_m"] = np.nan
+    valid_count = 0
+    invalid_count = 0
+    valid_sales = 0.0
+    weighted_road = 0.0
+    weighted_straight = 0.0
+    computed_count = 0
+    with atomic_open(od_save_path, "w", encoding="utf-8", newline="") as handle:
+        first = True
+        for od_df in pd.read_csv(od_save_path, chunksize=OD_CHUNK_ROWS):
+            if "road_distance_m" not in od_df.columns:
+                od_df["road_distance_m"] = np.nan
+            nan_mask = od_df["road_distance_m"].isna()
+            if nan_mask.any():
+                nan_df = od_df.loc[nan_mask]
+                distances = router.compute_od_distances_batch(
+                    nan_df[["from_lat", "from_lng"]].values,
+                    nan_df[["to_lat", "to_lng"]].values,
+                )
+                od_df.loc[nan_mask, "road_distance_m"] = distances
+                computed_count += int(nan_mask.sum())
+            road_distances = pd.to_numeric(
+                od_df["road_distance_m"], errors="coerce"
+            ).to_numpy()
+            annual_sales = pd.to_numeric(
+                od_df["annual_sales"], errors="coerce"
+            ).to_numpy()
+            straight = pd.to_numeric(od_df["distance_km"], errors="coerce").to_numpy()
+            valid_mask = np.isfinite(road_distances) & (road_distances >= 0)
+            valid_count += int(valid_mask.sum())
+            invalid_count += int((~valid_mask).sum())
+            valid_sales += float(annual_sales[valid_mask].sum())
+            weighted_road += float(
+                np.sum(road_distances[valid_mask] * annual_sales[valid_mask])
+            )
+            weighted_straight += float(
+                np.sum(straight[valid_mask] * annual_sales[valid_mask] * 1000)
+            )
+            od_df.to_csv(handle, index=False, header=first)
+            first = False
+        if valid_count == 0 or valid_sales <= 0:
+            raise ValueError(f"No valid routed OD rows in {od_save_path}")
 
-    nan_mask = od_df["road_distance_m"].isna()
-    nan_count = nan_mask.sum()
-
-    if nan_count > 0:
-        print(f"Computing road distances for {nan_count} rows with NaN values...")
-
-        nan_df = od_df[nan_mask]
-        origins = nan_df[["from_lat", "from_lng"]].values
-        destinations = nan_df[["to_lat", "to_lng"]].values
-
-        road_distances = router.compute_od_distances_batch(origins, destinations)
-
-        od_df.loc[nan_mask, "road_distance_m"] = road_distances
-
-        od_df.to_csv(od_save_path, index=False)
-        print(f"Updated OD pairs with road distances saved to {od_save_path}")
-    else:
-        print("All road distances already computed, skipping...")
-
-    road_distances = od_df["road_distance_m"].values
-
-    # Statistics
-    valid_mask = road_distances >= 0
-    if valid_mask.sum() > 0:
-        avg_road_dist = (
-            road_distances[valid_mask] * od_df.loc[valid_mask, "annual_sales"]
-        ).sum() / od_df.loc[valid_mask, "annual_sales"].sum()
-        avg_straight_dist = (
-            (
-                od_df.loc[valid_mask, "distance_km"]
-                * od_df.loc[valid_mask, "annual_sales"]
-            ).sum()
-            / od_df.loc[valid_mask, "annual_sales"].sum()
-            * 1000
-        )
+    print(
+        f"Updated {computed_count} road distances in bounded chunks; "
+        f"saved {od_save_path}"
+    )
+    if valid_count > 0:
+        avg_road_dist = weighted_road / valid_sales
+        avg_straight_dist = weighted_straight / valid_sales
         detour_ratio = avg_road_dist / avg_straight_dist if avg_straight_dist > 0 else 0
 
         region_info.set_stat("avg_road_distance_m", avg_road_dist)
         region_info.set_stat("avg_straight_distance_m", avg_straight_dist)
         region_info.set_stat("detour_ratio", detour_ratio)
-        region_info.set_stat("valid_path_count", int(valid_mask.sum()))
-        region_info.set_stat("invalid_path_count", int((~valid_mask).sum()))
+        region_info.set_stat("valid_path_count", valid_count)
+        region_info.set_stat("invalid_path_count", invalid_count)
 
         print(f"\n=== Road Distance Statistics ===")
-        print(f"Valid paths: {valid_mask.sum():,} / {len(od_df):,}")
+        print(f"Valid paths: {valid_count:,} / {valid_count + invalid_count:,}")
         print(f"Avg straight-line distance: {avg_straight_dist:.1f} m")
         print(f"Avg road network distance: {avg_road_dist:.1f} m")
         print(f"Detour ratio: {detour_ratio:.2f}")
