@@ -41,6 +41,7 @@ from drone_emission.utils.region_config import RegionConfig, init_registry  # no
 
 REGIONS_JSON = os.path.join(PROJECT_ROOT, "regions.json")
 REQUIRED_OD_COLUMNS = ("road_distance_m", "distance_km")
+OPTIONAL_OD_COLUMNS = ("annual_sales",)
 
 
 def _count_od_csvs(data_dir: str) -> int:
@@ -89,7 +90,17 @@ def _process(region_info, exp_config) -> tuple[str, str, float]:
         return region_key, "missing_od", 0.0
     t0 = time.time()
     try:
-        od_df = pd.read_csv(od_path)
+        columns = pd.read_csv(od_path, nrows=0).columns
+        usecols = [
+            column
+            for column in (*REQUIRED_OD_COLUMNS, *OPTIONAL_OD_COLUMNS)
+            if column in columns
+        ]
+        od_df = pd.read_csv(
+            od_path,
+            usecols=usecols,
+            dtype={column: "float64" for column in usecols},
+        )
         if len(od_df) == 0:
             return region_key, "empty_od", time.time() - t0
         missing = [col for col in REQUIRED_OD_COLUMNS if col not in od_df.columns]

@@ -14,7 +14,7 @@ ORIGINAL_ARGS=("$@")
 
 usage() {
     echo "Usage: $0 [--env ENV] [--jobs N] [--tmux NAME] STAGE [stage arguments]" >&2
-    echo "STAGE: inputs, calibrate, cities, aggregate, analyze, render, promote, city-promote, status, reproduce" >&2
+    echo "STAGE: inputs, calibrate, cities, aggregate, cohort, analyze, render, promote, city-promote, status, reproduce" >&2
 }
 
 while (( $# )); do
@@ -32,7 +32,7 @@ STAGE="$1"
 shift
 STAGE_ARGS=("$@")
 case "$STAGE" in
-    inputs|calibrate|cities|aggregate|analyze|render|promote|city-promote|status|reproduce) ;;
+    inputs|calibrate|cities|aggregate|cohort|analyze|render|promote|city-promote|status|reproduce) ;;
     *) echo "Unknown stage: $STAGE" >&2; usage; exit 2 ;;
 esac
 
