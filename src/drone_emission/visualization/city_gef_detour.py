@@ -67,7 +67,8 @@ CITY_GEF_SUMMARY_ROW_HSPACE = 0.32
 CITY_GEF_BOTTOM_SCATTER_SIZE = 18
 CITY_GEF_BOTTOM_SCATTER_ALPHA = 0.45
 
-REDUCTION_DETOUR_CACHE_VERSION = 4
+REDUCTION_DETOUR_CACHE_VERSION = 5
+REDUCTION_DETOUR_CHUNK_ROWS = 250_000
 POWER_GENERATION_2022_100M_KWH = {
     "shanghai": {
         "total": 955.0,
@@ -183,7 +184,9 @@ def _build_reduction_detour_binned_by_city(
     from drone_emission.emission.cal_single_delivery import create_ebike_params, get_emission_params
     from drone_emission.sensitivity.vectorized_lca import EbikeScenario, compute_ebike_per_order_g
     from drone_emission.utils.config import get_cache_dir
-    from drone_emission.visualization.city_gef_support import _bin_reduction_and_detour
+    from drone_emission.visualization.city_gef_support import (
+        _bin_reduction_and_detour_chunks,
+    )
 
     if exp_config is None:
         print(f"{figure_name}: exp_config missing; cannot apply configured kappa")
@@ -268,41 +271,71 @@ def _build_reduction_detour_binned_by_city(
     }
     for key in available_keys:
         od_path = od_paths[key]
-        od_df = pd.read_csv(od_path)
-        if not required.issubset(od_df.columns):
+        columns = set(pd.read_csv(od_path, nrows=0).columns)
+        if not required.issubset(columns):
             print(f"{figure_name}: {key} missing columns — skipping")
             continue
-        road_m = pd.to_numeric(
-            od_df["road_distance_m"], errors="coerce"
-        ).to_numpy()
-        air_km = pd.to_numeric(od_df["distance_km"], errors="coerce").to_numpy()
-        annual_sales = pd.to_numeric(
-            od_df["annual_sales"], errors="coerce"
-        ).to_numpy()
-        valid_detour = (
-            np.isfinite(road_m)
-            & np.isfinite(air_km)
-            & np.isfinite(annual_sales)
-            & (road_m >= 0)
-            & (air_km > 0)
-            & (annual_sales > 0)
-        )
-        weighted_road_m = float(
-            np.sum(road_m[valid_detour] * annual_sales[valid_detour])
-        )
-        weighted_air_m = float(
-            np.sum(air_km[valid_detour] * 1000.0 * annual_sales[valid_detour])
-        )
-        city_detour_ratio = (
-            weighted_road_m / weighted_air_m
-            if weighted_air_m > 0
-            else np.nan
-        )
+        max_air_distance_km = 0.0
+        for distance_chunk in pd.read_csv(
+            od_path,
+            usecols=["distance_km"],
+            dtype={"distance_km": "float64"},
+            chunksize=REDUCTION_DETOUR_CHUNK_ROWS,
+        ):
+            distances = distance_chunk["distance_km"].to_numpy(copy=False)
+            valid_distances = distances[np.isfinite(distances) & (distances > 0)]
+            if valid_distances.size:
+                max_air_distance_km = max(
+                    max_air_distance_km, float(valid_distances.max())
+                )
+        if max_air_distance_km <= 0:
+            print(f"{figure_name}: {key} has no valid air distances — skipping")
+            continue
+
         gef = gef_map[key]
         ebike_pp = replace(ebike_params, e_use=float(gef))
-        road_km = road_m / 1000.0
-        od_df = od_df.copy()
-        od_df["ebike_lifecycle_g"] = compute_ebike_per_order_g(road_km, ebike_pp, scenario)
+        detour_totals = {
+            "weighted_road_m": 0.0,
+            "weighted_air_m": 0.0,
+            "valid_path_count": 0,
+            "invalid_path_count": 0,
+        }
+
+        def prepared_chunks():
+            for od_chunk in pd.read_csv(
+                od_path,
+                usecols=sorted(required),
+                dtype={column: "float64" for column in required},
+                chunksize=REDUCTION_DETOUR_CHUNK_ROWS,
+            ):
+                road_m = od_chunk["road_distance_m"].to_numpy(copy=False)
+                air_km = od_chunk["distance_km"].to_numpy(copy=False)
+                annual_sales = od_chunk["annual_sales"].to_numpy(copy=False)
+                valid_detour = (
+                    np.isfinite(road_m)
+                    & np.isfinite(air_km)
+                    & np.isfinite(annual_sales)
+                    & (road_m >= 0)
+                    & (air_km > 0)
+                    & (annual_sales > 0)
+                )
+                detour_totals["weighted_road_m"] += float(
+                    np.sum(road_m[valid_detour] * annual_sales[valid_detour])
+                )
+                detour_totals["weighted_air_m"] += float(
+                    np.sum(
+                        air_km[valid_detour]
+                        * 1000.0
+                        * annual_sales[valid_detour]
+                    )
+                )
+                detour_totals["valid_path_count"] += int(valid_detour.sum())
+                detour_totals["invalid_path_count"] += int((~valid_detour).sum())
+                od_chunk["ebike_lifecycle_g"] = compute_ebike_per_order_g(
+                    road_m / 1000.0, ebike_pp, scenario
+                )
+                yield od_chunk
+
         (
             centres,
             reduction_pct,
@@ -311,9 +344,18 @@ def _build_reduction_detour_binned_by_city(
             max_km,
             oracle_drone_share_pct,
         ) = (
-            _bin_reduction_and_detour(
-                od_df, bin_width_km, absolute_reduction_metric
+            _bin_reduction_and_detour_chunks(
+                prepared_chunks(),
+                bin_width_km,
+                max_air_distance_km,
+                absolute_reduction_metric,
             )
+        )
+        city_detour_ratio = (
+            detour_totals["weighted_road_m"]
+            / detour_totals["weighted_air_m"]
+            if detour_totals["weighted_air_m"] > 0
+            else np.nan
         )
         binned_by_city[key] = {
             "centres": centres,
@@ -323,8 +365,8 @@ def _build_reduction_detour_binned_by_city(
             "max_km": max_km,
             "oracle_drone_share_pct": oracle_drone_share_pct,
             "city_detour_ratio": city_detour_ratio,
-            "valid_path_count": int(valid_detour.sum()),
-            "invalid_path_count": int((~valid_detour).sum()),
+            "valid_path_count": detour_totals["valid_path_count"],
+            "invalid_path_count": detour_totals["invalid_path_count"],
         }
 
     if use_binned_cache and binned_by_city:

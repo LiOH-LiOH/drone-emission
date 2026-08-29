@@ -737,3 +737,93 @@ def _bin_reduction_and_detour(
             reduction_pct[k] = (ebike_tot - drone_tot) / ebike_tot * 100
         detour_by_bin.append(detour[m])
     return centres, reduction_pct, reduction_abs, detour_by_bin, max_km, oracle_drone_share_pct
+
+
+def _bin_reduction_and_detour_chunks(
+    chunks,
+    bin_width_km: float,
+    max_air_distance_km: float,
+    absolute_reduction_metric: str = "total_t",
+):
+    """Aggregate the reduction-detour bins from bounded OD chunks."""
+    if absolute_reduction_metric not in {"total_t", "per_order_g"}:
+        raise ValueError(
+            "absolute_reduction_metric must be 'total_t' or 'per_order_g'"
+        )
+    if not np.isfinite(max_air_distance_km) or max_air_distance_km <= 0:
+        raise ValueError("max_air_distance_km must be finite and positive")
+
+    max_km = float(
+        np.ceil(max_air_distance_km / bin_width_km) * bin_width_km
+    )
+    edges = np.arange(0.0, max_km + bin_width_km / 2, bin_width_km)
+    n_bins = len(edges) - 1
+    centres = (edges[:-1] + edges[1:]) / 2
+    ebike_totals = np.zeros(n_bins, dtype=np.float64)
+    drone_totals = np.zeros(n_bins, dtype=np.float64)
+    order_totals = np.zeros(n_bins, dtype=np.float64)
+    oracle_drone_orders = np.zeros(n_bins, dtype=np.float64)
+    detour_chunks = [[] for _ in range(n_bins)]
+
+    for od_df in chunks:
+        valid = od_df[
+            (od_df["road_distance_m"] >= 0) & (od_df["distance_km"] > 0)
+        ]
+        if valid.empty:
+            continue
+        road_km = valid["road_distance_m"].to_numpy(dtype=float) / 1000.0
+        air_km = valid["distance_km"].to_numpy(dtype=float)
+        detour = road_km / air_km
+        drone_lc = valid["drone_lifecycle_g"].to_numpy(dtype=float)
+        ebike_lc = valid["ebike_lifecycle_g"].to_numpy(dtype=float)
+        sales = valid["annual_sales"].to_numpy(dtype=float)
+        bin_idx = np.clip(np.digitize(air_km, edges) - 1, 0, n_bins - 1)
+
+        for index in np.unique(bin_idx):
+            mask = bin_idx == index
+            index = int(index)
+            bin_sales = sales[mask]
+            bin_ebike = ebike_lc[mask]
+            bin_drone = drone_lc[mask]
+            ebike_totals[index] += np.sum(bin_ebike * bin_sales)
+            drone_totals[index] += np.sum(bin_drone * bin_sales)
+            order_totals[index] += np.sum(bin_sales)
+            oracle_drone_orders[index] += np.sum(
+                bin_sales[bin_drone < bin_ebike]
+            )
+            detour_chunks[index].append(detour[mask])
+
+    reduction_pct = np.full(n_bins, np.nan)
+    reduction_abs = np.zeros(n_bins)
+    oracle_drone_share_pct = np.full(n_bins, np.nan)
+    populated = np.array([bool(parts) for parts in detour_chunks])
+    positive_ebike = populated & (ebike_totals > 0)
+    positive_orders = populated & (order_totals > 0)
+    difference = ebike_totals - drone_totals
+    reduction_pct[positive_ebike] = (
+        difference[positive_ebike] / ebike_totals[positive_ebike] * 100.0
+    )
+    oracle_drone_share_pct[positive_orders] = (
+        oracle_drone_orders[positive_orders]
+        / order_totals[positive_orders]
+        * 100.0
+    )
+    if absolute_reduction_metric == "per_order_g":
+        reduction_abs[populated & ~positive_orders] = np.nan
+        reduction_abs[positive_orders] = (
+            difference[positive_orders] / order_totals[positive_orders]
+        )
+    else:
+        reduction_abs = difference / 1e6
+    detour_by_bin = [
+        np.concatenate(parts) if parts else np.array([])
+        for parts in detour_chunks
+    ]
+    return (
+        centres,
+        reduction_pct,
+        reduction_abs,
+        detour_by_bin,
+        max_km,
+        oracle_drone_share_pct,
+    )
