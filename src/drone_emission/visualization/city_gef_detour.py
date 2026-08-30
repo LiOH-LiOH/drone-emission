@@ -67,11 +67,9 @@ CITY_GEF_SUMMARY_ROW_HSPACE = 0.32
 CITY_GEF_BOTTOM_SCATTER_SIZE = 18
 CITY_GEF_BOTTOM_SCATTER_ALPHA = 0.45
 
-REDUCTION_DETOUR_CACHE_VERSION = 6
+REDUCTION_DETOUR_CACHE_VERSION = 7
 REDUCTION_DETOUR_CHUNK_ROWS = 250_000
-SHANGHAI_MERCHANT_SNAP_THRESHOLD_M = 1_000.0
-SHANGHAI_TAIL_BIN_CENTER_MIN_KM = 3.3
-SHANGHAI_TAIL_AIR_DISTANCE_MIN_KM = 3.2
+SHANGHAI_MERCHANT_SNAP_QUANTILE = 0.99
 POWER_GENERATION_2022_100M_KWH = {
     "shanghai": {
         "total": 955.0,
@@ -170,11 +168,28 @@ def _file_cache_signature(path):
     }
 
 
-def _merchant_snap_filter_from_graphml(merchant_coordinates, graphml_path):
-    """Return merchant origins more than 1 km from Shanghai's road graph."""
+def _unique_finite_coordinates(coordinates):
+    """Return sorted unique finite latitude-longitude coordinate pairs."""
     import numpy as np
 
-    from drone_emission.roadnet.sparse_graph import SparseGraph
+    coordinates = np.asarray(coordinates, dtype=np.float64)
+    if coordinates.ndim != 2 or coordinates.shape[1] != 2:
+        raise ValueError(
+            "merchant_coordinates must contain (latitude, longitude) pairs"
+        )
+    coordinates = coordinates[np.isfinite(coordinates).all(axis=1)]
+    if not coordinates.size:
+        return np.empty((0, 2), dtype=np.float64)
+    return np.unique(coordinates, axis=0)
+
+
+def _merchant_snap_outliers(
+    merchant_coordinates,
+    snap_distances_m,
+    quantile=SHANGHAI_MERCHANT_SNAP_QUANTILE,
+):
+    """Return merchants whose snap distance is strictly above the quantile."""
+    import numpy as np
 
     coordinates = np.asarray(merchant_coordinates, dtype=np.float64)
     if coordinates.ndim != 2 or coordinates.shape[1] != 2:
@@ -183,6 +198,37 @@ def _merchant_snap_filter_from_graphml(merchant_coordinates, graphml_path):
         )
     if not np.isfinite(coordinates).all():
         raise ValueError("merchant_coordinates must be finite")
+    if len(np.unique(coordinates, axis=0)) != len(coordinates):
+        raise ValueError("merchant_coordinates must be unique")
+    snap_distances_m = np.asarray(snap_distances_m, dtype=np.float64)
+    if len(coordinates) != len(snap_distances_m):
+        raise ValueError(
+            "merchant_coordinates and snap_distances_m must have equal length"
+        )
+    if not np.isfinite(snap_distances_m).all():
+        raise ValueError("snap_distances_m must be finite")
+    if not 0.0 <= quantile <= 1.0:
+        raise ValueError("quantile must be between zero and one")
+    threshold_m = float(
+        np.quantile(snap_distances_m, quantile, method="linear")
+    )
+    excluded = {
+        tuple(coordinate)
+        for coordinate, distance in zip(coordinates, snap_distances_m)
+        if distance > threshold_m
+    }
+    return excluded, threshold_m
+
+
+def _merchant_snap_filter_from_graphml(merchant_coordinates, graphml_path):
+    """Return Shanghai merchant origins above the road-snap P99."""
+    import numpy as np
+
+    from drone_emission.roadnet.sparse_graph import SparseGraph
+
+    coordinates = _unique_finite_coordinates(merchant_coordinates)
+    if not coordinates.size:
+        raise ValueError("merchant_coordinates must contain finite coordinates")
 
     graph = SparseGraph.from_graphml(graphml_path)
     nearest_indices = graph.find_nearest_nodes_batch(coordinates)
@@ -202,20 +248,14 @@ def _merchant_snap_filter_from_graphml(merchant_coordinates, graphml_path):
     snap_distances_m = 2.0 * 6_371_000.0 * np.arcsin(
         np.sqrt(np.clip(haversine_term, 0.0, 1.0))
     )
-    excluded = {
-        tuple(coordinate)
-        for coordinate, distance in zip(coordinates, snap_distances_m)
-        if distance > SHANGHAI_MERCHANT_SNAP_THRESHOLD_M
-    }
-    return excluded, snap_distances_m
+    excluded, threshold_m = _merchant_snap_outliers(
+        coordinates, snap_distances_m
+    )
+    return excluded, snap_distances_m, threshold_m
 
 
-def _filter_tail_rows_by_merchant(
-    od_chunk,
-    excluded_merchants,
-    tail_air_distance_min_km=SHANGHAI_TAIL_AIR_DISTANCE_MIN_KM,
-):
-    """Exclude listed merchant origins only in the requested distance tail."""
+def _filter_rows_by_merchant(od_chunk, excluded_merchants):
+    """Exclude every OD row belonging to listed merchant origins."""
     import numpy as np
 
     if not excluded_merchants:
@@ -226,18 +266,121 @@ def _filter_tail_rows_by_merchant(
     excluded_index = pd.MultiIndex.from_tuples(
         sorted(excluded_merchants), names=["from_lat", "from_lng"]
     )
-    air_distance = pd.to_numeric(
-        od_chunk["distance_km"], errors="coerce"
-    ).to_numpy(dtype=float)
-    excluded_mask = (
-        (air_distance >= tail_air_distance_min_km)
-        & origins.isin(excluded_index)
-    )
+    excluded_mask = origins.isin(excluded_index)
     sales = pd.to_numeric(
         od_chunk.loc[excluded_mask, "annual_sales"], errors="coerce"
     ).to_numpy(dtype=float)
     filtered_sales = float(np.sum(sales[np.isfinite(sales)]))
     return od_chunk.loc[~excluded_mask].copy(), excluded_mask, filtered_sales
+
+
+def _new_merchant_filter_bin_audit(max_air_distance_km, bin_width_km):
+    """Create streaming accumulators for pre/post-filter bin diagnostics."""
+    import numpy as np
+
+    max_km = float(
+        np.ceil(max_air_distance_km / bin_width_km) * bin_width_km
+    )
+    edges = np.arange(0.0, max_km + bin_width_km / 2, bin_width_km)
+    n_bins = len(edges) - 1
+
+    def state():
+        return {
+            "merchant_coordinates": [set() for _ in range(n_bins)],
+            "od_count": np.zeros(n_bins, dtype=np.int64),
+            "annual_sales": np.zeros(n_bins, dtype=np.float64),
+            "ebike_emissions_g": np.zeros(n_bins, dtype=np.float64),
+            "drone_emissions_g": np.zeros(n_bins, dtype=np.float64),
+            "optimal_drone_sales": np.zeros(n_bins, dtype=np.float64),
+        }
+
+    return {"edges": edges, "before": state(), "after": state()}
+
+
+def _update_merchant_filter_bin_audit(audit, state_name, od_chunk):
+    """Accumulate one raw or filtered Shanghai chunk into an audit state."""
+    import numpy as np
+
+    valid = od_chunk[
+        (od_chunk["road_distance_m"] >= 0)
+        & (od_chunk["distance_km"] > 0)
+    ]
+    if valid.empty:
+        return
+    edges = audit["edges"]
+    bin_indices = np.clip(
+        np.digitize(valid["distance_km"].to_numpy(dtype=float), edges) - 1,
+        0,
+        len(edges) - 2,
+    )
+    state = audit[state_name]
+    sales = valid["annual_sales"].to_numpy(dtype=float)
+    ebike = valid["ebike_lifecycle_g"].to_numpy(dtype=float)
+    drone = valid["drone_lifecycle_g"].to_numpy(dtype=float)
+    coordinates = valid[["from_lat", "from_lng"]].to_numpy(dtype=float)
+    for index in np.unique(bin_indices):
+        mask = bin_indices == index
+        index = int(index)
+        finite_coordinates = coordinates[mask]
+        finite_coordinates = finite_coordinates[
+            np.isfinite(finite_coordinates).all(axis=1)
+        ]
+        state["merchant_coordinates"][index].update(
+            map(tuple, finite_coordinates)
+        )
+        state["od_count"][index] += int(mask.sum())
+        state["annual_sales"][index] += float(np.sum(sales[mask]))
+        state["ebike_emissions_g"][index] += float(
+            np.sum(ebike[mask] * sales[mask])
+        )
+        state["drone_emissions_g"][index] += float(
+            np.sum(drone[mask] * sales[mask])
+        )
+        state["optimal_drone_sales"][index] += float(
+            np.sum(sales[mask][drone[mask] < ebike[mask]])
+        )
+
+
+def _finalize_merchant_filter_bin_audit(audit):
+    """Return JSON-ready pre/post-filter counts, sales, and middle metrics."""
+    edges = audit["edges"]
+    records = []
+    for index in range(len(edges) - 1):
+        record = {
+            "bin_left_air_km": float(edges[index]),
+            "bin_right_air_km": float(edges[index + 1]),
+            "bin_center_air_km": float(
+                (edges[index] + edges[index + 1]) / 2.0
+            ),
+        }
+        for state_name in ("before", "after"):
+            state = audit[state_name]
+            sales = float(state["annual_sales"][index])
+            ebike = float(state["ebike_emissions_g"][index])
+            drone = float(state["drone_emissions_g"][index])
+            populated = bool(state["od_count"][index])
+            record[state_name] = {
+                "merchant_count": len(state["merchant_coordinates"][index]),
+                "od_count": int(state["od_count"][index]),
+                "annual_sales": sales,
+                "optimal_drone_share_pct": (
+                    float(state["optimal_drone_sales"][index] / sales * 100.0)
+                    if populated and sales > 0
+                    else None
+                ),
+                "sales_weighted_ebike_minus_drone_g_per_order": (
+                    float((ebike - drone) / sales)
+                    if populated and sales > 0
+                    else None
+                ),
+                "lifecycle_reduction_pct": (
+                    float((ebike - drone) / ebike * 100.0)
+                    if populated and ebike > 0
+                    else None
+                ),
+            }
+        records.append(record)
+    return records
 
 
 def _build_reduction_detour_binned_by_city(
@@ -333,9 +476,10 @@ def _build_reduction_detour_binned_by_city(
             "absolute_reduction_metric": absolute_reduction_metric,
             "merchant_filter": {
                 "region_key": "shanghai",
-                "snap_distance_threshold_m": SHANGHAI_MERCHANT_SNAP_THRESHOLD_M,
-                "tail_bin_center_min_km": SHANGHAI_TAIL_BIN_CENTER_MIN_KM,
-                "tail_air_distance_min_km": SHANGHAI_TAIL_AIR_DISTANCE_MIN_KM,
+                "rule": "exclude merchants with road-snap distance > P99",
+                "quantile": SHANGHAI_MERCHANT_SNAP_QUANTILE,
+                "quantile_method": "linear",
+                "scope": "all OD rows for excluded Shanghai merchants",
             },
         }
         if os.path.exists(cache_path):
@@ -407,26 +551,31 @@ def _build_reduction_detour_binned_by_city(
                 raise ValueError(
                     f"{figure_name}: Shanghai has no valid merchant origins"
                 )
-            sorted_merchants = np.asarray(sorted(merchant_coordinates), dtype=float)
-            excluded_merchants, snap_distances_m = (
+            sorted_merchants = _unique_finite_coordinates(merchant_coordinates)
+            excluded_merchants, snap_distances_m, snap_threshold_m = (
                 _merchant_snap_filter_from_graphml(
                     sorted_merchants, shanghai_graphml_path
                 )
             )
             merchant_filter = {
                 "region_key": "shanghai",
-                "snap_distance_threshold_m": SHANGHAI_MERCHANT_SNAP_THRESHOLD_M,
-                "tail_bin_center_min_km": SHANGHAI_TAIL_BIN_CENTER_MIN_KM,
-                "tail_air_distance_min_km": SHANGHAI_TAIL_AIR_DISTANCE_MIN_KM,
+                "rule": "exclude merchants with road-snap distance > P99",
+                "quantile": SHANGHAI_MERCHANT_SNAP_QUANTILE,
+                "quantile_method": "linear",
+                "scope": "all OD rows for excluded Shanghai merchants",
+                "snap_distance_p99_m": snap_threshold_m,
                 "merchant_count": len(merchant_coordinates),
-                "eligible_merchant_count": (
+                "retained_merchant_count": (
                     len(merchant_coordinates) - len(excluded_merchants)
                 ),
-                "ineligible_merchant_count": len(excluded_merchants),
+                "excluded_merchant_count": len(excluded_merchants),
                 "maximum_snap_distance_m": float(snap_distances_m.max()),
                 "filtered_od_count": 0,
                 "filtered_annual_sales": 0.0,
             }
+            merchant_bin_audit = _new_merchant_filter_bin_audit(
+                max_air_distance_km, bin_width_km
+            )
 
         gef = gef_map[key]
         ebike_pp = replace(ebike_params, e_use=float(gef))
@@ -467,20 +616,23 @@ def _build_reduction_detour_binned_by_city(
                 )
                 detour_totals["valid_path_count"] += int(valid_detour.sum())
                 detour_totals["invalid_path_count"] += int((~valid_detour).sum())
+                od_chunk["ebike_lifecycle_g"] = compute_ebike_per_order_g(
+                    road_m / 1000.0, ebike_pp, scenario
+                )
                 if merchant_filter is not None:
+                    _update_merchant_filter_bin_audit(
+                        merchant_bin_audit, "before", od_chunk
+                    )
                     od_chunk, filtered_mask, filtered_sales = (
-                        _filter_tail_rows_by_merchant(
-                            od_chunk, excluded_merchants
-                        )
+                        _filter_rows_by_merchant(od_chunk, excluded_merchants)
                     )
                     merchant_filter["filtered_od_count"] += int(
                         filtered_mask.sum()
                     )
                     merchant_filter["filtered_annual_sales"] += filtered_sales
-                    road_m = od_chunk["road_distance_m"].to_numpy(copy=False)
-                od_chunk["ebike_lifecycle_g"] = compute_ebike_per_order_g(
-                    road_m / 1000.0, ebike_pp, scenario
-                )
+                    _update_merchant_filter_bin_audit(
+                        merchant_bin_audit, "after", od_chunk
+                    )
                 yield od_chunk
 
         (
@@ -504,6 +656,10 @@ def _build_reduction_detour_binned_by_city(
             if detour_totals["weighted_air_m"] > 0
             else np.nan
         )
+        if merchant_filter is not None:
+            merchant_filter["distance_bins"] = (
+                _finalize_merchant_filter_bin_audit(merchant_bin_audit)
+            )
         binned_by_city[key] = {
             "centres": centres,
             "reduction_pct": reduction_pct,
@@ -1845,6 +2001,15 @@ def _write_city_gef_context_detour_report(
     with open(json_path, "w", encoding="utf-8") as f:
         json.dump(payload, f, indent=2, ensure_ascii=False, allow_nan=False)
 
+    merchant_filter_summary = (
+        {
+            key: value
+            for key, value in merchant_filter.items()
+            if key != "distance_bins"
+        }
+        if merchant_filter is not None
+        else None
+    )
     lines = [
         f"# {figure_name} Figure Report",
         "",
@@ -1857,7 +2022,46 @@ def _write_city_gef_context_detour_report(
         f"- Legend rail orientation: {(legend_rail or {}).get('orientation')}",
         f"- GEF bin edges: {(legend_rail or {}).get('gef_bin_edges')}",
         f"- City marker entries: {(legend_rail or {}).get('city_markers')}",
-        f"- Merchant filter: {merchant_filter}",
+        f"- Merchant filter: {merchant_filter_summary}",
+        "",
+        "## Shanghai merchant filter audit",
+        "",
+    ]
+    if merchant_filter is None:
+        lines.append("- Not applied.")
+    else:
+        lines.extend(
+            [
+                f"- Rule: {merchant_filter.get('rule')}",
+                f"- Quantile: {merchant_filter.get('quantile')}",
+                f"- Quantile method: {merchant_filter.get('quantile_method')}",
+                f"- Actual P99: {merchant_filter.get('snap_distance_p99_m')} m",
+                f"- Merchants: {merchant_filter.get('merchant_count')} total, "
+                f"{merchant_filter.get('excluded_merchant_count')} excluded",
+                f"- Filtered OD rows: {merchant_filter.get('filtered_od_count')}",
+                f"- Filtered annual sales: {merchant_filter.get('filtered_annual_sales')}",
+                "",
+                "| Air-distance bin (km) | State | Merchants | OD rows | Annual sales | Optimal drone share (%) | Sales-weighted E-bike - Drone (g/order) | Lifecycle reduction (%) |",
+                "| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |",
+            ]
+        )
+        for bin_record in merchant_filter.get("distance_bins", []):
+            bin_label = (
+                f"{bin_record['bin_left_air_km']:.1f}-"
+                f"{bin_record['bin_right_air_km']:.1f}"
+            )
+            for state_name in ("before", "after"):
+                state = bin_record[state_name]
+                lines.append(
+                    f"| {bin_label} | {state_name} | "
+                    f"{state['merchant_count']} | {state['od_count']} | "
+                    f"{state['annual_sales']} | "
+                    f"{state['optimal_drone_share_pct']} | "
+                    f"{state['sales_weighted_ebike_minus_drone_g_per_order']} | "
+                    f"{state['lifecycle_reduction_pct']} |"
+                )
+    lines.extend(
+        [
         "",
         "## Top: city_gef_scatter_components",
         "",
@@ -1872,7 +2076,8 @@ def _write_city_gef_context_detour_report(
         "",
         "## Middle: selected_city_context",
         "",
-    ]
+        ]
+    )
     for city in city_reports:
         visible_bins = [
             item for item in city["distance_bins"]
