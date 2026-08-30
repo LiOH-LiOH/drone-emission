@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
+import os
 import shutil
+import tempfile
 from pathlib import Path
 
 import pandas as pd
@@ -12,10 +15,23 @@ from .paper_cohort import cohort_hash, locked_region_keys
 from .paths import PROJECT_ROOT
 
 
-DERIVED_GLOBAL_NAMES = {
+ANALYSIS_STATUS_SCHEMA_VERSION = 2
+INPUT_MANIFEST_SCHEMA_VERSION = 1
+AUTHORITATIVE_AGGREGATES = (
     "all_region_stats.json",
     "all_region_stats.csv",
     "all_region_stats_enriched.csv",
+)
+ANALYSIS_MODULES = (
+    "named-scenarios",
+    "pathway-scenarios",
+    "distance-threshold",
+    "threshold-resilience",
+    "city-attribution",
+    "contribution-decomposition",
+)
+DERIVED_GLOBAL_NAMES = {
+    *AUTHORITATIVE_AGGREGATES,
     "all_sensitivity_named.csv",
     "all_city_distance_threshold_summary.csv",
     "all_city_distance_threshold_summary.partial.csv",
@@ -29,7 +45,6 @@ DERIVED_GLOBAL_NAMES = {
     "all_threshold_resilience.csv",
     "all_threshold_resilience_drivers.csv",
 }
-
 COHORT_FILTERED_TABLES = {
     name for name in DERIVED_GLOBAL_NAMES if name.endswith(".csv")
 }
@@ -44,7 +59,127 @@ def analysis_data_dir(config: dict) -> Path:
     return analysis_root(config) / f"cohort-{cohort_hash()[:12]}" / "data"
 
 
-def _is_derived(relative: Path) -> bool:
+def analysis_input_manifest_path(config: dict) -> Path:
+    return analysis_data_dir(config).parent / "input_manifest.json"
+
+
+def _sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for block in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(block)
+    return digest.hexdigest()
+
+
+def _canonical_sha256(payload: dict) -> str:
+    encoded = json.dumps(
+        payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def _atomic_json(payload: dict, target: Path) -> None:
+    target.parent.mkdir(parents=True, exist_ok=True)
+    temporary = target.with_suffix(target.suffix + ".tmp")
+    temporary.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    temporary.replace(target)
+
+
+def _atomic_copy(source: Path, target: Path) -> None:
+    target.parent.mkdir(parents=True, exist_ok=True)
+    descriptor, temporary = tempfile.mkstemp(
+        prefix=f".{target.name}.", suffix=".tmp", dir=target.parent
+    )
+    os.close(descriptor)
+    try:
+        shutil.copy2(source, temporary)
+        os.replace(temporary, target)
+    finally:
+        if os.path.exists(temporary):
+            os.unlink(temporary)
+
+
+def _region_input_paths(config: dict) -> list[tuple[str, Path, Path]]:
+    registry = json.loads((PROJECT_ROOT / "regions.json").read_text(encoding="utf-8"))
+    data_root = Path(config["data_dir"]).resolve()
+    paths = []
+    for region_key in locked_region_keys():
+        region = registry[region_key]
+        directory = str(region.get("region_name_en", region_key)).lower()
+        city_root = data_root / "city" / directory
+        paths.append(
+            (
+                region_key,
+                city_root / "region_stats.json",
+                city_root / f"{directory}_od_pairs.csv",
+            )
+        )
+    return paths
+
+
+def build_input_manifest(config: dict) -> dict:
+    """Fingerprint authoritative analysis inputs without writing any state."""
+    data_root = Path(config["data_dir"]).resolve()
+    hashed: list[dict] = []
+    metadata: list[dict] = []
+    hash_inputs = [
+        (f"data:{name}", data_root / name) for name in AUTHORITATIVE_AGGREGATES
+    ]
+    for region_key, stats_path, od_path in _region_input_paths(config):
+        hash_inputs.append((f"city:{region_key}/region_stats.json", stats_path))
+        if not od_path.is_file():
+            raise FileNotFoundError(f"Missing analysis OD input: {od_path}")
+        stat = od_path.stat()
+        metadata.append(
+            {
+                "path": f"city:{region_key}/{od_path.name}",
+                "size_bytes": stat.st_size,
+                "mtime_ns": stat.st_mtime_ns,
+            }
+        )
+    hash_inputs.extend(
+        (
+            (
+                "project:paper_cohort.json",
+                PROJECT_ROOT / "src" / "drone_emission" / "paper_cohort.json",
+            ),
+            ("project:experiment.toml", PROJECT_ROOT / "experiment.toml"),
+            ("data:gef", Path(config["gef_path"]).resolve()),
+        )
+    )
+    sales_path = Path(config["sales_path"]).resolve()
+    if not sales_path.is_file():
+        raise FileNotFoundError(f"Missing analysis sales input: {sales_path}")
+    sales_stat = sales_path.stat()
+    metadata.append(
+        {
+            "path": "data:combined_data.csv",
+            "size_bytes": sales_stat.st_size,
+            "mtime_ns": sales_stat.st_mtime_ns,
+        }
+    )
+    for logical_path, path in hash_inputs:
+        if not path.is_file():
+            raise FileNotFoundError(f"Missing analysis input: {path}")
+        stat = path.stat()
+        hashed.append(
+            {
+                "path": logical_path,
+                "size_bytes": stat.st_size,
+                "sha256": _sha256(path),
+            }
+        )
+    body = {
+        "schema_version": INPUT_MANIFEST_SCHEMA_VERSION,
+        "cohort_sha256": cohort_hash(),
+        "city_count": len(locked_region_keys()),
+        "sha256_inputs": sorted(hashed, key=lambda item: item["path"]),
+        "stat_inputs": sorted(metadata, key=lambda item: item["path"]),
+    }
+    return {**body, "manifest_sha256": _canonical_sha256(body)}
+
+
+def _is_analysis_product(relative: Path) -> bool:
     return (
         relative.name in DERIVED_GLOBAL_NAMES
         or relative.name.endswith("_named.csv")
@@ -52,35 +187,41 @@ def _is_derived(relative: Path) -> bool:
     )
 
 
-def _stage_file(source: Path, target: Path, *, copy_file: bool) -> None:
+def _stage_symlink(source: Path, target: Path) -> None:
     target.parent.mkdir(parents=True, exist_ok=True)
     if target.exists() or target.is_symlink():
         return
-    if copy_file:
-        shutil.copy2(source, target)
-    else:
-        target.symlink_to(source.resolve())
+    target.symlink_to(source.resolve())
 
 
-def prepare_analysis_data_view(config: dict) -> Path:
-    """Mirror inputs into work while copying every file an analysis may replace.
+def _write_view_metadata(target_root: Path, manifest: dict) -> None:
+    metadata = {
+        "schema_version": 2,
+        "cohort_sha256": cohort_hash(),
+        "city_count": len(locked_region_keys()),
+        "region_keys": sorted(locked_region_keys()),
+        "input_manifest_sha256": manifest["manifest_sha256"],
+        "input_manifest": str(target_root.parent / "input_manifest.json"),
+    }
+    _atomic_json(metadata, target_root / "paper_cohort_view.json")
 
-    Large immutable city inputs (notably OD, building and road-network files) are
-    represented by read-only-use symlinks. Existing derived files are copied so
-    direct writers and atomic replacements can never reach the configured data
-    root through a symlink.
-    """
+
+def prepare_analysis_data_view(config: dict, manifest: dict | None = None) -> Path:
+    """Refresh inputs; never import analysis products from the official root."""
     source_root = Path(config["data_dir"]).resolve()
     target_root = analysis_data_dir(config)
     target_root.mkdir(parents=True, exist_ok=True)
     if source_root == target_root.resolve():
         raise ValueError("analysis work root must be independent of data root")
-
+    manifest = manifest or build_input_manifest(config)
+    for name in AUTHORITATIVE_AGGREGATES:
+        _atomic_copy(source_root / name, target_root / name)
     for source in source_root.iterdir():
-        if source.is_file():
-            relative = source.relative_to(source_root)
-            _stage_file(source, target_root / relative, copy_file=_is_derived(relative))
-
+        if not source.is_file() or source.name in AUTHORITATIVE_AGGREGATES:
+            continue
+        relative = source.relative_to(source_root)
+        if not _is_analysis_product(relative):
+            _stage_symlink(source, target_root / relative)
     study_keys = set(locked_region_keys())
     for level in ("city", "district"):
         level_root = source_root / level
@@ -93,11 +234,8 @@ def prepare_analysis_data_view(config: dict) -> Path:
                 if not source.is_file():
                     continue
                 relative = source.relative_to(source_root)
-                _stage_file(
-                    source,
-                    target_root / relative,
-                    copy_file=_is_derived(relative),
-                )
+                if not _is_analysis_product(relative):
+                    _stage_symlink(source, target_root / relative)
     for directory in sorted(path for path in source_root.iterdir() if path.is_dir()):
         if directory.name in {"city", "district"}:
             continue
@@ -105,12 +243,10 @@ def prepare_analysis_data_view(config: dict) -> Path:
             if not source.is_file():
                 continue
             relative = source.relative_to(source_root)
-            _stage_file(
-                source,
-                target_root / relative,
-                copy_file=_is_derived(relative),
-            )
-    _filter_analysis_view(target_root, study_keys)
+            if not _is_analysis_product(relative):
+                _stage_symlink(source, target_root / relative)
+    _atomic_json(manifest, analysis_input_manifest_path(config))
+    _write_view_metadata(target_root, manifest)
     return target_root
 
 
@@ -121,8 +257,8 @@ def _atomic_frame(frame: pd.DataFrame, target: Path) -> None:
 
 
 def _filter_analysis_view(target_root: Path, study_keys: set[str]) -> None:
-    """Make every nationwide analysis input match the locked paper cohort."""
-    for name in sorted(COHORT_FILTERED_TABLES):
+    """Filter derived nationwide outputs to the locked paper cohort."""
+    for name in sorted(COHORT_FILTERED_TABLES - set(AUTHORITATIVE_AGGREGATES)):
         path = target_root / name
         if not path.is_file():
             continue
@@ -135,51 +271,23 @@ def _filter_analysis_view(target_root: Path, study_keys: set[str]) -> None:
         cohort_rows = frame[frame["region_key"].astype(str).isin(study_keys)]
         if len(cohort_rows) != len(frame):
             _atomic_frame(cohort_rows.copy(), path)
-
-    stats_json = target_root / "all_region_stats.json"
-    if stats_json.is_file():
-        payload = json.loads(stats_json.read_text(encoding="utf-8"))
-        filtered = {key: value for key, value in payload.items() if key in study_keys}
-        if filtered != payload:
-            temporary = stats_json.with_suffix(".json.tmp")
-            temporary.write_text(
-                json.dumps(filtered, ensure_ascii=False, indent=2) + "\n",
-                encoding="utf-8",
-            )
-            temporary.replace(stats_json)
-
     partial = target_root / "all_city_distance_threshold_summary.partial.csv"
     complete = target_root / "all_city_distance_threshold_summary.csv"
     if partial.is_file() and not complete.is_file():
         frame = pd.read_csv(partial)
         keys = set(frame["region_key"].astype(str))
         bases = set(frame.get("distance_basis", pd.Series(dtype=str)).astype(str))
-        if keys == study_keys and bases == {"road", "straight"} and len(frame) == 2 * len(study_keys):
+        if (
+            keys == study_keys
+            and bases == {"road", "straight"}
+            and len(frame) == 2 * len(study_keys)
+        ):
             _atomic_frame(frame, complete)
 
-    metadata = {
-        "schema_version": 1,
-        "cohort_sha256": cohort_hash(),
-        "city_count": len(study_keys),
-        "region_keys": sorted(study_keys),
-    }
-    metadata_path = target_root / "paper_cohort_view.json"
-    existing_metadata = None
-    if metadata_path.is_file():
-        try:
-            existing_metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
-            pass
-    if existing_metadata != metadata:
-        temporary = metadata_path.with_suffix(".json.tmp")
-        temporary.write_text(json.dumps(metadata, indent=2) + "\n", encoding="utf-8")
-        temporary.replace(metadata_path)
 
-
-def _view_config(config: dict) -> dict:
+def _view_config(config: dict, manifest: dict | None = None) -> dict:
     view = dict(config)
-    view["data_dir"] = str(prepare_analysis_data_view(config))
-    # Global inputs remain authoritative and read-only to analysis routines.
+    view["data_dir"] = str(prepare_analysis_data_view(config, manifest))
     view["sales_path"] = config["sales_path"]
     view["gef_path"] = config["gef_path"]
     view["study_region_keys"] = locked_region_keys()
@@ -191,13 +299,10 @@ def _run_named_scenarios(config: dict, *, force: bool) -> Path:
     from .tools.consolidate_sensitivity import consolidate
     from .tools.rerun_named_scenarios import _process, _select_regions
     from .utils.region_config import init_registry
-
     output = Path(config["data_dir"]) / "all_sensitivity_named.csv"
     if output.exists() and not force:
         return output
-    registry = init_registry(
-        str(PROJECT_ROOT / "regions.json"), data_dir=config["data_dir"]
-    )
+    registry = init_registry(str(PROJECT_ROOT / "regions.json"), data_dir=config["data_dir"])
     failures = []
     regions = _select_regions(registry, config["data_dir"], "city", None, False)
     study_keys = set(config.get("study_region_keys", ()))
@@ -216,12 +321,7 @@ def _run_named_scenarios(config: dict, *, force: bool) -> Path:
 
 
 def _run_distance_threshold(config: dict, *, force: bool) -> Path:
-    from .tools.run_distance_threshold_analysis import (
-        _city_regions,
-        analyze_region,
-        consolidate,
-    )
-
+    from .tools.run_distance_threshold_analysis import _city_regions, analyze_region, consolidate
     output = Path(config["data_dir"]) / "all_city_distance_threshold_summary.csv"
     if output.exists() and not force:
         return output
@@ -238,49 +338,27 @@ def _run_distance_threshold(config: dict, *, force: bool) -> Path:
     return output
 
 
-def _run_contribution_decomposition(
-    config: dict,
-    *,
-    force: bool,
-    chunk_rows: int,
-) -> Path:
+def _run_contribution_decomposition(config: dict, *, force: bool, chunk_rows: int) -> Path:
     from .analysis.contribution_decomposition import run_contribution_analysis
-
-    output, _ = run_contribution_analysis(
-        config,
-        force=force,
-        chunk_rows=chunk_rows,
-    )
+    output, _ = run_contribution_analysis(config, force=force, chunk_rows=chunk_rows)
     return output
 
 
 def _run_pathway_scenarios(config: dict, *, force: bool) -> Path:
     from .analysis.pathway_scenarios import run_pathway_analysis
-
     _, _, report = run_pathway_analysis(config, force=force)
     return report
 
 
 def _run_threshold_resilience(config: dict, *, force: bool) -> Path:
     from .tools.run_threshold_resilience import (
-        _city_regions,
-        analyze_region,
-        build_execution_context,
-        consolidate,
-        inventory_regions,
+        _city_regions, analyze_region, build_execution_context, consolidate, inventory_regions,
     )
-
     output = Path(config["data_dir"]) / "all_threshold_resilience.csv"
     regions = _city_regions(config)
     if output.exists() and not force:
-        inventory = inventory_regions(
-            config, require_samples=False, force=False
-        )
-        all_city_caches_are_fresh = (
-            len(inventory) == len(regions)
-            and (inventory["status"] == "cached").all()
-        )
-        if all_city_caches_are_fresh:
+        inventory = inventory_regions(config, require_samples=False, force=False)
+        if len(inventory) == len(regions) and (inventory["status"] == "cached").all():
             summary = pd.read_csv(output, usecols=["region_key"])
             if summary["region_key"].nunique() == len(regions):
                 return output
@@ -288,19 +366,14 @@ def _run_threshold_resilience(config: dict, *, force: bool) -> Path:
     execution_context = build_execution_context(config)
     for region_key, region in regions.items():
         result = analyze_region(
-            region_key,
-            region,
-            config,
-            force=force,
-            execution_context=execution_context,
+            region_key, region, config, force=force, execution_context=execution_context
         )
         if result["status"] not in {"ok", "cached"}:
             failures.append(f"{region_key}:{result['status']}")
     if failures:
         raise RuntimeError("threshold-resilience analysis incomplete: " + ", ".join(failures))
     output, _ = consolidate(config)
-    summary = pd.read_csv(output, usecols=["region_key"])
-    if summary["region_key"].nunique() != len(regions):
+    if pd.read_csv(output, usecols=["region_key"])["region_key"].nunique() != len(regions):
         raise RuntimeError("threshold-resilience consolidation omitted cities")
     return output
 
@@ -310,20 +383,79 @@ def _run_city_attribution(config: dict, *, force: bool) -> Path:
         build_r2_city_attribution,
         write_r2_city_attribution_report,
     )
-
     root = analysis_root(config) / "city_attribution"
     report = root / "r2_city_attribution_analysis_report.json"
     prepared = root / "r2_city_attribution_data.csv"
     if report.exists() and prepared.exists() and not force:
         return report
     frame, payload = build_r2_city_attribution(
-        Path(config["data_dir"]) / "all_region_stats_enriched.csv",
-        config["data_dir"],
+        Path(config["data_dir"]) / "all_region_stats_enriched.csv", config["data_dir"]
     )
     root.mkdir(parents=True, exist_ok=True)
     frame.to_csv(prepared, index=False)
     write_r2_city_attribution_report(payload, report)
     return report
+
+
+def _module_outputs(config: dict) -> dict[str, tuple[Path, ...]]:
+    data = analysis_data_dir(config)
+    work = analysis_root(config)
+    return {
+        "named-scenarios": (data / "all_sensitivity_named.csv",),
+        "pathway-scenarios": (
+            data / "all_pathway_scenario_city.csv",
+            data / "all_pathway_curve_points.csv",
+            data / "all_pathway_scenarios_report.json",
+        ),
+        "distance-threshold": (
+            data / "all_city_distance_threshold_summary.csv",
+            data / "all_city_distance_threshold_status.csv",
+        ),
+        "threshold-resilience": (
+            data / "all_threshold_resilience.csv",
+            data / "all_threshold_resilience_drivers.csv",
+        ),
+        "city-attribution": (
+            work / "city_attribution" / "r2_city_attribution_data.csv",
+            work / "city_attribution" / "r2_city_attribution_analysis_report.json",
+        ),
+        "contribution-decomposition": (
+            data / "all_city_contribution_decomposition.csv",
+            data / "all_city_contribution_decomposition_status.csv",
+        ),
+    }
+
+
+def _output_signatures(paths: tuple[Path, ...]) -> list[dict]:
+    missing = [str(path) for path in paths if not path.is_file()]
+    if missing:
+        raise FileNotFoundError("analysis module omitted output(s):\n- " + "\n- ".join(missing))
+    return [
+        {"path": str(path.resolve()), "size_bytes": path.stat().st_size, "sha256": _sha256(path)}
+        for path in paths
+    ]
+
+
+def _new_status(config: dict, manifest: dict) -> dict:
+    return {
+        "schema_version": ANALYSIS_STATUS_SCHEMA_VERSION,
+        "input_manifest_sha256": manifest["manifest_sha256"],
+        "input_manifest": str(analysis_input_manifest_path(config)),
+        "analysis_data_dir": str(analysis_data_dir(config)),
+        "paper_cohort_sha256": cohort_hash(),
+        "paper_city_count": len(locked_region_keys()),
+        "modules": {},
+        "complete": False,
+    }
+
+
+def _load_status(path: Path) -> dict | None:
+    if not path.is_file():
+        return None
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
 
 
 def analyze(
@@ -333,20 +465,16 @@ def analyze(
     reuse_from: str | Path | None = None,
     only: list[str] | None = None,
     contribution_chunk_rows: int = 250_000,
-) -> dict[str, str]:
-    """Build or restore every retained non-plot paper analysis."""
+) -> dict:
+    """Build or restore retained analyses with incrementally durable status."""
     runners = {
         "named-scenarios": lambda view: _run_named_scenarios(view, force=force),
-        "pathway-scenarios": lambda view: _run_pathway_scenarios(
-            view, force=force
-        ),
+        "pathway-scenarios": lambda view: _run_pathway_scenarios(view, force=force),
         "distance-threshold": lambda view: _run_distance_threshold(view, force=force),
         "threshold-resilience": lambda view: _run_threshold_resilience(view, force=force),
-        "city-attribution": lambda view: _run_city_attribution(config, force=force),
+        "city-attribution": lambda view: _run_city_attribution(view, force=force),
         "contribution-decomposition": lambda view: _run_contribution_decomposition(
-            view,
-            force=force,
-            chunk_rows=contribution_chunk_rows,
+            view, force=force, chunk_rows=contribution_chunk_rows
         ),
     }
     selected = list(runners) if only is None else list(dict.fromkeys(only))
@@ -356,66 +484,143 @@ def analyze(
             f"unknown analysis selection(s): {unknown}; "
             f"choose from {sorted(runners)}"
         )
-    view = _view_config(config)
+    if reuse_from is not None and force:
+        raise ValueError("--force cannot be combined with --reuse-from")
+    manifest = build_input_manifest(config)
+    view = _view_config(config, manifest)
+    status_path = analysis_root(config) / "status.json"
+    previous = _load_status(status_path)
+    previous_is_v2 = bool(
+        previous and previous.get("schema_version") == ANALYSIS_STATUS_SCHEMA_VERSION
+    )
+    if previous is not None and not previous_is_v2 and not force:
+        raise RuntimeError(
+            "analysis status schema is stale; "
+            "run `python -m drone_emission analyze --force`"
+        )
+    fingerprint_changed = previous_is_v2 and (
+        previous.get("input_manifest_sha256") != manifest["manifest_sha256"]
+    )
+    if fingerprint_changed and not force and reuse_from is None:
+        raise RuntimeError(
+            "analysis inputs changed; old module results are invalid. "
+            "Run `python -m drone_emission analyze --force`."
+        )
+    status = (
+        previous
+        if previous_is_v2 and not fingerprint_changed
+        else _new_status(config, manifest)
+    )
+    if fingerprint_changed:
+        _atomic_json(status, status_path)
     reuse_payload = None
     if reuse_from is not None:
-        if force:
-            raise ValueError("--force cannot be combined with --reuse-from")
-        from .paper_reuse import (
-            restore_reuse_directory,
-            validate_reused_region_sets,
-        )
-
+        from .paper_reuse import restore_reuse_directory, validate_reused_region_sets
         reuse_payload = restore_reuse_directory(view, reuse_from)
         validate_reused_region_sets(view)
-        outputs = {
-            "named_scenarios": Path(view["data_dir"]) / "all_sensitivity_named.csv",
-            "distance_threshold": Path(view["data_dir"])
-            / "all_city_distance_threshold_summary.csv",
-            "threshold_resilience": Path(view["data_dir"])
-            / "all_threshold_resilience.csv",
-            "city_attribution": analysis_root(config)
-            / "city_attribution"
-            / "r2_city_attribution_analysis_report.json",
-            "contribution_decomposition": Path(view["data_dir"])
-            / "all_city_contribution_decomposition.csv",
-            "pathway_scenarios": Path(view["data_dir"])
-            / "all_pathway_scenarios_report.json",
+        reuse_manifest = build_input_manifest(view)
+        _atomic_json(reuse_manifest, analysis_input_manifest_path(config))
+        _write_view_metadata(analysis_data_dir(config), reuse_manifest)
+        status = _new_status(config, reuse_manifest)
+        status["reuse"] = {
+            "manifest": reuse_payload["manifest"],
+            "restored": reuse_payload["restored"],
         }
-        selected_outputs = {name.replace("-", "_") for name in selected}
-        outputs = {
-            name: path for name, path in outputs.items() if name in selected_outputs
+    module_paths = _module_outputs(config)
+    outputs: dict[str, str] = {}
+    for name in selected:
+        # A forced or retried module must stop being renderable before it runs.
+        status["modules"].pop(name, None)
+        status["complete"] = False
+        _atomic_json(status, status_path)
+        primary = Path(runners[name](view)) if reuse_from is None else module_paths[name][0]
+        status["modules"][name] = {
+            "status": "complete",
+            "primary_output": str(primary),
+            "outputs": _output_signatures(module_paths[name]),
         }
-        missing = [str(path) for path in outputs.values() if not path.is_file()]
-        if missing:
-            raise FileNotFoundError(
-                "audited reuse directory did not restore required analysis files:\n- "
-                + "\n- ".join(missing)
-            )
-    else:
-        outputs = {name.replace("-", "_"): runners[name](view) for name in selected}
-    payload = {name: str(path) for name, path in outputs.items()}
-    payload["analysis_data_dir"] = str(analysis_data_dir(config))
-    payload["paper_cohort_sha256"] = cohort_hash()
-    payload["paper_city_count"] = len(locked_region_keys())
-    if reuse_payload is not None:
-        payload["reuse_manifest"] = reuse_payload["manifest"]
-    status = analysis_root(config) / "status.json"
-    status.parent.mkdir(parents=True, exist_ok=True)
-    status.write_text(json.dumps(payload, indent=2), encoding="utf-8")
-    return payload
+        status["complete"] = set(status["modules"]) == set(ANALYSIS_MODULES)
+        _atomic_json(status, status_path)
+        outputs[name.replace("-", "_")] = str(primary)
+    status["complete"] = (
+        set(status["modules"]) == set(ANALYSIS_MODULES)
+        and all(item.get("status") == "complete" for item in status["modules"].values())
+    )
+    _atomic_json(status, status_path)
+    return {**outputs, **status}
+
+
+def _verify_output_signature(record: dict) -> bool:
+    path = Path(record.get("path", ""))
+    return (
+        path.is_file()
+        and path.stat().st_size == record.get("size_bytes")
+        and _sha256(path) == record.get("sha256")
+    )
 
 
 def require_current_analysis(config: dict) -> dict:
-    """Require an analyze result produced for the tracked paper cohort."""
-    status = analysis_root(config) / "status.json"
-    if not status.is_file():
+    """Read-only fail-closed validation for formal rendering."""
+    status_path = analysis_root(config) / "status.json"
+    if not status_path.is_file():
         raise FileNotFoundError(
-            f"Missing analysis status: {status}. Run `python -m drone_emission analyze` first."
+            f"Missing analysis status: {status_path}. Run aggregate, cohort, and analyze first."
         )
-    payload = json.loads(status.read_text(encoding="utf-8"))
-    if payload.get("paper_cohort_sha256") != cohort_hash():
+    payload = json.loads(status_path.read_text(encoding="utf-8"))
+    if payload.get("schema_version") != ANALYSIS_STATUS_SCHEMA_VERSION:
         raise RuntimeError(
-            "analysis status belongs to a different paper cohort; rerun analyze"
+            "analysis status schema is stale; run `python -m drone_emission analyze --force`"
         )
+    is_explicit_reuse = bool(payload.get("reuse"))
+    manifest_config = (
+        dict(config, data_dir=str(analysis_data_dir(config)))
+        if is_explicit_reuse
+        else config
+    )
+    current_manifest = build_input_manifest(manifest_config)
+    if payload.get("input_manifest_sha256") != current_manifest["manifest_sha256"]:
+        raise RuntimeError(
+            "analysis inputs changed; rerun aggregate/cohort and "
+            "`python -m drone_emission analyze --force`"
+        )
+    stored_manifest_path = Path(payload.get("input_manifest", ""))
+    if not stored_manifest_path.is_file():
+        raise RuntimeError("analysis input manifest is missing; rerun analyze --force")
+    stored_manifest = json.loads(stored_manifest_path.read_text(encoding="utf-8"))
+    if stored_manifest != current_manifest:
+        raise RuntimeError("analysis input manifest is stale or changed; rerun analyze --force")
+    view_metadata_path = analysis_data_dir(config) / "paper_cohort_view.json"
+    if not view_metadata_path.is_file():
+        raise RuntimeError("analysis view metadata is missing; rerun analyze --force")
+    view_metadata = json.loads(view_metadata_path.read_text(encoding="utf-8"))
+    if (
+        view_metadata.get("schema_version") != 2
+        or view_metadata.get("input_manifest_sha256") != current_manifest["manifest_sha256"]
+        or view_metadata.get("cohort_sha256") != cohort_hash()
+    ):
+        raise RuntimeError("analysis view metadata is stale; rerun analyze --force")
+    if not is_explicit_reuse:
+        for name in AUTHORITATIVE_AGGREGATES:
+            official = Path(config["data_dir"]) / name
+            staged = analysis_data_dir(config) / name
+            if not staged.is_file() or _sha256(official) != _sha256(staged):
+                raise RuntimeError(
+                    f"analysis view aggregate is stale: {name}; rerun analyze --force"
+                )
+    modules = payload.get("modules", {})
+    if not payload.get("complete") or set(modules) != set(ANALYSIS_MODULES):
+        missing = sorted(set(ANALYSIS_MODULES) - set(modules))
+        raise RuntimeError(
+            "analysis is incomplete"
+            + (f" (missing: {', '.join(missing)})" if missing else "")
+            + "; run analyze --force"
+        )
+    for name in ANALYSIS_MODULES:
+        module = modules[name]
+        if module.get("status") != "complete" or not module.get("outputs"):
+            raise RuntimeError(f"analysis module is incomplete: {name}; rerun analyze --force")
+        if not all(_verify_output_signature(record) for record in module["outputs"]):
+            raise RuntimeError(
+                f"analysis module output changed or is missing: {name}; rerun analyze --force"
+            )
     return payload

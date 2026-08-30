@@ -199,6 +199,9 @@ def _request_signature(request: dict, config: dict) -> dict:
     return {
         "cache_version": request["cache_version"],
         "paper_cohort_sha256": cohort_hash(),
+        "analysis_input_manifest_sha256": config.get(
+            "analysis_input_manifest_sha256"
+        ),
         "inputs": [_file_signature(path) for path in _resolve_request_inputs(request, config)],
     }
 
@@ -239,8 +242,11 @@ def _write_receipt(request: dict, config: dict, signature: dict, elapsed: float)
     path = _receipt_path(request, config)
     path.parent.mkdir(parents=True, exist_ok=True)
     payload = {
-        "schema_version": 1,
+        "schema_version": 2,
         "request_id": request["id"],
+        "analysis_input_manifest_sha256": config.get(
+            "analysis_input_manifest_sha256"
+        ),
         "signature": signature,
         "outputs": [
             _file_signature(output.resolve()) for output in _request_outputs(request, config)
@@ -338,6 +344,9 @@ def _write_source_report(
         "paper_cohort_id": cohort["cohort_id"],
         "paper_cohort_sha256": cohort["included_region_keys_sha256"],
         "paper_city_count": cohort["expected_city_count"],
+        "analysis_input_manifest_sha256": config.get(
+            "analysis_input_manifest_sha256"
+        ),
         "grid_emission_factor_fallback": cohort["grid_emission_factor_fallback"],
     }
     temporary = report_path.with_suffix(report_path.suffix + ".tmp")
@@ -356,6 +365,11 @@ def render(
     """Render selected request bundles and stage completed direct figures."""
     if only and requests:
         raise ValueError("render --only and --request are mutually exclusive")
+    if not config.get("analysis_input_manifest_sha256"):
+        raise RuntimeError(
+            "formal render is not bound to a validated analysis input manifest; "
+            "run it through `python -m drone_emission render`"
+        )
     manifest = load_manifest()
     if requests:
         selected_requests = select_requests(requests)
