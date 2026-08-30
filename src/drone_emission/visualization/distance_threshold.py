@@ -78,6 +78,9 @@ DISTANCE_THRESHOLD_COMPARISON_LABEL_OFFSETS = {
         "shanghai": (7, -14),
     },
 }
+DISTANCE_THRESHOLD_POINT_COLOR = "#4C78A8"
+DISTANCE_THRESHOLD_POINT_SIZE = 28
+DISTANCE_THRESHOLD_POINT_ALPHA = 0.65
 
 
 def _save_distance_threshold_figure(
@@ -132,7 +135,6 @@ def _prepare_distance_threshold_all_city_data(
         "distance_basis",
         "optimal_threshold_km",
         "annual_reduction_pct",
-        "drone_order_ratio_pct",
         "n_od_pairs_total",
         "n_od_pairs_unreachable",
         "unreachable_annual_orders",
@@ -191,7 +193,6 @@ def _prepare_distance_threshold_all_city_data(
     metric_columns = (
         "optimal_threshold_km",
         "annual_reduction_pct",
-        "drone_order_ratio_pct",
     )
     wide = identity.set_index("region_key")
     for basis in ("road", "straight"):
@@ -232,31 +233,22 @@ def _plot_distance_threshold_all_city_scatter(
     diagonal: bool,
 ):
     """Draw one all-city threshold scatter panel on an existing axis."""
-    from matplotlib.colors import Normalize
-
-    cmap = plt.get_cmap("Blues")
-    norm = Normalize(vmin=0, vmax=100)
     highlight = wide["region_key"].isin(DISTANCE_THRESHOLD_TYPICAL_CITIES)
-    color_values = wide["road_drone_order_ratio_pct"]
     ax.scatter(
         wide.loc[~highlight, x_col],
         wide.loc[~highlight, y_col],
-        c=color_values[~highlight],
-        cmap=cmap,
-        norm=norm,
-        s=18,
-        alpha=0.62,
+        color=DISTANCE_THRESHOLD_POINT_COLOR,
+        s=DISTANCE_THRESHOLD_POINT_SIZE,
+        alpha=DISTANCE_THRESHOLD_POINT_ALPHA,
         edgecolor="white",
         linewidth=0.3,
     )
     ax.scatter(
         wide.loc[highlight, x_col],
         wide.loc[highlight, y_col],
-        c=color_values[highlight],
-        cmap=cmap,
-        norm=norm,
-        s=46,
-        alpha=1.0,
+        color=DISTANCE_THRESHOLD_POINT_COLOR,
+        s=DISTANCE_THRESHOLD_POINT_SIZE,
+        alpha=DISTANCE_THRESHOLD_POINT_ALPHA,
         edgecolor="#151515",
         linewidth=0.8,
         zorder=4,
@@ -305,7 +297,6 @@ def _plot_distance_threshold_all_city_scatter(
     _style_distance_threshold_axis(ax)
     ax.grid(False)
     ax.tick_params(labelsize=7)
-    return norm, cmap
 
 
 def _distance_threshold_all_city_report(
@@ -334,9 +325,6 @@ def _distance_threshold_all_city_report(
         ),
         "oracle_reduction_pct": _writing_numeric_summary(
             wide["oracle_annual_reduction_pct"]
-        ),
-        "road_drone_order_share_pct": _writing_numeric_summary(
-            wide["road_drone_order_ratio_pct"]
         ),
         "excluded_unreachable_routes": {
             "od_pair_count": unreachable_rows,
@@ -418,7 +406,7 @@ def plot_distance_threshold_oracle_performance(
     summary_df: pd.DataFrame,
     oracle_df: pd.DataFrame,
     save_path: str = None,
-    figsize: tuple = (92.0 / 25.4, 78.0 / 25.4),
+    figsize: tuple = (84.0 / 25.4, 78.0 / 25.4),
     for_latex: bool = False,
     plot_title: bool = False,
 ):
@@ -434,7 +422,7 @@ def plot_distance_threshold_oracle_performance(
     """
     wide = _prepare_distance_threshold_all_city_data(summary_df, oracle_df)
     fig, ax = plt.subplots(figsize=figsize)
-    norm, cmap = _plot_distance_threshold_all_city_scatter(
+    _plot_distance_threshold_all_city_scatter(
         ax,
         wide,
         "oracle_annual_reduction_pct",
@@ -445,22 +433,12 @@ def plot_distance_threshold_oracle_performance(
         panel_idx=1,
         diagonal=True,
     )
-    scalar = plt.cm.ScalarMappable(norm=norm, cmap=cmap)
-    scalar.set_array([])
     fig.subplots_adjust(
         left=0.17,
-        right=0.78,
+        right=0.97,
         bottom=0.18,
         top=0.79 if plot_title else 0.96,
     )
-    colorbar_top = 0.79 if plot_title else 0.96
-    colorbar_ax = fig.add_axes([0.84, 0.18, 0.025, colorbar_top - 0.18])
-    colorbar = fig.colorbar(
-        scalar,
-        cax=colorbar_ax,
-    )
-    colorbar.set_label("Road-policy drone order share (%)", fontsize=8)
-    colorbar.ax.tick_params(labelsize=7)
     if plot_title:
         fig.suptitle(
             "Road thresholds approach but remain below trip-level performance",
@@ -481,7 +459,7 @@ def plot_distance_threshold_oracle_performance(
                 "Road-distance threshold performance remains below the "
                 "trip-level Oracle allocation."
             ),
-            "native_size_mm": [92.0, 78.0],
+            "native_size_mm": [84.0, 78.0],
             **report,
         },
         save_tight=False,
