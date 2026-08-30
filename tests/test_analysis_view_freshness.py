@@ -11,6 +11,7 @@ import drone_emission.paper_reuse as paper_reuse
 import drone_emission.analysis.pathway_scenarios as pathway
 from drone_emission.analysis.city_attribution import prepare_r2_city_data
 from drone_emission.paper_workflow import render
+import drone_emission.visualization.formal_registry as formal_registry
 
 
 def _fixture_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict:
@@ -224,3 +225,32 @@ def test_authoritative_aggregate_is_filtered_only_at_analysis_boundary(
         region_keys={"alpha", "beta"},
     )
     assert prepared["region_key"].tolist() == ["alpha", "beta"]
+
+
+def test_formal_renderer_filters_authoritative_aggregate_to_cohort(
+    tmp_path, monkeypatch
+):
+    frame = pd.DataFrame(
+        {
+            "region_key": ["alpha", "outside"],
+            "region_level": ["city", "city"],
+            "grid_emission_factor": [0.5, 0.6],
+        }
+    )
+    stats = tmp_path / "all_region_stats.csv"
+    enriched = tmp_path / "all_region_stats_enriched.csv"
+    frame.to_csv(stats, index=False)
+    frame.to_csv(enriched, index=False)
+
+    class Context:
+        data_root = tmp_path
+
+        @staticmethod
+        def require_file(unused, *, stage):
+            return stats
+
+    monkeypatch.setattr(
+        "drone_emission.paper_cohort.locked_region_keys", lambda: ["alpha"]
+    )
+    selected = formal_registry._city_stats(Context())
+    assert selected["region_key"].tolist() == ["alpha"]

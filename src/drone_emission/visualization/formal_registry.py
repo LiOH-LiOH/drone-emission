@@ -16,6 +16,10 @@ def _city_stats(context: RenderContext) -> pd.DataFrame:
     frame = pd.read_csv(context.require_file("all_region_stats.csv", stage="aggregate"))
     if "region_level" in frame.columns:
         frame = frame[frame["region_level"].eq("city")].copy()
+    from drone_emission.paper_cohort import locked_region_keys
+
+    expected = set(locked_region_keys())
+    frame = frame[frame["region_key"].astype(str).isin(expected)].copy()
     enriched_path = context.data_root / "all_region_stats_enriched.csv"
     if enriched_path.is_file():
         enriched = pd.read_csv(enriched_path)
@@ -46,14 +50,11 @@ def _city_stats(context: RenderContext) -> pd.DataFrame:
     )
     frame.loc[fallback_mask, "gef_source"] = "fallback_0.5366"
     frame["gef"] = pd.to_numeric(frame["grid_emission_factor"], errors="coerce")
-    from drone_emission.paper_cohort import locked_region_keys
-
-    expected = set(locked_region_keys())
     actual = set(frame["region_key"].astype(str))
     if actual != expected or len(frame) != len(expected):
         raise RuntimeError(
             "formal city statistics do not match the locked paper cohort: "
-            f"missing={sorted(expected - actual)}, extra={sorted(actual - expected)}"
+            f"missing={sorted(expected - actual)}"
         )
     return frame
 
