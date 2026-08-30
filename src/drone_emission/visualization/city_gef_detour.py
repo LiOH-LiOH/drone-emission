@@ -67,8 +67,11 @@ CITY_GEF_SUMMARY_ROW_HSPACE = 0.32
 CITY_GEF_BOTTOM_SCATTER_SIZE = 18
 CITY_GEF_BOTTOM_SCATTER_ALPHA = 0.45
 
-REDUCTION_DETOUR_CACHE_VERSION = 5
+REDUCTION_DETOUR_CACHE_VERSION = 6
 REDUCTION_DETOUR_CHUNK_ROWS = 250_000
+SHANGHAI_MERCHANT_SNAP_THRESHOLD_M = 1_000.0
+SHANGHAI_TAIL_BIN_CENTER_MIN_KM = 3.3
+SHANGHAI_TAIL_AIR_DISTANCE_MIN_KM = 3.2
 POWER_GENERATION_2022_100M_KWH = {
     "shanghai": {
         "total": 955.0,
@@ -167,6 +170,76 @@ def _file_cache_signature(path):
     }
 
 
+def _merchant_snap_filter_from_graphml(merchant_coordinates, graphml_path):
+    """Return merchant origins more than 1 km from Shanghai's road graph."""
+    import numpy as np
+
+    from drone_emission.roadnet.sparse_graph import SparseGraph
+
+    coordinates = np.asarray(merchant_coordinates, dtype=np.float64)
+    if coordinates.ndim != 2 or coordinates.shape[1] != 2:
+        raise ValueError(
+            "merchant_coordinates must contain (latitude, longitude) pairs"
+        )
+    if not np.isfinite(coordinates).all():
+        raise ValueError("merchant_coordinates must be finite")
+
+    graph = SparseGraph.from_graphml(graphml_path)
+    nearest_indices = graph.find_nearest_nodes_batch(coordinates)
+    nearest_coordinates = graph._node_coords[nearest_indices]
+    latitude_1 = np.radians(coordinates[:, 0])
+    latitude_2 = np.radians(nearest_coordinates[:, 0])
+    delta_latitude = latitude_2 - latitude_1
+    delta_longitude = np.radians(
+        nearest_coordinates[:, 1] - coordinates[:, 1]
+    )
+    haversine_term = (
+        np.sin(delta_latitude / 2.0) ** 2
+        + np.cos(latitude_1)
+        * np.cos(latitude_2)
+        * np.sin(delta_longitude / 2.0) ** 2
+    )
+    snap_distances_m = 2.0 * 6_371_000.0 * np.arcsin(
+        np.sqrt(np.clip(haversine_term, 0.0, 1.0))
+    )
+    excluded = {
+        tuple(coordinate)
+        for coordinate, distance in zip(coordinates, snap_distances_m)
+        if distance > SHANGHAI_MERCHANT_SNAP_THRESHOLD_M
+    }
+    return excluded, snap_distances_m
+
+
+def _filter_tail_rows_by_merchant(
+    od_chunk,
+    excluded_merchants,
+    tail_air_distance_min_km=SHANGHAI_TAIL_AIR_DISTANCE_MIN_KM,
+):
+    """Exclude listed merchant origins only in the requested distance tail."""
+    import numpy as np
+
+    if not excluded_merchants:
+        return od_chunk, np.zeros(len(od_chunk), dtype=bool), 0.0
+    origins = pd.MultiIndex.from_arrays(
+        [od_chunk["from_lat"], od_chunk["from_lng"]]
+    )
+    excluded_index = pd.MultiIndex.from_tuples(
+        sorted(excluded_merchants), names=["from_lat", "from_lng"]
+    )
+    air_distance = pd.to_numeric(
+        od_chunk["distance_km"], errors="coerce"
+    ).to_numpy(dtype=float)
+    excluded_mask = (
+        (air_distance >= tail_air_distance_min_km)
+        & origins.isin(excluded_index)
+    )
+    sales = pd.to_numeric(
+        od_chunk.loc[excluded_mask, "annual_sales"], errors="coerce"
+    ).to_numpy(dtype=float)
+    filtered_sales = float(np.sum(sales[np.isfinite(sales)]))
+    return od_chunk.loc[~excluded_mask].copy(), excluded_mask, filtered_sales
+
+
 def _build_reduction_detour_binned_by_city(
     data_dir,
     selected,
@@ -209,6 +282,9 @@ def _build_reduction_detour_binned_by_city(
         key: os.path.join(data_dir, "city", key, f"{key}_od_pairs.csv")
         for key in selected_keys
     }
+    shanghai_graphml_path = os.path.join(
+        data_dir, "city", "shanghai", "shanghai_roadnet.graphml"
+    )
 
     cache_path = None
     cache_meta = None
@@ -225,6 +301,15 @@ def _build_reduction_detour_binned_by_city(
             continue
         available_keys.append(key)
         source_files[key] = _file_cache_signature(od_path)
+        if key == "shanghai":
+            if not os.path.exists(shanghai_graphml_path):
+                raise FileNotFoundError(
+                    f"{figure_name}: missing {shanghai_graphml_path}; "
+                    "run the declared prerequisite stage first"
+                )
+            source_files["shanghai_roadnet"] = _file_cache_signature(
+                shanghai_graphml_path
+            )
 
     if not available_keys:
         print(f"{figure_name}: no city OD data available")
@@ -246,6 +331,12 @@ def _build_reduction_detour_binned_by_city(
             "scenario": asdict(scenario),
             "bin_width_km": bin_width_km,
             "absolute_reduction_metric": absolute_reduction_metric,
+            "merchant_filter": {
+                "region_key": "shanghai",
+                "snap_distance_threshold_m": SHANGHAI_MERCHANT_SNAP_THRESHOLD_M,
+                "tail_bin_center_min_km": SHANGHAI_TAIL_BIN_CENTER_MIN_KM,
+                "tail_air_distance_min_km": SHANGHAI_TAIL_AIR_DISTANCE_MIN_KM,
+            },
         }
         if os.path.exists(cache_path):
             try:
@@ -272,14 +363,25 @@ def _build_reduction_detour_binned_by_city(
     for key in available_keys:
         od_path = od_paths[key]
         columns = set(pd.read_csv(od_path, nrows=0).columns)
-        if not required.issubset(columns):
+        city_required = set(required)
+        if key == "shanghai":
+            city_required.update({"from_lat", "from_lng"})
+        if not city_required.issubset(columns):
             print(f"{figure_name}: {key} missing columns — skipping")
             continue
         max_air_distance_km = 0.0
+        merchant_coordinates = set()
+        first_pass_columns = ["distance_km"]
+        first_pass_dtypes = {"distance_km": "float64"}
+        if key == "shanghai":
+            first_pass_columns.extend(["from_lat", "from_lng"])
+            first_pass_dtypes.update(
+                {"from_lat": "float64", "from_lng": "float64"}
+            )
         for distance_chunk in pd.read_csv(
             od_path,
-            usecols=["distance_km"],
-            dtype={"distance_km": "float64"},
+            usecols=first_pass_columns,
+            dtype=first_pass_dtypes,
             chunksize=REDUCTION_DETOUR_CHUNK_ROWS,
         ):
             distances = distance_chunk["distance_km"].to_numpy(copy=False)
@@ -288,9 +390,43 @@ def _build_reduction_detour_binned_by_city(
                 max_air_distance_km = max(
                     max_air_distance_km, float(valid_distances.max())
                 )
+            if key == "shanghai":
+                coordinates = distance_chunk[["from_lat", "from_lng"]].to_numpy(
+                    dtype=float
+                )
+                coordinates = coordinates[np.isfinite(coordinates).all(axis=1)]
+                merchant_coordinates.update(map(tuple, coordinates))
         if max_air_distance_km <= 0:
             print(f"{figure_name}: {key} has no valid air distances — skipping")
             continue
+
+        excluded_merchants = set()
+        merchant_filter = None
+        if key == "shanghai":
+            if not merchant_coordinates:
+                raise ValueError(
+                    f"{figure_name}: Shanghai has no valid merchant origins"
+                )
+            sorted_merchants = np.asarray(sorted(merchant_coordinates), dtype=float)
+            excluded_merchants, snap_distances_m = (
+                _merchant_snap_filter_from_graphml(
+                    sorted_merchants, shanghai_graphml_path
+                )
+            )
+            merchant_filter = {
+                "region_key": "shanghai",
+                "snap_distance_threshold_m": SHANGHAI_MERCHANT_SNAP_THRESHOLD_M,
+                "tail_bin_center_min_km": SHANGHAI_TAIL_BIN_CENTER_MIN_KM,
+                "tail_air_distance_min_km": SHANGHAI_TAIL_AIR_DISTANCE_MIN_KM,
+                "merchant_count": len(merchant_coordinates),
+                "eligible_merchant_count": (
+                    len(merchant_coordinates) - len(excluded_merchants)
+                ),
+                "ineligible_merchant_count": len(excluded_merchants),
+                "maximum_snap_distance_m": float(snap_distances_m.max()),
+                "filtered_od_count": 0,
+                "filtered_annual_sales": 0.0,
+            }
 
         gef = gef_map[key]
         ebike_pp = replace(ebike_params, e_use=float(gef))
@@ -304,8 +440,8 @@ def _build_reduction_detour_binned_by_city(
         def prepared_chunks():
             for od_chunk in pd.read_csv(
                 od_path,
-                usecols=sorted(required),
-                dtype={column: "float64" for column in required},
+                usecols=sorted(city_required),
+                dtype={column: "float64" for column in city_required},
                 chunksize=REDUCTION_DETOUR_CHUNK_ROWS,
             ):
                 road_m = od_chunk["road_distance_m"].to_numpy(copy=False)
@@ -331,6 +467,17 @@ def _build_reduction_detour_binned_by_city(
                 )
                 detour_totals["valid_path_count"] += int(valid_detour.sum())
                 detour_totals["invalid_path_count"] += int((~valid_detour).sum())
+                if merchant_filter is not None:
+                    od_chunk, filtered_mask, filtered_sales = (
+                        _filter_tail_rows_by_merchant(
+                            od_chunk, excluded_merchants
+                        )
+                    )
+                    merchant_filter["filtered_od_count"] += int(
+                        filtered_mask.sum()
+                    )
+                    merchant_filter["filtered_annual_sales"] += filtered_sales
+                    road_m = od_chunk["road_distance_m"].to_numpy(copy=False)
                 od_chunk["ebike_lifecycle_g"] = compute_ebike_per_order_g(
                     road_m / 1000.0, ebike_pp, scenario
                 )
@@ -367,6 +514,7 @@ def _build_reduction_detour_binned_by_city(
             "city_detour_ratio": city_detour_ratio,
             "valid_path_count": detour_totals["valid_path_count"],
             "invalid_path_count": detour_totals["invalid_path_count"],
+            "merchant_filter": merchant_filter,
         }
 
     if use_binned_cache and binned_by_city:
@@ -1657,6 +1805,7 @@ def _write_city_gef_context_detour_report(
     connector_lines,
     legend_rail=None,
     render_style="color",
+    merchant_filter=None,
 ):
     """Write JSON and Markdown reports for the city GEF context figure."""
     report_base = save_path.rsplit(".", 1)[0] + "_report"
@@ -1681,6 +1830,7 @@ def _write_city_gef_context_detour_report(
         },
         "connector_lines": connector_lines,
         "legend_rail": legend_rail,
+        "merchant_filter": merchant_filter,
     }
     if render_style == "grayscale":
         payload["visual_encoding"] = {
@@ -1707,6 +1857,7 @@ def _write_city_gef_context_detour_report(
         f"- Legend rail orientation: {(legend_rail or {}).get('orientation')}",
         f"- GEF bin edges: {(legend_rail or {}).get('gef_bin_edges')}",
         f"- City marker entries: {(legend_rail or {}).get('city_markers')}",
+        f"- Merchant filter: {merchant_filter}",
         "",
         "## Top: city_gef_scatter_components",
         "",
@@ -2052,6 +2203,9 @@ def _render_city_gef_context_detour_summary(
         connector_lines=connector_lines,
         legend_rail=legend_rail_report,
         render_style="grayscale" if grayscale else "color",
+        merchant_filter=binned_by_city.get("shanghai", {}).get(
+            "merchant_filter"
+        ),
     )
     plt.close(fig)
     print(f"City GEF context detour summary saved to {save_path}")
