@@ -65,6 +65,10 @@ def test_p99_uses_unique_finite_merchants_and_strict_upper_tail():
     )
     unique = _unique_finite_coordinates(raw_coordinates)
     assert unique.tolist() == [[31.0, 121.0], [31.1, 121.1]]
+    set_unique = _unique_finite_coordinates(
+        {(31.1, 121.1), (31.0, 121.0)}
+    )
+    assert set_unique.tolist() == [[31.0, 121.0], [31.1, 121.1]]
 
     coordinates = np.column_stack(
         [np.arange(100, dtype=float), np.arange(100, dtype=float) + 100.0]

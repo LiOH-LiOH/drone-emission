@@ -172,6 +172,8 @@ def _unique_finite_coordinates(coordinates):
     """Return sorted unique finite latitude-longitude coordinate pairs."""
     import numpy as np
 
+    if not isinstance(coordinates, np.ndarray):
+        coordinates = list(coordinates)
     coordinates = np.asarray(coordinates, dtype=np.float64)
     if coordinates.ndim != 2 or coordinates.shape[1] != 2:
         raise ValueError(
