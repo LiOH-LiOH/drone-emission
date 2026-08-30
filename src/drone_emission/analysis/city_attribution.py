@@ -144,6 +144,7 @@ def prepare_r2_city_data(
     enriched_csv_path: str | Path,
     data_dir: str | Path,
     supplement_missing_detour: bool = True,
+    region_keys: set[str] | None = None,
 ) -> tuple[pd.DataFrame, list[dict]]:
     """Load city data, derive Oracle outcomes, and supplement detour statistics."""
     enriched_csv_path = Path(enriched_csv_path)
@@ -151,6 +152,8 @@ def prepare_r2_city_data(
     df = pd.read_csv(enriched_csv_path)
     if "region_level" in df.columns:
         df = df[df["region_level"] == "city"].copy()
+    if region_keys is not None:
+        df = df[df["region_key"].astype(str).isin(region_keys)].copy()
     if "total_ebike_lifecycle" in df.columns:
         df = df[pd.to_numeric(df["total_ebike_lifecycle"], errors="coerce").notna()]
     df = df.copy()
@@ -1215,9 +1218,14 @@ def run_r2_city_attribution(df: pd.DataFrame, supplements: list[dict]) -> dict:
 def build_r2_city_attribution(
     enriched_csv_path: str | Path,
     data_dir: str | Path,
+    region_keys: set[str] | None = None,
 ) -> tuple[pd.DataFrame, dict]:
     """Prepare data and run all R2 analyses used by paper subfigures."""
-    df, supplements = prepare_r2_city_data(enriched_csv_path, data_dir)
+    df, supplements = prepare_r2_city_data(
+        enriched_csv_path,
+        data_dir,
+        region_keys=region_keys,
+    )
     analysis = run_r2_city_attribution(df, supplements)
     source = Path(enriched_csv_path)
     analysis["source"] = {

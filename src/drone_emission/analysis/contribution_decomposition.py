@@ -545,6 +545,8 @@ def _city_inputs(config: dict) -> list[dict]:
     if missing:
         raise ValueError(f"city stats missing contribution columns: {missing}")
     stats = stats[stats["region_level"].eq("city")].copy()
+    expected = set(locked_region_keys())
+    stats = stats[stats["region_key"].astype(str).isin(expected)].copy()
     enriched_path = Path(config["data_dir"]) / "all_region_stats_enriched.csv"
     if enriched_path.is_file():
         enriched = pd.read_csv(enriched_path)
@@ -577,7 +579,6 @@ def _city_inputs(config: dict) -> list[dict]:
     )
     stats.loc[fallback_mask, "gef_source"] = "fallback_0.5366"
     stats["gef"] = pd.to_numeric(stats["grid_emission_factor"], errors="coerce")
-    expected = set(locked_region_keys())
     actual = set(stats["region_key"].astype(str))
     if len(stats) != len(expected) or actual != expected:
         raise ValueError(

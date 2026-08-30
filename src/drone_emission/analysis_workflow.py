@@ -317,6 +317,13 @@ def _run_named_scenarios(config: dict, *, force: bool) -> Path:
     consolidate(config["data_dir"], level_filter="city")
     if not output.exists():
         raise RuntimeError("named-scenario consolidation produced no output")
+    named = pd.read_csv(output)
+    if "region_key" not in named.columns:
+        raise ValueError("named-scenario output has no region_key column")
+    named = named[
+        named["region_key"].astype(str).isin(set(config["study_region_keys"]))
+    ].copy()
+    _atomic_frame(named, output)
     return output
 
 
@@ -389,7 +396,9 @@ def _run_city_attribution(config: dict, *, force: bool) -> Path:
     if report.exists() and prepared.exists() and not force:
         return report
     frame, payload = build_r2_city_attribution(
-        Path(config["data_dir"]) / "all_region_stats_enriched.csv", config["data_dir"]
+        Path(config["data_dir"]) / "all_region_stats_enriched.csv",
+        config["data_dir"],
+        region_keys=set(config["study_region_keys"]),
     )
     root.mkdir(parents=True, exist_ok=True)
     frame.to_csv(prepared, index=False)

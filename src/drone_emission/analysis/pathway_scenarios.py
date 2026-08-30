@@ -31,6 +31,24 @@ PATHWAY_KAPPA_END = 0.65
 OD_COLUMNS = ("road_distance_m", "distance_km", "annual_sales")
 
 
+def _cohort_city_rows(stats: pd.DataFrame) -> pd.DataFrame:
+    """Select and validate the locked cohort from an authoritative aggregate."""
+    city_rows = (
+        stats[stats["region_level"].eq("city")].copy()
+        if "region_level" in stats.columns
+        else stats.copy()
+    )
+    expected = set(locked_region_keys())
+    city_rows = city_rows[city_rows["region_key"].astype(str).isin(expected)].copy()
+    actual = set(city_rows["region_key"].astype(str))
+    if len(city_rows) != len(expected) or actual != expected:
+        raise RuntimeError(
+            "pathway analysis does not match the locked cohort: "
+            f"missing={sorted(expected - actual)}"
+        )
+    return city_rows
+
+
 def _file_signature(path: Path) -> dict:
     stat = path.stat()
     return {
@@ -240,18 +258,10 @@ def run_pathway_analysis(config: dict, *, force: bool = False) -> tuple[Path, Pa
     report_path = data_root / "all_pathway_scenarios_report.json"
     stats = pd.read_csv(data_root / "all_region_stats.csv")
     named = pd.read_csv(data_root / "all_sensitivity_named.csv")
-    city_rows = (
-        stats[stats["region_level"].eq("city")].copy()
-        if "region_level" in stats.columns
-        else stats.copy()
-    )
+    city_rows = _cohort_city_rows(stats)
     expected = set(locked_region_keys())
-    actual = set(city_rows["region_key"].astype(str))
-    if len(city_rows) != len(expected) or actual != expected:
-        raise RuntimeError(
-            "pathway analysis does not match the locked cohort: "
-            f"missing={sorted(expected - actual)}, extra={sorted(actual - expected)}"
-        )
+    if "region_key" in named.columns:
+        named = named[named["region_key"].astype(str).isin(expected)].copy()
     signature = _analysis_signature(config, city_rows)
     if not force and scenario_path.is_file() and curve_path.is_file() and report_path.is_file():
         report = json.loads(report_path.read_text(encoding="utf-8"))

@@ -4,9 +4,12 @@ import json
 from pathlib import Path
 
 import pytest
+import pandas as pd
 
 import drone_emission.analysis_workflow as workflow
 import drone_emission.paper_reuse as paper_reuse
+import drone_emission.analysis.pathway_scenarios as pathway
+from drone_emission.analysis.city_attribution import prepare_r2_city_data
 from drone_emission.paper_workflow import render
 
 
@@ -195,3 +198,29 @@ def test_explicit_reuse_records_an_independent_input_source(tmp_path, monkeypatc
 def test_render_requires_validated_input_manifest_binding():
     with pytest.raises(RuntimeError, match="validated analysis input manifest"):
         render({})
+
+
+def test_authoritative_aggregate_is_filtered_only_at_analysis_boundary(
+    tmp_path, monkeypatch
+):
+    stats = pd.DataFrame(
+        {
+            "region_key": ["alpha", "beta", "outside"],
+            "region_level": ["city", "city", "city"],
+            "total_ebike_lifecycle": [1.0, 2.0, 3.0],
+            "oracle_min_lifecycle_kg": [0.5, 1.0, 1.5],
+        }
+    )
+    monkeypatch.setattr(pathway, "locked_region_keys", lambda: ["alpha", "beta"])
+    selected = pathway._cohort_city_rows(stats)
+    assert selected["region_key"].tolist() == ["alpha", "beta"]
+
+    enriched = tmp_path / "all_region_stats_enriched.csv"
+    stats.to_csv(enriched, index=False)
+    prepared, _ = prepare_r2_city_data(
+        enriched,
+        tmp_path,
+        supplement_missing_detour=False,
+        region_keys={"alpha", "beta"},
+    )
+    assert prepared["region_key"].tolist() == ["alpha", "beta"]
