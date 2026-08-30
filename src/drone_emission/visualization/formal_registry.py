@@ -290,8 +290,6 @@ REQUEST_RENDERERS: dict[str, Renderer] = {
     "median_trip_eol_emissions": lambda c: _render_median_phase(c, "median_trip_eol_emissions"),
     "province_total_ebike_lifecycle": _render_province_lifecycle,
     "regions_map_oracle_reduction_rank_map_only": lambda c: _render_priority(c, "regions_map_oracle_reduction_rank_map_only"),
-    "city_annual_absolute_reduction_distribution": lambda c: _render_priority(c, "city_annual_absolute_reduction_distribution"),
-    "city_relative_lifecycle_reduction_distribution": lambda c: _render_priority(c, "city_relative_lifecycle_reduction_distribution"),
     "city_reduction_rank_all_macro_region": lambda c: _render_priority(c, "city_reduction_rank_all_macro_region"),
     "city_gef_context_detour_summary": _render_gef_detour,
     "contribution_decomposition_city_b": _render_contribution,

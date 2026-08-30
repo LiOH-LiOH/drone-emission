@@ -23,9 +23,9 @@ def test_manifest_has_exact_locked_set():
         "inkscape",
     }
     assert sum(figure["mode"] == "direct" for figure in manifest["figures"]) == 3
-    assert manifest["render_request_count"] == 24
-    assert len(manifest["requests"]) == 24
-    assert sum(len(request["outputs"]) for request in manifest["requests"]) == 37
+    assert manifest["render_request_count"] == 22
+    assert len(manifest["requests"]) == 22
+    assert sum(len(request["outputs"]) for request in manifest["requests"]) == 35
     assert all(
         figure_required_inputs(figure, manifest)
         for figure in manifest["figures"]
@@ -39,7 +39,7 @@ def test_manifest_requests_exactly_match_registry():
         for figure in load_manifest()["figures"]
         for request in figure["render_requests"]
     ]
-    assert len(requests) == 24
+    assert len(requests) == 22
     assert len(requests) == len(set(requests))
     assert set(requests) == set(REQUEST_RENDERERS)
 

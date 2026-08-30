@@ -109,7 +109,7 @@ for figure in manifest["figures"]:
                 print("paper/subfigure/" + name)
 ' src/drone_emission/paper_figures.json
 )
-[[ "${#PDF_PATHS[@]}" -eq 37 ]] || { echo "Expected 37 review PDFs, found ${#PDF_PATHS[@]}" >&2; exit 1; }
+[[ "${#PDF_PATHS[@]}" -eq 35 ]] || { echo "Expected 35 review PDFs, found ${#PDF_PATHS[@]}" >&2; exit 1; }
 : > "$REPORTS/fetch-pdfs.txt"
 for relative in "${PDF_PATHS[@]}"; do
     path="$FIGURE_OUTPUT/$relative"
