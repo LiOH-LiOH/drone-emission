@@ -146,6 +146,44 @@ def select_requests(requests: list[str] | None) -> list[dict]:
     return [index[request_id] for request_id in dict.fromkeys(requests)]
 
 
+def _analysis_modules_for_requests(
+    requests: list[dict],
+    config: dict,
+) -> set[str]:
+    from .analysis_workflow import _module_outputs
+
+    output_modules = {
+        path.name: module
+        for module, paths in _module_outputs(config).items()
+        for path in paths
+    }
+    selected: set[str] = set()
+    for request in requests:
+        for declaration in request["required_inputs"]:
+            _, separator, relative = declaration.partition(":")
+            name = Path(relative if separator else declaration).name
+            if name in output_modules:
+                selected.add(output_modules[name])
+    return selected
+
+
+def _bind_render_analysis(
+    config: dict,
+    requests: list[dict],
+) -> dict:
+    modules = _analysis_modules_for_requests(requests, config)
+    if not modules:
+        return config
+    from .analysis_workflow import analysis_data_dir, require_current_analysis
+
+    status = require_current_analysis(config, required_modules=modules)
+    return dict(
+        config,
+        data_dir=str(analysis_data_dir(config)),
+        analysis_input_manifest_sha256=status["input_manifest_sha256"],
+    )
+
+
 def figure_requests(figure: dict, manifest: dict | None = None) -> list[dict]:
     index = request_index(manifest)
     return [index[request_id] for request_id in figure["render_requests"]]
@@ -653,11 +691,6 @@ def render(
     """Render selected request bundles and stage completed direct figures."""
     if only and requests:
         raise ValueError("render --only and --request are mutually exclusive")
-    if not config.get("analysis_input_manifest_sha256"):
-        raise RuntimeError(
-            "formal render is not bound to a validated analysis input manifest; "
-            "run it through `python -m drone_emission render`"
-        )
     manifest = load_manifest()
     if requests:
         selected_requests = select_requests(requests)
@@ -677,6 +710,7 @@ def render(
         selected_requests = [
             request for request in manifest["requests"] if request["id"] in selected_ids
         ]
+    config = _bind_render_analysis(config, selected_requests)
 
     figures_root = Path(config["figures_dir"])
     paper_dir = figures_root / "paper"

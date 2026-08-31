@@ -568,8 +568,20 @@ def _verify_output_signature(record: dict) -> bool:
     )
 
 
-def require_current_analysis(config: dict) -> dict:
-    """Read-only fail-closed validation for formal rendering."""
+def require_current_analysis(
+    config: dict,
+    *,
+    required_modules: set[str] | None = None,
+) -> dict:
+    """Validate the analysis modules required by a render selection."""
+    selected_modules = (
+        set(ANALYSIS_MODULES)
+        if required_modules is None
+        else set(required_modules)
+    )
+    unknown = selected_modules - set(ANALYSIS_MODULES)
+    if unknown:
+        raise ValueError(f"unknown analysis modules: {sorted(unknown)}")
     status_path = analysis_root(config) / "status.json"
     if not status_path.is_file():
         raise FileNotFoundError(
@@ -617,14 +629,18 @@ def require_current_analysis(config: dict) -> dict:
                     f"analysis view aggregate is stale: {name}; rerun analyze --force"
                 )
     modules = payload.get("modules", {})
-    if not payload.get("complete") or set(modules) != set(ANALYSIS_MODULES):
-        missing = sorted(set(ANALYSIS_MODULES) - set(modules))
+    missing = sorted(selected_modules - set(modules))
+    if missing:
         raise RuntimeError(
             "analysis is incomplete"
-            + (f" (missing: {', '.join(missing)})" if missing else "")
+            + f" (missing: {', '.join(missing)})"
             + "; run analyze --force"
         )
-    for name in ANALYSIS_MODULES:
+    if required_modules is None and (
+        not payload.get("complete") or set(modules) != set(ANALYSIS_MODULES)
+    ):
+        raise RuntimeError("analysis is incomplete; run analyze --force")
+    for name in selected_modules:
         module = modules[name]
         if module.get("status") != "complete" or not module.get("outputs"):
             raise RuntimeError(f"analysis module is incomplete: {name}; rerun analyze --force")

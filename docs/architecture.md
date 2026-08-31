@@ -21,11 +21,13 @@ The active workflow has four layers:
    explicitly confirmed operation.
 
 `paper_workflow.py` is the only formal scheduler. Before rendering it verifies
-that the 24 unique manifest requests exactly equal the explicit
+that the 23 unique manifest requests exactly equal the explicit
 `formal_registry.REQUEST_RENDERERS` keys. Every renderer receives one immutable
 context containing the configured data, figures, cache, and work roots.
-The context also requires a matching cohort-view record. Renderers therefore
-cannot silently reintroduce excluded or newly configured cities.
+Requests that consume analysis products receive a matching cohort-versioned
+view and validate only their required analysis modules. Aggregate-only requests
+read their declared inputs directly; nationwide renderers apply the locked
+cohort selection themselves.
 
 `render` accepts formal manifest IDs, not internal plot-function names. The
 eight `inkscape` entries generate required panels and reports; the local-only

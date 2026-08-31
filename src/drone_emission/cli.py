@@ -468,20 +468,8 @@ def command_prepare_reuse(args: argparse.Namespace) -> None:
 
 
 def command_render(args: argparse.Namespace) -> None:
-    config = _config(args.env)
-    from .analysis_workflow import (
-        analysis_data_dir,
-        require_current_analysis,
-    )
-
-    analysis_status = require_current_analysis(config)
-    config = dict(
-        config,
-        data_dir=str(analysis_data_dir(config)),
-        analysis_input_manifest_sha256=analysis_status["input_manifest_sha256"],
-    )
     staged = render(
-        config,
+        _config(args.env),
         only=_split_ids(getattr(args, "only", None)),
         requests=_split_ids(getattr(args, "request", None)),
         force=bool(getattr(args, "force", False)),

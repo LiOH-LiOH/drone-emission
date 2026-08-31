@@ -10,7 +10,7 @@ import drone_emission.analysis_workflow as workflow
 import drone_emission.paper_reuse as paper_reuse
 import drone_emission.analysis.pathway_scenarios as pathway
 from drone_emission.analysis.city_attribution import prepare_r2_city_data
-from drone_emission.paper_workflow import render
+from drone_emission.paper_workflow import _analysis_modules_for_requests
 import drone_emission.visualization.formal_registry as formal_registry
 
 
@@ -152,6 +152,15 @@ def test_partial_analysis_accumulates_and_changed_input_requires_force(
     monkeypatch.setattr(workflow, "_run_pathway_scenarios", create_pathway)
     first = workflow.analyze(config, only=["named-scenarios"])
     assert set(first["modules"]) == {"named-scenarios"}
+    assert workflow.require_current_analysis(
+        config,
+        required_modules={"named-scenarios"},
+    )["modules"] == first["modules"]
+    with pytest.raises(RuntimeError, match="pathway-scenarios"):
+        workflow.require_current_analysis(
+            config,
+            required_modules={"pathway-scenarios"},
+        )
     second = workflow.analyze(config, only=["pathway-scenarios"])
     assert set(second["modules"]) == {"named-scenarios", "pathway-scenarios"}
 
@@ -196,9 +205,21 @@ def test_explicit_reuse_records_an_independent_input_source(tmp_path, monkeypatc
     assert stored["manifest_sha256"] == result["input_manifest_sha256"]
 
 
-def test_render_requires_validated_input_manifest_binding():
-    with pytest.raises(RuntimeError, match="validated analysis input manifest"):
-        render({})
+def test_render_analysis_dependencies_are_request_scoped(tmp_path):
+    config = {
+        "work_dir": str(tmp_path / "work"),
+    }
+    aggregate_only = [
+        {"required_inputs": ["all_region_stats.csv", "gef_china.csv"]}
+    ]
+    pathway = [
+        {"required_inputs": ["all_pathway_scenario_city.csv"]}
+    ]
+
+    assert _analysis_modules_for_requests(aggregate_only, config) == set()
+    assert _analysis_modules_for_requests(pathway, config) == {
+        "pathway-scenarios"
+    }
 
 
 def test_authoritative_aggregate_is_filtered_only_at_analysis_boundary(

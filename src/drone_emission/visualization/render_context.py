@@ -27,19 +27,25 @@ class RenderContext:
             work_root=Path(config["work_dir"]).resolve(),
             experiment=dict(config),
         )
-        from drone_emission.paper_cohort import cohort_hash, locked_region_keys
+        analysis_hash = config.get("analysis_input_manifest_sha256")
+        if analysis_hash:
+            from drone_emission.paper_cohort import cohort_hash, locked_region_keys
 
-        cohort_view = context.data_root / "paper_cohort_view.json"
-        if not cohort_view.is_file():
-            raise FileNotFoundError(
-                f"Missing cohort-filtered render view: {cohort_view}. "
-                "Run `python -m drone_emission analyze` first."
-            )
-        metadata = json.loads(cohort_view.read_text(encoding="utf-8"))
-        if metadata.get("cohort_sha256") != cohort_hash():
-            raise RuntimeError("render data view belongs to a different paper cohort")
-        if int(metadata.get("city_count", -1)) != len(locked_region_keys()):
-            raise RuntimeError("render data view has the wrong paper city count")
+            cohort_view = context.data_root / "paper_cohort_view.json"
+            if not cohort_view.is_file():
+                raise FileNotFoundError(
+                    f"Missing cohort-filtered render view: {cohort_view}. "
+                    "Run `python -m drone_emission analyze` first."
+                )
+            metadata = json.loads(cohort_view.read_text(encoding="utf-8"))
+            if metadata.get("input_manifest_sha256") != analysis_hash:
+                raise RuntimeError("render data view has the wrong input manifest")
+            if metadata.get("cohort_sha256") != cohort_hash():
+                raise RuntimeError(
+                    "render data view belongs to a different paper cohort"
+                )
+            if int(metadata.get("city_count", -1)) != len(locked_region_keys()):
+                raise RuntimeError("render data view has the wrong paper city count")
         for root in (context.figures_root, context.cache_root, context.work_root):
             root.mkdir(parents=True, exist_ok=True)
         matplotlib_cache = context.cache_root / "matplotlib"
