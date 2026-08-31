@@ -12,6 +12,7 @@ SUMMARY_REQUIRED_COLUMNS = {
     "distance_basis",
     "policy_case",
     "optimal_threshold_km",
+    "annual_reduction_kg",
     "annual_reduction_pct",
     "drone_order_ratio_pct",
     "n_od_pairs_total",
@@ -78,13 +79,15 @@ def _load_oracle_results(data_dir: Path) -> pd.DataFrame:
     oracle = pd.read_csv(path)
     if "region_key" not in oracle.columns:
         raise ValueError("All-region statistics are missing region_key")
+    has_baseline = "total_ebike_lifecycle" in oracle.columns
     has_direct = "oracle_min_reduction_vs_ebike_pct" in oracle.columns
     has_components = {
         "total_ebike_lifecycle",
         "oracle_min_lifecycle_kg",
     }.issubset(oracle.columns)
-    if not has_direct and not has_components:
+    if not has_baseline or (not has_direct and not has_components):
         raise ValueError(
-            "All-region statistics are missing trip-level Oracle metrics"
+            "All-region statistics are missing the all-e-bike baseline or "
+            "trip-level Oracle metrics"
         )
     return oracle

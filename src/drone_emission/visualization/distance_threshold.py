@@ -134,6 +134,7 @@ def _prepare_distance_threshold_all_city_data(
         "region_name_en",
         "distance_basis",
         "optimal_threshold_km",
+        "annual_reduction_kg",
         "annual_reduction_pct",
         "n_od_pairs_total",
         "n_od_pairs_unreachable",
@@ -185,13 +186,28 @@ def _prepare_distance_threshold_all_city_data(
             "Oracle results require oracle_min_reduction_vs_ebike_pct or "
             "total_ebike_lifecycle plus oracle_min_lifecycle_kg"
         )
-    oracle = oracle[["region_key", "oracle_annual_reduction_pct"]]
+    if "total_ebike_lifecycle" not in oracle.columns:
+        raise KeyError(
+            "Oracle results require total_ebike_lifecycle for the full-city "
+            "road-policy baseline"
+        )
+    oracle["total_ebike_lifecycle"] = pd.to_numeric(
+        oracle["total_ebike_lifecycle"], errors="coerce"
+    )
+    oracle = oracle[
+        [
+            "region_key",
+            "oracle_annual_reduction_pct",
+            "total_ebike_lifecycle",
+        ]
+    ]
 
     identity = summary_df[
         ["region_key", "region_name_en"]
     ].drop_duplicates("region_key")
     metric_columns = (
         "optimal_threshold_km",
+        "annual_reduction_kg",
         "annual_reduction_pct",
     )
     wide = identity.set_index("region_key")
@@ -205,11 +221,27 @@ def _prepare_distance_threshold_all_city_data(
             )
     wide = wide.join(oracle.set_index("region_key"), how="left")
     wide = wide.reset_index()
+    wide["road_full_domain_reduction_pct"] = np.where(
+        wide["total_ebike_lifecycle"] > 0,
+        wide["road_annual_reduction_kg"]
+        / wide["total_ebike_lifecycle"]
+        * 100.0,
+        np.nan,
+    )
+    wide["road_oracle_gap_pp"] = (
+        wide["oracle_annual_reduction_pct"]
+        - wide["road_full_domain_reduction_pct"]
+    )
     numeric = [
         f"{basis}_{column}"
         for basis in ("road", "straight")
         for column in metric_columns
-    ] + ["oracle_annual_reduction_pct"]
+    ] + [
+        "oracle_annual_reduction_pct",
+        "total_ebike_lifecycle",
+        "road_full_domain_reduction_pct",
+        "road_oracle_gap_pp",
+    ]
     if not np.isfinite(wide[numeric].to_numpy(dtype=float)).all():
         missing_oracle = wide.loc[
             ~np.isfinite(wide["oracle_annual_reduction_pct"]), "region_key"
@@ -231,6 +263,7 @@ def _plot_distance_threshold_all_city_scatter(
     y_label: str,
     panel_idx: int,
     diagonal: bool,
+    zero_baseline: bool = False,
 ):
     """Draw one all-city threshold scatter panel on an existing axis."""
     highlight = wide["region_key"].isin(DISTANCE_THRESHOLD_TYPICAL_CITIES)
@@ -269,6 +302,18 @@ def _plot_distance_threshold_all_city_scatter(
         )
         ax.set_xlim(lower, upper)
         ax.set_ylim(lower, upper)
+    elif zero_baseline:
+        x_upper = max(float(wide[x_col].max()) * 1.06, 0.1)
+        y_upper = max(float(wide[y_col].max()) * 1.08, 0.1)
+        ax.axhline(
+            0.0,
+            color="#8A8A8A",
+            linewidth=0.8,
+            linestyle="--",
+            zorder=0,
+        )
+        ax.set_xlim(0.0, x_upper)
+        ax.set_ylim(0.0, y_upper)
     for _, row in wide[highlight].iterrows():
         offset = DISTANCE_THRESHOLD_COMPARISON_LABEL_OFFSETS.get(
             panel_idx, {}
@@ -302,6 +347,7 @@ def _plot_distance_threshold_all_city_scatter(
 def _distance_threshold_all_city_report(
     summary_df: pd.DataFrame,
     wide: pd.DataFrame,
+    road_reduction_col: str = "road_annual_reduction_pct",
 ) -> dict:
     """Return shared report fields for the split all-city figures."""
     city_count = int(wide["region_key"].nunique())
@@ -313,7 +359,7 @@ def _distance_threshold_all_city_report(
     total_rows = int(road["n_od_pairs_total"].sum())
     unreachable_orders = float(road["unreachable_annual_orders"].sum())
     reachable_orders = float(road["total_annual_orders"].sum())
-    return {
+    report = {
         "city_count": city_count,
         "configured_city_count": configured_count,
         "highlighted_cities": list(DISTANCE_THRESHOLD_TYPICAL_CITIES),
@@ -321,7 +367,7 @@ def _distance_threshold_all_city_report(
             wide["road_optimal_threshold_km"]
         ),
         "road_reduction_pct": _writing_numeric_summary(
-            wide["road_annual_reduction_pct"]
+            wide[road_reduction_col]
         ),
         "oracle_reduction_pct": _writing_numeric_summary(
             wide["oracle_annual_reduction_pct"]
@@ -337,6 +383,18 @@ def _distance_threshold_all_city_report(
             ),
         },
     }
+    if road_reduction_col == "road_full_domain_reduction_pct":
+        report["oracle_minus_road_gap_pp"] = _writing_numeric_summary(
+            wide["road_oracle_gap_pp"]
+        )
+        report["road_policy_comparison_scope"] = {
+            "reduction_denominator": (
+                "full-city all-e-bike lifecycle emissions"
+            ),
+            "unreachable_road_assignment": "e-bike",
+            "threshold_optimization": "valid road-distance OD pairs",
+        }
+    return report
 
 
 def plot_distance_threshold_city_landscape(
@@ -425,28 +483,33 @@ def plot_distance_threshold_oracle_performance(
     _plot_distance_threshold_all_city_scatter(
         ax,
         wide,
-        "oracle_annual_reduction_pct",
-        "road_annual_reduction_pct",
-        "Trip-level optimal reduction (%)\n"
-        "(drone for every lower-emission trip)",
+        "road_full_domain_reduction_pct",
+        "road_oracle_gap_pp",
         "Road-policy reduction (%)",
+        "Reduction gap (percentage points)\n"
+        "(Trip-level optimum − road policy)",
         panel_idx=1,
-        diagonal=True,
+        diagonal=False,
+        zero_baseline=True,
     )
     fig.subplots_adjust(
-        left=0.17,
+        left=0.22,
         right=0.97,
         bottom=0.18,
         top=0.79 if plot_title else 0.96,
     )
     if plot_title:
         fig.suptitle(
-            "Road thresholds approach but remain below trip-level performance",
+            "Road-policy benefits retain a limited gap to trip-level performance",
             fontsize=10,
             fontweight="bold",
             y=0.97,
         )
-    report = _distance_threshold_all_city_report(summary_df, wide)
+    report = _distance_threshold_all_city_report(
+        summary_df,
+        wide,
+        road_reduction_col="road_full_domain_reduction_pct",
+    )
     return _save_distance_threshold_figure(
         fig,
         save_path,
@@ -456,8 +519,8 @@ def plot_distance_threshold_oracle_performance(
         {
             "figure_name": "distance_threshold_oracle_performance",
             "core_conclusion": (
-                "Road-distance threshold performance remains below the "
-                "trip-level Oracle allocation."
+                "The remaining trip-level performance gap is shown against "
+                "the full-city reduction achieved by each road policy."
             ),
             "native_size_mm": [84.0, 78.0],
             **report,
