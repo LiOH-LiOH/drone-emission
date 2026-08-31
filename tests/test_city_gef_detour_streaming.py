@@ -13,6 +13,7 @@ from drone_emission.visualization.city_gef_detour import (
     _filter_rows_by_merchant,
     _finalize_merchant_filter_bin_audit,
     _merchant_snap_outliers,
+    _middle_distance_domain,
     _new_merchant_filter_bin_audit,
     _unique_finite_coordinates,
     _update_merchant_filter_bin_audit,
@@ -87,7 +88,7 @@ def test_p99_uses_unique_finite_merchants_and_strict_upper_tail():
     assert boundary_excluded == {(2.0, 2.0)}
 
 
-def test_shanghai_p99_filter_removes_excluded_merchants_at_all_distances():
+def test_each_middle_city_computes_own_p99_and_excludes_all_merchant_rows():
     frame = pd.DataFrame(
         {
             "from_lat": [31.0, 31.0, 31.1, 31.2],
@@ -99,10 +100,26 @@ def test_shanghai_p99_filter_removes_excluded_merchants_at_all_distances():
             "annual_sales": [10.0, 20.0, 30.0, 40.0],
         }
     )
-    excluded = {(31.0, 121.0)}
+    city_snap_distances = {
+        "chengdu": np.arange(100, dtype=float),
+        "beijing": np.arange(100, dtype=float) * 2.0,
+        "shanghai": np.arange(100, dtype=float) + 25.0,
+        "guangzhou": np.arange(100, dtype=float) * 0.5,
+    }
+    coordinates = np.column_stack(
+        [np.arange(100, dtype=float), np.arange(100, dtype=float) + 100.0]
+    )
+    thresholds = {}
+    for city, snap_distances in city_snap_distances.items():
+        excluded, thresholds[city] = _merchant_snap_outliers(
+            coordinates,
+            snap_distances,
+        )
+        assert excluded == {(99.0, 199.0)}, city
+    assert len(set(thresholds.values())) == len(city_snap_distances)
 
     filtered, mask, filtered_sales = _filter_rows_by_merchant(
-        frame, excluded
+        frame, {(31.0, 121.0)}
     )
 
     assert mask.tolist() == [True, True, False, False]
@@ -131,7 +148,11 @@ def test_shanghai_p99_filter_removes_excluded_merchants_at_all_distances():
     assert np.isclose(reduction_abs[bin_33], 20.0 / 70.0)
     assert np.isclose(drone_share[bin_33], 40.0 / 70.0 * 100.0)
 
-    visible = np.isfinite(reduction_abs) & (centres >= 0.2) & (centres <= 5.0)
+    _, _, visible = _middle_distance_domain(
+        centres,
+        reduction_abs,
+        frame["distance_km"].max(),
+    )
     actual_fit = np.polyfit(centres[visible], reduction_abs[visible], 1)
     expected_reduction_abs = np.zeros_like(centres)
     expected_reduction_abs[:expected_bin_count] = expected[2]
@@ -144,10 +165,10 @@ def test_shanghai_p99_filter_removes_excluded_merchants_at_all_distances():
     )
     assert np.allclose(actual_fit, expected_fit)
 
-    other_city, other_mask, other_sales = _filter_rows_by_merchant(
+    non_middle_city, other_mask, other_sales = _filter_rows_by_merchant(
         frame, set()
     )
-    pd.testing.assert_frame_equal(other_city, frame)
+    pd.testing.assert_frame_equal(non_middle_city, frame)
     assert not other_mask.any()
     assert other_sales == 0.0
 
@@ -192,3 +213,18 @@ def test_shanghai_p99_filter_removes_excluded_merchants_at_all_distances():
         ],
         reduction_abs[bin_33],
     )
+
+
+def test_middle_distance_domain_keeps_35_bin_and_hides_37_onward():
+    centres = np.array([0.1, 0.3, 3.3, 3.5, 3.7, 4.9])
+    values = np.arange(len(centres), dtype=float)
+
+    x_min, x_max, visible = _middle_distance_domain(
+        centres,
+        values,
+        max_km=5.0,
+    )
+
+    assert x_min == 0.2
+    assert x_max == 3.5
+    assert visible.tolist() == [False, True, True, True, False, False]

@@ -67,9 +67,11 @@ CITY_GEF_SUMMARY_ROW_HSPACE = 0.32
 CITY_GEF_BOTTOM_SCATTER_SIZE = 18
 CITY_GEF_BOTTOM_SCATTER_ALPHA = 0.45
 
-REDUCTION_DETOUR_CACHE_VERSION = 7
+REDUCTION_DETOUR_CACHE_VERSION = 8
 REDUCTION_DETOUR_CHUNK_ROWS = 250_000
-SHANGHAI_MERCHANT_SNAP_QUANTILE = 0.99
+MERCHANT_SNAP_QUANTILE = 0.99
+MIDDLE_DISTANCE_MIN_KM = 0.2
+MIDDLE_DISTANCE_MAX_KM = 3.5
 POWER_GENERATION_2022_100M_KWH = {
     "shanghai": {
         "total": 955.0,
@@ -188,7 +190,7 @@ def _unique_finite_coordinates(coordinates):
 def _merchant_snap_outliers(
     merchant_coordinates,
     snap_distances_m,
-    quantile=SHANGHAI_MERCHANT_SNAP_QUANTILE,
+    quantile=MERCHANT_SNAP_QUANTILE,
 ):
     """Return merchants whose snap distance is strictly above the quantile."""
     import numpy as np
@@ -223,7 +225,7 @@ def _merchant_snap_outliers(
 
 
 def _merchant_snap_filter_from_graphml(merchant_coordinates, graphml_path):
-    """Return Shanghai merchant origins above the road-snap P99."""
+    """Return merchant origins strictly above their city's road-snap P99."""
     import numpy as np
 
     from drone_emission.roadnet.sparse_graph import SparseGraph
@@ -254,6 +256,25 @@ def _merchant_snap_filter_from_graphml(merchant_coordinates, graphml_path):
         coordinates, snap_distances_m
     )
     return excluded, snap_distances_m, threshold_m
+
+
+def _middle_distance_domain(centres, values, max_km):
+    """Return the shared 0.2--3.5 km middle-panel domain and finite mask."""
+    import numpy as np
+
+    centres = np.asarray(centres, dtype=float)
+    values = np.asarray(values, dtype=float)
+    if not np.isfinite(float(max_km)) or float(max_km) <= 0:
+        raise ValueError("max_km must be finite and positive")
+    x_min = MIDDLE_DISTANCE_MIN_KM
+    x_max = MIDDLE_DISTANCE_MAX_KM
+    visible = (
+        (centres >= x_min)
+        & (centres <= x_max)
+        & np.isfinite(centres)
+        & np.isfinite(values)
+    )
+    return x_min, x_max, visible
 
 
 def _filter_rows_by_merchant(od_chunk, excluded_merchants):
@@ -300,7 +321,7 @@ def _new_merchant_filter_bin_audit(max_air_distance_km, bin_width_km):
 
 
 def _update_merchant_filter_bin_audit(audit, state_name, od_chunk):
-    """Accumulate one raw or filtered Shanghai chunk into an audit state."""
+    """Accumulate one raw or filtered city chunk into an audit state."""
     import numpy as np
 
     valid = od_chunk[
@@ -427,9 +448,10 @@ def _build_reduction_detour_binned_by_city(
         key: os.path.join(data_dir, "city", key, f"{key}_od_pairs.csv")
         for key in selected_keys
     }
-    shanghai_graphml_path = os.path.join(
-        data_dir, "city", "shanghai", "shanghai_roadnet.graphml"
-    )
+    graphml_paths = {
+        key: os.path.join(data_dir, "city", key, f"{key}_roadnet.graphml")
+        for key in selected_keys
+    }
 
     cache_path = None
     cache_meta = None
@@ -446,15 +468,13 @@ def _build_reduction_detour_binned_by_city(
             continue
         available_keys.append(key)
         source_files[key] = _file_cache_signature(od_path)
-        if key == "shanghai":
-            if not os.path.exists(shanghai_graphml_path):
-                raise FileNotFoundError(
-                    f"{figure_name}: missing {shanghai_graphml_path}; "
-                    "run the declared prerequisite stage first"
-                )
-            source_files["shanghai_roadnet"] = _file_cache_signature(
-                shanghai_graphml_path
+        graphml_path = graphml_paths[key]
+        if not os.path.exists(graphml_path):
+            raise FileNotFoundError(
+                f"{figure_name}: missing {graphml_path}; "
+                "run the declared prerequisite stage first"
             )
+        source_files[f"{key}_roadnet"] = _file_cache_signature(graphml_path)
 
     if not available_keys:
         print(f"{figure_name}: no city OD data available")
@@ -477,11 +497,15 @@ def _build_reduction_detour_binned_by_city(
             "bin_width_km": bin_width_km,
             "absolute_reduction_metric": absolute_reduction_metric,
             "merchant_filter": {
-                "region_key": "shanghai",
-                "rule": "exclude merchants with road-snap distance > P99",
-                "quantile": SHANGHAI_MERCHANT_SNAP_QUANTILE,
+                "region_keys": available_keys,
+                "rule": "independently exclude each city's merchants with road-snap distance > city P99",
+                "quantile": MERCHANT_SNAP_QUANTILE,
                 "quantile_method": "linear",
-                "scope": "all OD rows for excluded Shanghai merchants",
+                "scope": "all middle-panel OD rows for excluded merchants",
+                "middle_distance_domain_km": [
+                    MIDDLE_DISTANCE_MIN_KM,
+                    MIDDLE_DISTANCE_MAX_KM,
+                ],
             },
         }
         if os.path.exists(cache_path):
@@ -510,20 +534,18 @@ def _build_reduction_detour_binned_by_city(
         od_path = od_paths[key]
         columns = set(pd.read_csv(od_path, nrows=0).columns)
         city_required = set(required)
-        if key == "shanghai":
-            city_required.update({"from_lat", "from_lng"})
+        city_required.update({"from_lat", "from_lng"})
         if not city_required.issubset(columns):
             print(f"{figure_name}: {key} missing columns — skipping")
             continue
         max_air_distance_km = 0.0
         merchant_coordinates = set()
-        first_pass_columns = ["distance_km"]
-        first_pass_dtypes = {"distance_km": "float64"}
-        if key == "shanghai":
-            first_pass_columns.extend(["from_lat", "from_lng"])
-            first_pass_dtypes.update(
-                {"from_lat": "float64", "from_lng": "float64"}
-            )
+        first_pass_columns = ["distance_km", "from_lat", "from_lng"]
+        first_pass_dtypes = {
+            "distance_km": "float64",
+            "from_lat": "float64",
+            "from_lng": "float64",
+        }
         for distance_chunk in pd.read_csv(
             od_path,
             usecols=first_pass_columns,
@@ -536,48 +558,44 @@ def _build_reduction_detour_binned_by_city(
                 max_air_distance_km = max(
                     max_air_distance_km, float(valid_distances.max())
                 )
-            if key == "shanghai":
-                coordinates = distance_chunk[["from_lat", "from_lng"]].to_numpy(
-                    dtype=float
-                )
-                coordinates = coordinates[np.isfinite(coordinates).all(axis=1)]
-                merchant_coordinates.update(map(tuple, coordinates))
+            coordinates = distance_chunk[["from_lat", "from_lng"]].to_numpy(
+                dtype=float
+            )
+            coordinates = coordinates[np.isfinite(coordinates).all(axis=1)]
+            merchant_coordinates.update(map(tuple, coordinates))
         if max_air_distance_km <= 0:
             print(f"{figure_name}: {key} has no valid air distances — skipping")
             continue
 
-        excluded_merchants = set()
-        merchant_filter = None
-        if key == "shanghai":
-            if not merchant_coordinates:
-                raise ValueError(
-                    f"{figure_name}: Shanghai has no valid merchant origins"
-                )
-            sorted_merchants = _unique_finite_coordinates(merchant_coordinates)
-            excluded_merchants, snap_distances_m, snap_threshold_m = (
-                _merchant_snap_filter_from_graphml(
-                    sorted_merchants, shanghai_graphml_path
-                )
+        if not merchant_coordinates:
+            raise ValueError(
+                f"{figure_name}: {key} has no valid merchant origins"
             )
-            merchant_filter = {
-                "region_key": "shanghai",
-                "rule": "exclude merchants with road-snap distance > P99",
-                "quantile": SHANGHAI_MERCHANT_SNAP_QUANTILE,
-                "quantile_method": "linear",
-                "scope": "all OD rows for excluded Shanghai merchants",
-                "snap_distance_p99_m": snap_threshold_m,
-                "merchant_count": len(merchant_coordinates),
-                "retained_merchant_count": (
-                    len(merchant_coordinates) - len(excluded_merchants)
-                ),
-                "excluded_merchant_count": len(excluded_merchants),
-                "maximum_snap_distance_m": float(snap_distances_m.max()),
-                "filtered_od_count": 0,
-                "filtered_annual_sales": 0.0,
-            }
-            merchant_bin_audit = _new_merchant_filter_bin_audit(
-                max_air_distance_km, bin_width_km
+        sorted_merchants = _unique_finite_coordinates(merchant_coordinates)
+        excluded_merchants, snap_distances_m, snap_threshold_m = (
+            _merchant_snap_filter_from_graphml(
+                sorted_merchants, graphml_paths[key]
             )
+        )
+        merchant_filter = {
+            "region_key": key,
+            "rule": "exclude merchants with road-snap distance > P99",
+            "quantile": MERCHANT_SNAP_QUANTILE,
+            "quantile_method": "linear",
+            "scope": "all middle-panel OD rows for excluded merchants",
+            "snap_distance_p99_m": snap_threshold_m,
+            "merchant_count": len(merchant_coordinates),
+            "retained_merchant_count": (
+                len(merchant_coordinates) - len(excluded_merchants)
+            ),
+            "excluded_merchant_count": len(excluded_merchants),
+            "maximum_snap_distance_m": float(snap_distances_m.max()),
+            "filtered_od_count": 0,
+            "filtered_annual_sales": 0.0,
+        }
+        merchant_bin_audit = _new_merchant_filter_bin_audit(
+            max_air_distance_km, bin_width_km
+        )
 
         gef = gef_map[key]
         ebike_pp = replace(ebike_params, e_use=float(gef))
@@ -621,20 +639,19 @@ def _build_reduction_detour_binned_by_city(
                 od_chunk["ebike_lifecycle_g"] = compute_ebike_per_order_g(
                     road_m / 1000.0, ebike_pp, scenario
                 )
-                if merchant_filter is not None:
-                    _update_merchant_filter_bin_audit(
-                        merchant_bin_audit, "before", od_chunk
-                    )
-                    od_chunk, filtered_mask, filtered_sales = (
-                        _filter_rows_by_merchant(od_chunk, excluded_merchants)
-                    )
-                    merchant_filter["filtered_od_count"] += int(
-                        filtered_mask.sum()
-                    )
-                    merchant_filter["filtered_annual_sales"] += filtered_sales
-                    _update_merchant_filter_bin_audit(
-                        merchant_bin_audit, "after", od_chunk
-                    )
+                _update_merchant_filter_bin_audit(
+                    merchant_bin_audit, "before", od_chunk
+                )
+                od_chunk, filtered_mask, filtered_sales = (
+                    _filter_rows_by_merchant(od_chunk, excluded_merchants)
+                )
+                merchant_filter["filtered_od_count"] += int(
+                    filtered_mask.sum()
+                )
+                merchant_filter["filtered_annual_sales"] += filtered_sales
+                _update_merchant_filter_bin_audit(
+                    merchant_bin_audit, "after", od_chunk
+                )
                 yield od_chunk
 
         (
@@ -658,10 +675,9 @@ def _build_reduction_detour_binned_by_city(
             if detour_totals["weighted_air_m"] > 0
             else np.nan
         )
-        if merchant_filter is not None:
-            merchant_filter["distance_bins"] = (
-                _finalize_merchant_filter_bin_audit(merchant_bin_audit)
-            )
+        merchant_filter["distance_bins"] = (
+            _finalize_merchant_filter_bin_audit(merchant_bin_audit)
+        )
         binned_by_city[key] = {
             "centres": centres,
             "reduction_pct": reduction_pct,
@@ -768,13 +784,10 @@ def _plot_compact_city_context_summary_panels(
         binned = binned_by_city[region_key]
         centres = np.asarray(binned["centres"], dtype=float)
         reduction_abs = np.asarray(binned["reduction_abs"], dtype=float)
-        x_max = min(5.0, float(binned["max_km"]))
-        x_min = min(0.2, x_max)
-        visible = (
-            (centres >= x_min)
-            & (centres <= x_max)
-            & np.isfinite(centres)
-            & np.isfinite(reduction_abs)
+        x_min, x_max, visible = _middle_distance_domain(
+            centres,
+            reduction_abs,
+            binned["max_km"],
         )
         visible_by_city[region_key] = (centres, reduction_abs, visible, x_min, x_max)
         absolute_values.extend(reduction_abs[visible].tolist())
@@ -894,7 +907,7 @@ def _plot_compact_city_context_summary_panels(
         )
         ax_distance.set_xlim(x_min, x_max)
         ax_distance.set_ylim(0, 105)
-        ax_distance.set_xticks([0.2, 2.5, 5.0])
+        ax_distance.set_xticks([0.2, 2.0, 3.5])
         ax_distance.set_yticks([0, 50, 100])
         ax_distance.tick_params(axis="both", labelsize=7, length=2.5, pad=1.5)
         ax_distance.yaxis.set_ticks_position("right")
@@ -1464,12 +1477,13 @@ def _city_context_summary_report(
             bar_label = "reduction_pct"
         detour_by_bin = binned.get("detour_by_bin") or [np.array([]) for _ in centres]
         max_km = float(binned["max_km"])
-        x_min = min(0.2, max_km)
-        x_max = min(5.0, max_km)
-        visible = (centres >= x_min) & (centres <= x_max)
-        finite_abs = visible & np.isfinite(centres) & np.isfinite(reduction_abs)
-        x_abs = centres[finite_abs]
-        y_abs = reduction_abs[finite_abs]
+        x_min, x_max, visible = _middle_distance_domain(
+            centres,
+            reduction_abs,
+            max_km,
+        )
+        x_abs = centres[visible]
+        y_abs = reduction_abs[visible]
 
         linear_fit = None
         if x_abs.size >= 2:
@@ -1606,6 +1620,8 @@ def _city_context_summary_report(
                 "city_detour_ratio": _report_number(
                     binned.get("city_detour_ratio")
                 ),
+                "merchant_filter": binned.get("merchant_filter"),
+                "middle_distance_domain_km": [x_min, x_max],
                 "valid_path_count": int(binned.get("valid_path_count", 0)),
                 "invalid_path_count": int(binned.get("invalid_path_count", 0)),
                 "axes": {
@@ -1963,7 +1979,7 @@ def _write_city_gef_context_detour_report(
     connector_lines,
     legend_rail=None,
     render_style="color",
-    merchant_filter=None,
+    merchant_filters=None,
 ):
     """Write JSON and Markdown reports for the city GEF context figure."""
     report_base = save_path.rsplit(".", 1)[0] + "_report"
@@ -1988,7 +2004,11 @@ def _write_city_gef_context_detour_report(
         },
         "connector_lines": connector_lines,
         "legend_rail": legend_rail,
-        "merchant_filter": merchant_filter,
+        "middle_analysis_domain_km": [
+            MIDDLE_DISTANCE_MIN_KM,
+            MIDDLE_DISTANCE_MAX_KM,
+        ],
+        "merchant_filters": merchant_filters or {},
     }
     if render_style == "grayscale":
         payload["visual_encoding"] = {
@@ -2003,15 +2023,14 @@ def _write_city_gef_context_detour_report(
     with open(json_path, "w", encoding="utf-8") as f:
         json.dump(payload, f, indent=2, ensure_ascii=False, allow_nan=False)
 
-    merchant_filter_summary = (
-        {
+    merchant_filter_summaries = {
+        region_key: {
             key: value
             for key, value in merchant_filter.items()
             if key != "distance_bins"
         }
-        if merchant_filter is not None
-        else None
-    )
+        for region_key, merchant_filter in (merchant_filters or {}).items()
+    }
     lines = [
         f"# {figure_name} Figure Report",
         "",
@@ -2024,44 +2043,49 @@ def _write_city_gef_context_detour_report(
         f"- Legend rail orientation: {(legend_rail or {}).get('orientation')}",
         f"- GEF bin edges: {(legend_rail or {}).get('gef_bin_edges')}",
         f"- City marker entries: {(legend_rail or {}).get('city_markers')}",
-        f"- Merchant filter: {merchant_filter_summary}",
+        f"- Common middle-panel analysis domain: {MIDDLE_DISTANCE_MIN_KM}-{MIDDLE_DISTANCE_MAX_KM} km bin centres",
+        f"- Merchant filters: {merchant_filter_summaries}",
         "",
-        "## Shanghai merchant filter audit",
+        "## Per-city merchant filter audit",
         "",
     ]
-    if merchant_filter is None:
+    if not merchant_filters:
         lines.append("- Not applied.")
     else:
-        lines.extend(
-            [
-                f"- Rule: {merchant_filter.get('rule')}",
-                f"- Quantile: {merchant_filter.get('quantile')}",
-                f"- Quantile method: {merchant_filter.get('quantile_method')}",
-                f"- Actual P99: {merchant_filter.get('snap_distance_p99_m')} m",
-                f"- Merchants: {merchant_filter.get('merchant_count')} total, "
-                f"{merchant_filter.get('excluded_merchant_count')} excluded",
-                f"- Filtered OD rows: {merchant_filter.get('filtered_od_count')}",
-                f"- Filtered annual sales: {merchant_filter.get('filtered_annual_sales')}",
-                "",
-                "| Air-distance bin (km) | State | Merchants | OD rows | Annual sales | Optimal drone share (%) | Sales-weighted E-bike - Drone (g/order) | Lifecycle reduction (%) |",
-                "| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |",
-            ]
-        )
-        for bin_record in merchant_filter.get("distance_bins", []):
-            bin_label = (
-                f"{bin_record['bin_left_air_km']:.1f}-"
-                f"{bin_record['bin_right_air_km']:.1f}"
+        for region_key, merchant_filter in merchant_filters.items():
+            lines.extend(
+                [
+                    f"### {region_key}",
+                    "",
+                    f"- Rule: {merchant_filter.get('rule')}",
+                    f"- Quantile: {merchant_filter.get('quantile')}",
+                    f"- Quantile method: {merchant_filter.get('quantile_method')}",
+                    f"- Actual P99: {merchant_filter.get('snap_distance_p99_m')} m",
+                    f"- Merchants: {merchant_filter.get('merchant_count')} total, "
+                    f"{merchant_filter.get('excluded_merchant_count')} excluded",
+                    f"- Filtered OD rows: {merchant_filter.get('filtered_od_count')}",
+                    f"- Filtered annual sales: {merchant_filter.get('filtered_annual_sales')}",
+                    "",
+                    "| Air-distance bin (km) | State | Merchants | OD rows | Annual sales | Optimal drone share (%) | Sales-weighted E-bike - Drone (g/order) | Lifecycle reduction (%) |",
+                    "| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |",
+                ]
             )
-            for state_name in ("before", "after"):
-                state = bin_record[state_name]
-                lines.append(
-                    f"| {bin_label} | {state_name} | "
-                    f"{state['merchant_count']} | {state['od_count']} | "
-                    f"{state['annual_sales']} | "
-                    f"{state['optimal_drone_share_pct']} | "
-                    f"{state['sales_weighted_ebike_minus_drone_g_per_order']} | "
-                    f"{state['lifecycle_reduction_pct']} |"
+            for bin_record in merchant_filter.get("distance_bins", []):
+                bin_label = (
+                    f"{bin_record['bin_left_air_km']:.1f}-"
+                    f"{bin_record['bin_right_air_km']:.1f}"
                 )
+                for state_name in ("before", "after"):
+                    state = bin_record[state_name]
+                    lines.append(
+                        f"| {bin_label} | {state_name} | "
+                        f"{state['merchant_count']} | {state['od_count']} | "
+                        f"{state['annual_sales']} | "
+                        f"{state['optimal_drone_share_pct']} | "
+                        f"{state['sales_weighted_ebike_minus_drone_g_per_order']} | "
+                        f"{state['lifecycle_reduction_pct']} |"
+                    )
+            lines.append("")
     lines.extend(
         [
         "",
@@ -2092,7 +2116,9 @@ def _write_city_gef_context_detour_report(
                 f"- Region key: `{city['region_key']}`",
                 f"- OD-derived detour ratio: {city['city_detour_ratio']}",
                 f"- Valid/invalid paths: {city['valid_path_count']}/{city['invalid_path_count']}",
+                f"- Common fit/display domain: {city['middle_distance_domain_km']} km bin centres",
                 f"- Visible distance-bin count: {len(visible_bins)}",
+                f"- E-bike - Drone linear slope: {(city.get('absolute_linear_fit') or {}).get('slope')} g CO2e/order/km",
                 f"- Power mix components: {', '.join(item['component'] for item in city['power_mix'])}",
                 f"- Bar metric: `{city['bar_metric']}`",
                 "- JSON records every distance bin with air-distance x center, "
@@ -2410,9 +2436,11 @@ def _render_city_gef_context_detour_summary(
         connector_lines=connector_lines,
         legend_rail=legend_rail_report,
         render_style="grayscale" if grayscale else "color",
-        merchant_filter=binned_by_city.get("shanghai", {}).get(
-            "merchant_filter"
-        ),
+        merchant_filters={
+            region_key: binned["merchant_filter"]
+            for region_key, binned in binned_by_city.items()
+            if binned.get("merchant_filter") is not None
+        },
     )
     plt.close(fig)
     print(f"City GEF context detour summary saved to {save_path}")
