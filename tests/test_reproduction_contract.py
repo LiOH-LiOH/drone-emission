@@ -85,6 +85,7 @@ def test_contribution_figure_consumes_only_prepared_analysis():
 
 def test_city_gef_distribution_consumes_cohort_statistics_only():
     request = request_index()["city_gef_distribution"]
+    assert request["cache_version"] == 2
     assert request["required_inputs"] == [
         "all_region_stats.csv",
         "all_region_stats_enriched.csv",

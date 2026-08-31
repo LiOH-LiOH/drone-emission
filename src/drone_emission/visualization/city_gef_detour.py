@@ -1762,14 +1762,15 @@ def _add_city_gef_xaxis_markers(fig, axes, selected, contexts):
 def plot_city_gef_distribution(
     df: pd.DataFrame,
     save_path: str = None,
-    figsize: tuple = (3.7, 2.1),
+    figsize: tuple = (3.7, 4.2),
     for_latex: bool = False,
     plot_title: bool = False,
 ):
-    """Plot the equal-city GEF density and selected-city positions."""
+    """Plot city GEF density above selected-city power mixes."""
     import matplotlib as mpl
     import matplotlib.pyplot as plt
     import numpy as np
+    from matplotlib.patches import Patch
     from scipy.stats import gaussian_kde
 
     from drone_emission.visualization._utils import (
@@ -1884,8 +1885,18 @@ def plot_city_gef_distribution(
         )
     marker_rows.sort(key=lambda item: (item["gef"], item["region_key"]))
 
-    fig, ax = plt.subplots(figsize=figsize)
-    fig.subplots_adjust(left=0.17, right=0.98, bottom=0.24, top=0.94)
+    fig = plt.figure(figsize=figsize)
+    outer = fig.add_gridspec(
+        2,
+        1,
+        height_ratios=[1.0, 1.0],
+        hspace=0.24,
+        left=0.17,
+        right=0.98,
+        bottom=0.055,
+        top=0.97,
+    )
+    ax = fig.add_subplot(outer[0])
     ax.fill_between(
         curve_x,
         0.0,
@@ -1920,6 +1931,153 @@ def plot_city_gef_distribution(
     ax.spines["right"].set_visible(False)
     ax.spines["left"].set_linewidth(0.8)
     ax.spines["bottom"].set_linewidth(0.8)
+
+    lower = outer[1].subgridspec(
+        5,
+        2,
+        height_ratios=[1.0, 1.0, 1.0, 1.0, 0.72],
+        width_ratios=[0.31, 0.69],
+        hspace=0.34,
+        wspace=0.06,
+    )
+    context_by_key = {
+        context["region_key"]: context
+        for context in CITY_GEF_CONTEXT_DETOUR_CONTEXTS
+    }
+    power_mix_rows = []
+    for index, marker_row in enumerate(marker_rows):
+        context = context_by_key[marker_row["region_key"]]
+        power_region_key = context.get(
+            "power_region_key", marker_row["region_key"]
+        )
+        generation = POWER_GENERATION_2022_100M_KWH[power_region_key]
+        total = float(generation["total"])
+        components = ["Hydro", "Thermal", "Wind", "Solar"]
+        values = [float(generation[name]) for name in components]
+        remainder = total - sum(values)
+        if remainder / total > 0.005:
+            components.append("Other")
+            values.append(remainder)
+
+        label_ax = fig.add_subplot(lower[index, 0])
+        bar_ax = fig.add_subplot(lower[index, 1])
+        label_ax.set_xlim(0, 1)
+        label_ax.set_ylim(0, 1)
+        label_ax.scatter(
+            [0.08],
+            [0.5],
+            s=22,
+            marker=marker_row["marker"],
+            facecolors="white",
+            edgecolors="#111111",
+            linewidths=0.9,
+            clip_on=False,
+        )
+        label_ax.text(
+            0.19,
+            0.5,
+            marker_row["display_name"],
+            fontsize=7.5,
+            fontweight="bold",
+            ha="left",
+            va="center",
+        )
+        label_ax.set_axis_off()
+
+        left = 0.0
+        component_records = []
+        for name, value in zip(components, values):
+            share = value / total * 100.0
+            bar_ax.barh(
+                [0],
+                [share],
+                left=[left],
+                height=0.62,
+                color=POWER_MIX_COLORS[name],
+                edgecolor="white",
+                linewidth=0.45,
+                zorder=2,
+            )
+            label_visible = share >= 12.0
+            if label_visible:
+                bar_ax.text(
+                    left + share / 2.0,
+                    0,
+                    f"{share:.0f}%",
+                    fontsize=7,
+                    fontweight="bold",
+                    color=(
+                        "white"
+                        if name in {"Hydro", "Thermal"}
+                        else "#222222"
+                    ),
+                    ha="center",
+                    va="center",
+                    zorder=3,
+                )
+            component_records.append(
+                {
+                    "component": name,
+                    "value_100m_kwh": float(value),
+                    "share_pct": float(share),
+                    "color": POWER_MIX_COLORS[name],
+                    "bar_left_pct": float(left),
+                    "bar_right_pct": float(left + share),
+                    "percentage_label": (
+                        f"{share:.0f}%" if label_visible else None
+                    ),
+                }
+            )
+            left += share
+        bar_ax.set_xlim(0, 100)
+        bar_ax.set_ylim(-0.55, 0.55)
+        bar_ax.set_axis_off()
+        power_mix_rows.append(
+            {
+                "region_key": marker_row["region_key"],
+                "display_name": marker_row["display_name"],
+                "marker": marker_row["marker"],
+                "power_region_key": power_region_key,
+                "generation_total_100m_kwh": total,
+                "components": component_records,
+                "label_ax": label_ax,
+                "bar_ax": bar_ax,
+            }
+        )
+
+    legend_ax = fig.add_subplot(lower[4, :])
+    legend_ax.set_axis_off()
+    legend_components = ("Hydro", "Thermal", "Wind", "Solar", "Other")
+    legend_handles = [
+        Patch(
+            facecolor=POWER_MIX_COLORS[name],
+            edgecolor="none",
+            label=name,
+        )
+        for name in legend_components
+    ]
+    legend_ax.text(
+        0.0,
+        0.5,
+        "Power mix",
+        fontsize=7,
+        fontweight="bold",
+        ha="left",
+        va="center",
+        transform=legend_ax.transAxes,
+    )
+    legend_ax.legend(
+        handles=legend_handles,
+        loc="center left",
+        bbox_to_anchor=(0.20, 0.5),
+        ncol=5,
+        frameon=False,
+        fontsize=6.5,
+        handlelength=0.75,
+        handletextpad=0.25,
+        columnspacing=0.55,
+        borderaxespad=0.0,
+    )
     if plot_title:
         ax.set_title(
             "Distribution of City Grid Emission Factors",
@@ -1955,11 +2113,12 @@ def plot_city_gef_distribution(
         )
         selected_keys = {item["region_key"] for item in marker_rows}
         report = {
-            "schema_version": 1,
+            "schema_version": 2,
             "figure_id": "city_gef_distribution",
             "core_conclusion": (
                 "The tracked city cohort provides the national GEF distribution "
-                "context for four representative cities at distinct positions."
+                "context for four representative cities, whose contrasting "
+                "power mixes provide descriptive context for their positions."
             ),
             "figure_size_inches": [float(figsize[0]), float(figsize[1])],
             "weighting": "equal_city",
@@ -1992,6 +2151,46 @@ def plot_city_gef_distribution(
                 "grid": False,
             },
             "selected_city_markers": marker_rows,
+            "layout": {
+                "orientation": "vertical",
+                "density_panel_position": "top",
+                "power_mix_panel_position": "bottom",
+                "panel_gap": "whitespace",
+                "embedded_panel_letters": False,
+            },
+            "power_mix": {
+                "city_order": [
+                    row["region_key"] for row in power_mix_rows
+                ],
+                "percentage_label_threshold_pct": 12.0,
+                "axis_visible": False,
+                "rows": [
+                    {
+                        key: value
+                        for key, value in row.items()
+                        if key not in {"label_ax", "bar_ax"}
+                    }
+                    | {
+                        "axes": {
+                            "label": _report_axis(row["label_ax"]),
+                            "bar": _report_axis(row["bar_ax"]),
+                        }
+                    }
+                    for row in power_mix_rows
+                ],
+                "legend": {
+                    "title": "Power mix",
+                    "placement": "below_rows_single_line",
+                    "components": [
+                        {
+                            "component": name,
+                            "color": POWER_MIX_COLORS[name],
+                        }
+                        for name in legend_components
+                    ],
+                    "axis": _report_axis(legend_ax),
+                },
+            },
             "observations": [
                 {
                     "region_key": str(row.region_key),
@@ -2008,8 +2207,9 @@ def plot_city_gef_distribution(
             ],
             "omitted_elements": [
                 "all-city rug marks",
-                "city labels",
-                "city legend",
+                "standalone city legend",
+                "power-mix percentage axis",
+                "city GEF value labels",
                 "panel letter",
                 "sample-size annotation",
             ],

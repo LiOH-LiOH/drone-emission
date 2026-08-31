@@ -39,7 +39,8 @@ def test_city_gef_distribution_writes_equal_city_kde_report(tmp_path):
     )
     assert result == str(output)
     assert output.is_file()
-    assert report["figure_size_inches"] == [3.7, 2.1]
+    assert report["schema_version"] == 2
+    assert report["figure_size_inches"] == [3.7, 4.2]
     assert report["weighting"] == "equal_city"
     assert report["city_count"] == 8
     assert report["kde"]["bandwidth_rule"] == "scott"
@@ -57,6 +58,46 @@ def test_city_gef_distribution_writes_equal_city_kde_report(tmp_path):
         "s",
         "D",
     ]
+    assert report["layout"] == {
+        "orientation": "vertical",
+        "density_panel_position": "top",
+        "power_mix_panel_position": "bottom",
+        "panel_gap": "whitespace",
+        "embedded_panel_letters": False,
+    }
+    power_mix = report["power_mix"]
+    assert power_mix["city_order"] == [
+        "chengdu",
+        "guangzhou",
+        "beijing",
+        "shanghai",
+    ]
+    assert power_mix["percentage_label_threshold_pct"] == 12.0
+    assert power_mix["axis_visible"] is False
+    assert [row["power_region_key"] for row in power_mix["rows"]] == [
+        "sichuan",
+        "guangdong",
+        "beijing",
+        "shanghai",
+    ]
+    assert [row["marker"] for row in power_mix["rows"]] == [
+        "o",
+        "^",
+        "s",
+        "D",
+    ]
+    assert [
+        item["component"] for item in power_mix["legend"]["components"]
+    ] == ["Hydro", "Thermal", "Wind", "Solar", "Other"]
+    assert power_mix["legend"]["title"] == "Power mix"
+    for row in power_mix["rows"]:
+        for component in row["components"]:
+            expected = (
+                f'{component["share_pct"]:.0f}%'
+                if component["share_pct"] >= 12.0
+                else None
+            )
+            assert component["percentage_label"] == expected
     assert len(report["observations"]) == 8
 
 
