@@ -1759,6 +1759,271 @@ def _add_city_gef_xaxis_markers(fig, axes, selected, contexts):
     return marker_records
 
 
+def plot_city_gef_distribution(
+    df: pd.DataFrame,
+    save_path: str = None,
+    figsize: tuple = (3.7, 2.1),
+    for_latex: bool = False,
+    plot_title: bool = False,
+):
+    """Plot the equal-city GEF density and selected-city positions."""
+    import matplotlib as mpl
+    import matplotlib.pyplot as plt
+    import numpy as np
+    from scipy.stats import gaussian_kde
+
+    from drone_emission.visualization._utils import (
+        _add_title_suffix,
+        write_figure_report,
+    )
+
+    mpl.rcParams.update(
+        {
+            "font.family": "sans-serif",
+            "font.sans-serif": [
+                "Arial",
+                "Helvetica",
+                "DejaVu Sans",
+                "sans-serif",
+            ],
+            "svg.fonttype": "none",
+            "pdf.fonttype": 42,
+        }
+    )
+
+    required = {"region_key"}
+    missing = sorted(required - set(df.columns))
+    if missing:
+        raise ValueError(
+            "City GEF distribution requires columns: " + ", ".join(missing)
+        )
+
+    gef_col = next(
+        (
+            candidate
+            for candidate in ("grid_emission_factor", "gef")
+            if candidate in df.columns
+        ),
+        None,
+    )
+    if gef_col is None:
+        raise ValueError(
+            "City GEF distribution requires grid_emission_factor or gef"
+        )
+
+    plot_df = df.copy()
+    if "region_level" in plot_df.columns:
+        plot_df = plot_df[plot_df["region_level"].eq("city")].copy()
+    if plot_df.empty:
+        raise ValueError("City GEF distribution has no city rows")
+
+    plot_df["region_key"] = plot_df["region_key"].astype(str)
+    duplicated = sorted(
+        plot_df.loc[
+            plot_df["region_key"].duplicated(keep=False), "region_key"
+        ].unique()
+    )
+    if duplicated:
+        raise ValueError(
+            "City GEF distribution has duplicate region keys: "
+            + ", ".join(duplicated)
+        )
+
+    plot_df[gef_col] = pd.to_numeric(plot_df[gef_col], errors="coerce")
+    invalid_mask = ~np.isfinite(plot_df[gef_col].to_numpy(dtype=float))
+    if invalid_mask.any():
+        invalid_keys = sorted(plot_df.loc[invalid_mask, "region_key"])
+        raise ValueError(
+            "City GEF distribution has missing or non-finite GEF values: "
+            + ", ".join(invalid_keys)
+        )
+
+    x_min, x_max = 0.1, 0.8
+    outside_mask = ~plot_df[gef_col].between(x_min, x_max, inclusive="both")
+    if outside_mask.any():
+        outside = [
+            f"{row.region_key}={getattr(row, gef_col):.4f}"
+            for row in plot_df.loc[outside_mask, ["region_key", gef_col]].itertuples(
+                index=False
+            )
+        ]
+        raise ValueError(
+            "City GEF distribution values fall outside the fixed 0.1-0.8 domain: "
+            + ", ".join(outside)
+        )
+
+    density_values = plot_df[gef_col].to_numpy(dtype=float)
+    if np.unique(density_values).size < 2:
+        raise ValueError("City GEF distribution requires at least two unique values")
+    kde = gaussian_kde(density_values, bw_method="scott")
+    curve_x = np.linspace(x_min, x_max, 240)
+    curve_y = kde(curve_x)
+
+    indexed = plot_df.set_index("region_key", drop=False)
+    marker_rows = []
+    for context in CITY_GEF_CONTEXT_DETOUR_CONTEXTS:
+        region_key = context["region_key"]
+        if region_key not in indexed.index:
+            raise ValueError(
+                f"City GEF distribution is missing selected city: {region_key}"
+            )
+        row = indexed.loc[region_key]
+        marker_rows.append(
+            {
+                "region_key": region_key,
+                "display_name": context["display_name"],
+                "gef": float(row[gef_col]),
+                "gef_source": (
+                    str(row["gef_source"])
+                    if "gef_source" in plot_df.columns
+                    and pd.notna(row["gef_source"])
+                    else None
+                ),
+                "marker": CITY_CONTEXT_MARKERS[region_key],
+            }
+        )
+    marker_rows.sort(key=lambda item: (item["gef"], item["region_key"]))
+
+    fig, ax = plt.subplots(figsize=figsize)
+    fig.subplots_adjust(left=0.17, right=0.98, bottom=0.24, top=0.94)
+    ax.fill_between(
+        curve_x,
+        0.0,
+        curve_y,
+        color="#AFAFAF",
+        alpha=0.35,
+        linewidth=0,
+        zorder=1,
+    )
+    ax.plot(curve_x, curve_y, color="#4F4F4F", linewidth=1.0, zorder=2)
+    for marker_row in marker_rows:
+        ax.scatter(
+            [marker_row["gef"]],
+            [0.0],
+            s=24,
+            marker=marker_row["marker"],
+            facecolors="white",
+            edgecolors="#111111",
+            linewidths=0.9,
+            zorder=4,
+            clip_on=False,
+        )
+
+    ax.set_xlim(x_min, x_max)
+    ax.set_ylim(0.0, float(curve_y.max()) * 1.08)
+    ax.set_xticks(np.arange(x_min, x_max + 0.001, 0.1))
+    ax.set_xlabel("Grid Emission Factor (kg CO$_2$e/kWh)", fontsize=7.5)
+    ax.set_ylabel("Density", fontsize=7.5)
+    ax.tick_params(axis="both", labelsize=7, length=2.5, pad=1.5)
+    ax.grid(False)
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+    ax.spines["left"].set_linewidth(0.8)
+    ax.spines["bottom"].set_linewidth(0.8)
+    if plot_title:
+        ax.set_title(
+            "Distribution of City Grid Emission Factors",
+            fontsize=8,
+            fontweight="bold",
+        )
+
+    output_path = save_path
+    if output_path:
+        if for_latex and not output_path.endswith(".pdf"):
+            output_path = output_path.rsplit(".", 1)[0] + ".pdf"
+        if plot_title:
+            output_path = _add_title_suffix(output_path)
+        output_dir = os.path.dirname(output_path)
+        if output_dir:
+            os.makedirs(output_dir, exist_ok=True)
+        fig.canvas.draw()
+        fig.savefig(
+            output_path,
+            dpi=300,
+            bbox_inches=fig.bbox_inches,
+            pad_inches=0.0,
+        )
+
+        source_counts = (
+            plot_df["gef_source"]
+            .fillna("missing")
+            .value_counts()
+            .sort_index()
+            .to_dict()
+            if "gef_source" in plot_df.columns
+            else {}
+        )
+        selected_keys = {item["region_key"] for item in marker_rows}
+        report = {
+            "schema_version": 1,
+            "figure_id": "city_gef_distribution",
+            "core_conclusion": (
+                "The tracked city cohort provides the national GEF distribution "
+                "context for four representative cities at distinct positions."
+            ),
+            "figure_size_inches": [float(figsize[0]), float(figsize[1])],
+            "weighting": "equal_city",
+            "city_count": int(len(plot_df)),
+            "unique_gef_count": int(np.unique(density_values).size),
+            "gef_column": gef_col,
+            "gef_source_counts": {
+                str(key): int(value) for key, value in source_counts.items()
+            },
+            "gef_summary": {
+                "min": float(density_values.min()),
+                "max": float(density_values.max()),
+                "mean": float(density_values.mean()),
+                "median": float(np.median(density_values)),
+            },
+            "kde": {
+                "implementation": "scipy.stats.gaussian_kde",
+                "bandwidth_rule": "scott",
+                "covariance_factor": float(kde.factor),
+                "curve": [
+                    {"gef": float(x), "density": float(y)}
+                    for x, y in zip(curve_x, curve_y)
+                ],
+                "shade_semantics": "area_under_density_curve",
+            },
+            "axis": {
+                "xlim": [x_min, x_max],
+                "xlabel": ax.get_xlabel(),
+                "ylabel": ax.get_ylabel(),
+                "grid": False,
+            },
+            "selected_city_markers": marker_rows,
+            "observations": [
+                {
+                    "region_key": str(row.region_key),
+                    "gef": float(getattr(row, gef_col)),
+                    "gef_source": (
+                        str(getattr(row, "gef_source"))
+                        if "gef_source" in plot_df.columns
+                        and pd.notna(getattr(row, "gef_source"))
+                        else None
+                    ),
+                    "selected_city": str(row.region_key) in selected_keys,
+                }
+                for row in plot_df.itertuples(index=False)
+            ],
+            "omitted_elements": [
+                "all-city rug marks",
+                "city labels",
+                "city legend",
+                "panel letter",
+                "sample-size annotation",
+            ],
+        }
+        report_path = output_path.rsplit(".", 1)[0] + "_report.json"
+        write_figure_report(report_path, report)
+        print(f"City GEF distribution report saved to {report_path}")
+        print(f"City GEF distribution saved to {output_path}")
+    else:
+        plt.show()
+    plt.close(fig)
+    return output_path
+
+
 def _add_city_detour_reduction_markers(
     fig,
     axes,

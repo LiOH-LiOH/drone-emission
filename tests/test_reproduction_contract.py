@@ -23,9 +23,9 @@ def test_manifest_has_exact_locked_set():
         "inkscape",
     }
     assert sum(figure["mode"] == "direct" for figure in manifest["figures"]) == 3
-    assert manifest["render_request_count"] == 22
-    assert len(manifest["requests"]) == 22
-    assert sum(len(request["outputs"]) for request in manifest["requests"]) == 35
+    assert manifest["render_request_count"] == 23
+    assert len(manifest["requests"]) == 23
+    assert sum(len(request["outputs"]) for request in manifest["requests"]) == 36
     assert all(
         figure_required_inputs(figure, manifest)
         for figure in manifest["figures"]
@@ -39,7 +39,7 @@ def test_manifest_requests_exactly_match_registry():
         for figure in load_manifest()["figures"]
         for request in figure["render_requests"]
     ]
-    assert len(requests) == 22
+    assert len(requests) == 23
     assert len(requests) == len(set(requests))
     assert set(requests) == set(REQUEST_RENDERERS)
 
@@ -81,6 +81,15 @@ def test_contribution_figure_consumes_only_prepared_analysis():
     assert request["required_inputs"] == [
         "all_city_contribution_decomposition.csv"
     ]
+
+
+def test_city_gef_distribution_consumes_cohort_statistics_only():
+    request = request_index()["city_gef_distribution"]
+    assert request["required_inputs"] == [
+        "all_region_stats.csv",
+        "all_region_stats_enriched.csv",
+    ]
+    assert request["outputs"] == ["city_gef_distribution.pdf"]
 
 
 def test_pathway_renderers_consume_only_prepared_analysis():

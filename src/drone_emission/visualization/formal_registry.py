@@ -169,6 +169,17 @@ def _render_gef_detour(context: RenderContext) -> None:
     )
 
 
+def _render_city_gef_distribution(context: RenderContext) -> None:
+    from .city_gef_detour import plot_city_gef_distribution
+
+    plot_city_gef_distribution(
+        _city_stats(context),
+        save_path=str(context.output("city_gef_distribution.pdf")),
+        for_latex=True,
+        plot_title=False,
+    )
+
+
 def _render_contribution(context: RenderContext) -> None:
     from .contribution_renderers import render_contribution_decomposition_city_b
 
@@ -295,6 +306,7 @@ REQUEST_RENDERERS: dict[str, Renderer] = {
     "regions_map_oracle_reduction_rank_map_only": lambda c: _render_priority(c, "regions_map_oracle_reduction_rank_map_only"),
     "city_reduction_rank_all_macro_region": lambda c: _render_priority(c, "city_reduction_rank_all_macro_region"),
     "city_gef_context_detour_summary": _render_gef_detour,
+    "city_gef_distribution": _render_city_gef_distribution,
     "contribution_decomposition_city_b": _render_contribution,
     "regions_map_pathway_scenarios": lambda c: _render_scenario(c, "regions_map_pathway_scenarios"),
     "threshold_resilience_national_overview": _render_threshold_resilience,
