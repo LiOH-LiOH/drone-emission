@@ -1932,13 +1932,25 @@ def plot_city_gef_distribution(
     ax.spines["left"].set_linewidth(0.8)
     ax.spines["bottom"].set_linewidth(0.8)
 
+    power_mix_style = {
+        "row_hspace": 0.12,
+        "column_wspace": 0.03,
+        "label_bar_width_ratios": [0.23, 0.77],
+        "bar_height": 0.78,
+        "city_label_fontsize": 8.5,
+        "percentage_label_fontsize": 8.0,
+        "marker_size": 28.0,
+        "marker_linewidth": 1.0,
+        "legend_title_fontsize": 8.0,
+        "legend_fontsize": 7.5,
+    }
     lower = outer[1].subgridspec(
         5,
         2,
-        height_ratios=[1.0, 1.0, 1.0, 1.0, 0.72],
-        width_ratios=[0.31, 0.69],
-        hspace=0.34,
-        wspace=0.06,
+        height_ratios=[1.0, 1.0, 1.0, 1.0, 0.60],
+        width_ratios=power_mix_style["label_bar_width_ratios"],
+        hspace=power_mix_style["row_hspace"],
+        wspace=power_mix_style["column_wspace"],
     )
     context_by_key = {
         context["region_key"]: context
@@ -1964,20 +1976,20 @@ def plot_city_gef_distribution(
         label_ax.set_xlim(0, 1)
         label_ax.set_ylim(0, 1)
         label_ax.scatter(
-            [0.08],
+            [-0.38],
             [0.5],
-            s=22,
+            s=power_mix_style["marker_size"],
             marker=marker_row["marker"],
             facecolors="white",
             edgecolors="#111111",
-            linewidths=0.9,
+            linewidths=power_mix_style["marker_linewidth"],
             clip_on=False,
         )
         label_ax.text(
-            0.19,
+            -0.18,
             0.5,
             marker_row["display_name"],
-            fontsize=7.5,
+            fontsize=power_mix_style["city_label_fontsize"],
             fontweight="bold",
             ha="left",
             va="center",
@@ -1992,7 +2004,7 @@ def plot_city_gef_distribution(
                 [0],
                 [share],
                 left=[left],
-                height=0.62,
+                height=power_mix_style["bar_height"],
                 color=POWER_MIX_COLORS[name],
                 edgecolor="white",
                 linewidth=0.45,
@@ -2004,7 +2016,9 @@ def plot_city_gef_distribution(
                     left + share / 2.0,
                     0,
                     f"{share:.0f}%",
-                    fontsize=7,
+                    fontsize=power_mix_style[
+                        "percentage_label_fontsize"
+                    ],
                     fontweight="bold",
                     color=(
                         "white"
@@ -2057,10 +2071,10 @@ def plot_city_gef_distribution(
         for name in legend_components
     ]
     legend_ax.text(
-        0.0,
+        -0.085,
         0.5,
         "Power mix",
-        fontsize=7,
+        fontsize=power_mix_style["legend_title_fontsize"],
         fontweight="bold",
         ha="left",
         va="center",
@@ -2069,10 +2083,10 @@ def plot_city_gef_distribution(
     legend_ax.legend(
         handles=legend_handles,
         loc="center left",
-        bbox_to_anchor=(0.20, 0.5),
+        bbox_to_anchor=(0.12, 0.5),
         ncol=5,
         frameon=False,
-        fontsize=6.5,
+        fontsize=power_mix_style["legend_fontsize"],
         handlelength=0.75,
         handletextpad=0.25,
         columnspacing=0.55,
@@ -2162,6 +2176,7 @@ def plot_city_gef_distribution(
                 "city_order": [
                     row["region_key"] for row in power_mix_rows
                 ],
+                "style": power_mix_style,
                 "percentage_label_threshold_pct": 12.0,
                 "axis_visible": False,
                 "rows": [

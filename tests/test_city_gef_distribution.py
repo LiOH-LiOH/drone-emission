@@ -74,6 +74,18 @@ def test_city_gef_distribution_writes_equal_city_kde_report(tmp_path):
     ]
     assert power_mix["percentage_label_threshold_pct"] == 12.0
     assert power_mix["axis_visible"] is False
+    assert power_mix["style"] == {
+        "row_hspace": 0.12,
+        "column_wspace": 0.03,
+        "label_bar_width_ratios": [0.23, 0.77],
+        "bar_height": 0.78,
+        "city_label_fontsize": 8.5,
+        "percentage_label_fontsize": 8.0,
+        "marker_size": 28.0,
+        "marker_linewidth": 1.0,
+        "legend_title_fontsize": 8.0,
+        "legend_fontsize": 7.5,
+    }
     assert [row["power_region_key"] for row in power_mix["rows"]] == [
         "sichuan",
         "guangdong",
