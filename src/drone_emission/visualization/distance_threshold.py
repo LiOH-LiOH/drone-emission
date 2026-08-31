@@ -74,7 +74,7 @@ DISTANCE_THRESHOLD_LABEL_OFFSETS = {
 }
 DISTANCE_THRESHOLD_COMPARISON_LABEL_OFFSETS = {
     1: {
-        "beijing": (12, -22),
+        "beijing": (12, 12),
         "shanghai": (-12, 20),
     },
 }
