@@ -10,6 +10,7 @@ import sys
 from pathlib import Path
 
 from .paper_workflow import (
+    compose,
     figure_required_outputs,
     load_manifest,
     promote,
@@ -489,7 +490,27 @@ def command_render(args: argparse.Namespace) -> None:
         print("Staged direct figures:")
         for path in staged:
             print(path)
-    print("Inkscape figures require manual assembly from manifest subfigures.")
+    print(
+        "Run `python -m drone_emission --env local compose` "
+        "to refresh Inkscape figures."
+    )
+
+
+def command_compose(args: argparse.Namespace) -> None:
+    paths = compose(
+        _config(args.env),
+        only=_split_ids(getattr(args, "only", None)),
+        prepare_links=bool(getattr(args, "prepare_links", False)),
+        force=bool(getattr(args, "force", False)),
+    )
+    if args.prepare_links:
+        for path in paths:
+            print(f"Linked subfigure ready: {path}")
+        print(f"Prepared {len(paths)} linked subfigure(s).")
+    elif paths:
+        print(f"Composed {len(paths)} formal figure(s).")
+    else:
+        print("All selected compositions are fresh.")
 
 
 def command_promote(args: argparse.Namespace) -> None:
@@ -664,6 +685,27 @@ def build_parser() -> argparse.ArgumentParser:
         help="ignore fresh render-request receipts",
     )
     render_parser.set_defaults(func=command_render)
+
+    compose_parser = subparsers.add_parser(
+        "compose",
+        help="compose linked subfigures through the formal Inkscape SVGs",
+    )
+    compose_parser.add_argument(
+        "--only",
+        action="append",
+        help="Inkscape manifest figure ID; comma-separated accepted",
+    )
+    compose_parser.add_argument(
+        "--prepare-links",
+        action="store_true",
+        help="convert subfigure PDFs to linked SVGs without exporting formal figures",
+    )
+    compose_parser.add_argument(
+        "--force",
+        action="store_true",
+        help="refresh linked SVGs and formal PDFs regardless of modification time",
+    )
+    compose_parser.set_defaults(func=command_compose)
 
     promote_parser = subparsers.add_parser("promote", help="publish all staged PDFs to docs/paper")
     promote_parser.add_argument("--yes", action="store_true")

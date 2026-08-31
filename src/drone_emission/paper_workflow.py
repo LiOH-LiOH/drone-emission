@@ -1,20 +1,27 @@
-"""Manifest-driven rendering and publication of the locked paper figures."""
+"""Manifest-driven rendering, composition, and publication of paper figures."""
 
 from __future__ import annotations
 
 import json
 import multiprocessing
 import shutil
+import subprocess
 import time
 import traceback
 from importlib.resources import files
 from pathlib import Path
+from urllib.parse import unquote, urlparse
+from xml.etree import ElementTree
 
 from .paper_cohort import cohort_hash
 from .paths import PROJECT_ROOT
 
 EXPECTED_FIGURE_COUNT = 11
 EXPECTED_RENDER_REQUEST_COUNT = 22
+LINKED_SUBFIGURE_DIR = (
+    PROJECT_ROOT / "figures" / "inkscape" / "linked-subfigures"
+)
+LINKED_SUBFIGURE_ROOT_ID = "linked-subfigure-root"
 
 
 def load_manifest() -> dict:
@@ -115,6 +122,19 @@ def select_figures(only: list[str] | None) -> list[dict]:
     return [index[figure_id] for figure_id in dict.fromkeys(only)]
 
 
+def select_inkscape_figures(only: list[str] | None) -> list[dict]:
+    """Select formal figures whose final layout is an Inkscape SVG."""
+    selected = select_figures(only)
+    direct = [
+        figure["id"] for figure in selected if figure["mode"] != "inkscape"
+    ]
+    if only and direct:
+        raise ValueError(
+            "compose accepts Inkscape figure IDs only: " + ", ".join(direct)
+        )
+    return [figure for figure in selected if figure["mode"] == "inkscape"]
+
+
 def select_requests(requests: list[str] | None) -> list[dict]:
     index = request_index()
     if not requests:
@@ -153,6 +173,200 @@ def _valid_pdf(path: Path) -> bool:
         return False
     with path.open("rb") as handle:
         return handle.read(5) == b"%PDF-"
+
+
+def _tool_path(name: str) -> Path:
+    resolved = shutil.which(name)
+    if resolved:
+        return Path(resolved)
+    if name == "inkscape":
+        application = Path("/Applications/Inkscape.app/Contents/MacOS/inkscape")
+        if application.is_file():
+            return application
+    raise FileNotFoundError(f"Required local command is unavailable: {name}")
+
+
+def _is_newer(source: Path, target: Path) -> bool:
+    return not target.is_file() or source.stat().st_mtime_ns > target.stat().st_mtime_ns
+
+
+def _linked_subfigure_names(svg_path: Path) -> set[str]:
+    """Return external SVG filenames linked from an Inkscape document."""
+    root = ElementTree.fromstring(svg_path.read_text(encoding="utf-8"))
+    names: set[str] = set()
+    for element in root.iter():
+        for attribute, value in element.attrib.items():
+            if attribute != "href" and not attribute.endswith("}href"):
+                continue
+            if value.startswith("data:"):
+                continue
+            path = unquote(urlparse(value).path)
+            if path.endswith(".svg"):
+                names.add(Path(path).name)
+    return names
+
+
+def _convert_linked_subfigure(
+    source: Path,
+    target: Path,
+    *,
+    pdftocairo: Path,
+) -> None:
+    target.parent.mkdir(parents=True, exist_ok=True)
+    temporary = target.with_suffix(".tmp.svg")
+    subprocess.run(
+        [str(pdftocairo), "-svg", str(source), str(temporary)],
+        check=True,
+    )
+    tree = ElementTree.parse(temporary)
+    tree.getroot().set("id", LINKED_SUBFIGURE_ROOT_ID)
+    tree.write(temporary, encoding="utf-8", xml_declaration=True)
+    temporary.replace(target)
+
+
+def _vector_export_source(source: Path, managed_names: set[str]) -> Path:
+    """Materialize linked SVG images as external vector uses for export."""
+    tree = ElementTree.parse(source)
+    converted: set[str] = set()
+    for element in tree.getroot().iter():
+        if element.tag.rsplit("}", 1)[-1] != "image":
+            continue
+        for attribute, value in list(element.attrib.items()):
+            if attribute != "href" and not attribute.endswith("}href"):
+                continue
+            if value.startswith("data:"):
+                continue
+            name = Path(unquote(urlparse(value).path)).name
+            if name not in managed_names:
+                continue
+            namespace = element.tag.rsplit("}", 1)[0]
+            element.tag = (
+                f"{namespace}}}use" if element.tag.startswith("{") else "use"
+            )
+            element.set(
+                attribute,
+                value.split("#", 1)[0] + f"#{LINKED_SUBFIGURE_ROOT_ID}",
+            )
+            converted.add(name)
+    missing = sorted(managed_names - converted)
+    if missing:
+        raise ValueError(
+            f"{source} is missing managed linked image(s): "
+            + ", ".join(missing)
+        )
+    temporary = source.with_name(f".{source.stem}.compose.tmp.svg")
+    tree.write(temporary, encoding="utf-8", xml_declaration=True)
+    return temporary
+
+
+def _export_inkscape_figure(
+    source: Path,
+    target: Path,
+    *,
+    inkscape: Path,
+) -> None:
+    target.parent.mkdir(parents=True, exist_ok=True)
+    temporary = target.with_suffix(".tmp.pdf")
+    subprocess.run(
+        [
+            str(inkscape),
+            str(source),
+            "--export-type=pdf",
+            f"--export-filename={temporary}",
+        ],
+        check=True,
+    )
+    if not _valid_pdf(temporary):
+        raise RuntimeError(f"Inkscape did not produce a valid PDF: {temporary}")
+    temporary.replace(target)
+
+
+def compose(
+    config: dict,
+    only: list[str] | None = None,
+    *,
+    prepare_links: bool = False,
+    force: bool = False,
+) -> list[Path]:
+    """Refresh linked panels and export the selected Inkscape figures."""
+    manifest = load_manifest()
+    selected = select_inkscape_figures(only)
+    figures_root = Path(config["figures_dir"])
+    subfigure_dir = figures_root / "paper" / "subfigure"
+    paper_dir = figures_root / "paper"
+    pdftocairo = _tool_path("pdftocairo")
+    inkscape = None if prepare_links else _tool_path("inkscape")
+    converted: dict[str, Path] = {}
+
+    for figure in selected:
+        for output in figure_required_outputs(figure, manifest):
+            source = subfigure_dir / output
+            if not _valid_pdf(source):
+                raise FileNotFoundError(
+                    f"{figure['id']} missing valid subfigure PDF: {source}. "
+                    "Run render first."
+                )
+            target = LINKED_SUBFIGURE_DIR / Path(output).with_suffix(".svg").name
+            if force or _is_newer(source, target):
+                _convert_linked_subfigure(source, target, pdftocairo=pdftocairo)
+            converted[output] = target
+
+    if prepare_links:
+        return list(dict.fromkeys(converted.values()))
+
+    staged: list[Path] = []
+    assert inkscape is not None
+    for figure in selected:
+        source = PROJECT_ROOT / figure["inkscape_source"]
+        if not source.is_file():
+            raise FileNotFoundError(f"Missing Inkscape source: {source}")
+        required_names = {
+            Path(output).with_suffix(".svg").name
+            for output in figure_required_outputs(figure, manifest)
+        }
+        linked_names = _linked_subfigure_names(source)
+        missing_links = sorted(required_names - linked_names)
+        if missing_links:
+            raise ValueError(
+                f"{figure['id']} source SVG is missing linked subfigure(s): "
+                + ", ".join(missing_links)
+                + ". Import them from figures/inkscape/linked-subfigures "
+                "using Link mode."
+            )
+        extra_names = {
+            name
+            for name in linked_names - required_names
+            if _valid_pdf(subfigure_dir / Path(name).with_suffix(".pdf"))
+            and (LINKED_SUBFIGURE_DIR / name).is_file()
+        }
+        for name in extra_names:
+            panel_pdf = subfigure_dir / Path(name).with_suffix(".pdf")
+            linked_svg = LINKED_SUBFIGURE_DIR / name
+            if force or _is_newer(panel_pdf, linked_svg):
+                _convert_linked_subfigure(
+                    panel_pdf,
+                    linked_svg,
+                    pdftocairo=pdftocairo,
+                )
+        managed_names = required_names | extra_names
+        target = paper_dir / Path(figure["staging"]).name
+        dependencies = [source] + [
+            converted[name]
+            for name in figure_required_outputs(figure, manifest)
+        ] + [LINKED_SUBFIGURE_DIR / name for name in sorted(extra_names)]
+        if force or not _valid_pdf(target) or any(
+            _is_newer(dependency, target) for dependency in dependencies
+        ):
+            export_source = _vector_export_source(source, managed_names)
+            try:
+                _export_inkscape_figure(export_source, target, inkscape=inkscape)
+            finally:
+                export_source.unlink(missing_ok=True)
+            print(f"Composed formal figure: {target}")
+            staged.append(target)
+        else:
+            print(f"Composition is fresh: {target}")
+    return staged
 
 
 def _declaration_root(config: dict, declaration: str) -> tuple[Path, str]:

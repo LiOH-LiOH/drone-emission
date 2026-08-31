@@ -28,12 +28,16 @@ The context also requires a matching cohort-view record. Renderers therefore
 cannot silently reintroduce excluded or newly configured cities.
 
 `render` accepts formal manifest IDs, not internal plot-function names. The
-eight `inkscape` entries generate required panels and reports only. The three
-`direct` entries additionally copy their renderer output to the formal staging
-filename. Missing inputs fail with a prerequisite-stage hint; render never
-invokes `analyze`, creates placeholders, or silently skips them. Derived inputs
-are produced only by an explicit prior `analyze` command. Formal rendering
-never rewrites city OD files or per-region statistics. The manifest
+eight `inkscape` entries generate required panels and reports; the local-only
+`compose` command converts those panel PDFs to external SVG links and exports
+the tracked Inkscape layouts to formal staging filenames. It never rewrites the
+master SVGs: linked image elements are changed to vector-preserving external
+SVG uses only in a temporary export copy. The three `direct` entries copy their
+renderer output to staging without composition. Missing inputs fail with a
+prerequisite-stage hint; render never invokes `analyze`, creates placeholders,
+or silently skips them.
+Derived inputs are produced only by an explicit prior `analyze` command. Formal
+rendering never rewrites city OD files or per-region statistics. The manifest
 records input contracts, render requests, required outputs, source reports,
 Inkscape sources, staging paths, and publication paths.
 

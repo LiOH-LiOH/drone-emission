@@ -11,6 +11,7 @@ Source code lives in `src/drone_emission/`. The package CLI is the active entry 
 - `python -m drone_emission --env local cohort`: audit the tracked paper-city sample after aggregation.
 - `python -m drone_emission --env local analyze`: build derived nationwide analysis inputs required by formal figures.
 - `python -m drone_emission --env local render [--only FIGURE_ID]`: render only manifest-backed paper figures.
+- `python -m drone_emission --env local compose [--only FIGURE_ID]`: refresh linked Inkscape panels and export formal staging PDFs.
 - `./entrypoint.sh --jobs 4 cities`: run the multi-city pipeline wrapper with four workers under the shared memory contract.
 - `bash scripts/log_summary.sh [logs/file.log]`: summarize a pipeline log.
 
@@ -20,7 +21,7 @@ Use Python 3.10+ and follow PEP 8 conventions: four-space indentation, `snake_ca
 ## Testing Guidelines
 There is no single default end-to-end test command for every change. Validate with the narrowest runnable workflow that matches the touched stage, and prefer static inspection when the user does not authorize Python execution. For pipeline work, use the package CLI such as `python -m drone_emission --env local cities --region <region> --no-fetch`, `aggregate`, `analyze`, or the manifest-backed `render`. Record the region, environment, and command used in PR notes when runtime validation is performed.
 
-Agent preference: do not run Python code, Python modules, tests, or local figure rendering unless the user explicitly asks for that validation. Use only the manifest-backed `python -m drone_emission render` command for formal figures. When preparing to run Python for checks or figure generation, ask first or skip and report that validation/rendering was not run.
+Agent preference: do not run Python code, Python modules, tests, or local figure rendering unless the user explicitly asks for that validation. Use only the manifest-backed `python -m drone_emission render` and `python -m drone_emission compose` commands for formal figures. When preparing to run Python for checks or figure generation, ask first or skip and report that validation/rendering was not run.
 
 Paper analyses must use the tracked cohort contract. Do not derive the paper
 sample directly from every city in `regions.json`, silently accept a changed
