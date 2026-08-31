@@ -74,8 +74,8 @@ DISTANCE_THRESHOLD_LABEL_OFFSETS = {
 }
 DISTANCE_THRESHOLD_COMPARISON_LABEL_OFFSETS = {
     1: {
-        "beijing": (-7, 9),
-        "shanghai": (7, -14),
+        "beijing": (12, -22),
+        "shanghai": (-12, 20),
     },
 }
 DISTANCE_THRESHOLD_POINT_COLOR = "#4C78A8"
@@ -330,6 +330,12 @@ def _plot_distance_threshold_all_city_scatter(
             fontweight="semibold",
             color="#222222",
             ha="right" if offset[0] < 0 else "left",
+            bbox={
+                "boxstyle": "square,pad=0.15",
+                "facecolor": "white",
+                "edgecolor": "none",
+                "alpha": 0.78,
+            },
             arrowprops={
                 "arrowstyle": "-",
                 "color": "#777777",
