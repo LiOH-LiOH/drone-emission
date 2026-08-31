@@ -44,7 +44,7 @@ no username is embedded in source code.
 Eight manifest entries declare Inkscape sources. Their rendered panel PDFs are
 converted into external SVG links by the local `compose` command. The tracked
 master SVGs remain the layout authority: `compose` reads but never rewrites
-them. For PDF export, linked image elements become external SVG `use` elements
+them. For PDF export, linked image elements are inlined as nested SVG elements
 in a temporary copy so the panel content remains vector; the temporary copy is
 then removed. Figure 4, Figure 5, and Extended Data Figure 6 are staged
 directly. `supplementary.tex` is retained but is outside this workflow and its

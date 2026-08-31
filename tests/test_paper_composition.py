@@ -1,5 +1,6 @@
 import os
 from pathlib import Path
+from xml.etree import ElementTree
 
 import pytest
 
@@ -55,6 +56,28 @@ def test_linked_subfigure_names_reads_external_links_only(tmp_path):
     assert paper_workflow._linked_subfigure_names(source) == {"panel.svg"}
 
 
+def test_namespace_linked_svg_ids_rewrites_local_references():
+    tree = ElementTree.ElementTree(
+        ElementTree.fromstring(
+            '<svg id="surface1">'
+            '<defs><path id="glyph-0-0"/><clipPath id="clip-0"/></defs>'
+            '<use href="#glyph-0-0" style="clip-path:url(#clip-0)"/>'
+            "</svg>"
+        )
+    )
+
+    root_id = paper_workflow._namespace_linked_svg_ids(tree, "panel.svg")
+    rendered = ElementTree.tostring(tree.getroot(), encoding="unicode")
+
+    assert root_id == "linked-subfigure-panel-root"
+    assert 'id="linked-subfigure-panel-root"' in rendered
+    assert 'id="linked-subfigure-panel-glyph-0-0"' in rendered
+    assert 'id="linked-subfigure-panel-clip-0"' in rendered
+    assert 'href="#linked-subfigure-panel-glyph-0-0"' in rendered
+    assert "url(#linked-subfigure-panel-clip-0)" in rendered
+    assert "url(#clip-0)" not in rendered
+
+
 def test_prepare_links_converts_subfigure_without_export(tmp_path, monkeypatch):
     project = tmp_path / "project"
     figures = tmp_path / "runtime-figures"
@@ -100,11 +123,19 @@ def test_compose_exports_when_master_is_newer(tmp_path, monkeypatch):
     _valid_pdf(panel_pdf)
     _valid_pdf(extra_pdf)
     linked_svg.parent.mkdir(parents=True, exist_ok=True)
-    linked_svg.write_text("<svg/>", encoding="utf-8")
-    extra_svg.write_text("<svg/>", encoding="utf-8")
+    linked_svg.write_text(
+        '<svg viewBox="0 0 10 10"><path id="panel-mark"/></svg>',
+        encoding="utf-8",
+    )
+    extra_svg.write_text(
+        '<svg viewBox="0 0 20 20"><path id="extra-mark"/></svg>',
+        encoding="utf-8",
+    )
     master.write_text(
         '<svg xmlns="http://www.w3.org/2000/svg">'
-        '<image href="linked-subfigures/panel.svg"/>'
+        '<image href="linked-subfigures/panel.svg" '
+        'x="5" y="6" width="10" height="11" '
+        'transform="translate(3,4)"/>'
         '<image href="linked-subfigures/extra.svg"/>'
         "</svg>",
         encoding="utf-8",
@@ -138,9 +169,12 @@ def test_compose_exports_when_master_is_newer(tmp_path, monkeypatch):
     assert outputs == [target]
     assert len(exported) == 1
     exported_svg, exported_target, exported_inkscape = exported[0]
-    assert "use" in exported_svg
-    assert "#linked-subfigure-root" in exported_svg
-    assert "extra.svg#linked-subfigure-root" in exported_svg
+    assert "panel-mark" in exported_svg
+    assert "extra-mark" in exported_svg
+    assert "linked-subfigures/panel.svg" not in exported_svg
+    assert "linked-subfigures/extra.svg" not in exported_svg
+    assert 'transform="translate(3,4)"' in exported_svg
+    assert 'x="5" y="6" width="10" height="11"' in exported_svg
     assert exported_target == target
     assert exported_inkscape == Path("inkscape")
     assert paper_workflow.compose({"figures_dir": str(figures)}) == []

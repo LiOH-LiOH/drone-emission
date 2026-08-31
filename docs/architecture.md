@@ -31,8 +31,8 @@ cannot silently reintroduce excluded or newly configured cities.
 eight `inkscape` entries generate required panels and reports; the local-only
 `compose` command converts those panel PDFs to external SVG links and exports
 the tracked Inkscape layouts to formal staging filenames. It never rewrites the
-master SVGs: linked image elements are changed to vector-preserving external
-SVG uses only in a temporary export copy. The three `direct` entries copy their
+master SVGs: linked image elements are inlined as nested SVG elements only in a
+temporary export copy. The three `direct` entries copy their
 renderer output to staging without composition. Missing inputs fail with a
 prerequisite-stage hint; render never invokes `analyze`, creates placeholders,
 or silently skips them.

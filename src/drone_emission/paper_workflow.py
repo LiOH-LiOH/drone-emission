@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import multiprocessing
+import re
 import shutil
 import subprocess
 import time
@@ -21,7 +22,7 @@ EXPECTED_RENDER_REQUEST_COUNT = 22
 LINKED_SUBFIGURE_DIR = (
     PROJECT_ROOT / "figures" / "inkscape" / "linked-subfigures"
 )
-LINKED_SUBFIGURE_ROOT_ID = "linked-subfigure-root"
+_LOCAL_URL_REFERENCE = re.compile(r"url\(#([^)]+)\)")
 
 
 def load_manifest() -> dict:
@@ -206,6 +207,54 @@ def _linked_subfigure_names(svg_path: Path) -> set[str]:
     return names
 
 
+def _linked_subfigure_prefix(name: str) -> str:
+    stem = Path(name).stem
+    safe_stem = re.sub(r"[^A-Za-z0-9_.-]+", "-", stem).strip("-.")
+    return f"linked-subfigure-{safe_stem or 'panel'}"
+
+
+def _rewrite_local_svg_references(value: str, id_map: dict[str, str]) -> str:
+    if value.startswith("#") and value[1:] in id_map:
+        value = f"#{id_map[value[1:]]}"
+    return _LOCAL_URL_REFERENCE.sub(
+        lambda match: f"url(#{id_map.get(match.group(1), match.group(1))})",
+        value,
+    )
+
+
+def _namespace_linked_svg_ids(tree: ElementTree.ElementTree, name: str) -> str:
+    """Make pdftocairo IDs unique before several SVGs share one document."""
+    root = tree.getroot()
+    prefix = _linked_subfigure_prefix(name)
+    root_id = f"{prefix}-root"
+    id_map: dict[str, str] = {}
+    for element in root.iter():
+        old_id = element.get("id")
+        if old_id:
+            id_map[old_id] = (
+                root_id if element is root else f"{prefix}-{old_id}"
+            )
+
+    for element in root.iter():
+        old_id = element.get("id")
+        if old_id:
+            element.set("id", id_map[old_id])
+        for attribute, value in list(element.attrib.items()):
+            if attribute == "id":
+                continue
+            element.set(
+                attribute,
+                _rewrite_local_svg_references(value, id_map),
+            )
+        if element.text and "url(#" in element.text:
+            element.text = _rewrite_local_svg_references(
+                element.text,
+                id_map,
+            )
+    root.set("id", root_id)
+    return root_id
+
+
 def _convert_linked_subfigure(
     source: Path,
     target: Path,
@@ -219,13 +268,13 @@ def _convert_linked_subfigure(
         check=True,
     )
     tree = ElementTree.parse(temporary)
-    tree.getroot().set("id", LINKED_SUBFIGURE_ROOT_ID)
+    _namespace_linked_svg_ids(tree, target.name)
     tree.write(temporary, encoding="utf-8", xml_declaration=True)
     temporary.replace(target)
 
 
 def _vector_export_source(source: Path, managed_names: set[str]) -> Path:
-    """Materialize linked SVG images as external vector uses for export."""
+    """Inline linked SVG images in a temporary vector export document."""
     tree = ElementTree.parse(source)
     converted: set[str] = set()
     for element in tree.getroot().iter():
@@ -239,15 +288,40 @@ def _vector_export_source(source: Path, managed_names: set[str]) -> Path:
             name = Path(unquote(urlparse(value).path)).name
             if name not in managed_names:
                 continue
+            linked_root = ElementTree.parse(
+                LINKED_SUBFIGURE_DIR / name
+            ).getroot()
             namespace = element.tag.rsplit("}", 1)[0]
+            svg_tag = (
+                f"{namespace}}}svg" if element.tag.startswith("{") else "svg"
+            )
+            nested_svg = ElementTree.Element(svg_tag)
+            for geometry_attribute in (
+                "x",
+                "y",
+                "width",
+                "height",
+                "preserveAspectRatio",
+            ):
+                if geometry_attribute in element.attrib:
+                    nested_svg.set(
+                        geometry_attribute,
+                        element.attrib.pop(geometry_attribute),
+                    )
             element.tag = (
-                f"{namespace}}}use" if element.tag.startswith("{") else "use"
+                f"{namespace}}}g" if element.tag.startswith("{") else "g"
             )
-            element.set(
-                attribute,
-                value.split("#", 1)[0] + f"#{LINKED_SUBFIGURE_ROOT_ID}",
-            )
+            for href_attribute in list(element.attrib):
+                if href_attribute == "href" or href_attribute.endswith("}href"):
+                    del element.attrib[href_attribute]
+            view_box = linked_root.get("viewBox")
+            if view_box:
+                nested_svg.set("viewBox", view_box)
+            nested_svg.text = linked_root.text
+            nested_svg.extend(list(linked_root))
+            element.append(nested_svg)
             converted.add(name)
+            break
     missing = sorted(managed_names - converted)
     if missing:
         raise ValueError(
