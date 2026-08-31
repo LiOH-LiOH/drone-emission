@@ -18,7 +18,7 @@ from .paper_cohort import cohort_hash
 from .paths import PROJECT_ROOT
 
 EXPECTED_FIGURE_COUNT = 11
-EXPECTED_RENDER_REQUEST_COUNT = 24
+EXPECTED_RENDER_REQUEST_COUNT = 25
 LINKED_SUBFIGURE_DIR = (
     PROJECT_ROOT / "figures" / "inkscape" / "linked-subfigures"
 )

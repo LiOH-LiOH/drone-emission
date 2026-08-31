@@ -23,9 +23,9 @@ def test_manifest_has_exact_locked_set():
         "inkscape",
     }
     assert sum(figure["mode"] == "direct" for figure in manifest["figures"]) == 3
-    assert manifest["render_request_count"] == 24
-    assert len(manifest["requests"]) == 24
-    assert sum(len(request["outputs"]) for request in manifest["requests"]) == 37
+    assert manifest["render_request_count"] == 25
+    assert len(manifest["requests"]) == 25
+    assert sum(len(request["outputs"]) for request in manifest["requests"]) == 38
     assert all(
         figure_required_inputs(figure, manifest)
         for figure in manifest["figures"]
@@ -39,7 +39,7 @@ def test_manifest_requests_exactly_match_registry():
         for figure in load_manifest()["figures"]
         for request in figure["render_requests"]
     ]
-    assert len(requests) == 24
+    assert len(requests) == 25
     assert len(requests) == len(set(requests))
     assert set(requests) == set(REQUEST_RENDERERS)
 
@@ -91,6 +91,16 @@ def test_city_gef_distribution_consumes_cohort_statistics_only():
         "all_region_stats_enriched.csv",
     ]
     assert request["outputs"] == ["city_gef_distribution.pdf"]
+
+
+def test_city_gef_lifecycle_components_consumes_cohort_statistics_only():
+    request = request_index()["city_gef_lifecycle_components"]
+    assert request["cache_version"] == 1
+    assert request["required_inputs"] == [
+        "all_region_stats.csv",
+        "all_region_stats_enriched.csv",
+    ]
+    assert request["outputs"] == ["city_gef_lifecycle_components.pdf"]
 
 
 def test_city_reduction_scatter_consumes_cohort_statistics_only():

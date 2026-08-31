@@ -1266,151 +1266,66 @@ def _report_axis(ax):
 
 def _city_gef_components_report(df, axes, grayscale=False):
     """Return exact plotted data for the GEF component panel."""
-    import numpy as np
+    from drone_emission.visualization.city_gef_support import (
+        _prepare_city_gef_component_data,
+    )
 
     ax, ax_dist = axes
-    gef_col = None
-    for candidate in ("grid_emission_factor", "gef"):
-        if candidate in df.columns and df[candidate].notna().any():
-            gef_col = candidate
-            break
-    if gef_col is None or "total_odpair_annual_sales" not in df.columns:
-        return {"status": "skipped", "reason": "missing GEF or sales column"}
-
-    vehicle_specs = [
-        {
-            "label": "E-bike",
-            "color": (
-                CITY_GEF_GRAYSCALE_VEHICLE_COLORS["E-bike"]
-                if grayscale
-                else "#4C8CBF"
-            ),
-            "offset": -0.18,
-            "use_col": "total_ebike_use_phase_emission_kg",
-            "production_col": "total_ebike_production_emission_kg",
-            "eol_col": "total_ebike_end_of_life_emission_kg",
-        },
-        {
-            "label": "Drone",
-            "color": (
-                CITY_GEF_GRAYSCALE_VEHICLE_COLORS["Drone"]
-                if grayscale
-                else "#E05C2B"
-            ),
-            "offset": 0.18,
-            "use_col": "total_drone_use_phase_emission_kg",
-            "production_col": "total_drone_production_emission_kg",
-            "eol_col": "total_drone_end_of_life_emission_kg",
-        },
-    ]
-    required_cols = ["total_odpair_annual_sales"]
-    for spec in vehicle_specs:
-        required_cols.extend([spec["use_col"], spec["production_col"], spec["eol_col"]])
-
-    plot_df = df.copy()
-    if "region_level" in plot_df.columns:
-        plot_df = plot_df[plot_df["region_level"] == "city"]
-    for col in [gef_col, *required_cols]:
-        plot_df[col] = pd.to_numeric(plot_df[col], errors="coerce")
-    plot_df = plot_df.dropna(subset=[gef_col, *required_cols])
-    valid_positive = (
-        (plot_df[gef_col] > 0)
-        & (plot_df[gef_col] <= 0.9)
-        & (plot_df["total_odpair_annual_sales"] > 0)
-    )
-    for spec in vehicle_specs:
-        valid_positive = (
-            valid_positive
-            & (plot_df[spec["use_col"]] > 0)
-            & (plot_df[spec["production_col"]] >= 0)
-            & (plot_df[spec["eol_col"]] >= 0)
+    try:
+        component_data = _prepare_city_gef_component_data(
+            df,
+            grayscale=grayscale,
         )
-    plot_df = plot_df[valid_positive]
+    except ValueError as error:
+        return {"status": "skipped", "reason": str(error)}
 
-    bin_width = 0.1
-    bin_edges = np.linspace(0.0, 0.9, 10)
-    labels = [f"{right:.1f}" for right in bin_edges[1:]]
-    plot_df["gef_range"] = pd.cut(
-        plot_df[gef_col],
-        bins=bin_edges,
-        labels=labels,
-        include_lowest=True,
-        right=True,
-    )
-    x_all = (bin_edges[:-1] + bin_edges[1:]) / 2.0
-
-    bars = []
-    bins = []
-    for idx, label in enumerate(labels):
-        group = plot_df[plot_df["gef_range"] == label]
-        if group.empty:
-            continue
-        orders_sum = group["total_odpair_annual_sales"].sum()
-        bin_record = {
-            "label_right_edge": label,
-            "bin_left": _report_number(bin_edges[idx]),
-            "bin_right": _report_number(bin_edges[idx + 1]),
-            "bin_center": _report_number(x_all[idx]),
-            "city_count": int(len(group)),
-            "orders_sum": _report_number(orders_sum),
+    bar_width = component_data["bin_width"] * 0.28
+    bars = [
+        {
+            "vehicle": bar["vehicle"],
+            "color": bar["color"],
+            "bin_label_right_edge": bar["bin_label_right_edge"],
+            "x_center": _report_number(bar["x_center"]),
+            "width": _report_number(bar_width),
+            "production_eol_segment": {
+                "bottom": 0.0,
+                "height_g_co2e_per_order": _report_number(
+                    bar["production_eol"]
+                ),
+                "top": _report_number(bar["production_eol"]),
+                "alpha": 1.0 if grayscale else 0.38,
+                "hatch": "////" if grayscale else None,
+                "edgecolor": "#222222" if grayscale else "white",
+            },
+            "use_phase_segment": {
+                "bottom": _report_number(bar["production_eol"]),
+                "height_g_co2e_per_order": _report_number(
+                    bar["use_phase"]
+                ),
+                "top": _report_number(bar["total"]),
+                "alpha": 1.0 if grayscale else 0.88,
+                "hatch": None,
+                "edgecolor": "#222222" if grayscale else "white",
+            },
+            "total_label": {
+                "x": _report_number(bar["x_center"]),
+                "y": _report_number(bar["total"]),
+                "text": f'{bar["total"]:.1f}',
+                "rotation": 90,
+            },
+            "orders_sum": _report_number(bar["orders_sum"]),
+            "city_count": int(bar["city_count"]),
         }
-        bins.append(bin_record)
-        for spec in vehicle_specs:
-            fixed = (
-                (group[spec["production_col"]].sum() + group[spec["eol_col"]].sum())
-                / orders_sum
-                * 1000.0
-            )
-            use = group[spec["use_col"]].sum() / orders_sum * 1000.0
-            x_center = x_all[idx] + spec["offset"] * bin_width
-            bars.append(
-                {
-                    "vehicle": spec["label"],
-                    "color": spec["color"],
-                    "bin_label_right_edge": label,
-                    "x_center": _report_number(x_center),
-                    "width": _report_number(bin_width * 0.28),
-                    "production_eol_segment": {
-                        "bottom": 0.0,
-                        "height_g_co2e_per_order": _report_number(fixed),
-                        "top": _report_number(fixed),
-                        "alpha": 1.0 if grayscale else 0.38,
-                        "hatch": "////" if grayscale else None,
-                        "edgecolor": "#222222" if grayscale else "white",
-                    },
-                    "use_phase_segment": {
-                        "bottom": _report_number(fixed),
-                        "height_g_co2e_per_order": _report_number(use),
-                        "top": _report_number(fixed + use),
-                        "alpha": 1.0 if grayscale else 0.88,
-                        "hatch": None,
-                        "edgecolor": "#222222" if grayscale else "white",
-                    },
-                    "total_label": {
-                        "x": _report_number(x_center),
-                        "y": _report_number(fixed + use),
-                        "text": f"{fixed + use:.1f}",
-                        "rotation": 90,
-                    },
-                    "orders_sum": _report_number(orders_sum),
-                    "city_count": int(len(group)),
-                }
-            )
-
-    density_x = plot_df[gef_col].to_numpy(dtype=float)
-    if len(density_x) > 5 and np.unique(density_x).size > 1:
-        from scipy.stats import gaussian_kde
-
-        x_violin = np.linspace(bin_edges[0], bin_edges[-1], 240)
-        density = gaussian_kde(density_x)(x_violin)
-    else:
-        x_violin = x_all
-        density = np.array(
-            [len(plot_df[plot_df["gef_range"] == label]) for label in labels],
-            dtype=float,
-        )
-    if density.size and density.max() > 0:
-        density = density / density.max()
+        for bar in component_data["bars"]
+    ]
+    bins = [
+        {
+            key: _report_number(value) if isinstance(value, float) else value
+            for key, value in bin_record.items()
+            if key != "index"
+        }
+        for bin_record in component_data["bins"]
+    ]
 
     return {
         "status": "drawn",
@@ -1424,18 +1339,21 @@ def _city_gef_components_report(df, axes, grayscale=False):
             "stacked_bars": _report_axis(ax),
             "gef_density": _report_axis(ax_dist),
         },
-        "gef_column": gef_col,
-        "bin_width": bin_width,
-        "bin_edges": _report_array(bin_edges),
+        "gef_column": component_data["gef_col"],
+        "bin_width": component_data["bin_width"],
+        "bin_edges": _report_array(component_data["bin_edges"]),
         "bins": bins,
         "bars": bars,
         "density_curve": [
             {"x": _report_number(x), "y": _report_number(y)}
-            for x, y in zip(x_violin, density)
+            for x, y in zip(
+                component_data["density_curve_x"],
+                component_data["density_curve_y"],
+            )
         ],
         "city_rug_marks": [
             {"x": _report_number(x), "y": 0.0}
-            for x in density_x
+            for x in component_data["density_x"]
         ],
     }
 
@@ -2233,6 +2151,325 @@ def plot_city_gef_distribution(
         write_figure_report(report_path, report)
         print(f"City GEF distribution report saved to {report_path}")
         print(f"City GEF distribution saved to {output_path}")
+    else:
+        plt.show()
+    plt.close(fig)
+    return output_path
+
+
+def plot_city_gef_lifecycle_components(
+    df: pd.DataFrame,
+    save_path: str = None,
+    figsize: tuple = (3.7, 4.2),
+    for_latex: bool = False,
+    plot_title: bool = False,
+):
+    """Plot GEF-binned lifecycle components without the density strip."""
+    import matplotlib as mpl
+    import matplotlib.pyplot as plt
+    import numpy as np
+    from matplotlib.patches import Patch
+
+    from drone_emission.visualization._utils import (
+        _add_title_suffix,
+        write_figure_report,
+    )
+    from drone_emission.visualization.city_gef_support import (
+        _prepare_city_gef_component_data,
+    )
+
+    mpl.rcParams.update(
+        {
+            "font.family": "sans-serif",
+            "font.sans-serif": [
+                "Arial",
+                "Helvetica",
+                "DejaVu Sans",
+                "sans-serif",
+            ],
+            "svg.fonttype": "none",
+            "pdf.fonttype": 42,
+        }
+    )
+    component_data = _prepare_city_gef_component_data(df)
+    style = {
+        "x_domain": [0.1, 0.8],
+        "bar_width_gef": 0.032,
+        "axis_label_fontsize": 8.5,
+        "tick_fontsize": 8.0,
+        "total_label_fontsize": 8.0,
+        "total_label_rotation": 90,
+        "legend_title_fontsize": 8.0,
+        "legend_fontsize": 7.5,
+        "grid_alpha": 0.18,
+    }
+
+    fig = plt.figure(figsize=figsize)
+    layout = fig.add_gridspec(
+        2,
+        1,
+        height_ratios=[1.0, 0.18],
+        hspace=0.08,
+        left=0.18,
+        right=0.98,
+        bottom=0.055,
+        top=0.97,
+    )
+    ax = fig.add_subplot(layout[0])
+    legend_ax = fig.add_subplot(layout[1])
+    legend_ax.set_axis_off()
+
+    max_total = max(bar["total"] for bar in component_data["bars"])
+    for spec in component_data["vehicle_specs"]:
+        bars = [
+            bar
+            for bar in component_data["bars"]
+            if bar["vehicle"] == spec["label"]
+        ]
+        positions = np.array([bar["x_center"] for bar in bars], dtype=float)
+        production_eol = np.array(
+            [bar["production_eol"] for bar in bars], dtype=float
+        )
+        use_phase = np.array(
+            [bar["use_phase"] for bar in bars], dtype=float
+        )
+        ax.bar(
+            positions,
+            production_eol,
+            width=style["bar_width_gef"],
+            color=spec["color"],
+            alpha=0.38,
+            edgecolor="white",
+            linewidth=0.6,
+            zorder=3,
+        )
+        ax.bar(
+            positions,
+            use_phase,
+            width=style["bar_width_gef"],
+            bottom=production_eol,
+            color=spec["color"],
+            alpha=0.88,
+            edgecolor="white",
+            linewidth=0.6,
+            zorder=3,
+        )
+        for bar in bars:
+            ax.text(
+                bar["x_center"],
+                bar["total"],
+                f'{bar["total"]:.1f}',
+                ha="center",
+                va="bottom",
+                fontsize=style["total_label_fontsize"],
+                color="0.25",
+                rotation=style["total_label_rotation"],
+                zorder=5,
+            )
+
+    ax.set_xlim(*style["x_domain"])
+    ax.set_xticks(np.arange(0.1, 0.81, 0.1))
+    ax.set_ylim(0.0, max_total * 1.22)
+    ax.set_xlabel(
+        "Grid Emission Factor (kg CO$_2$e/kWh)",
+        fontsize=style["axis_label_fontsize"],
+    )
+    ax.set_ylabel(
+        "Lifecycle emission\n(g CO$_2$e/order)",
+        fontsize=style["axis_label_fontsize"],
+    )
+    ax.tick_params(
+        axis="both",
+        labelsize=style["tick_fontsize"],
+        length=2.5,
+        pad=1.5,
+    )
+    ax.grid(
+        True,
+        axis="y",
+        alpha=style["grid_alpha"],
+        linestyle="--",
+        linewidth=0.45,
+    )
+    ax.set_axisbelow(True)
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+    ax.spines["left"].set_linewidth(0.8)
+    ax.spines["bottom"].set_linewidth(0.8)
+
+    vehicle_handles = [
+        Patch(
+            facecolor=spec["color"],
+            alpha=0.88,
+            edgecolor="white",
+            label=spec["label"],
+        )
+        for spec in component_data["vehicle_specs"]
+    ]
+    component_handles = [
+        Patch(
+            facecolor="#777777",
+            alpha=0.38,
+            edgecolor="#555555",
+            label="Production + EOL",
+        ),
+        Patch(
+            facecolor="#777777",
+            alpha=0.88,
+            edgecolor="#555555",
+            label="Use phase",
+        ),
+    ]
+    legend_ax.text(
+        0.0,
+        0.72,
+        "Vehicle",
+        fontsize=style["legend_title_fontsize"],
+        fontweight="bold",
+        ha="left",
+        va="center",
+        transform=legend_ax.transAxes,
+    )
+    vehicle_legend = legend_ax.legend(
+        handles=vehicle_handles,
+        loc="center left",
+        bbox_to_anchor=(0.22, 0.72),
+        ncol=2,
+        frameon=False,
+        fontsize=style["legend_fontsize"],
+        handlelength=0.9,
+        handletextpad=0.35,
+        columnspacing=0.8,
+        borderaxespad=0.0,
+    )
+    legend_ax.add_artist(vehicle_legend)
+    legend_ax.text(
+        0.0,
+        0.20,
+        "Component",
+        fontsize=style["legend_title_fontsize"],
+        fontweight="bold",
+        ha="left",
+        va="center",
+        transform=legend_ax.transAxes,
+    )
+    legend_ax.legend(
+        handles=component_handles,
+        loc="center left",
+        bbox_to_anchor=(0.30, 0.20),
+        ncol=2,
+        frameon=False,
+        fontsize=style["legend_fontsize"],
+        handlelength=0.9,
+        handletextpad=0.35,
+        columnspacing=0.8,
+        borderaxespad=0.0,
+    )
+
+    if plot_title:
+        ax.set_title(
+            "Lifecycle Emission Components by Grid Emission Factor",
+            fontsize=9,
+            fontweight="bold",
+        )
+
+    output_path = save_path
+    if output_path:
+        if for_latex and not output_path.endswith(".pdf"):
+            output_path = output_path.rsplit(".", 1)[0] + ".pdf"
+        if plot_title:
+            output_path = _add_title_suffix(output_path)
+        output_dir = os.path.dirname(output_path)
+        if output_dir:
+            os.makedirs(output_dir, exist_ok=True)
+        fig.canvas.draw()
+        fig.savefig(
+            output_path,
+            dpi=300,
+            bbox_inches=fig.bbox_inches,
+            pad_inches=0.0,
+        )
+        report_bars = [
+            {
+                "vehicle": bar["vehicle"],
+                "color": bar["color"],
+                "bin_label_right_edge": bar["bin_label_right_edge"],
+                "x_center": float(bar["x_center"]),
+                "width": style["bar_width_gef"],
+                "production_eol_segment": {
+                    "bottom": 0.0,
+                    "height_g_co2e_per_order": float(
+                        bar["production_eol"]
+                    ),
+                    "top": float(bar["production_eol"]),
+                    "alpha": 0.38,
+                },
+                "use_phase_segment": {
+                    "bottom": float(bar["production_eol"]),
+                    "height_g_co2e_per_order": float(bar["use_phase"]),
+                    "top": float(bar["total"]),
+                    "alpha": 0.88,
+                },
+                "total_label": {
+                    "text": f'{bar["total"]:.1f}',
+                    "rotation": style["total_label_rotation"],
+                },
+                "orders_sum": float(bar["orders_sum"]),
+                "city_count": int(bar["city_count"]),
+            }
+            for bar in component_data["bars"]
+        ]
+        omitted_elements = [
+            "GEF density strip",
+            "city rug marks",
+            "panel letter",
+        ]
+        if not plot_title:
+            omitted_elements.append("title")
+        report = {
+            "schema_version": 1,
+            "figure_id": "city_gef_lifecycle_components",
+            "core_conclusion": (
+                "Sales-weighted per-order lifecycle emissions vary across "
+                "GEF bins for e-bikes and drones, with fixed and use-phase "
+                "components contributing differently."
+            ),
+            "figure_size_inches": [float(figsize[0]), float(figsize[1])],
+            "aggregation": (
+                "sum of lifecycle-component emissions divided by sum of "
+                "annual orders within each GEF bin"
+            ),
+            "gef_column": component_data["gef_col"],
+            "input_city_count": component_data["input_city_count"],
+            "valid_city_count": component_data["valid_city_count"],
+            "excluded_city_count": component_data["excluded_city_count"],
+            "bin_width": component_data["bin_width"],
+            "bin_edges": [
+                float(value) for value in component_data["bin_edges"]
+            ],
+            "populated_bins": [
+                {
+                    key: value
+                    for key, value in bin_record.items()
+                    if key != "index"
+                }
+                for bin_record in component_data["bins"]
+            ],
+            "bars": report_bars,
+            "axis": _report_axis(ax),
+            "legend_axis": _report_axis(legend_ax),
+            "legends": {
+                "placement": "below_chart_two_rows",
+                "vehicle": ["E-bike", "Drone"],
+                "component": ["Production + EOL", "Use phase"],
+            },
+            "style": style,
+            "omitted_elements": omitted_elements,
+        }
+        report_path = output_path.rsplit(".", 1)[0] + "_report.json"
+        write_figure_report(report_path, report)
+        print(f"City GEF lifecycle components report saved to {report_path}")
+        print(f"City GEF lifecycle components saved to {output_path}")
     else:
         plt.show()
     plt.close(fig)

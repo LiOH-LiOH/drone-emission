@@ -344,34 +344,24 @@ def _plot_grouped_scatter_split_panels_axes(
     return ax_low, cbar_ax, ax_high
 
 
-def _plot_city_gef_scatter_components_axes(
-    fig,
-    subplot_spec,
+def _prepare_city_gef_component_data(
     df: pd.DataFrame,
-    plot_title: bool = False,
-    compact: bool = False,
-    show_legend: bool = True,
     grayscale: bool = False,
-):
-    """Draw GEF-binned per-order emission components into a parent subplot spec."""
-    gef_col = None
-    for candidate in ("grid_emission_factor", "gef"):
-        if candidate in df.columns and df[candidate].notna().any():
-            gef_col = candidate
-            break
-
+) -> dict:
+    """Prepare shared GEF-bin lifecycle-component values."""
+    gef_col = next(
+        (
+            candidate
+            for candidate in ("grid_emission_factor", "gef")
+            if candidate in df.columns and df[candidate].notna().any()
+        ),
+        None,
+    )
     if gef_col is None:
-        print(
-            "City GEF stacked components skipped - "
-            "missing grid_emission_factor or gef column"
+        raise ValueError(
+            "City GEF lifecycle components require "
+            "grid_emission_factor or gef"
         )
-        return None
-    if "total_odpair_annual_sales" not in df.columns:
-        print(
-            "City GEF stacked components skipped - "
-            "missing total_odpair_annual_sales column"
-        )
-        return None
 
     vehicle_specs = [
         {
@@ -393,44 +383,46 @@ def _plot_city_gef_scatter_components_axes(
     ]
     required_cols = ["total_odpair_annual_sales"]
     for spec in vehicle_specs:
-        required_cols.extend([spec["use_col"], spec["production_col"], spec["eol_col"]])
-
-    missing = [col for col in required_cols if col not in df.columns]
+        required_cols.extend(
+            [spec["use_col"], spec["production_col"], spec["eol_col"]]
+        )
+    missing = sorted(set(required_cols) - set(df.columns))
     if missing:
-        print(f"City GEF stacked components skipped - missing columns {missing}")
-        return None
+        raise ValueError(
+            "City GEF lifecycle components require columns: "
+            + ", ".join(missing)
+        )
 
     plot_df = df.copy()
     if "region_level" in plot_df.columns:
-        plot_df = plot_df[plot_df["region_level"] == "city"]
-
-    numeric_cols = [gef_col] + required_cols
-    for col in numeric_cols:
+        plot_df = plot_df[plot_df["region_level"].eq("city")].copy()
+    input_city_count = int(len(plot_df))
+    for col in [gef_col, *required_cols]:
         plot_df[col] = pd.to_numeric(plot_df[col], errors="coerce")
-    plot_df = plot_df.dropna(subset=numeric_cols)
-    valid_positive = (
-        (plot_df[gef_col] > 0)
-        & (plot_df[gef_col] <= 0.9)
-        & (plot_df["total_odpair_annual_sales"] > 0)
+    complete_mask = plot_df[[gef_col, *required_cols]].notna().all(axis=1)
+    valid_mask = (
+        complete_mask
+        & plot_df[gef_col].gt(0)
+        & plot_df[gef_col].le(0.9)
+        & plot_df["total_odpair_annual_sales"].gt(0)
     )
     for spec in vehicle_specs:
-        valid_positive = (
-            valid_positive
-            & (plot_df[spec["use_col"]] > 0)
-            & (plot_df[spec["production_col"]] >= 0)
-            & (plot_df[spec["eol_col"]] >= 0)
+        valid_mask = (
+            valid_mask
+            & plot_df[spec["use_col"]].gt(0)
+            & plot_df[spec["production_col"]].ge(0)
+            & plot_df[spec["eol_col"]].ge(0)
         )
-    plot_df = plot_df[valid_positive]
+    plot_df = plot_df.loc[valid_mask].copy()
     if plot_df.empty:
-        print(
-            "City GEF stacked components skipped - "
-            "no valid city GEF/emission values"
+        raise ValueError(
+            "City GEF lifecycle components have no valid city rows"
         )
-        return None
 
     bin_width = 0.1
     bin_edges = np.linspace(0.0, 0.9, 10)
     labels = [f"{right:.1f}" for right in bin_edges[1:]]
+    x_all = (bin_edges[:-1] + bin_edges[1:]) / 2.0
     plot_df["gef_range"] = pd.cut(
         plot_df[gef_col],
         bins=bin_edges,
@@ -439,18 +431,118 @@ def _plot_city_gef_scatter_components_axes(
         right=True,
     )
 
-    bin_groups = []
-    bin_positions = []
-    for idx, label in enumerate(labels):
-        group = plot_df[plot_df["gef_range"] == label]
+    bins = []
+    bars = []
+    for index, label in enumerate(labels):
+        group = plot_df[plot_df["gef_range"].eq(label)]
         if group.empty:
             continue
-        bin_groups.append(group)
-        bin_positions.append(idx)
+        orders_sum = float(group["total_odpair_annual_sales"].sum())
+        bins.append(
+            {
+                "index": index,
+                "label_right_edge": label,
+                "bin_left": float(bin_edges[index]),
+                "bin_right": float(bin_edges[index + 1]),
+                "bin_center": float(x_all[index]),
+                "city_count": int(len(group)),
+                "orders_sum": orders_sum,
+            }
+        )
+        for spec in vehicle_specs:
+            production_eol = float(
+                (
+                    group[spec["production_col"]].sum()
+                    + group[spec["eol_col"]].sum()
+                )
+                / orders_sum
+                * 1000.0
+            )
+            use_phase = float(
+                group[spec["use_col"]].sum() / orders_sum * 1000.0
+            )
+            bars.append(
+                {
+                    "vehicle": spec["label"],
+                    "color": spec["color"],
+                    "bin_index": index,
+                    "bin_label_right_edge": label,
+                    "x_center": float(
+                        x_all[index] + spec["offset"] * bin_width
+                    ),
+                    "production_eol": production_eol,
+                    "use_phase": use_phase,
+                    "total": production_eol + use_phase,
+                    "orders_sum": orders_sum,
+                    "city_count": int(len(group)),
+                }
+            )
 
-    if not bin_groups:
-        print("City GEF stacked components skipped - no cities in GEF ranges")
+    if not bins:
+        raise ValueError(
+            "City GEF lifecycle components have no populated GEF bins"
+        )
+
+    density_x = plot_df[gef_col].to_numpy(dtype=float)
+    if len(density_x) > 5 and np.unique(density_x).size > 1:
+        x_density = np.linspace(bin_edges[0], bin_edges[-1], 240)
+        density = stats.gaussian_kde(density_x)(x_density)
+    else:
+        x_density = x_all
+        density = np.array(
+            [
+                len(plot_df[plot_df["gef_range"].eq(label)])
+                for label in labels
+            ],
+            dtype=float,
+        )
+    if density.size and density.max() > 0:
+        density = density / density.max()
+
+    return {
+        "gef_col": gef_col,
+        "input_city_count": input_city_count,
+        "valid_city_count": int(len(plot_df)),
+        "excluded_city_count": input_city_count - int(len(plot_df)),
+        "plot_df": plot_df,
+        "vehicle_specs": vehicle_specs,
+        "required_columns": required_cols,
+        "bin_width": bin_width,
+        "bin_edges": bin_edges,
+        "labels": labels,
+        "x_all": x_all,
+        "bins": bins,
+        "bars": bars,
+        "density_x": density_x,
+        "density_curve_x": x_density,
+        "density_curve_y": density,
+    }
+
+
+def _plot_city_gef_scatter_components_axes(
+    fig,
+    subplot_spec,
+    df: pd.DataFrame,
+    plot_title: bool = False,
+    compact: bool = False,
+    show_legend: bool = True,
+    grayscale: bool = False,
+):
+    """Draw GEF-binned per-order emission components into a parent subplot spec."""
+    try:
+        component_data = _prepare_city_gef_component_data(
+            df,
+            grayscale=grayscale,
+        )
+    except ValueError as error:
+        print(f"City GEF stacked components skipped - {error}")
         return None
+
+    gef_col = component_data["gef_col"]
+    vehicle_specs = component_data["vehicle_specs"]
+    bin_width = component_data["bin_width"]
+    bin_edges = component_data["bin_edges"]
+    bars = component_data["bars"]
 
     gs = subplot_spec.subgridspec(
         2,
@@ -460,9 +552,7 @@ def _plot_city_gef_scatter_components_axes(
     )
     ax = fig.add_subplot(gs[0])
     ax_dist = fig.add_subplot(gs[1], sharex=ax)
-    x_all = (bin_edges[:-1] + bin_edges[1:]) / 2.0
     tick_labels = [f"{edge:.1f}" for edge in bin_edges]
-    x = x_all[np.array(bin_positions, dtype=int)]
     width = bin_width * 0.28
     max_total = 0.0
     legend_handles = [
@@ -487,21 +577,21 @@ def _plot_city_gef_scatter_components_axes(
     ]
 
     for spec in vehicle_specs:
-        positions = x + spec["offset"] * bin_width
-        fixed_values = []
-        use_values = []
-        for group in bin_groups:
-            orders_sum = group["total_odpair_annual_sales"].sum()
-            fixed_values.append(
-                (group[spec["production_col"]].sum() + group[spec["eol_col"]].sum())
-                / orders_sum
-                * 1000.0
-            )
-            use_values.append(group[spec["use_col"]].sum() / orders_sum * 1000.0)
-
-        fixed_values = np.array(fixed_values, dtype=float)
-        use_values = np.array(use_values, dtype=float)
-        totals = fixed_values + use_values
+        vehicle_bars = [
+            bar for bar in bars if bar["vehicle"] == spec["label"]
+        ]
+        positions = np.array(
+            [bar["x_center"] for bar in vehicle_bars], dtype=float
+        )
+        fixed_values = np.array(
+            [bar["production_eol"] for bar in vehicle_bars], dtype=float
+        )
+        use_values = np.array(
+            [bar["use_phase"] for bar in vehicle_bars], dtype=float
+        )
+        totals = np.array(
+            [bar["total"] for bar in vehicle_bars], dtype=float
+        )
         if totals.size:
             max_total = max(max_total, float(totals.max()))
 
@@ -614,20 +704,9 @@ def _plot_city_gef_scatter_components_axes(
             title_fontsize=7 if compact else 9,
         )
 
-    density_x = plot_df[gef_col].to_numpy(dtype=float)
-    if len(density_x) > 5 and np.unique(density_x).size > 1:
-        from scipy.stats import gaussian_kde
-
-        x_violin = np.linspace(bin_edges[0], bin_edges[-1], 240)
-        density = gaussian_kde(density_x)(x_violin)
-    else:
-        x_violin = x_all
-        density = np.array(
-            [len(plot_df[plot_df["gef_range"] == label]) for label in labels],
-            dtype=float,
-        )
-    if density.max() > 0:
-        density = density / density.max()
+    density_x = component_data["density_x"]
+    x_violin = component_data["density_curve_x"]
+    density = component_data["density_curve_y"]
 
     ax_dist.fill_between(
         x_violin,
