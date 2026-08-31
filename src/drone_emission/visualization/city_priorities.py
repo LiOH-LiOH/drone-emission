@@ -929,8 +929,10 @@ def plot_regions_map_oracle_reduction_rank(
     if bubble_df.empty:
         print("Regions map oracle reduction rank skipped — no valid bubble positions")
         return
-    bubble_draw_df = bubble_df.sort_values("_bubble_size", ascending=True)
     is_map_only_figure = figure_name == ORACLE_REDUCTION_MAP_ONLY_FIGURE
+    bubble_area_scale = 1.5 if is_map_only_figure else 1.0
+    bubble_df["_bubble_size"] *= bubble_area_scale
+    bubble_draw_df = bubble_df.sort_values("_bubble_size", ascending=True)
 
     if is_map_only_figure:
         fig = plt.figure(figsize=figsize)
@@ -1038,6 +1040,8 @@ def plot_regions_map_oracle_reduction_rank(
     size_legend = _draw_bubble_size_legend(
         ax_map,
         bubble_df[reduction_col],
+        size_min=6.0 * bubble_area_scale,
+        size_max=130.0 * bubble_area_scale,
         **size_legend_kwargs,
     )
     if size_legend is not None:
@@ -1202,7 +1206,7 @@ def plot_regions_map_oracle_reduction_rank_map_only(
     df_stats: "pd.DataFrame",
     stats_csv_path: str,
     save_path: str = None,
-    figsize: tuple = (6.55, 4.90),
+    figsize: tuple = (4.585, 3.43),
     for_latex: bool = False,
     plot_title: bool = False,
 ):
