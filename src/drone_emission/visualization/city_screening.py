@@ -8,7 +8,11 @@ import numpy as np
 import pandas as pd
 
 from drone_emission.analysis.constants import (
-    CITY_REDUCTION_SCATTER_LABELED_CITIES,
+    ORACLE_REDUCTION_LABEL_CITIES,
+)
+from drone_emission.visualization._utils import (
+    _add_title_suffix,
+    write_figure_report,
 )
 
 ABSOLUTE_REDUCTION_COL = "annual_absolute_reduction_t_co2e"
@@ -48,12 +52,12 @@ def _reduction_metrics(df: pd.DataFrame) -> pd.DataFrame:
 def plot_city_reduction_potential_scatter(
     df: pd.DataFrame,
     save_path: str = None,
-    figsize: tuple = (130.5 / 25.4, 100 / 25.4),
+    figsize: tuple = (1.965, 3.43),
     for_latex: bool = False,
+    plot_title: bool = False,
 ):
     """Plot absolute against relative city emission-reduction potential."""
     import matplotlib.pyplot as plt
-    from matplotlib.lines import Line2D
 
     plt.rcParams.update(
         {
@@ -73,37 +77,60 @@ def plot_city_reduction_potential_scatter(
     relative_median = float(plot_df[RELATIVE_REDUCTION_COL].median())
 
     fig, ax = plt.subplots(figsize=figsize)
-    fig.subplots_adjust(left=0.14, right=0.98, bottom=0.16, top=0.98)
+    fig.subplots_adjust(
+        left=0.31,
+        right=0.97,
+        bottom=0.16,
+        top=0.91 if plot_title else 0.98,
+    )
     ax.scatter(
         plot_df[ABSOLUTE_REDUCTION_COL],
         plot_df[RELATIVE_REDUCTION_COL],
-        s=30,
-        alpha=0.72,
+        s=18,
+        alpha=0.68,
         color="#737373",
         edgecolor="white",
-        linewidth=0.35,
+        linewidth=0.3,
         zorder=3,
     )
-    ax.axhline(relative_median, color="#666666", linestyle="--", linewidth=1)
-    ax.axvline(absolute_median, color="#666666", linestyle="--", linewidth=1)
+    ax.axhline(
+        relative_median,
+        color="#666666",
+        linestyle="--",
+        linewidth=0.75,
+        zorder=2,
+    )
+    ax.axvline(
+        absolute_median,
+        color="#666666",
+        linestyle="--",
+        linewidth=0.75,
+        zorder=2,
+    )
     ax.set_xscale("log")
+    ax.set_ylim(0.0, 50.0)
 
     name_col = "region_name_en" if "region_name_en" in plot_df else "region_key"
-    labeled_city_order = tuple(
-        city_name for city_name, _ in CITY_REDUCTION_SCATTER_LABELED_CITIES
+    labeled = plot_df[plot_df[name_col].isin(ORACLE_REDUCTION_LABEL_CITIES)].copy()
+    missing_labels = set(ORACLE_REDUCTION_LABEL_CITIES).difference(
+        labeled[name_col].astype(str)
     )
-    labeled = plot_df[plot_df[name_col].isin(labeled_city_order)].copy()
+    if missing_labels:
+        raise ValueError(
+            "City reduction scatter missing labeled cities: "
+            f"{sorted(missing_labels)}"
+        )
     labeled["_label_order"] = pd.Categorical(
-        labeled[name_col], categories=labeled_city_order, ordered=True
+        labeled[name_col], categories=ORACLE_REDUCTION_LABEL_CITIES, ordered=True
     )
     labeled = labeled.sort_values("_label_order")
     ax.scatter(
         labeled[ABSOLUTE_REDUCTION_COL],
         labeled[RELATIVE_REDUCTION_COL],
-        s=30,
+        s=24,
         facecolors="none",
-        edgecolors="#555555",
-        linewidth=0.8,
+        edgecolors="#333333",
+        linewidth=0.7,
         zorder=5,
     )
     label_texts = [
@@ -111,7 +138,7 @@ def plot_city_reduction_potential_scatter(
             row[ABSOLUTE_REDUCTION_COL],
             row[RELATIVE_REDUCTION_COL],
             row[name_col],
-            fontsize=7.5,
+            fontsize=6.5,
             color="#202020",
             zorder=6,
         )
@@ -125,41 +152,94 @@ def plot_city_reduction_potential_scatter(
             x=labeled[ABSOLUTE_REDUCTION_COL].to_numpy(dtype=float),
             y=labeled[RELATIVE_REDUCTION_COL].to_numpy(dtype=float),
             ax=ax,
-            expand=(1.12, 1.22),
-            force_text=(0.15, 0.25),
-            force_static=(0.08, 0.15),
+            expand=(1.08, 1.16),
+            force_text=(0.12, 0.2),
+            force_static=(0.06, 0.12),
             ensure_inside_axes=True,
             arrowprops=None,
         )
 
     ax.set_xlabel(
-        "Annual absolute emission reduction (t CO$_2$e yr$^{-1}$)",
-        fontsize=9,
+        "Annual absolute reduction\n(t CO$_2$e yr$^{-1}$)",
+        fontsize=7.5,
     )
-    ax.set_ylabel("Relative lifecycle emission reduction (%)", fontsize=9)
-    ax.tick_params(axis="both", labelsize=8)
-    ax.legend(
-        [Line2D([0], [0], color="#666666", linestyle="--", linewidth=1)],
-        ["Median values"],
-        loc="upper left",
-        frameon=False,
-        fontsize=8,
-    )
+    ax.set_ylabel("Relative lifecycle reduction (%)", fontsize=7.5)
+    ax.tick_params(axis="both", labelsize=7)
     ax.spines[["top", "right"]].set_visible(False)
+    if plot_title:
+        ax.set_title("City mitigation priorities", fontsize=9, fontweight="bold")
 
     if not save_path:
         fig.show()
         return None
     if for_latex and not save_path.endswith(".pdf"):
         save_path = save_path.rsplit(".", 1)[0] + ".pdf"
+    if plot_title:
+        save_path = _add_title_suffix(save_path)
     save_dir = os.path.dirname(save_path)
     if save_dir:
         os.makedirs(save_dir, exist_ok=True)
+    fig.canvas.draw()
     fig.savefig(
         save_path,
         dpi=300,
         bbox_inches=fig.bbox_inches,
         pad_inches=0.0,
+    )
+    labeled_names = set(labeled[name_col].astype(str))
+    point_records = []
+    for _, row in plot_df.iterrows():
+        city_name = str(row[name_col])
+        point_records.append(
+            {
+                "region_key": str(row.get("region_key", "")),
+                "region_name_en": city_name,
+                ABSOLUTE_REDUCTION_COL: float(row[ABSOLUTE_REDUCTION_COL]),
+                RELATIVE_REDUCTION_COL: float(row[RELATIVE_REDUCTION_COL]),
+                "highlighted": city_name in labeled_names,
+            }
+        )
+    axis_position = ax.get_position()
+    report_path = save_path.rsplit(".", 1)[0] + "_report.json"
+    write_figure_report(
+        report_path,
+        {
+            "schema_version": 1,
+            "figure_name": "city_reduction_potential_scatter",
+            "figure_path": save_path,
+            "figure_size_inches": {
+                "width": float(figsize[0]),
+                "height": float(figsize[1]),
+            },
+            "data": {
+                "input_row_count": int(len(df)),
+                "plotted_city_count": int(len(plot_df)),
+                "absolute_reduction_field": ABSOLUTE_REDUCTION_COL,
+                "relative_reduction_field": RELATIVE_REDUCTION_COL,
+                "points": point_records,
+            },
+            "axes": {
+                "x_scale": "log",
+                "x_label": "Annual absolute reduction (t CO2e yr-1)",
+                "x_limits": [float(value) for value in ax.get_xlim()],
+                "y_scale": "linear",
+                "y_label": "Relative lifecycle reduction (%)",
+                "y_limits": [float(value) for value in ax.get_ylim()],
+                "bbox_figure_fraction": {
+                    "x0": float(axis_position.x0),
+                    "y0": float(axis_position.y0),
+                    "width": float(axis_position.width),
+                    "height": float(axis_position.height),
+                },
+            },
+            "median_reference_lines": {
+                "absolute_reduction_t_co2e": absolute_median,
+                "relative_reduction_pct": relative_median,
+                "legend_drawn": False,
+            },
+            "highlighted_cities": list(ORACLE_REDUCTION_LABEL_CITIES),
+            "label_leaders_drawn": False,
+        },
     )
     plt.close(fig)
     print(f"City reduction-potential scatter saved to {save_path}")

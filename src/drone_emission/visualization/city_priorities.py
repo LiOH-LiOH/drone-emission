@@ -30,6 +30,7 @@ from drone_emission.visualization.macro_regions import (
 
 # Import from constants module (no circular dependency)
 from drone_emission.analysis.constants import (
+    ORACLE_REDUCTION_LABEL_CITIES,
     PROVINCE_NAME_EN,
     VARIABLE_LABELS,
 )
@@ -44,16 +45,6 @@ WEIGHTED_REDUCTION_COLUMNS = (
 ORACLE_REDUCTION_KG_COL = "oracle_min_reduction_vs_ebike_kg"
 ORACLE_REDUCTION_T_COL = "oracle_min_reduction_vs_ebike_t"
 ORACLE_REDUCTION_MAP_ONLY_FIGURE = "regions_map_oracle_reduction_rank_map_only"
-ORACLE_REDUCTION_LABEL_CITIES = (
-    "Beijing",
-    "Shanghai",
-    "Guangzhou",
-    "Hangzhou",
-    "Shenzhen",
-    "Wuhan",
-    "Chongqing",
-    "Chengdu",
-)
 CITY_REDUCTION_RANK_LABEL_Y = {
     "Chengdu": 44.0,
     "Chongqing": 37.0,

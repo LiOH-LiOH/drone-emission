@@ -146,6 +146,17 @@ def _render_priority(context: RenderContext, request: str) -> None:
         function(frame, **kwargs)
 
 
+def _render_city_screening(context: RenderContext) -> None:
+    from .city_screening import plot_city_reduction_potential_scatter
+
+    plot_city_reduction_potential_scatter(
+        _city_stats(context),
+        save_path=str(context.output("city_reduction_potential_scatter.pdf")),
+        for_latex=True,
+        plot_title=False,
+    )
+
+
 def _render_gef_detour(context: RenderContext) -> None:
     from .city_gef_detour import _render_city_gef_context_detour_summary
 
@@ -304,6 +315,7 @@ REQUEST_RENDERERS: dict[str, Renderer] = {
     "median_trip_eol_emissions": lambda c: _render_median_phase(c, "median_trip_eol_emissions"),
     "province_total_ebike_lifecycle": _render_province_lifecycle,
     "regions_map_oracle_reduction_rank_map_only": lambda c: _render_priority(c, "regions_map_oracle_reduction_rank_map_only"),
+    "city_reduction_potential_scatter": _render_city_screening,
     "city_reduction_rank_all_macro_region": lambda c: _render_priority(c, "city_reduction_rank_all_macro_region"),
     "city_gef_context_detour_summary": _render_gef_detour,
     "city_gef_distribution": _render_city_gef_distribution,
