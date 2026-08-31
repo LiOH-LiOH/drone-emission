@@ -94,6 +94,7 @@ def test_city_gef_distribution_consumes_cohort_statistics_only():
 
 def test_city_reduction_scatter_consumes_cohort_statistics_only():
     request = request_index()["city_reduction_potential_scatter"]
+    assert request["cache_version"] == 2
     assert request["required_inputs"] == ["all_region_stats.csv"]
     assert request["outputs"] == ["city_reduction_potential_scatter.pdf"]
 

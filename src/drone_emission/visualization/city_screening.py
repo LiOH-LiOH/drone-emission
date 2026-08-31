@@ -7,9 +7,6 @@ import os
 import numpy as np
 import pandas as pd
 
-from drone_emission.analysis.constants import (
-    ORACLE_REDUCTION_LABEL_CITIES,
-)
 from drone_emission.visualization._utils import (
     _add_title_suffix,
     write_figure_report,
@@ -110,55 +107,6 @@ def plot_city_reduction_potential_scatter(
     ax.set_xscale("log")
     ax.set_ylim(0.0, 50.0)
 
-    name_col = "region_name_en" if "region_name_en" in plot_df else "region_key"
-    labeled = plot_df[plot_df[name_col].isin(ORACLE_REDUCTION_LABEL_CITIES)].copy()
-    missing_labels = set(ORACLE_REDUCTION_LABEL_CITIES).difference(
-        labeled[name_col].astype(str)
-    )
-    if missing_labels:
-        raise ValueError(
-            "City reduction scatter missing labeled cities: "
-            f"{sorted(missing_labels)}"
-        )
-    labeled["_label_order"] = pd.Categorical(
-        labeled[name_col], categories=ORACLE_REDUCTION_LABEL_CITIES, ordered=True
-    )
-    labeled = labeled.sort_values("_label_order")
-    ax.scatter(
-        labeled[ABSOLUTE_REDUCTION_COL],
-        labeled[RELATIVE_REDUCTION_COL],
-        s=24,
-        facecolors="none",
-        edgecolors="#333333",
-        linewidth=0.7,
-        zorder=5,
-    )
-    label_texts = [
-        ax.text(
-            row[ABSOLUTE_REDUCTION_COL],
-            row[RELATIVE_REDUCTION_COL],
-            row[name_col],
-            fontsize=6.5,
-            color="#202020",
-            zorder=6,
-        )
-        for _, row in labeled.iterrows()
-    ]
-    if label_texts:
-        from adjustText import adjust_text
-
-        adjust_text(
-            label_texts,
-            x=labeled[ABSOLUTE_REDUCTION_COL].to_numpy(dtype=float),
-            y=labeled[RELATIVE_REDUCTION_COL].to_numpy(dtype=float),
-            ax=ax,
-            expand=(1.08, 1.16),
-            force_text=(0.12, 0.2),
-            force_static=(0.06, 0.12),
-            ensure_inside_axes=True,
-            arrowprops=None,
-        )
-
     ax.set_xlabel(
         "Annual absolute reduction\n(t CO$_2$e yr$^{-1}$)",
         fontsize=7.5,
@@ -186,7 +134,7 @@ def plot_city_reduction_potential_scatter(
         bbox_inches=fig.bbox_inches,
         pad_inches=0.0,
     )
-    labeled_names = set(labeled[name_col].astype(str))
+    name_col = "region_name_en" if "region_name_en" in plot_df else "region_key"
     point_records = []
     for _, row in plot_df.iterrows():
         city_name = str(row[name_col])
@@ -196,7 +144,7 @@ def plot_city_reduction_potential_scatter(
                 "region_name_en": city_name,
                 ABSOLUTE_REDUCTION_COL: float(row[ABSOLUTE_REDUCTION_COL]),
                 RELATIVE_REDUCTION_COL: float(row[RELATIVE_REDUCTION_COL]),
-                "highlighted": city_name in labeled_names,
+                "highlighted": False,
             }
         )
     axis_position = ax.get_position()
@@ -237,7 +185,9 @@ def plot_city_reduction_potential_scatter(
                 "relative_reduction_pct": relative_median,
                 "legend_drawn": False,
             },
-            "highlighted_cities": list(ORACLE_REDUCTION_LABEL_CITIES),
+            "highlighted_cities": [],
+            "city_name_labels_drawn": False,
+            "highlight_rings_drawn": False,
             "label_leaders_drawn": False,
         },
     )

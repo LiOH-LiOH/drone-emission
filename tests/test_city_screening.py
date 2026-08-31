@@ -5,30 +5,12 @@ import json
 import numpy as np
 import pandas as pd
 
-from drone_emission.analysis.constants import ORACLE_REDUCTION_LABEL_CITIES
 from drone_emission.visualization.city_screening import (
     ABSOLUTE_REDUCTION_COL,
     RELATIVE_REDUCTION_COL,
     _reduction_metrics,
     plot_city_reduction_potential_scatter,
 )
-from drone_emission.visualization.city_priorities import (
-    ORACLE_REDUCTION_LABEL_CITIES as MAP_LABEL_CITIES,
-)
-
-
-def test_scatter_and_map_share_highlighted_cities() -> None:
-    assert ORACLE_REDUCTION_LABEL_CITIES == MAP_LABEL_CITIES
-    assert ORACLE_REDUCTION_LABEL_CITIES == (
-        "Beijing",
-        "Shanghai",
-        "Guangzhou",
-        "Hangzhou",
-        "Shenzhen",
-        "Wuhan",
-        "Chongqing",
-        "Chengdu",
-    )
 
 
 def test_reduction_metrics_derive_values_and_filter_nonpositive_cities() -> None:
@@ -60,11 +42,12 @@ def test_reduction_metrics_require_lifecycle_inputs() -> None:
 
 
 def test_scatter_writes_exact_size_and_traceable_report(tmp_path) -> None:
-    city_count = len(ORACLE_REDUCTION_LABEL_CITIES)
+    city_names = ("Alpha", "Beta", "Gamma")
+    city_count = len(city_names)
     source = pd.DataFrame(
         {
-            "region_key": [name.casefold() for name in ORACLE_REDUCTION_LABEL_CITIES],
-            "region_name_en": ORACLE_REDUCTION_LABEL_CITIES,
+            "region_key": [name.casefold() for name in city_names],
+            "region_name_en": city_names,
             "region_level": ["city"] * city_count,
             "total_ebike_lifecycle": np.linspace(2_000.0, 9_000.0, city_count),
             "oracle_min_lifecycle_kg": np.linspace(1_000.0, 4_000.0, city_count),
@@ -89,5 +72,7 @@ def test_scatter_writes_exact_size_and_traceable_report(tmp_path) -> None:
     assert report["data"]["plotted_city_count"] == city_count
     assert report["axes"]["x_scale"] == "log"
     assert report["axes"]["y_limits"] == [0.0, 50.0]
-    assert report["highlighted_cities"] == list(ORACLE_REDUCTION_LABEL_CITIES)
+    assert report["highlighted_cities"] == []
+    assert report["city_name_labels_drawn"] is False
+    assert report["highlight_rings_drawn"] is False
     assert report["label_leaders_drawn"] is False
