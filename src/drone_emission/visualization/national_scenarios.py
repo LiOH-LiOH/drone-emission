@@ -1121,7 +1121,7 @@ def plot_regions_map_pathway_scenarios(
     unstudied_text = cbar_ax.text(
         1.0,
         0.5 / n_bands,
-        "Unstudied",
+        "No data",
         transform=cbar_ax.transAxes,
         ha="center",
         va="center",
@@ -1236,7 +1236,7 @@ def _colorbar_report(ax, bin_edges, tick_edges, label_text, cmap):
         "tick_edges": _json_safe_array(tick_edges),
         "colors": [to_hex(cmap(i)) for i in range(cmap.N)],
         "unstudied_band": {
-            "label": "Unstudied",
+            "label": "No data",
             "color": "#cccccc",
             "bin_index": 0,
         },
