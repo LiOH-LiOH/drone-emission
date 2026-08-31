@@ -6,7 +6,7 @@
   "requests": [
     {"id": "shanghai_merchant_monthly_sales", "cache_version": 1, "required_inputs": ["city/shanghai/*_sales.csv", "city/shanghai/*_buildings.*"], "outputs": ["shanghai_merchant_monthly_sales.pdf"]},
     {"id": "shanghai_building_footprint_heatmap", "cache_version": 1, "required_inputs": ["city/shanghai/*_sales.csv", "city/shanghai/*_buildings.*"], "outputs": ["shanghai_building_footprint_heatmap.pdf"]},
-    {"id": "province_gef_china_map", "cache_version": 1, "required_inputs": ["gef_china.csv"], "outputs": ["province_gef_china_map.pdf"]},
+    {"id": "province_gef_china_map", "cache_version": 2, "required_inputs": ["gef_china.csv"], "outputs": ["province_gef_china_map.pdf"]},
     {"id": "beijing_road_network_subfigure", "cache_version": 1, "required_inputs": ["city/beijing/*_roadnet.graphml", "city/beijing/*_buildings.*"], "outputs": ["beijing_road_network_subfigure.pdf"]},
     {"id": "shanghai_building_height_merchant", "cache_version": 1, "required_inputs": ["city/shanghai/*_sales.csv", "city/shanghai/*_od_pairs.csv", "city/shanghai/*_roadnet.graphml", "city/shanghai/*_buildings.*"], "outputs": ["shanghai_building_height_merchant.pdf"]},
     {"id": "distance_comparison_single_panel", "cache_version": 1, "required_inputs": ["city/shanghai/*_od_pairs.csv", "city/shanghai/*_roadnet.graphml"], "outputs": ["distance_comparison_single_panel.pdf"]},

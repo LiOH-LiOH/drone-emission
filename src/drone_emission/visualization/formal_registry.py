@@ -89,8 +89,11 @@ def _render_province_gef(context: RenderContext) -> None:
     plot_province_gef_china_map(
         gef_path=str(context.require_file("gef_china.csv", stage="inputs")),
         save_path=str(context.output("province_gef_china_map.pdf")),
+        figsize=(1.25, 0.95),
         for_latex=True,
         plot_title=False,
+        compact=True,
+        south_china_inset_bounds=(0.80, 0.04, 0.16, 0.28),
     )
 
 
