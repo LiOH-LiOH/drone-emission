@@ -92,7 +92,7 @@ def plot_beijing_order_distance_distribution(
     predicted_counts = predicted_counts * model_scale
 
     fig = plt.figure(figsize=figsize, facecolor="white")
-    ax = fig.add_axes([0.075, 0.22, 0.905, 0.72])
+    ax = fig.add_axes([0.10, 0.22, 0.88, 0.72])
     bar_width = 0.085
     ax.bar(
         display_centers - bar_width / 2,
