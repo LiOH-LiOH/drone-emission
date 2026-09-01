@@ -207,6 +207,7 @@ def test_locked_beijing_distance_sources_are_complete():
         index * 0.05 for index in range(101)
     }
     request = request_index()["beijing_order_distance_distribution"]
+    assert request["cache_version"] == 2
     assert request["required_inputs"] == [
         "package:calibration/observed_delivery_distance_histogram.csv",
         "package:calibration/gravity_calibration_summary.json",
