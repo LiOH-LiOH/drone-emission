@@ -95,7 +95,7 @@ def test_city_gef_distribution_consumes_cohort_statistics_only():
 
 def test_city_gef_lifecycle_components_consumes_cohort_statistics_only():
     request = request_index()["city_gef_lifecycle_components"]
-    assert request["cache_version"] == 3
+    assert request["cache_version"] == 4
     assert request["required_inputs"] == [
         "all_region_stats.csv",
         "all_region_stats_enriched.csv",

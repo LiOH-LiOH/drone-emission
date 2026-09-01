@@ -2319,7 +2319,7 @@ def plot_city_gef_lifecycle_components(
     delta_ax.text(
         0.98,
         0.92,
-        "$\\Delta$ = E-bike $-$ Drone (g CO$_2$e/order)",
+        "$\\Delta$ = E-bike $-$ Drone",
         transform=delta_ax.transAxes,
         fontsize=style["delta_label_fontsize"],
         ha="right",
