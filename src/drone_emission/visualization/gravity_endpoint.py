@@ -125,7 +125,7 @@ def plot_beijing_endpoint_grid_heatmap(
         3,
         width_ratios=(1.0, 1.0, 0.035),
         left=0.012,
-        right=0.965,
+        right=0.94,
         bottom=0.035,
         top=0.97,
         wspace=0.035,
@@ -145,7 +145,7 @@ def plot_beijing_endpoint_grid_heatmap(
         image = axis.pcolormesh(
             prepared["x_edges"],
             prepared["y_edges"],
-            np.ma.masked_less_equal(values, 0.0),
+            np.ma.masked_less(values, norm.vmin),
             cmap="magma",
             norm=norm,
             alpha=0.82,
@@ -229,7 +229,7 @@ def plot_beijing_endpoint_grid_heatmap(
                 "normalization": "shared_logarithmic",
                 "vmin_orders": 1.0,
                 "vmax_orders": float(prepared["vmax"]),
-                "zero_cells": "transparent",
+                "values_below_one_order": "transparent",
             },
             "panels": [
                 {"position": "left", "data": "observed_orders", "title": None},

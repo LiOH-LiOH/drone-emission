@@ -65,7 +65,7 @@ def test_endpoint_grid_heatmap_writes_full_width_pdf_and_report(
         "normalization": "shared_logarithmic",
         "vmin_orders": 1.0,
         "vmax_orders": 12.0,
-        "zero_cells": "transparent",
+        "values_below_one_order": "transparent",
     }
     assert [panel["title"] for panel in report["panels"]] == [None, None]
     assert report["basemap"]["attribution_placement"] == "lower left of each map"
