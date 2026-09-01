@@ -55,13 +55,13 @@ CONTRIBUTION_COMPONENT_KEYS = tuple(
     spec["key"] for spec in CONTRIBUTION_COMPONENT_SPECS
 )
 CONTRIBUTION_CITY_B_GROUPS = (
-    ("north_china", ("beijing", "tianjin", "shijiazhuang", "taiyuan")),
-    ("northeast_china", ("shenyang", "dalian", "changchun", "haerbin")),
-    ("east_china", ("shanghai", "hangzhou", "nanjing", "ningbo")),
-    ("central_china", ("zhengzhou", "wuhan", "changsha", "xiangyang")),
-    ("south_china", ("guangzhou", "shenzhen", "nanning", "haikou")),
-    ("southwest_china", ("chongqing", "chengdu", "guiyang", "kunming")),
-    ("northwest_china", ("xian", "lanzhou", "xining", "wulumuqi")),
+    ("north_china", ("beijing", "taiyuan")),
+    ("northeast_china", ("shenyang", "haerbin")),
+    ("east_china", ("shanghai", "nanjing")),
+    ("central_china", ("changsha", "wuhan")),
+    ("south_china", ("guangzhou", "nanning")),
+    ("southwest_china", ("chongqing", "kunming")),
+    ("northwest_china", ("xian", "xining")),
 )
 CONTRIBUTION_CITY_B_REGION_KEYS = tuple(
     region_key
@@ -962,7 +962,7 @@ def prepare_contribution_decomposition_data(
 
 
 def _plot_selected_city_contribution_bars(ax, rows: list[dict]):
-    """Draw one-row-per-city horizontal component bars with net points."""
+    """Draw one-column-per-city vertical component bars with net points."""
     if not rows:
         ax.text(
             0.5,
@@ -977,21 +977,21 @@ def _plot_selected_city_contribution_bars(ax, rows: list[dict]):
         ax.tick_params(left=False, bottom=False, labelleft=False, labelbottom=False)
         return np.array([], dtype=float)
 
-    y_values = []
-    current_y = 0.0
+    x_values = []
+    current_x = 0.0
     for idx, row in enumerate(rows):
         if idx:
             previous = rows[idx - 1]
-            current_y += 1.0
+            current_x += 1.0
             if previous.get("row_type") == "overall":
-                current_y += 0.85
+                current_x += 0.70
             elif (
                 row.get("macro_region_key")
                 != previous.get("macro_region_key")
             ):
-                current_y += 0.65
-        y_values.append(current_y)
-    y = np.array(y_values, dtype=float)
+                current_x += 0.45
+        x_values.append(current_x)
+    x = np.array(x_values, dtype=float)
     positive_acc = np.zeros(len(rows), dtype=float)
     negative_acc = np.zeros(len(rows), dtype=float)
     extrema = [0.0]
@@ -1001,21 +1001,21 @@ def _plot_selected_city_contribution_bars(ax, rows: list[dict]):
         benefits = np.clip(values, 0.0, None)
         penalties = np.clip(values, None, 0.0)
         if np.any(benefits):
-            ax.barh(
-                y,
+            ax.bar(
+                x,
                 benefits,
-                left=positive_acc,
-                height=0.62,
+                bottom=positive_acc,
+                width=0.66,
                 color=spec["color"],
                 edgecolor="white",
                 linewidth=0.8,
             )
         if np.any(penalties):
-            ax.barh(
-                y,
-                np.abs(penalties),
-                left=negative_acc + penalties,
-                height=0.62,
+            ax.bar(
+                x,
+                penalties,
+                bottom=negative_acc,
+                width=0.66,
                 color=spec["color"],
                 edgecolor="white",
                 linewidth=0.8,
@@ -1028,8 +1028,8 @@ def _plot_selected_city_contribution_bars(ax, rows: list[dict]):
     total_pp = np.array([float(row["total_net_pp"]) for row in rows], dtype=float)
     extrema.extend(total_pp.tolist())
     ax.scatter(
+        x,
         total_pp,
-        y,
         s=26,
         color="#111111",
         edgecolor="white",
@@ -1038,31 +1038,39 @@ def _plot_selected_city_contribution_bars(ax, rows: list[dict]):
         label="Net reduction",
     )
 
-    ax.axvline(0, color="#555555", linewidth=0.8)
-    ax.set_yticks(y, [row["label"] for row in rows])
-    ax.invert_yaxis()
-    tick_labels = ax.get_yticklabels()
+    ax.axhline(0, color="#555555", linewidth=0.8)
+    ax.set_xticks(
+        x,
+        [row["label"] for row in rows],
+        rotation=40,
+        ha="right",
+    )
+    tick_labels = ax.get_xticklabels()
     if tick_labels and rows[0].get("row_type") == "overall":
         tick_labels[0].set_fontweight("bold")
         tick_labels[0].set_color("#222222")
-    ax.set_xlabel(
+    ax.set_ylabel(
         "Contribution to all-e-bike baseline (percentage points)",
-        fontsize=9.5,
+        fontsize=8.2,
     )
-    ax.grid(axis="x", alpha=0.25)
-    ax.tick_params(axis="both", labelsize=8.2)
+    ax.grid(axis="y", alpha=0.25)
+    ax.tick_params(axis="x", labelsize=6.8, pad=2)
+    ax.tick_params(axis="y", labelsize=7.2)
 
-    xmin = min(extrema)
-    xmax = max(extrema)
-    span = max(xmax - xmin, 1.0)
-    ax.set_xlim(xmin - span * 0.10, xmax + span * 0.10)
-    _annotate_selected_city_macro_regions(ax, rows, y)
-    return y
+    ymin = min(extrema)
+    ymax = max(extrema)
+    span = max(ymax - ymin, 1.0)
+    lower = np.floor((ymin - span * 0.06) / 10.0) * 10.0
+    upper = np.ceil((ymax + span * 0.06) / 10.0) * 10.0
+    ax.set_ylim(lower, upper)
+    ax.set_xlim(float(x[0] - 0.70), float(x[-1] + 0.70))
+    _annotate_selected_city_macro_regions(ax, rows, x)
+    return x
 
 
-def _annotate_selected_city_macro_regions(ax, rows: list[dict], y: np.ndarray):
-    """Add left-side macro-region labels and brackets to selected-city rows."""
-    if not rows or y.size == 0:
+def _annotate_selected_city_macro_regions(ax, rows: list[dict], x: np.ndarray):
+    """Add bottom macro-region labels and grouping rules to city columns."""
+    if not rows or x.size == 0:
         return
 
     city_indices = [
@@ -1084,61 +1092,42 @@ def _annotate_selected_city_macro_regions(ax, rows: list[dict], y: np.ndarray):
             if next_idx is not None:
                 start_idx = next_idx
 
-    y_transform = ax.get_yaxis_transform()
+    x_transform = ax.get_xaxis_transform()
     if rows[0].get("row_type") == "overall":
-        separator_y = (float(y[0]) + float(y[city_indices[0]])) / 2.0
-        ax.axhline(
-            separator_y,
+        separator_x = (float(x[0]) + float(x[city_indices[0]])) / 2.0
+        ax.axvline(
+            separator_x,
             color="#C9C9C9",
             linewidth=0.9,
             zorder=1,
         )
 
-    bracket_x = -0.280
-    bracket_cap_x = -0.235
-    label_x = -0.320
-    for group_idx, (start, end) in enumerate(groups):
+    rule_y = -0.38
+    label_y = -0.55
+    for start, end in groups:
         row = rows[start]
         color = row.get("macro_region_color", "#777777")
         label = row.get("macro_region_label", row.get("macro_region_key", ""))
-        y_top = float(y[start] - 0.38)
-        y_bottom = float(y[end] + 0.38)
+        x_left = float(x[start] - 0.34)
+        x_right = float(x[end] + 0.34)
         ax.plot(
-            [bracket_x, bracket_x],
-            [y_top, y_bottom],
-            transform=y_transform,
+            [x_left, x_right],
+            [rule_y, rule_y],
+            transform=x_transform,
             color=color,
             linewidth=1.25,
             solid_capstyle="butt",
             clip_on=False,
             zorder=4,
         )
-        for y_cap in (y_top, y_bottom):
-            ax.plot(
-                [bracket_x, bracket_cap_x],
-                [y_cap, y_cap],
-                transform=y_transform,
-                color=color,
-                linewidth=1.25,
-                solid_capstyle="butt",
-                clip_on=False,
-                zorder=4,
-            )
-        if group_idx:
-            ax.axhline(
-                y_top - 0.32,
-                color="#DDDDDD",
-                linewidth=0.7,
-                zorder=1,
-            )
         ax.text(
-            label_x,
-            (y_top + y_bottom) / 2.0,
+            (x_left + x_right) / 2.0,
+            label_y,
             label,
-            transform=y_transform,
-            ha="right",
-            va="center",
-            fontsize=7.2,
+            transform=x_transform,
+            ha="center",
+            va="top",
+            fontsize=6.2,
             fontweight="bold",
             color=color,
             clip_on=False,
@@ -1148,15 +1137,15 @@ def _annotate_selected_city_macro_regions(ax, rows: list[dict], y: np.ndarray):
 def _plot_selected_city_absolute_reduction_points(
     ax,
     rows: list[dict],
-    y: np.ndarray,
+    x: np.ndarray,
     zero_fraction: float,
 ):
-    """Draw selected-city absolute net reductions on a top x-axis."""
+    """Draw selected-city absolute net reductions on a right y-axis."""
     city_indices = [
         idx for idx, row in enumerate(rows) if row.get("row_type") == "city"
     ]
     if not city_indices:
-        ax.tick_params(top=False, labeltop=False, bottom=False, labelbottom=False)
+        ax.tick_params(right=False, labelright=False)
         return
 
     reductions_kt = np.array(
@@ -1164,8 +1153,8 @@ def _plot_selected_city_absolute_reduction_points(
         dtype=float,
     )
     ax.scatter(
+        x[city_indices],
         reductions_kt,
-        y[city_indices],
         s=42,
         facecolor="white",
         edgecolor="#1B5E20",
@@ -1173,26 +1162,33 @@ def _plot_selected_city_absolute_reduction_points(
         zorder=6,
         label="Absolute net reduction",
     )
-    ax.set_xlabel("Absolute net reduction (kt CO2e yr$^{-1}$)", fontsize=9.5)
+    ax.set_ylabel("Absolute net reduction (kt CO2e yr$^{-1}$)", fontsize=8.2)
     ax.tick_params(
-        axis="x",
-        top=True,
-        labeltop=True,
-        bottom=False,
-        labelbottom=False,
-        labelsize=8.2,
+        axis="y",
+        right=True,
+        labelright=True,
+        left=False,
+        labelleft=False,
+        labelsize=7.2,
         colors="#1B5E20",
     )
-    ax.xaxis.label.set_color("#1B5E20")
-    ax.spines["top"].set_color("#1B5E20")
-    ax.spines["bottom"].set_visible(False)
-    ax.tick_params(axis="y", left=False, labelleft=False)
+    ax.yaxis.label.set_color("#1B5E20")
+    ax.spines["right"].set_color("#1B5E20")
+    ax.spines["left"].set_visible(False)
+    ax.tick_params(axis="x", bottom=False, labelbottom=False)
 
     xmax = max(float(np.max(reductions_kt)), 0.0)
     positive_limit = max(xmax * 1.12, 0.1)
     zero_fraction = float(np.clip(zero_fraction, 0.05, 0.95))
     negative_limit = positive_limit * zero_fraction / (1.0 - zero_fraction)
-    ax.set_xlim(-negative_limit, positive_limit)
+    ax.set_ylim(-negative_limit, positive_limit)
+    ax.set_yticks(
+        [
+            tick
+            for tick in ax.get_yticks()
+            if 0.0 <= float(tick) <= positive_limit
+        ]
+    )
 
 
 def _write_contribution_decomposition_city_b_report(
@@ -1203,7 +1199,7 @@ def _write_contribution_decomposition_city_b_report(
     rows: list[dict],
 ):
     """Write compact JSON report for the selected-city contribution figure."""
-    ax_main, ax_top = axes
+    ax_main, ax_right = axes
     report_path = save_path.rsplit(".", 1)[0] + "_report.json"
     macro_region_by_key = {
         spec["key"]: spec
@@ -1231,8 +1227,8 @@ def _write_contribution_decomposition_city_b_report(
         "figure_path": save_path,
         "figure_size_inches": {"width": figsize[0], "height": figsize[1]},
         "axes": {
-            "bottom_relative_contribution_decomposition": _report_axis(ax_main),
-            "top_absolute_net_reduction": _report_axis(ax_top),
+            "left_relative_contribution_decomposition": _report_axis(ax_main),
+            "right_absolute_net_reduction": _report_axis(ax_right),
         },
         "selected_region_keys": list(CONTRIBUTION_CITY_B_REGION_KEYS),
         "selected_city_groups": selected_city_groups,
@@ -1250,18 +1246,20 @@ def _write_contribution_decomposition_city_b_report(
         "gef_coverage": _json_safe(prepared.get("gef_coverage", {})),
         "sort_order": (
             "All study regions first, followed by China macro-region order "
-            "with four curated representative cities per region"
+            "with two locked representative cities per region: the city with "
+            "the largest absolute reduction followed by the city with the "
+            "largest relative net reduction in the current analysis"
         ),
         "bar_design": (
-            "An independent all-study-regions row precedes the grouped city "
-            "rows. The seven China macro-regions follow the shared paper "
-            "order, with colored left-side labels and brackets spanning four "
-            "curated representative cities per region. Positive components "
-            "stack from zero to the right, negative components stack from "
-            "zero to the left, and a black point marks total net reduction "
-            "on the bottom percentage-point axis. White circles with dark "
-            "green outlines mark city absolute net reduction on the top kt "
-            "CO2e/yr axis; the overall row is excluded from that axis."
+            "An independent all-study-regions column precedes the grouped city "
+            "columns. The seven China macro-regions follow the shared paper "
+            "order, with colored bottom labels and rules spanning two locked "
+            "representative cities per region. Positive components stack "
+            "upward from zero, negative components stack downward from zero, "
+            "and a black point marks total net reduction on the left "
+            "percentage-point axis. White circles with dark green outlines "
+            "mark city absolute net reduction on the right kt CO2e/yr axis; "
+            "the overall column is excluded from that axis."
         ),
         "decomposition_contract": {
             "scope": "OD pairs assigned to drones by the lifecycle-minimum rule",
@@ -1320,7 +1318,7 @@ def _write_contribution_decomposition_city_b_report(
 def plot_contribution_decomposition_city_b(
     prepared: Dict,
     save_path: str = None,
-    figsize: tuple = (7.2, 7.5),
+    figsize: tuple = (7.2, 2.8),
     for_latex: bool = False,
     plot_title: bool = False,
 ):
@@ -1341,13 +1339,18 @@ def plot_contribution_decomposition_city_b(
     rows = [_national_contribution_row(prepared.get("national", {})), *city_rows]
     fig = plt.figure(figsize=figsize)
     ax = fig.add_subplot(1, 1, 1)
-    fig.subplots_adjust(left=0.375, right=0.98, bottom=0.09, top=0.80)
-    y = _plot_selected_city_contribution_bars(ax, rows)
-    ax_top = ax.twiny()
-    bottom_xlim = ax.get_xlim()
-    zero_fraction = (0.0 - bottom_xlim[0]) / (bottom_xlim[1] - bottom_xlim[0])
-    _plot_selected_city_absolute_reduction_points(ax_top, rows, y, zero_fraction)
-    ax_top.set_ylim(ax.get_ylim())
+    fig.subplots_adjust(left=0.095, right=0.90, bottom=0.34, top=0.78)
+    x = _plot_selected_city_contribution_bars(ax, rows)
+    ax_right = ax.twinx()
+    left_ylim = ax.get_ylim()
+    zero_fraction = (0.0 - left_ylim[0]) / (left_ylim[1] - left_ylim[0])
+    _plot_selected_city_absolute_reduction_points(
+        ax_right,
+        rows,
+        x,
+        zero_fraction,
+    )
+    ax_right.set_xlim(ax.get_xlim())
 
     legend_handles = [
         plt.Rectangle(
@@ -1356,7 +1359,7 @@ def plot_contribution_decomposition_city_b(
             1,
             facecolor=spec["color"],
             edgecolor="white",
-            label=spec["label"],
+            label=spec["short_label"],
         )
         for spec in CONTRIBUTION_COMPONENT_SPECS
     ]
@@ -1388,17 +1391,18 @@ def plot_contribution_decomposition_city_b(
     ax.legend(
         handles=legend_handles,
         loc="lower center",
-        bbox_to_anchor=(0.5, 1.105),
-        ncol=2,
+        bbox_to_anchor=(0.5, 1.07),
+        ncol=6,
         frameon=False,
-        fontsize=7.3,
-        handlelength=1.15,
-        columnspacing=0.8,
+        fontsize=6.4,
+        handlelength=1.0,
+        columnspacing=0.65,
     )
     if plot_title:
         ax.set_title(
             "Lifecycle-emissions balance by representative city",
-            fontsize=13,
+            fontsize=10,
+            pad=26,
         )
 
     if save_path:
@@ -1417,7 +1421,7 @@ def plot_contribution_decomposition_city_b(
             prepared,
             save_path,
             figsize,
-            axes=(ax, ax_top),
+            axes=(ax, ax_right),
             rows=rows,
         )
         plt.close(fig)
