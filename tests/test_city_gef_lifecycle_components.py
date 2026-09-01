@@ -60,8 +60,10 @@ def test_city_gef_lifecycle_components_writes_weighted_report(tmp_path):
     assert report["style"]["bar_width_gef"] == 0.032
     assert report["style"]["total_label_rotation"] == 90
     assert report["style"]["panel_hspace"] == 0.20
-    assert report["style"]["delta_height_ratio"] == 0.18
+    assert report["style"]["delta_height_ratio"] == 0.24
     assert report["style"]["delta_ylim"] == [-3.0, 7.0]
+    assert report["style"]["delta_point_size"] == 24.0
+    assert report["style"]["delta_point_edge_width"] == 0.9
     assert report["legends"] == {
         "placement": "below_chart_centered_table",
         "layout": "two_rows_three_columns",
@@ -99,6 +101,13 @@ def test_city_gef_lifecycle_components_writes_weighted_report(tmp_path):
     assert report["delta_strip"]["encoding"]["type"] == (
         "neutral_lollipop"
     )
+    assert report["delta_strip"]["encoding"]["point_face_color"] == (
+        "#FFFFFF"
+    )
+    assert report["delta_strip"]["encoding"]["point_edge_color"] == (
+        "#222222"
+    )
+    assert report["delta_strip"]["encoding"]["point_edge_width"] == 0.9
     assert report["delta_strip"]["encoding"]["direction_labels"] is False
 
 

@@ -2210,10 +2210,11 @@ def plot_city_gef_lifecycle_components(
         "legend_fontsize": 7.5,
         "grid_alpha": 0.18,
         "panel_hspace": 0.20,
-        "delta_height_ratio": 0.18,
+        "delta_height_ratio": 0.24,
         "delta_panel_hspace": 0.04,
         "delta_ylim": [-3.0, 7.0],
-        "delta_point_size": 18.0,
+        "delta_point_size": 24.0,
+        "delta_point_edge_width": 0.9,
         "delta_linewidth": 0.8,
         "delta_label_fontsize": 7.0,
         "legend_column_width_points": [60.0, 100.0, 65.0],
@@ -2270,8 +2271,9 @@ def plot_city_gef_lifecycle_components(
             [x],
             [delta],
             s=style["delta_point_size"],
-            color="#222222",
-            linewidths=0,
+            facecolors="white",
+            edgecolors="#222222",
+            linewidths=style["delta_point_edge_width"],
             zorder=3,
         )
         label_offset = 0.35 if delta >= 0 else -0.35
@@ -2617,7 +2619,11 @@ def plot_city_gef_lifecycle_components(
                     "type": "neutral_lollipop",
                     "zero_line_color": "#999999",
                     "stem_color": "#666666",
-                    "point_color": "#222222",
+                    "point_face_color": "#FFFFFF",
+                    "point_edge_color": "#222222",
+                    "point_edge_width": style[
+                        "delta_point_edge_width"
+                    ],
                     "label_precision_decimals": 1,
                     "direction_labels": False,
                 },
