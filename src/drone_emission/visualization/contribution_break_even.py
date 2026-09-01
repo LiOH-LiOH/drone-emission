@@ -1040,8 +1040,8 @@ def _plot_selected_city_contribution_bars(ax, rows: list[dict]):
         x,
         tick_text,
         rotation=90,
-        ha="right",
-        va="center",
+        ha="center",
+        va="top",
     )
     tick_labels = ax.get_xticklabels()
     if tick_labels and rows[0].get("row_type") == "overall":
