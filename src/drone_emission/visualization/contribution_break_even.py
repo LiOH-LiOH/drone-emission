@@ -1025,18 +1025,11 @@ def _plot_selected_city_contribution_bars(ax, rows: list[dict]):
         extrema.extend(positive_acc.tolist())
         extrema.extend(negative_acc.tolist())
 
-    total_pp = np.array([float(row["total_net_pp"]) for row in rows], dtype=float)
-    extrema.extend(total_pp.tolist())
-    ax.scatter(
-        x,
-        total_pp,
-        s=26,
-        color="#111111",
-        edgecolor="white",
-        linewidth=0.5,
-        zorder=5,
-        label="Net reduction",
+    total_pp = np.array(
+        [float(row["total_net_pp"]) for row in rows],
+        dtype=float,
     )
+    extrema.extend(total_pp.tolist())
 
     ax.axhline(0, color="#555555", linewidth=0.8)
     tick_text = [
@@ -1046,8 +1039,9 @@ def _plot_selected_city_contribution_bars(ax, rows: list[dict]):
     ax.set_xticks(
         x,
         tick_text,
-        rotation=40,
+        rotation=90,
         ha="right",
+        va="center",
     )
     tick_labels = ax.get_xticklabels()
     if tick_labels and rows[0].get("row_type") == "overall":
@@ -1073,7 +1067,7 @@ def _plot_selected_city_contribution_bars(ax, rows: list[dict]):
 
 
 def _annotate_selected_city_macro_regions(ax, rows: list[dict], x: np.ndarray):
-    """Add bottom macro-region labels and grouping rules to city columns."""
+    """Add bottom macro-region labels to the selected city columns."""
     if not rows or x.size == 0:
         return
 
@@ -1106,26 +1100,13 @@ def _annotate_selected_city_macro_regions(ax, rows: list[dict], x: np.ndarray):
             zorder=1,
         )
 
-    rule_y = -0.38
-    label_y = -0.55
+    label_y = -0.66
     for start, end in groups:
         row = rows[start]
         color = row.get("macro_region_color", "#777777")
         label = row.get("macro_region_label", row.get("macro_region_key", ""))
-        x_left = float(x[start] - 0.34)
-        x_right = float(x[end] + 0.34)
-        ax.plot(
-            [x_left, x_right],
-            [rule_y, rule_y],
-            transform=x_transform,
-            color=color,
-            linewidth=1.25,
-            solid_capstyle="butt",
-            clip_on=False,
-            zorder=4,
-        )
         ax.text(
-            (x_left + x_right) / 2.0,
+            (float(x[start]) + float(x[end])) / 2.0,
             label_y,
             label,
             transform=x_transform,
@@ -1138,25 +1119,33 @@ def _annotate_selected_city_macro_regions(ax, rows: list[dict], x: np.ndarray):
         )
 
 
-def _plot_selected_city_absolute_reduction_points(
-    ax,
+def _plot_selected_city_reduction_points(
+    ax_left,
+    ax_right,
     rows: list[dict],
     x: np.ndarray,
     zero_fraction: float,
 ):
-    """Draw selected-city absolute net reductions on a right y-axis."""
+    """Draw absolute points, then overlay relative net-reduction points."""
     city_indices = [
         idx for idx, row in enumerate(rows) if row.get("row_type") == "city"
     ]
     if not city_indices:
-        ax.tick_params(right=False, labelright=False)
+        ax_right.tick_params(right=False, labelright=False)
         return
 
     reductions_kt = np.array(
         [float(rows[idx].get("total_net_kg", 0.0)) / 1e6 for idx in city_indices],
         dtype=float,
     )
-    ax.scatter(
+    xmax = max(float(np.max(reductions_kt)), 0.0)
+    positive_limit = max(xmax * 1.12, 0.1)
+    zero_fraction = float(np.clip(zero_fraction, 0.05, 0.95))
+    negative_limit = positive_limit * zero_fraction / (1.0 - zero_fraction)
+    ax_right.set_ylim(-negative_limit, positive_limit)
+    ax_right.set_xlim(ax_left.get_xlim())
+
+    ax_right.scatter(
         x[city_indices],
         reductions_kt,
         s=42,
@@ -1166,8 +1155,26 @@ def _plot_selected_city_absolute_reduction_points(
         zorder=6,
         label="Absolute net reduction",
     )
-    ax.set_ylabel("Net reduction (kt CO2e yr$^{-1}$)", fontsize=8.2)
-    ax.tick_params(
+    total_pp = np.array(
+        [float(row["total_net_pp"]) for row in rows],
+        dtype=float,
+    )
+    left_points = np.column_stack((x, total_pp))
+    display_points = ax_left.transData.transform(left_points)
+    right_points = ax_right.transData.inverted().transform(display_points)
+    ax_right.scatter(
+        right_points[:, 0],
+        right_points[:, 1],
+        s=26,
+        color="#111111",
+        edgecolor="white",
+        linewidth=0.5,
+        zorder=7,
+        label="Net reduction",
+    )
+
+    ax_right.set_ylabel("Net reduction (kt CO2e yr$^{-1}$)", fontsize=8.2)
+    ax_right.tick_params(
         axis="y",
         right=True,
         labelright=True,
@@ -1176,20 +1183,14 @@ def _plot_selected_city_absolute_reduction_points(
         labelsize=7.2,
         colors="#1B5E20",
     )
-    ax.yaxis.label.set_color("#1B5E20")
-    ax.spines["right"].set_color("#1B5E20")
-    ax.spines["left"].set_visible(False)
-    ax.tick_params(axis="x", bottom=False, labelbottom=False)
-
-    xmax = max(float(np.max(reductions_kt)), 0.0)
-    positive_limit = max(xmax * 1.12, 0.1)
-    zero_fraction = float(np.clip(zero_fraction, 0.05, 0.95))
-    negative_limit = positive_limit * zero_fraction / (1.0 - zero_fraction)
-    ax.set_ylim(-negative_limit, positive_limit)
-    ax.set_yticks(
+    ax_right.yaxis.label.set_color("#1B5E20")
+    ax_right.spines["right"].set_color("#1B5E20")
+    ax_right.spines["left"].set_visible(False)
+    ax_right.tick_params(axis="x", bottom=False, labelbottom=False)
+    ax_right.set_yticks(
         [
             tick
-            for tick in ax.get_yticks()
+            for tick in ax_right.get_yticks()
             if 0.0 <= float(tick) <= positive_limit
         ]
     )
@@ -1257,13 +1258,15 @@ def _write_contribution_decomposition_city_b_report(
         "bar_design": (
             "An independent all-study-regions column precedes the grouped city "
             "columns. The seven China macro-regions follow the shared paper "
-            "order, with colored bottom labels and rules spanning two locked "
-            "representative cities per region. Positive components stack "
+            "order, with colored bottom labels centered beneath two locked "
+            "representative cities per region and no regional grouping rules. "
+            "City labels are vertical. Positive components stack "
             "upward from zero, negative components stack downward from zero, "
             "and a black point marks total net reduction on the left "
             "percentage-point axis. White circles with dark green outlines "
             "mark city absolute net reduction on the right kt CO2e/yr axis; "
-            "the overall column is excluded from that axis."
+            "the overall column is excluded from that axis. Black points are "
+            "drawn last so they remain visible above overlapping white points."
         ),
         "decomposition_contract": {
             "scope": "OD pairs assigned to drones by the lifecycle-minimum rule",
@@ -1343,18 +1346,18 @@ def plot_contribution_decomposition_city_b(
     rows = [_national_contribution_row(prepared.get("national", {})), *city_rows]
     fig = plt.figure(figsize=figsize)
     ax = fig.add_subplot(1, 1, 1)
-    fig.subplots_adjust(left=0.095, right=0.90, bottom=0.34, top=0.78)
+    fig.subplots_adjust(left=0.095, right=0.90, bottom=0.40, top=0.78)
     x = _plot_selected_city_contribution_bars(ax, rows)
     ax_right = ax.twinx()
     left_ylim = ax.get_ylim()
     zero_fraction = (0.0 - left_ylim[0]) / (left_ylim[1] - left_ylim[0])
-    _plot_selected_city_absolute_reduction_points(
+    _plot_selected_city_reduction_points(
+        ax,
         ax_right,
         rows,
         x,
         zero_fraction,
     )
-    ax_right.set_xlim(ax.get_xlim())
 
     legend_handles = [
         plt.Rectangle(
