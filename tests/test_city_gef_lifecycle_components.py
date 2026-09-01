@@ -12,9 +12,9 @@ def _component_frame():
     return pd.DataFrame(
         [
             ("city_a", 0.15, 100.0, 2.0, 1.0, 0.5, 1.5, 0.2, 0.1),
-            ("city_b", 0.18, 300.0, 9.0, 3.0, 0.0, 6.0, 0.6, 0.2),
-            ("city_c", 0.55, 200.0, 8.0, 2.0, 0.4, 9.0, 0.3, 0.1),
-            ("city_d", 0.75, 400.0, 20.0, 4.0, 0.8, 24.0, 0.4, 0.2),
+            ("city_b", 0.18, 300.0, 9.0, 3.0, 0.0, 10.42, 0.6, 0.2),
+            ("city_c", 0.55, 200.0, 8.0, 2.0, 0.4, 10.1, 0.3, 0.1),
+            ("city_d", 0.75, 400.0, 20.0, 4.0, 0.8, 25.08, 0.4, 0.2),
         ],
         columns=[
             "region_key",
@@ -45,7 +45,7 @@ def test_city_gef_lifecycle_components_writes_weighted_report(tmp_path):
     )
     assert result == str(output)
     assert output.is_file()
-    assert report["schema_version"] == 1
+    assert report["schema_version"] == 2
     assert report["figure_size_inches"] == [3.7, 4.2]
     assert report["input_city_count"] == 4
     assert report["valid_city_count"] == 4
@@ -60,8 +60,13 @@ def test_city_gef_lifecycle_components_writes_weighted_report(tmp_path):
     assert report["style"]["bar_width_gef"] == 0.032
     assert report["style"]["total_label_rotation"] == 90
     assert report["style"]["panel_hspace"] == 0.20
+    assert report["style"]["delta_height_ratio"] == 0.18
+    assert report["style"]["delta_ylim"] == [-3.0, 7.0]
     assert report["legends"] == {
-        "placement": "below_chart_two_rows",
+        "placement": "below_chart_centered_table",
+        "layout": "two_rows_three_columns",
+        "center_figure_fraction_x": 0.5,
+        "column_width_points": [60.0, 100.0, 65.0],
         "vehicle": ["E-bike", "Drone"],
         "component": ["Production + EOL", "Use phase"],
     }
@@ -82,6 +87,19 @@ def test_city_gef_lifecycle_components_writes_weighted_report(tmp_path):
         "height_g_co2e_per_order"
     ] == pytest.approx(27.5)
     assert ebike_low["total_label"]["text"] == "38.8"
+    delta_values = report["delta_strip"]["values"]
+    assert [item["display_label"] for item in delta_values] == [
+        "+6.2",
+        "-0.5",
+        "-2.2",
+    ]
+    assert report["delta_strip"]["definition"] == (
+        "E-bike total minus Drone total"
+    )
+    assert report["delta_strip"]["encoding"]["type"] == (
+        "neutral_lollipop"
+    )
+    assert report["delta_strip"]["encoding"]["direction_labels"] is False
 
 
 @pytest.mark.parametrize(

@@ -2168,7 +2168,14 @@ def plot_city_gef_lifecycle_components(
     import matplotlib as mpl
     import matplotlib.pyplot as plt
     import numpy as np
-    from matplotlib.patches import Patch
+    from matplotlib.offsetbox import (
+        AnchoredOffsetbox,
+        DrawingArea,
+        HPacker,
+        VPacker,
+    )
+    from matplotlib.patches import Rectangle
+    from matplotlib.text import Text
 
     from drone_emission.visualization._utils import (
         _add_title_suffix,
@@ -2203,6 +2210,13 @@ def plot_city_gef_lifecycle_components(
         "legend_fontsize": 7.5,
         "grid_alpha": 0.18,
         "panel_hspace": 0.20,
+        "delta_height_ratio": 0.18,
+        "delta_panel_hspace": 0.04,
+        "delta_ylim": [-3.0, 7.0],
+        "delta_point_size": 18.0,
+        "delta_linewidth": 0.8,
+        "delta_label_fontsize": 7.0,
+        "legend_column_width_points": [60.0, 100.0, 65.0],
     }
 
     fig = plt.figure(figsize=figsize)
@@ -2216,9 +2230,102 @@ def plot_city_gef_lifecycle_components(
         bottom=0.055,
         top=0.97,
     )
-    ax = fig.add_subplot(layout[0])
+    chart_layout = layout[0].subgridspec(
+        2,
+        1,
+        height_ratios=[
+            style["delta_height_ratio"],
+            1.0 - style["delta_height_ratio"],
+        ],
+        hspace=style["delta_panel_hspace"],
+    )
+    delta_ax = fig.add_subplot(chart_layout[0])
+    ax = fig.add_subplot(chart_layout[1], sharex=delta_ax)
     legend_ax = fig.add_subplot(layout[1])
     legend_ax.set_axis_off()
+    legend_position = legend_ax.get_position()
+    legend_ax.set_position(
+        [0.0, legend_position.y0, 1.0, legend_position.height]
+    )
+
+    delta_records = []
+    for bin_record in component_data["bins"]:
+        bin_bars = [
+            bar
+            for bar in component_data["bars"]
+            if bar["bin_index"] == bin_record["index"]
+        ]
+        totals = {bar["vehicle"]: bar["total"] for bar in bin_bars}
+        delta = float(totals["E-bike"] - totals["Drone"])
+        x = float(bin_record["bin_center"])
+        delta_ax.vlines(
+            x,
+            0.0,
+            delta,
+            color="#666666",
+            linewidth=style["delta_linewidth"],
+            zorder=2,
+        )
+        delta_ax.scatter(
+            [x],
+            [delta],
+            s=style["delta_point_size"],
+            color="#222222",
+            linewidths=0,
+            zorder=3,
+        )
+        label_offset = 0.35 if delta >= 0 else -0.35
+        delta_ax.text(
+            x,
+            delta + label_offset,
+            f"{delta:+.1f}",
+            ha="center",
+            va="bottom" if delta >= 0 else "top",
+            fontsize=style["delta_label_fontsize"],
+            color="#333333",
+            zorder=4,
+        )
+        delta_records.append(
+            {
+                "bin_label_right_edge": bin_record["label_right_edge"],
+                "x_center": x,
+                "ebike_total_g_co2e_per_order": float(
+                    totals["E-bike"]
+                ),
+                "drone_total_g_co2e_per_order": float(totals["Drone"]),
+                "ebike_minus_drone_g_co2e_per_order": delta,
+                "display_label": f"{delta:+.1f}",
+            }
+        )
+
+    delta_ax.axhline(
+        0.0,
+        color="#999999",
+        linewidth=0.65,
+        zorder=1,
+    )
+    delta_ax.set_xlim(*style["x_domain"])
+    delta_ax.set_ylim(*style["delta_ylim"])
+    delta_ax.tick_params(
+        axis="both",
+        which="both",
+        bottom=False,
+        left=False,
+        labelbottom=False,
+        labelleft=False,
+    )
+    for spine in delta_ax.spines.values():
+        spine.set_visible(False)
+    delta_ax.text(
+        0.98,
+        0.92,
+        "$\\Delta$ = E-bike $-$ Drone (g CO$_2$e/order)",
+        transform=delta_ax.transAxes,
+        fontsize=style["delta_label_fontsize"],
+        ha="right",
+        va="top",
+        color="#333333",
+    )
 
     max_total = max(bar["total"] for bar in component_data["bars"])
     for spec in component_data["vehicle_specs"]:
@@ -2298,73 +2405,114 @@ def plot_city_gef_lifecycle_components(
     ax.spines["left"].set_linewidth(0.8)
     ax.spines["bottom"].set_linewidth(0.8)
 
-    vehicle_handles = [
-        Patch(
-            facecolor=spec["color"],
-            alpha=0.88,
-            edgecolor="white",
-            label=spec["label"],
+    def _legend_cell(
+        text,
+        width,
+        facecolor=None,
+        alpha=1.0,
+        fontweight="normal",
+    ):
+        cell = DrawingArea(width, 13.0, 0.0, 0.0)
+        text_x = 0.0
+        if facecolor is not None:
+            cell.add_artist(
+                Rectangle(
+                    (0.0, 2.5),
+                    8.0,
+                    8.0,
+                    facecolor=facecolor,
+                    edgecolor="#555555",
+                    linewidth=0.45,
+                    alpha=alpha,
+                )
+            )
+            text_x = 12.0
+        cell.add_artist(
+            Text(
+                text_x,
+                6.5,
+                text,
+                fontsize=(
+                    style["legend_title_fontsize"]
+                    if fontweight == "bold"
+                    else style["legend_fontsize"]
+                ),
+                fontweight=fontweight,
+                verticalalignment="center",
+            )
         )
-        for spec in component_data["vehicle_specs"]
-    ]
-    component_handles = [
-        Patch(
-            facecolor="#777777",
-            alpha=0.38,
-            edgecolor="#555555",
-            label="Production + EOL",
+        return cell
+
+    column_widths = style["legend_column_width_points"]
+    vehicle_by_name = {
+        spec["label"]: spec for spec in component_data["vehicle_specs"]
+    }
+    legend_rows = [
+        HPacker(
+            children=[
+                _legend_cell(
+                    "Vehicle",
+                    column_widths[0],
+                    fontweight="bold",
+                ),
+                _legend_cell(
+                    "E-bike",
+                    column_widths[1],
+                    facecolor=vehicle_by_name["E-bike"]["color"],
+                    alpha=0.88,
+                ),
+                _legend_cell(
+                    "Drone",
+                    column_widths[2],
+                    facecolor=vehicle_by_name["Drone"]["color"],
+                    alpha=0.88,
+                ),
+            ],
+            align="center",
+            pad=0.0,
+            sep=0.0,
         ),
-        Patch(
-            facecolor="#777777",
-            alpha=0.88,
-            edgecolor="#555555",
-            label="Use phase",
+        HPacker(
+            children=[
+                _legend_cell(
+                    "Component",
+                    column_widths[0],
+                    fontweight="bold",
+                ),
+                _legend_cell(
+                    "Production + EOL",
+                    column_widths[1],
+                    facecolor="#777777",
+                    alpha=0.38,
+                ),
+                _legend_cell(
+                    "Use phase",
+                    column_widths[2],
+                    facecolor="#777777",
+                    alpha=0.88,
+                ),
+            ],
+            align="center",
+            pad=0.0,
+            sep=0.0,
         ),
     ]
-    legend_ax.text(
-        0.0,
-        0.72,
-        "Vehicle",
-        fontsize=style["legend_title_fontsize"],
-        fontweight="bold",
-        ha="left",
-        va="center",
-        transform=legend_ax.transAxes,
+    legend_table = VPacker(
+        children=legend_rows,
+        align="left",
+        pad=0.0,
+        sep=5.0,
     )
-    vehicle_legend = legend_ax.legend(
-        handles=vehicle_handles,
-        loc="center left",
-        bbox_to_anchor=(0.22, 0.72),
-        ncol=2,
-        frameon=False,
-        fontsize=style["legend_fontsize"],
-        handlelength=0.9,
-        handletextpad=0.35,
-        columnspacing=0.8,
-        borderaxespad=0.0,
-    )
-    legend_ax.add_artist(vehicle_legend)
-    legend_ax.text(
-        0.0,
-        0.20,
-        "Component",
-        fontsize=style["legend_title_fontsize"],
-        fontweight="bold",
-        ha="left",
-        va="center",
-        transform=legend_ax.transAxes,
-    )
-    legend_ax.legend(
-        handles=component_handles,
-        loc="center left",
-        bbox_to_anchor=(0.30, 0.20),
-        ncol=2,
-        frameon=False,
-        fontsize=style["legend_fontsize"],
-        handlelength=0.9,
-        handletextpad=0.35,
-        columnspacing=0.8,
-        borderaxespad=0.0,
+    legend_ax.add_artist(
+        AnchoredOffsetbox(
+            loc="center",
+            child=legend_table,
+            pad=0.0,
+            frameon=False,
+            bbox_to_anchor=(0.5, 0.5),
+            bbox_transform=legend_ax.transAxes,
+            borderpad=0.0,
+        )
     )
 
     if plot_title:
@@ -2428,12 +2576,12 @@ def plot_city_gef_lifecycle_components(
         if not plot_title:
             omitted_elements.append("title")
         report = {
-            "schema_version": 1,
+            "schema_version": 2,
             "figure_id": "city_gef_lifecycle_components",
             "core_conclusion": (
                 "Sales-weighted per-order lifecycle emissions vary across "
-                "GEF bins for e-bikes and drones, with fixed and use-phase "
-                "components contributing differently."
+                "GEF bins, while the descriptive e-bike minus drone "
+                "difference changes from positive to negative at higher GEF."
             ),
             "figure_size_inches": [float(figsize[0]), float(figsize[1])],
             "aggregation": (
@@ -2458,9 +2606,28 @@ def plot_city_gef_lifecycle_components(
             ],
             "bars": report_bars,
             "axis": _report_axis(ax),
+            "delta_strip": {
+                "definition": "E-bike total minus Drone total",
+                "unit": "g CO2e/order",
+                "ylim": style["delta_ylim"],
+                "height_ratio": style["delta_height_ratio"],
+                "axis": _report_axis(delta_ax),
+                "values": delta_records,
+                "encoding": {
+                    "type": "neutral_lollipop",
+                    "zero_line_color": "#999999",
+                    "stem_color": "#666666",
+                    "point_color": "#222222",
+                    "label_precision_decimals": 1,
+                    "direction_labels": False,
+                },
+            },
             "legend_axis": _report_axis(legend_ax),
             "legends": {
-                "placement": "below_chart_two_rows",
+                "placement": "below_chart_centered_table",
+                "layout": "two_rows_three_columns",
+                "center_figure_fraction_x": 0.5,
+                "column_width_points": column_widths,
                 "vehicle": ["E-bike", "Drone"],
                 "component": ["Production + EOL", "Use phase"],
             },
