@@ -1054,7 +1054,7 @@ def _plot_selected_city_contribution_bars(ax, rows: list[dict]):
         tick_labels[0].set_fontweight("bold")
         tick_labels[0].set_color("#222222")
     ax.set_ylabel(
-        "Contribution to all-e-bike baseline (pp)",
+        "Contribution (pp of baseline)",
         fontsize=8.2,
     )
     ax.grid(axis="y", alpha=0.25)
@@ -1166,7 +1166,7 @@ def _plot_selected_city_absolute_reduction_points(
         zorder=6,
         label="Absolute net reduction",
     )
-    ax.set_ylabel("Annual net reduction (kt CO2e yr$^{-1}$)", fontsize=8.2)
+    ax.set_ylabel("Net reduction (kt CO2e yr$^{-1}$)", fontsize=8.2)
     ax.tick_params(
         axis="y",
         right=True,
