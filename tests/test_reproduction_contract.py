@@ -175,7 +175,7 @@ def test_render_selection_rejects_internal_plot_names():
         raise AssertionError("internal plot name was accepted")
 
 
-def test_locked_observed_distance_histogram_is_complete():
+def test_locked_beijing_distance_sources_are_complete():
     root = Path(__file__).parents[1]
     histogram = (
         root
@@ -188,10 +188,30 @@ def test_locked_observed_distance_histogram_is_complete():
         rows = list(csv.DictReader(handle))
     assert len(rows) == 90
     assert sum(int(row["count"]) for row in rows) == 278688
-    request = request_index()["observed_delivery_distance_distribution"]
+    model_source = (
+        root
+        / "src"
+        / "drone_emission"
+        / "calibration"
+        / "beijing_gravity_distance_distribution_a1303469cb38697a.csv"
+    )
+    with model_source.open(newline="", encoding="utf-8") as handle:
+        model_rows = list(csv.DictReader(handle))
+    assert len(model_rows) == 202
+    assert {row["series"] for row in model_rows} == {
+        "observed",
+        "joint_three_parameter",
+    }
+    assert {float(row["distance_bin_km"]) for row in model_rows} == {
+        index * 0.05 for index in range(101)
+    }
+    request = request_index()["beijing_order_distance_distribution"]
     assert request["required_inputs"] == [
-        "package:calibration/observed_delivery_distance_histogram.csv"
+        "package:calibration/observed_delivery_distance_histogram.csv",
+        "package:calibration/gravity_calibration_summary.json",
+        "package:calibration/beijing_gravity_distance_distribution_a1303469cb38697a.csv",
     ]
+    assert request["outputs"] == ["beijing_order_distance_distribution.pdf"]
 
 
 def test_city_pipeline_has_no_visualization_dependency():

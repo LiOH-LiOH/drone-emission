@@ -1,72 +1,46 @@
-"""Formal observed distance renderers used only by the manifest registry."""
+"""Formal Beijing distance renderer used only by the manifest registry."""
 
-import os
+import json
+from pathlib import Path
 
-import numpy as np
 import pandas as pd
 
 
-def _render_observed_delivery_distance_distribution(
+def _render_beijing_order_distance_distribution(
     data_dir,
     out,
     for_latex,
     plot_title,
 ):
-    """Render the full observed Eleme delivery-distance distribution."""
+    """Render the accepted gravity-model fit against observed Beijing orders."""
     from drone_emission.visualization.observed_distance_plot import (
-        plot_observed_delivery_distance_distribution,
+        plot_beijing_order_distance_distribution,
     )
 
-    # The formal figure always consumes the tracked historical evidence. Raw
-    # customer coordinates are deliberately outside the active render path.
-    locked_path = os.path.normpath(
-        os.path.join(
-            os.path.dirname(os.path.abspath(__file__)),
-            "..",
-            "calibration",
-            "observed_delivery_distance_histogram.csv",
+    calibration_dir = Path(__file__).resolve().parent.parent / "calibration"
+    observed_path = calibration_dir / "observed_delivery_distance_histogram.csv"
+    summary_path = calibration_dir / "gravity_calibration_summary.json"
+    summary = json.loads(summary_path.read_text(encoding="utf-8"))
+    run_hash = str(summary["run_hash"])
+    model_path = (
+        calibration_dir
+        / f"beijing_gravity_distance_distribution_{run_hash}.csv"
+    )
+    if not model_path.is_file():
+        raise FileNotFoundError(
+            "Missing accepted Beijing gravity distance source: "
+            f"{model_path}. Restore the source from calibration run {run_hash}."
         )
-    )
-    locked = pd.read_csv(locked_path)
-    distances = np.repeat(
-        locked["center_km"].to_numpy(dtype=float),
-        locked["count"].to_numpy(dtype=int),
-    )
-    sample_metadata = {
-        "source": "locked Beijing OD histogram",
-        "source_file_count": 29,
-        "raw_order_count": 278733,
-        "raw_shop_count": 11633,
-        "min_orders_per_shop": None,
-        "orders_after_shop_filter": 278733,
-        "shops_after_shop_filter": 11633,
-        "finite_positive_distance_count": 278688,
-        "excluded_invalid_or_zero_count": 45,
-        "max_distance_km": None,
-        "above_max_distance_count": 0,
-        "retained_distance_count": 278688,
-    }
-    distance_summary = {
-        "count": 278688,
-        "min": 0.00011119062365690736,
-        "q1": 0.7110052863443016,
-        "median": 1.2393072588493563,
-        "mean": 1.3523227505534225,
-        "q3": 1.8804782161212,
-        "max": 8.18385784959984,
-    }
+
     print(
-        "observed_delivery_distance_distribution: using locked "
-        f"histogram {locked_path}"
+        "beijing_order_distance_distribution: using locked observed histogram "
+        f"{observed_path} and accepted calibration source {model_path}"
     )
-    plot_observed_delivery_distance_distribution(
-        distances,
-        save_path=os.path.join(
-            out,
-            "observed_delivery_distance_distribution.png",
-        ),
+    plot_beijing_order_distance_distribution(
+        pd.read_csv(observed_path),
+        pd.read_csv(model_path),
+        save_path=str(Path(out) / "beijing_order_distance_distribution.pdf"),
         for_latex=for_latex,
         plot_title=plot_title,
-        sample_metadata=sample_metadata,
-        distance_summary=distance_summary,
+        calibration_run_hash=run_hash,
     )

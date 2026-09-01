@@ -351,10 +351,10 @@ def _render_distance_threshold(context: RenderContext) -> None:
     )
 
 
-def _render_observed(context: RenderContext) -> None:
-    from .observed_distance import _render_observed_delivery_distance_distribution
+def _render_beijing_order_distance(context: RenderContext) -> None:
+    from .observed_distance import _render_beijing_order_distance_distribution
 
-    _render_observed_delivery_distance_distribution(
+    _render_beijing_order_distance_distribution(
         data_dir=str(context.data_root), out=str(context.subfigure_dir),
         for_latex=True, plot_title=False,
     )
@@ -387,7 +387,7 @@ REQUEST_RENDERERS: dict[str, Renderer] = {
     "break_even_contribution_decomposition_marching_cubes_subfigures": _render_break_even,
     "distance_threshold_policy_comparison": _render_distance_threshold,
     "regions_map_pathway_scenario_maps": lambda c: _render_scenario(c, "regions_map_pathway_scenario_maps"),
-    "observed_delivery_distance_distribution": _render_observed,
+    "beijing_order_distance_distribution": _render_beijing_order_distance,
 }
 
 
