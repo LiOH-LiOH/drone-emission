@@ -202,6 +202,25 @@ def _render_city_gef_lifecycle_components(context: RenderContext) -> None:
     )
 
 
+def _render_city_distance_drone_share_emission_fit(
+    context: RenderContext,
+) -> None:
+    from .city_gef_detour import (
+        _render_city_distance_drone_share_emission_fit as render,
+    )
+
+    render(
+        data_dir=str(context.data_root),
+        save_path=str(
+            context.output("city_distance_drone_share_emission_fit.pdf")
+        ),
+        for_latex=True,
+        plot_title=False,
+        city_df=_city_stats(context),
+        exp_config=context.experiment,
+    )
+
+
 def _render_contribution(context: RenderContext) -> None:
     from .contribution_renderers import render_contribution_decomposition_city_b
 
@@ -331,6 +350,7 @@ REQUEST_RENDERERS: dict[str, Renderer] = {
     "city_gef_context_detour_summary": _render_gef_detour,
     "city_gef_distribution": _render_city_gef_distribution,
     "city_gef_lifecycle_components": _render_city_gef_lifecycle_components,
+    "city_distance_drone_share_emission_fit": _render_city_distance_drone_share_emission_fit,
     "contribution_decomposition_city_b": _render_contribution,
     "regions_map_pathway_scenarios": lambda c: _render_scenario(c, "regions_map_pathway_scenarios"),
     "threshold_resilience_national_overview": _render_threshold_resilience,

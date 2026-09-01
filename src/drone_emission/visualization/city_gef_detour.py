@@ -414,6 +414,7 @@ def _build_reduction_detour_binned_by_city(
     absolute_reduction_metric="total_t",
     use_binned_cache=False,
     bin_width_km=0.1,
+    cache_namespace=None,
 ):
     """Return binned reduction-detour data for selected city rows."""
     from dataclasses import asdict, replace
@@ -453,6 +454,7 @@ def _build_reduction_detour_binned_by_city(
         for key in selected_keys
     }
 
+    cache_identity = cache_namespace or figure_name
     cache_path = None
     cache_meta = None
     available_keys = []
@@ -483,11 +485,11 @@ def _build_reduction_detour_binned_by_city(
     if use_binned_cache:
         cache_path = os.path.join(
             get_cache_dir("visualization", "paper"),
-            f"{figure_name}_binned.pkl",
+            f"{cache_identity}_binned.pkl",
         )
         cache_meta = {
             "version": REDUCTION_DETOUR_CACHE_VERSION,
-            "figure_name": figure_name,
+            "figure_name": cache_identity,
             "city_keys": available_keys,
             "source_files": source_files,
             "gef": {key: float(gef_map[key]) for key in available_keys},
@@ -2648,6 +2650,500 @@ def plot_city_gef_lifecycle_components(
         plt.show()
     plt.close(fig)
     return output_path
+
+
+def plot_city_distance_drone_share_emission_fit(
+    binned_by_city,
+    contexts,
+    save_path: str = None,
+    figsize: tuple = (7.8, 2.4),
+    for_latex: bool = False,
+    plot_title: bool = False,
+):
+    """Plot four-city distance response bars, points, and linear fits."""
+    import matplotlib as mpl
+    import matplotlib.pyplot as plt
+    import numpy as np
+
+    from drone_emission.visualization._utils import (
+        _add_title_suffix,
+        write_figure_report,
+    )
+
+    mpl.rcParams.update(
+        {
+            "font.family": "sans-serif",
+            "font.sans-serif": [
+                "Arial",
+                "Helvetica",
+                "DejaVu Sans",
+                "sans-serif",
+            ],
+            "svg.fonttype": "none",
+            "pdf.fonttype": 42,
+        }
+    )
+    contexts = list(contexts)
+    if len(contexts) != 4:
+        raise ValueError("distance response figure requires exactly four cities")
+    region_keys = [context["region_key"] for context in contexts]
+    if len(set(region_keys)) != len(region_keys):
+        raise ValueError("distance response city keys must be unique")
+    missing_keys = [key for key in region_keys if key not in binned_by_city]
+    if missing_keys:
+        raise ValueError(
+            "distance response figure missing binned cities: "
+            + ", ".join(missing_keys)
+        )
+
+    style = {
+        "x_domain_km": [MIDDLE_DISTANCE_MIN_KM, MIDDLE_DISTANCE_MAX_KM],
+        "x_ticks_km": [0.2, 2.0, 3.5],
+        "bar_ylim_pct": [0.0, 105.0],
+        "bar_yticks_pct": [0.0, 50.0, 100.0],
+        "bar_width_km": 0.156,
+        "bar_color": "#9ecae1",
+        "scatter_color": "#555555",
+        "scatter_size": 14.0,
+        "scatter_alpha": 0.72,
+        "fit_color": "#111111",
+        "fit_linewidth": 1.0,
+        "fit_alpha": 0.82,
+        "zero_line_color": "#555555",
+        "zero_linewidth": 0.45,
+        "tick_fontsize": 8.0,
+        "axis_label_fontsize": 8.0,
+        "city_label_fontsize": 8.0,
+        "grid_alpha": 0.18,
+        "panel_wspace": 0.24,
+    }
+
+    prepared = []
+    absolute_values = []
+    for context in contexts:
+        region_key = context["region_key"]
+        binned = binned_by_city[region_key]
+        required_fields = (
+            "centres",
+            "reduction_abs",
+            "oracle_drone_share_pct",
+            "max_km",
+        )
+        missing_fields = [name for name in required_fields if name not in binned]
+        if missing_fields:
+            raise ValueError(
+                f"{region_key} missing binned fields: "
+                + ", ".join(missing_fields)
+            )
+        centres = np.asarray(binned["centres"], dtype=float)
+        reduction_abs = np.asarray(binned["reduction_abs"], dtype=float)
+        drone_share = np.asarray(
+            binned["oracle_drone_share_pct"], dtype=float
+        )
+        if not (
+            centres.shape == reduction_abs.shape == drone_share.shape
+        ):
+            raise ValueError(
+                f"{region_key} binned arrays must have matching shapes"
+            )
+        x_min, x_max, visible = _middle_distance_domain(
+            centres,
+            reduction_abs,
+            binned["max_km"],
+        )
+        if int(visible.sum()) < 2:
+            raise ValueError(
+                f"{region_key} requires at least two visible distance bins"
+            )
+        fit_x_data = centres[visible]
+        fit_y_data = reduction_abs[visible]
+        slope, intercept = np.polyfit(fit_x_data, fit_y_data, deg=1)
+        fit_x = np.array(
+            [float(fit_x_data.min()), float(fit_x_data.max())],
+            dtype=float,
+        )
+        fit_y = slope * fit_x + intercept
+        absolute_values.extend(fit_y_data.tolist())
+        absolute_values.extend(fit_y.tolist())
+        prepared.append(
+            {
+                "context": context,
+                "binned": binned,
+                "centres": centres,
+                "reduction_abs": reduction_abs,
+                "drone_share": drone_share,
+                "visible": visible,
+                "bar_visible": visible & np.isfinite(drone_share),
+                "x_domain": [x_min, x_max],
+                "fit_slope": float(slope),
+                "fit_intercept": float(intercept),
+                "fit_x": fit_x,
+                "fit_y": fit_y,
+            }
+        )
+
+    finite_absolute = np.asarray(absolute_values, dtype=float)
+    finite_absolute = finite_absolute[np.isfinite(finite_absolute)]
+    absolute_min = min(0.0, float(finite_absolute.min()))
+    absolute_max = max(0.0, float(finite_absolute.max()))
+    absolute_pad = max((absolute_max - absolute_min) * 0.08, 0.5)
+    shared_absolute_ylim = [
+        absolute_min - absolute_pad,
+        absolute_max + absolute_pad,
+    ]
+
+    fig = plt.figure(figsize=figsize)
+    grid = fig.add_gridspec(
+        1,
+        4,
+        left=0.09,
+        right=0.91,
+        bottom=0.23,
+        top=0.83,
+        wspace=style["panel_wspace"],
+    )
+    plot_records = []
+    for index, item in enumerate(prepared):
+        context = item["context"]
+        ax_share = fig.add_subplot(grid[0, index])
+        ax_absolute = ax_share.twinx()
+        ax_absolute.patch.set_visible(False)
+        ax_absolute.set_zorder(ax_share.get_zorder() + 1)
+
+        ax_share.bar(
+            item["centres"][item["bar_visible"]],
+            item["drone_share"][item["bar_visible"]],
+            width=style["bar_width_km"],
+            color=style["bar_color"],
+            edgecolor="white",
+            linewidth=0.25,
+            zorder=2,
+        )
+        ax_absolute.scatter(
+            item["centres"][item["visible"]],
+            item["reduction_abs"][item["visible"]],
+            s=style["scatter_size"],
+            color=style["scatter_color"],
+            alpha=style["scatter_alpha"],
+            linewidth=0,
+            zorder=5,
+        )
+        ax_absolute.plot(
+            item["fit_x"],
+            item["fit_y"],
+            color=style["fit_color"],
+            linewidth=style["fit_linewidth"],
+            alpha=style["fit_alpha"],
+            zorder=6,
+        )
+        ax_absolute.axhline(
+            0.0,
+            color=style["zero_line_color"],
+            linewidth=style["zero_linewidth"],
+            alpha=0.3,
+            zorder=3,
+        )
+
+        ax_share.set_xlim(*style["x_domain_km"])
+        ax_share.set_xticks(style["x_ticks_km"])
+        ax_share.set_ylim(*style["bar_ylim_pct"])
+        ax_share.set_yticks(style["bar_yticks_pct"])
+        ax_share.yaxis.set_ticks_position("right")
+        ax_share.tick_params(
+            axis="both",
+            labelsize=style["tick_fontsize"],
+            length=2.5,
+            pad=1.5,
+        )
+        ax_share.tick_params(axis="y", labelcolor="#3182bd")
+        ax_share.grid(
+            True,
+            axis="y",
+            alpha=style["grid_alpha"],
+            linewidth=0.45,
+        )
+        ax_share.set_axisbelow(True)
+        ax_share.spines["top"].set_visible(False)
+        ax_share.spines["left"].set_visible(False)
+        if index != len(prepared) - 1:
+            ax_share.tick_params(axis="y", right=False, labelright=False)
+            ax_share.spines["right"].set_visible(False)
+
+        ax_absolute.set_ylim(*shared_absolute_ylim)
+        ax_absolute.yaxis.set_ticks_position("left")
+        ax_absolute.tick_params(
+            axis="y",
+            labelsize=style["tick_fontsize"],
+            labelcolor=style["scatter_color"],
+            length=2.5,
+            pad=1.5,
+        )
+        ax_absolute.tick_params(axis="x", bottom=False, labelbottom=False)
+        ax_absolute.spines["top"].set_visible(False)
+        ax_absolute.spines["right"].set_visible(False)
+        ax_absolute.spines["bottom"].set_visible(False)
+        if index != 0:
+            ax_absolute.tick_params(axis="y", left=False, labelleft=False)
+            ax_absolute.spines["left"].set_visible(False)
+
+        ax_share.set_title(
+            context["display_name"],
+            fontsize=style["city_label_fontsize"],
+            fontweight="bold",
+            pad=5.0,
+        )
+        plot_records.append(
+            {
+                **item,
+                "share_ax": ax_share,
+                "absolute_ax": ax_absolute,
+            }
+        )
+
+    fig.text(
+        0.018,
+        0.53,
+        "E-bike $-$ Drone (g CO$_2$e/order)",
+        rotation=90,
+        fontsize=style["axis_label_fontsize"],
+        ha="center",
+        va="center",
+        color=style["scatter_color"],
+    )
+    fig.text(
+        0.982,
+        0.53,
+        "Optimal drone share (%)",
+        rotation=90,
+        fontsize=style["axis_label_fontsize"],
+        ha="center",
+        va="center",
+        color="#3182bd",
+    )
+    fig.text(
+        0.5,
+        0.06,
+        "Air distance (km)",
+        fontsize=style["axis_label_fontsize"],
+        ha="center",
+        va="center",
+    )
+    if plot_title:
+        fig.suptitle(
+            "Distance Response of Drone Share and Lifecycle Emissions",
+            fontsize=9,
+            fontweight="bold",
+            y=0.98,
+        )
+
+    output_path = save_path
+    if output_path:
+        if for_latex and not output_path.endswith(".pdf"):
+            output_path = output_path.rsplit(".", 1)[0] + ".pdf"
+        if plot_title:
+            output_path = _add_title_suffix(output_path)
+        output_dir = os.path.dirname(output_path)
+        if output_dir:
+            os.makedirs(output_dir, exist_ok=True)
+        fig.canvas.draw()
+        fig.savefig(
+            output_path,
+            dpi=300,
+            bbox_inches=fig.bbox_inches,
+            pad_inches=0.0,
+        )
+        city_reports = []
+        for item in plot_records:
+            visible_indices = np.flatnonzero(item["visible"])
+            bar_indices = np.flatnonzero(item["bar_visible"])
+            binned = item["binned"]
+            city_reports.append(
+                {
+                    "region_key": item["context"]["region_key"],
+                    "display_name": item["context"]["display_name"],
+                    "gef_kg_co2e_per_kwh": _report_number(
+                        item["context"].get("gef")
+                    ),
+                    "valid_path_count": int(
+                        binned.get("valid_path_count", 0)
+                    ),
+                    "invalid_path_count": int(
+                        binned.get("invalid_path_count", 0)
+                    ),
+                    "merchant_filter": binned.get("merchant_filter"),
+                    "axes": {
+                        "optimal_drone_share": _report_axis(
+                            item["share_ax"]
+                        ),
+                        "ebike_minus_drone": _report_axis(
+                            item["absolute_ax"]
+                        ),
+                    },
+                    "bars": [
+                        {
+                            "x_air_km": _report_number(
+                                item["centres"][bin_index]
+                            ),
+                            "width_km": style["bar_width_km"],
+                            "optimal_drone_share_pct": _report_number(
+                                item["drone_share"][bin_index]
+                            ),
+                        }
+                        for bin_index in bar_indices
+                    ],
+                    "scatter_points": [
+                        {
+                            "x_air_km": _report_number(
+                                item["centres"][bin_index]
+                            ),
+                            "ebike_minus_drone_g_co2e_per_order": (
+                                _report_number(
+                                    item["reduction_abs"][bin_index]
+                                )
+                            ),
+                        }
+                        for bin_index in visible_indices
+                    ],
+                    "linear_fit": {
+                        "weighting": "equal weight per visible distance bin",
+                        "slope_g_co2e_per_order_per_km": _report_number(
+                            item["fit_slope"]
+                        ),
+                        "intercept_g_co2e_per_order": _report_number(
+                            item["fit_intercept"]
+                        ),
+                        "line_points": [
+                            {
+                                "x_air_km": _report_number(x),
+                                "y_g_co2e_per_order": _report_number(y),
+                            }
+                            for x, y in zip(item["fit_x"], item["fit_y"])
+                        ],
+                    },
+                }
+            )
+        report = {
+            "schema_version": 1,
+            "figure_id": "city_distance_drone_share_emission_fit",
+            "core_conclusion": (
+                "Optimal drone share and the signed e-bike minus drone "
+                "lifecycle-emission difference generally rise with air "
+                "distance, with heterogeneous levels and slopes across cities."
+            ),
+            "figure_size_inches": [float(figsize[0]), float(figsize[1])],
+            "archetype": "quantitative_grid",
+            "city_order": region_keys,
+            "data_contract": {
+                "bin_width_km": 0.2,
+                "distance_domain_km": style["x_domain_km"],
+                "within_bin_aggregation": "sales weighted",
+                "fit_weighting": "equal weight per visible distance bin",
+                "fit_line_domain": "minimum to maximum visible bin center",
+                "merchant_filter": (
+                    "independently exclude each city's merchants with "
+                    "road-snap distance above the city P99"
+                ),
+            },
+            "shared_absolute_ylim": shared_absolute_ylim,
+            "style": style,
+            "cities": city_reports,
+            "omitted_elements": [
+                "power mix bars",
+                "panel letters",
+                "legend",
+                "fit equation",
+                "R-squared",
+                "confidence interval",
+            ] + ([] if plot_title else ["title"]),
+        }
+        report_path = output_path.rsplit(".", 1)[0] + "_report.json"
+        write_figure_report(report_path, report)
+        print(f"City distance response report saved to {report_path}")
+        print(f"City distance response saved to {output_path}")
+    else:
+        plt.show()
+    plt.close(fig)
+    return output_path
+
+
+def _render_city_distance_drone_share_emission_fit(
+    data_dir,
+    save_path,
+    for_latex,
+    plot_title,
+    city_df,
+    exp_config,
+    figure_name="city_distance_drone_share_emission_fit",
+):
+    """Build and render the standalone four-city distance response figure."""
+    base_contexts = CITY_GEF_CONTEXT_DETOUR_CONTEXTS
+    region_keys = [context["region_key"] for context in base_contexts]
+    selected = city_df[city_df["region_key"].isin(region_keys)].copy()
+    selected["_context_order"] = selected["region_key"].map(
+        {key: index for index, key in enumerate(region_keys)}
+    )
+    selected = selected.sort_values("_context_order")
+    selected_keys = selected["region_key"].astype(str).tolist()
+    missing_keys = [key for key in region_keys if key not in selected_keys]
+    if missing_keys:
+        raise ValueError(
+            f"{figure_name} missing cohort cities: " + ", ".join(missing_keys)
+        )
+
+    gef_by_key = dict(
+        zip(
+            selected["region_key"],
+            pd.to_numeric(selected["gef"], errors="coerce"),
+        )
+    )
+    missing_gef = [key for key in region_keys if pd.isna(gef_by_key.get(key))]
+    if missing_gef:
+        raise ValueError(
+            f"{figure_name} missing city GEF: " + ", ".join(missing_gef)
+        )
+    contexts = tuple(
+        {
+            **context,
+            "gef": float(gef_by_key[context["region_key"]]),
+        }
+        for context in sorted(
+            base_contexts,
+            key=lambda item: (
+                float(gef_by_key[item["region_key"]]),
+                item["region_key"],
+            ),
+        )
+    )
+    built = _build_reduction_detour_binned_by_city(
+        data_dir=data_dir,
+        selected=selected,
+        figure_name=figure_name,
+        exp_config=exp_config,
+        absolute_reduction_metric="per_order_g",
+        use_binned_cache=True,
+        bin_width_km=0.2,
+        cache_namespace="city_gef_context_detour_summary",
+    )
+    if built is None:
+        raise RuntimeError(f"{figure_name} could not build city distance bins")
+    binned_by_city, _ = built
+    missing_binned = [
+        context["region_key"]
+        for context in contexts
+        if context["region_key"] not in binned_by_city
+    ]
+    if missing_binned:
+        raise RuntimeError(
+            f"{figure_name} missing binned city data: "
+            + ", ".join(missing_binned)
+        )
+    return plot_city_distance_drone_share_emission_fit(
+        binned_by_city=binned_by_city,
+        contexts=contexts,
+        save_path=save_path,
+        for_latex=for_latex,
+        plot_title=plot_title,
+    )
 
 
 def _add_city_detour_reduction_markers(
