@@ -59,6 +59,7 @@ def test_city_gef_lifecycle_components_writes_weighted_report(tmp_path):
     assert report["style"]["x_domain"] == [0.1, 0.8]
     assert report["style"]["bar_width_gef"] == 0.032
     assert report["style"]["total_label_rotation"] == 90
+    assert report["style"]["panel_hspace"] == 0.20
     assert report["legends"] == {
         "placement": "below_chart_two_rows",
         "vehicle": ["E-bike", "Drone"],

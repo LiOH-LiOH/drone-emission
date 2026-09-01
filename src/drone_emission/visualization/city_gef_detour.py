@@ -2202,6 +2202,7 @@ def plot_city_gef_lifecycle_components(
         "legend_title_fontsize": 8.0,
         "legend_fontsize": 7.5,
         "grid_alpha": 0.18,
+        "panel_hspace": 0.20,
     }
 
     fig = plt.figure(figsize=figsize)
@@ -2209,7 +2210,7 @@ def plot_city_gef_lifecycle_components(
         2,
         1,
         height_ratios=[1.0, 0.18],
-        hspace=0.08,
+        hspace=style["panel_hspace"],
         left=0.18,
         right=0.98,
         bottom=0.055,
