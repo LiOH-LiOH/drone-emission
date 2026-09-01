@@ -17,8 +17,8 @@ from xml.etree import ElementTree
 from .paper_cohort import cohort_hash
 from .paths import PROJECT_ROOT
 
-EXPECTED_FIGURE_COUNT = 11
-EXPECTED_RENDER_REQUEST_COUNT = 28
+EXPECTED_FIGURE_COUNT = 10
+EXPECTED_RENDER_REQUEST_COUNT = 27
 LINKED_SUBFIGURE_DIR = (
     PROJECT_ROOT / "figures" / "inkscape" / "linked-subfigures"
 )
@@ -688,7 +688,7 @@ def render(
     *,
     force: bool = False,
 ) -> list[Path]:
-    """Render selected request bundles and stage completed direct figures."""
+    """Render selected request bundles for later formal composition."""
     if only and requests:
         raise ValueError("render --only and --request are mutually exclusive")
     manifest = load_manifest()

@@ -109,7 +109,7 @@ for figure in manifest["figures"]:
                 print("paper/subfigure/" + name)
 ' src/drone_emission/paper_figures.json
 )
-[[ "${#PDF_PATHS[@]}" -eq 35 ]] || { echo "Expected 35 review PDFs, found ${#PDF_PATHS[@]}" >&2; exit 1; }
+[[ "${#PDF_PATHS[@]}" -eq 40 ]] || { echo "Expected 40 review PDFs, found ${#PDF_PATHS[@]}" >&2; exit 1; }
 : > "$REPORTS/fetch-pdfs.txt"
 for relative in "${PDF_PATHS[@]}"; do
     path="$FIGURE_OUTPUT/$relative"
@@ -119,7 +119,7 @@ for relative in "${PDF_PATHS[@]}"; do
 done
 
 # Promote validates mapping/PDF completeness, not visual composition. Seed its
-# isolated nine manual staging slots with valid generated panels when the paper
+# isolated composition staging slots with valid generated panels when the paper
 # subrepository is not mounted; no seeded placeholder is included in the fetch list.
 while IFS=$'\t' read -r figure_id panel; do
     cp --reflink=auto --preserve=mode,timestamps \

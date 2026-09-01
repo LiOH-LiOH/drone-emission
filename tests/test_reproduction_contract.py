@@ -17,16 +17,12 @@ from drone_emission.visualization.formal_registry import REQUEST_RENDERERS
 
 def test_manifest_has_exact_locked_set():
     manifest = load_manifest()
-    assert manifest["figure_count"] == 11
-    assert len(manifest["figures"]) == 11
-    assert {figure["mode"] for figure in manifest["figures"]} == {
-        "direct",
-        "inkscape",
-    }
-    assert sum(figure["mode"] == "direct" for figure in manifest["figures"]) == 3
-    assert manifest["render_request_count"] == 28
-    assert len(manifest["requests"]) == 28
-    assert sum(len(request["outputs"]) for request in manifest["requests"]) == 41
+    assert manifest["figure_count"] == 10
+    assert len(manifest["figures"]) == 10
+    assert {figure["mode"] for figure in manifest["figures"]} == {"inkscape"}
+    assert manifest["render_request_count"] == 27
+    assert len(manifest["requests"]) == 27
+    assert sum(len(request["outputs"]) for request in manifest["requests"]) == 40
     assert all(
         figure_required_inputs(figure, manifest)
         for figure in manifest["figures"]
@@ -40,7 +36,7 @@ def test_manifest_requests_exactly_match_registry():
         for figure in load_manifest()["figures"]
         for request in figure["render_requests"]
     ]
-    assert len(requests) == 28
+    assert len(requests) == 27
     assert len(requests) == len(set(requests))
     assert set(requests) == set(REQUEST_RENDERERS)
 
@@ -72,7 +68,7 @@ def test_manifest_paths_are_one_to_one():
     figures = load_manifest()["figures"]
     staging = [Path(figure["staging"]).name for figure in figures]
     publish = [Path(figure["publish"]).name for figure in figures]
-    assert len(set(staging)) == 11
+    assert len(set(staging)) == 10
     assert staging == publish
     assert staging == [f"{figure['id']}.pdf" for figure in figures]
 
@@ -254,7 +250,8 @@ def test_locked_beijing_distance_sources_are_complete():
         "beijing_order_distance_distribution",
         "beijing_endpoint_grid_heatmap",
     ]
-    assert ed6["source_output"] == "beijing_order_distance_distribution.pdf"
+    assert ed6["mode"] == "inkscape"
+    assert ed6["inkscape_source"] == "figures/inkscape/figure16.svg"
 
 
 def test_city_pipeline_has_no_visualization_dependency():

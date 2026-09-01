@@ -157,29 +157,6 @@ def _render_city_screening(context: RenderContext) -> None:
     )
 
 
-def _render_gef_detour(context: RenderContext) -> None:
-    from .city_gef_detour import _render_city_gef_context_detour_summary
-
-    stats = _city_stats(context)
-    enriched = pd.read_csv(context.require_file("all_region_stats_enriched.csv", stage="aggregate"))
-    enriched = enriched.drop(
-        columns=["grid_emission_factor", "gef", "gef_source"], errors="ignore"
-    ).merge(
-        stats[["region_key", "grid_emission_factor", "gef", "gef_source"]],
-        on="region_key",
-        how="inner",
-    )
-    _render_city_gef_context_detour_summary(
-        data_dir=str(context.data_root),
-        out=str(context.subfigure_dir),
-        for_latex=True,
-        plot_title=False,
-        df_enriched=enriched,
-        city_df=stats,
-        exp_config=context.experiment,
-    )
-
-
 def _render_city_gef_distribution(context: RenderContext) -> None:
     from .city_gef_detour import plot_city_gef_distribution
 
@@ -386,7 +363,6 @@ REQUEST_RENDERERS: dict[str, Renderer] = {
     "regions_map_oracle_reduction_rank_map_only": lambda c: _render_priority(c, "regions_map_oracle_reduction_rank_map_only"),
     "city_reduction_potential_scatter": _render_city_screening,
     "city_reduction_rank_all_macro_region": lambda c: _render_priority(c, "city_reduction_rank_all_macro_region"),
-    "city_gef_context_detour_summary": _render_gef_detour,
     "city_gef_distribution": _render_city_gef_distribution,
     "city_gef_lifecycle_components": _render_city_gef_lifecycle_components,
     "city_distance_drone_share_emission_fit": _render_city_distance_drone_share_emission_fit,

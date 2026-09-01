@@ -35,20 +35,19 @@ no username is embedded in source code.
 | `python -m drone_emission aggregate` | Consolidates compatible `all_region_stats.{json,csv}` and `all_region_stats_enriched.csv`. |
 | `python -m drone_emission cohort` | Audits post-aggregate city results against the tracked 313-city paper cohort. The minimum is 30 valid weighted OD pairs; the candidate audit is written below work and a changed set fails until explicitly reviewed and accepted. |
 | `python -m drone_emission analyze` | Restores or computes named scenarios, distance thresholds, threshold resilience, city attribution, and the full-OD contribution decomposition for the locked cohort. Use `--only contribution-decomposition` for that analysis alone and `--contribution-chunk-rows` to tune its bounded-memory reader. `--reuse-from DIR` restores one explicit SHA-256-audited directory without automatically discovering legacy files. |
-| `python -m drone_emission render` | Accepts 11 manifest IDs through `--only` or 23 individual render requests through `--request`. It writes panels to `paper/subfigure/`, reports to `paper/report/`, and three direct figures to `paper/`. Only selected requests that consume analysis products require the corresponding completed analysis modules. |
-| `python -m drone_emission --env local compose` | Converts rendered panel PDFs to linked SVGs and exports the eight manifest-backed Inkscape layouts to their formal staging PDFs. Use `--prepare-links` before linking panels in Inkscape and `--only FIGURE_ID` for one composition. |
-| `python -m drone_emission promote` | Validates all 11 staging PDFs and is the only command allowed to write `docs/paper/figures/`. Use `--dry-run` or explicitly confirm with `--yes`. |
+| `python -m drone_emission render` | Accepts 10 manifest IDs through `--only` or 27 individual render requests through `--request`. It writes panels to `paper/subfigure/` and source reports to `paper/report/`. Only selected requests that consume analysis products require the corresponding completed analysis modules. |
+| `python -m drone_emission --env local compose` | Converts rendered panel PDFs to linked SVGs and exports the 10 manifest-backed Inkscape layouts to their formal staging PDFs. Use `--prepare-links` before linking panels in Inkscape and `--only FIGURE_ID` for one composition. |
+| `python -m drone_emission promote` | Validates all 10 staging PDFs and is the only command allowed to write `docs/paper/figures/`. Use `--dry-run` or explicitly confirm with `--yes`. |
 | `python -m drone_emission status` | Reports staging and required-subfigure completeness without writing. |
 | `python -m drone_emission reproduce` | Runs inputs → cities → aggregate → cohort → analyze → render. Existing compatible results are reused; `--force` deliberately recomputes them. It never promotes. |
 
-Eight manifest entries declare Inkscape sources. Their rendered panel PDFs are
+All 10 manifest entries declare Inkscape sources. Their rendered panel PDFs are
 converted into external SVG links by the local `compose` command. The tracked
 master SVGs remain the layout authority: `compose` reads but never rewrites
 them. For PDF export, linked image elements are inlined as nested SVG elements
 in a temporary copy so the panel content remains vector; the temporary copy is
-then removed. Figure 4, Figure 5, and Extended Data Figure 6 are staged
-directly. `supplementary.tex` is retained but is outside this workflow and its
-publication contract.
+then removed. `supplementary.tex` is retained but is outside this workflow and
+its publication contract.
 
 For the initial migration, run `compose --prepare-links`, then import the files
 from `figures/inkscape/linked-subfigures/` into each master SVG using Inkscape's

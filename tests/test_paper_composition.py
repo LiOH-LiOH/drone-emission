@@ -34,13 +34,11 @@ def _valid_pdf(path: Path) -> None:
 
 def test_default_compose_selection_contains_only_inkscape_figures():
     selected = paper_workflow.select_inkscape_figures(None)
-    assert len(selected) == 8
+    assert len(selected) == 10
     assert all(figure["mode"] == "inkscape" for figure in selected)
-
-    with pytest.raises(ValueError, match="Inkscape figure IDs only"):
-        paper_workflow.select_inkscape_figures(
-            ["fig4_gef_distance_detour"]
-        )
+    assert {figure["id"] for figure in selected} == {
+        figure["id"] for figure in paper_workflow.load_manifest()["figures"]
+    }
 
 
 def test_linked_subfigure_names_reads_external_links_only(tmp_path):
