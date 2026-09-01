@@ -2,6 +2,7 @@
 
 import ast
 import csv
+import hashlib
 import json
 from pathlib import Path
 
@@ -23,9 +24,9 @@ def test_manifest_has_exact_locked_set():
         "inkscape",
     }
     assert sum(figure["mode"] == "direct" for figure in manifest["figures"]) == 3
-    assert manifest["render_request_count"] == 27
-    assert len(manifest["requests"]) == 27
-    assert sum(len(request["outputs"]) for request in manifest["requests"]) == 40
+    assert manifest["render_request_count"] == 28
+    assert len(manifest["requests"]) == 28
+    assert sum(len(request["outputs"]) for request in manifest["requests"]) == 41
     assert all(
         figure_required_inputs(figure, manifest)
         for figure in manifest["figures"]
@@ -39,7 +40,7 @@ def test_manifest_requests_exactly_match_registry():
         for figure in load_manifest()["figures"]
         for request in figure["render_requests"]
     ]
-    assert len(requests) == 27
+    assert len(requests) == 28
     assert len(requests) == len(set(requests))
     assert set(requests) == set(REQUEST_RENDERERS)
 
@@ -212,6 +213,47 @@ def test_locked_beijing_distance_sources_are_complete():
         "package:calibration/beijing_gravity_distance_distribution_a1303469cb38697a.csv",
     ]
     assert request["outputs"] == ["beijing_order_distance_distribution.pdf"]
+    endpoint_source = (
+        root
+        / "src"
+        / "drone_emission"
+        / "calibration"
+        / "beijing_gravity_endpoint_grid_a1303469cb38697a.csv"
+    )
+    with endpoint_source.open(newline="", encoding="utf-8") as handle:
+        endpoint_rows = list(csv.DictReader(handle))
+    assert len(endpoint_rows) == 4093
+    assert set(endpoint_rows[0]) == {
+        "grid_y",
+        "grid_x",
+        "observed_orders",
+        "expected_orders",
+        "x_min_m",
+        "y_min_m",
+    }
+    assert hashlib.sha256(endpoint_source.read_bytes()).hexdigest() == (
+        "7b93092c94362ee670e93860f3b46860f6108e4d289f834f21c6c955ae3bd9da"
+    )
+    assert sum(float(row["observed_orders"]) for row in endpoint_rows) == 245144.0
+    assert abs(
+        sum(float(row["expected_orders"]) for row in endpoint_rows) - 245144.0
+    ) < 1e-6
+    endpoint_request = request_index()["beijing_endpoint_grid_heatmap"]
+    assert endpoint_request["required_inputs"] == [
+        "package:calibration/gravity_calibration_summary.json",
+        "package:calibration/beijing_gravity_endpoint_grid_a1303469cb38697a.csv",
+    ]
+    assert endpoint_request["outputs"] == ["beijing_endpoint_grid_heatmap.pdf"]
+    ed6 = next(
+        figure
+        for figure in load_manifest()["figures"]
+        if figure["id"] == "extended_data_fig6_delivery_distance_distribution"
+    )
+    assert ed6["render_requests"] == [
+        "beijing_order_distance_distribution",
+        "beijing_endpoint_grid_heatmap",
+    ]
+    assert ed6["source_output"] == "beijing_order_distance_distribution.pdf"
 
 
 def test_city_pipeline_has_no_visualization_dependency():

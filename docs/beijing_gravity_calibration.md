@@ -130,5 +130,6 @@ audits beside the other files in the fingerprinted calibration run directory:
 delivery-distance orders, while `beijing_endpoint_grid_heatmap.pdf` compares
 observed and joint-model expected endpoint orders on aligned 1 km metric grids
 over a shared basemap and logarithmic scale. Both use the same
-valid-linked-order sample and are standalone calibration outputs rather than
-manifest figures.
+valid-linked-order sample. Their accepted aggregate sources are locked under
+`src/drone_emission/calibration/` for the formal Extended Data Fig. 6 render
+requests; the fingerprinted-run PDFs remain standalone calibration outputs.

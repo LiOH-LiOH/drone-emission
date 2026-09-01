@@ -360,6 +360,17 @@ def _render_beijing_order_distance(context: RenderContext) -> None:
     )
 
 
+def _render_beijing_endpoint_grid(context: RenderContext) -> None:
+    from .gravity_endpoint import _render_beijing_endpoint_grid_heatmap
+
+    _render_beijing_endpoint_grid_heatmap(
+        out=str(context.subfigure_dir),
+        cache_dir=context.cache_root,
+        for_latex=True,
+        plot_title=False,
+    )
+
+
 REQUEST_RENDERERS: dict[str, Renderer] = {
     "shanghai_merchant_monthly_sales": lambda c: _render_config_input(c, "shanghai_merchant_monthly_sales"),
     "shanghai_building_footprint_heatmap": lambda c: _render_config_input(c, "shanghai_building_footprint_heatmap"),
@@ -388,6 +399,7 @@ REQUEST_RENDERERS: dict[str, Renderer] = {
     "distance_threshold_policy_comparison": _render_distance_threshold,
     "regions_map_pathway_scenario_maps": lambda c: _render_scenario(c, "regions_map_pathway_scenario_maps"),
     "beijing_order_distance_distribution": _render_beijing_order_distance,
+    "beijing_endpoint_grid_heatmap": _render_beijing_endpoint_grid,
 }
 
 
