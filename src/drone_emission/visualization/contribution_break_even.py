@@ -474,7 +474,7 @@ def _selected_city_component_rows(
                     "province": str(city.get("province", "")),
                     "macro_region_key": macro_region_key,
                     "macro_region_label": macro_region.get(
-                        "full_label",
+                        "label",
                         macro_region_key,
                     ),
                     "macro_region_label_cn": macro_region.get("cn_label", ""),
@@ -1039,9 +1039,13 @@ def _plot_selected_city_contribution_bars(ax, rows: list[dict]):
     )
 
     ax.axhline(0, color="#555555", linewidth=0.8)
+    tick_text = [
+        "All cities" if row.get("row_type") == "overall" else row["label"]
+        for row in rows
+    ]
     ax.set_xticks(
         x,
-        [row["label"] for row in rows],
+        tick_text,
         rotation=40,
         ha="right",
     )
@@ -1050,7 +1054,7 @@ def _plot_selected_city_contribution_bars(ax, rows: list[dict]):
         tick_labels[0].set_fontweight("bold")
         tick_labels[0].set_color("#222222")
     ax.set_ylabel(
-        "Contribution to all-e-bike baseline (percentage points)",
+        "Contribution to all-e-bike baseline (pp)",
         fontsize=8.2,
     )
     ax.grid(axis="y", alpha=0.25)
@@ -1162,7 +1166,7 @@ def _plot_selected_city_absolute_reduction_points(
         zorder=6,
         label="Absolute net reduction",
     )
-    ax.set_ylabel("Absolute net reduction (kt CO2e yr$^{-1}$)", fontsize=8.2)
+    ax.set_ylabel("Annual net reduction (kt CO2e yr$^{-1}$)", fontsize=8.2)
     ax.tick_params(
         axis="y",
         right=True,
