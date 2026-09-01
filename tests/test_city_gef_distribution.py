@@ -40,12 +40,20 @@ def test_city_gef_distribution_writes_equal_city_kde_report(tmp_path):
     assert result == str(output)
     assert output.is_file()
     assert report["schema_version"] == 2
-    assert report["figure_size_inches"] == [3.7, 4.2]
+    assert report["figure_size_inches"] == [3.7, 3.8]
     assert report["weighting"] == "equal_city"
     assert report["city_count"] == 8
     assert report["kde"]["bandwidth_rule"] == "scott"
     assert len(report["kde"]["curve"]) == 240
     assert report["axis"]["xlim"] == [0.1, 0.8]
+    assert len(report["axis"]["yticks"]) == 3
+    assert report["axis"]["yticks"][0] == 0.0
+    assert report["axis"]["yticks"][-1] <= report["axis"]["axes"][
+        "ylim_data"
+    ][1]
+    assert report["axis"]["height_inches"] == pytest.approx(
+        1.42, abs=0.03
+    )
     assert [item["region_key"] for item in report["selected_city_markers"]] == [
         "chengdu",
         "guangzhou",
@@ -64,6 +72,10 @@ def test_city_gef_distribution_writes_equal_city_kde_report(tmp_path):
         "power_mix_panel_position": "bottom",
         "panel_gap": "whitespace",
         "embedded_panel_letters": False,
+        "density_height_ratio": 0.828,
+        "power_mix_height_ratio": 1.0,
+        "panel_hspace": 0.218,
+        "target_density_height_inches": 1.42,
     }
     power_mix = report["power_mix"]
     assert power_mix["city_order"] == [
@@ -102,6 +114,14 @@ def test_city_gef_distribution_writes_equal_city_kde_report(tmp_path):
         item["component"] for item in power_mix["legend"]["components"]
     ] == ["Hydro", "Thermal", "Wind", "Solar", "Other"]
     assert power_mix["legend"]["title"] == "Power mix"
+    first_bar_axis = power_mix["rows"][0]["axes"]["bar"]
+    assert first_bar_axis["bbox_figure_fraction"]["height"] * 3.8 == pytest.approx(
+        0.34, abs=0.02
+    )
+    legend_axis = power_mix["legend"]["axis"]
+    assert legend_axis["bbox_figure_fraction"]["height"] * 3.8 == pytest.approx(
+        0.20, abs=0.02
+    )
     for row in power_mix["rows"]:
         for component in row["components"]:
             expected = (

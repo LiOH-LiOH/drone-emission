@@ -1682,7 +1682,7 @@ def _add_city_gef_xaxis_markers(fig, axes, selected, contexts):
 def plot_city_gef_distribution(
     df: pd.DataFrame,
     save_path: str = None,
-    figsize: tuple = (3.7, 4.2),
+    figsize: tuple = (3.7, 3.8),
     for_latex: bool = False,
     plot_title: bool = False,
 ):
@@ -1805,12 +1805,21 @@ def plot_city_gef_distribution(
         )
     marker_rows.sort(key=lambda item: (item["gef"], item["region_key"]))
 
+    layout_style = {
+        "density_height_ratio": 0.828,
+        "power_mix_height_ratio": 1.0,
+        "panel_hspace": 0.218,
+        "target_density_height_inches": 1.42,
+    }
     fig = plt.figure(figsize=figsize)
     outer = fig.add_gridspec(
         2,
         1,
-        height_ratios=[1.0, 1.0],
-        hspace=0.24,
+        height_ratios=[
+            layout_style["density_height_ratio"],
+            layout_style["power_mix_height_ratio"],
+        ],
+        hspace=layout_style["panel_hspace"],
         left=0.17,
         right=0.98,
         bottom=0.055,
@@ -1841,7 +1850,14 @@ def plot_city_gef_distribution(
         )
 
     ax.set_xlim(x_min, x_max)
-    ax.set_ylim(0.0, float(curve_y.max()) * 1.08)
+    density_ymax = float(curve_y.max()) * 1.08
+    ax.set_ylim(0.0, density_ymax)
+    density_yticks = (
+        [0.0, 1.0, 2.0]
+        if density_ymax >= 2.0
+        else [float(value) for value in np.linspace(0.0, density_ymax, 3)]
+    )
+    ax.set_yticks(density_yticks)
     ax.set_xticks(np.arange(x_min, x_max + 0.001, 0.1))
     ax.set_xlabel("Grid Emission Factor (kg CO$_2$e/kWh)", fontsize=7.5)
     ax.set_ylabel("Density", fontsize=7.5)
@@ -2082,6 +2098,11 @@ def plot_city_gef_distribution(
                 "xlim": [x_min, x_max],
                 "xlabel": ax.get_xlabel(),
                 "ylabel": ax.get_ylabel(),
+                "yticks": [float(value) for value in ax.get_yticks()],
+                "axes": _report_axis(ax),
+                "height_inches": float(
+                    ax.get_position().height * figsize[1]
+                ),
                 "grid": False,
             },
             "selected_city_markers": marker_rows,
@@ -2091,6 +2112,16 @@ def plot_city_gef_distribution(
                 "power_mix_panel_position": "bottom",
                 "panel_gap": "whitespace",
                 "embedded_panel_letters": False,
+                "density_height_ratio": layout_style[
+                    "density_height_ratio"
+                ],
+                "power_mix_height_ratio": layout_style[
+                    "power_mix_height_ratio"
+                ],
+                "panel_hspace": layout_style["panel_hspace"],
+                "target_density_height_inches": layout_style[
+                    "target_density_height_inches"
+                ],
             },
             "power_mix": {
                 "city_order": [
@@ -2162,7 +2193,7 @@ def plot_city_gef_distribution(
 def plot_city_gef_lifecycle_components(
     df: pd.DataFrame,
     save_path: str = None,
-    figsize: tuple = (3.7, 4.2),
+    figsize: tuple = (3.7, 3.8),
     for_latex: bool = False,
     plot_title: bool = False,
 ):
@@ -2211,9 +2242,12 @@ def plot_city_gef_lifecycle_components(
         "legend_title_fontsize": 8.0,
         "legend_fontsize": 7.5,
         "grid_alpha": 0.18,
-        "panel_hspace": 0.20,
-        "delta_height_ratio": 0.24,
-        "delta_panel_hspace": 0.04,
+        "panel_hspace": 0.245,
+        "legend_height_ratio": 0.208,
+        "delta_height_ratio": 0.278,
+        "delta_panel_hspace": 0.046,
+        "target_bar_axis_height_inches": 1.81,
+        "y_tick_step": 20.0,
         "delta_ylim": [-3.0, 7.0],
         "delta_point_size": 24.0,
         "delta_point_edge_width": 0.9,
@@ -2226,7 +2260,7 @@ def plot_city_gef_lifecycle_components(
     layout = fig.add_gridspec(
         2,
         1,
-        height_ratios=[1.0, 0.18],
+        height_ratios=[1.0, style["legend_height_ratio"]],
         hspace=style["panel_hspace"],
         left=0.18,
         right=0.98,
@@ -2381,7 +2415,11 @@ def plot_city_gef_lifecycle_components(
 
     ax.set_xlim(*style["x_domain"])
     ax.set_xticks(np.arange(0.1, 0.81, 0.1))
-    ax.set_ylim(0.0, max_total * 1.22)
+    bar_ymax = max_total * 1.22
+    ax.set_ylim(0.0, bar_ymax)
+    ax.set_yticks(
+        np.arange(0.0, bar_ymax + 1e-9, style["y_tick_step"])
+    )
     ax.set_xlabel(
         "Grid Emission Factor (kg CO$_2$e/kWh)",
         fontsize=style["axis_label_fontsize"],
@@ -2610,6 +2648,17 @@ def plot_city_gef_lifecycle_components(
             ],
             "bars": report_bars,
             "axis": _report_axis(ax),
+            "layout": {
+                "bar_axis_height_inches": float(
+                    ax.get_position().height * figsize[1]
+                ),
+                "delta_axis_height_inches": float(
+                    delta_ax.get_position().height * figsize[1]
+                ),
+                "legend_axis_height_inches": float(
+                    legend_ax.get_position().height * figsize[1]
+                ),
+            },
             "delta_strip": {
                 "definition": "E-bike total minus Drone total",
                 "unit": "g CO2e/order",

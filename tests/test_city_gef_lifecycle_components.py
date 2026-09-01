@@ -46,7 +46,7 @@ def test_city_gef_lifecycle_components_writes_weighted_report(tmp_path):
     assert result == str(output)
     assert output.is_file()
     assert report["schema_version"] == 2
-    assert report["figure_size_inches"] == [3.7, 4.2]
+    assert report["figure_size_inches"] == [3.7, 3.8]
     assert report["input_city_count"] == 4
     assert report["valid_city_count"] == 4
     assert report["excluded_city_count"] == 0
@@ -59,11 +59,25 @@ def test_city_gef_lifecycle_components_writes_weighted_report(tmp_path):
     assert report["style"]["x_domain"] == [0.1, 0.8]
     assert report["style"]["bar_width_gef"] == 0.032
     assert report["style"]["total_label_rotation"] == 90
-    assert report["style"]["panel_hspace"] == 0.20
-    assert report["style"]["delta_height_ratio"] == 0.24
+    assert report["style"]["panel_hspace"] == 0.245
+    assert report["style"]["legend_height_ratio"] == 0.208
+    assert report["style"]["delta_height_ratio"] == 0.278
+    assert report["style"]["delta_panel_hspace"] == 0.046
+    assert report["style"]["target_bar_axis_height_inches"] == 1.81
+    assert report["style"]["y_tick_step"] == 20.0
     assert report["style"]["delta_ylim"] == [-3.0, 7.0]
     assert report["style"]["delta_point_size"] == 24.0
     assert report["style"]["delta_point_edge_width"] == 0.9
+    assert report["axis"]["yticks_data"] == [0.0, 20.0, 40.0, 60.0]
+    assert report["layout"]["bar_axis_height_inches"] == pytest.approx(
+        1.81, abs=0.03
+    )
+    assert report["layout"]["delta_axis_height_inches"] == pytest.approx(
+        0.70, abs=0.03
+    )
+    assert report["layout"]["legend_axis_height_inches"] == pytest.approx(
+        0.53, abs=0.03
+    )
     assert report["legends"] == {
         "placement": "below_chart_centered_table",
         "layout": "two_rows_three_columns",
