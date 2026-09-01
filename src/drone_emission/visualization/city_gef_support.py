@@ -81,6 +81,12 @@ def _plot_grouped_scatter_split_panels_axes(
     colorbar_label: str = None,
     scatter_size: float = None,
     scatter_alpha: float = 0.68,
+    fit_linewidth: float = None,
+    show_panel_letters: bool = True,
+    axis_label_fontsize: float = None,
+    tick_fontsize: float = None,
+    group_label_fontsize: float = None,
+    colorbar_fontsize: float = None,
     grayscale: bool = False,
 ):
     """Draw threshold-split scatter panels into a parent subplot spec."""
@@ -220,7 +226,11 @@ def _plot_grouped_scatter_split_panels_axes(
                 x_line,
                 y_line,
                 color=line_color,
-                linewidth=1.35 if compact else 2.5,
+                linewidth=(
+                    fit_linewidth
+                    if fit_linewidth is not None
+                    else (1.35 if compact else 2.5)
+                ),
                 alpha=0.42,
                 zorder=15,
             )
@@ -240,22 +250,27 @@ def _plot_grouped_scatter_split_panels_axes(
                 zorder=5,
             )
 
-        ax.text(
-            0.0 if compact else -0.10,
-            1.01 if compact else 1.02,
-            panel_letter,
-            transform=ax.transAxes,
-            fontsize=9 if compact else 14,
-            fontweight="bold",
-            va="bottom",
-            ha="left" if compact else "right",
-        )
+        if show_panel_letters and panel_letter:
+            ax.text(
+                0.0 if compact else -0.10,
+                1.01 if compact else 1.02,
+                panel_letter,
+                transform=ax.transAxes,
+                fontsize=9 if compact else 14,
+                fontweight="bold",
+                va="bottom",
+                ha="left" if compact else "right",
+            )
         ax.text(
             0.04,
             0.95,
             label,
             transform=ax.transAxes,
-            fontsize=7 if compact else 9,
+            fontsize=(
+                group_label_fontsize
+                if group_label_fontsize is not None
+                else (7 if compact else 9)
+            ),
             va="top",
             ha="left",
             bbox=dict(
@@ -269,10 +284,21 @@ def _plot_grouped_scatter_split_panels_axes(
         ax.set_ylim(y_global_min, y_global_max)
         ax.set_xlabel(
             VARIABLE_LABELS.get(feature_var, feature_var),
-            fontsize=7.5 if compact else 12,
+            fontsize=(
+                axis_label_fontsize
+                if axis_label_fontsize is not None
+                else (7.5 if compact else 12)
+            ),
         )
         if compact:
-            ax.tick_params(axis="both", labelsize=7, length=2.5, pad=1.5)
+            ax.tick_params(
+                axis="both",
+                labelsize=(
+                    tick_fontsize if tick_fontsize is not None else 7
+                ),
+                length=2.5,
+                pad=1.5,
+            )
         ax.grid(
             True,
             alpha=0.18 if compact else 0.3,
@@ -282,7 +308,11 @@ def _plot_grouped_scatter_split_panels_axes(
 
     ax_low.set_ylabel(
         VARIABLE_LABELS.get(result_var, result_var),
-        fontsize=7.5 if compact else 12,
+        fontsize=(
+            axis_label_fontsize
+            if axis_label_fontsize is not None
+            else (7.5 if compact else 12)
+        ),
     )
     ax_high.set_ylabel("")
     ax_high.tick_params(axis="y", left=False, labelleft=False)
@@ -317,13 +347,24 @@ def _plot_grouped_scatter_split_panels_axes(
                 )
                 else resolved_colorbar_label
             ),
-            fontsize=7,
+            fontsize=(
+                colorbar_fontsize
+                if colorbar_fontsize is not None
+                else 7
+            ),
             labelpad=1.5,
         )
         if horizontal_colorbar:
             cbar.ax.xaxis.set_label_position("top")
             cbar.ax.xaxis.set_ticks_position("bottom")
-        cbar.ax.tick_params(labelsize=6.8, length=2.2)
+        cbar.ax.tick_params(
+            labelsize=(
+                colorbar_fontsize
+                if colorbar_fontsize is not None
+                else 6.8
+            ),
+            length=2.2,
+        )
         if boundaries is not None:
             tick_labels = [f"{value:.1f}" for value in boundaries]
             if horizontal_colorbar and external_colorbar_ax is None:

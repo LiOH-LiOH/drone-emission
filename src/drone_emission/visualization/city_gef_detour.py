@@ -3153,6 +3153,7 @@ def _add_city_detour_reduction_markers(
     contexts,
     reduction_col,
     panel_letters=("f", "g"),
+    marker_size=28,
 ):
     """Add selected city markers to the bottom detour-reduction scatter panels."""
     ax_low, _, ax_high = axes
@@ -3195,7 +3196,7 @@ def _add_city_detour_reduction_markers(
         ax.scatter(
             [x],
             [y],
-            s=28,
+            s=marker_size,
             marker=marker,
             facecolors="none",
             edgecolors="#111111",
@@ -3230,6 +3231,10 @@ def _detour_reduction_scatter_report(
     panel_letters=("f", "g"),
     compact=False,
     grayscale=False,
+    scatter_size=None,
+    scatter_alpha=None,
+    fit_linewidth=None,
+    show_panel_letters=True,
 ):
     """Return exact plotted data for the bottom detour-reduction scatter panels."""
     import numpy as np
@@ -3316,9 +3321,10 @@ def _detour_reduction_scatter_report(
                 "panel_letter": panel_letter,
                 "axis_name": axis_name,
                 "label_text": label,
+                "sample_size": int(len(panel_df)),
                 "axes": _report_axis(ax),
                 "panel_label": {
-                    "text": panel_letter,
+                    "text": panel_letter if show_panel_letters else None,
                     "x_axes_fraction": 0.0 if compact else -0.10,
                     "y_axes_fraction": 1.01 if compact else 1.02,
                 },
@@ -3328,9 +3334,17 @@ def _detour_reduction_scatter_report(
                     "y_axes_fraction": 0.96,
                 },
                 "scatter_style": {
-                    "size": CITY_GEF_BOTTOM_SCATTER_SIZE if compact else 24,
+                    "size": (
+                        scatter_size
+                        if scatter_size is not None
+                        else CITY_GEF_BOTTOM_SCATTER_SIZE
+                        if compact
+                        else 24
+                    ),
                     "alpha": (
-                        CITY_GEF_GRAYSCALE_BOTTOM_SCATTER_ALPHA
+                        scatter_alpha
+                        if scatter_alpha is not None
+                        else CITY_GEF_GRAYSCALE_BOTTOM_SCATTER_ALPHA
                         if grayscale and compact
                         else CITY_GEF_BOTTOM_SCATTER_ALPHA
                         if compact
@@ -3341,6 +3355,13 @@ def _detour_reduction_scatter_report(
                 },
                 "points": points,
                 "regression": regression,
+                "fit_linewidth": (
+                    fit_linewidth
+                    if fit_linewidth is not None
+                    else 1.35
+                    if compact
+                    else 2.5
+                ),
             }
         )
 
@@ -3354,6 +3375,346 @@ def _detour_reduction_scatter_report(
         "threshold": threshold,
         "panels": panels,
     }
+
+
+def plot_city_detour_reduction_by_gef(
+    df: pd.DataFrame,
+    contexts=CITY_GEF_CONTEXT_DETOUR_CONTEXTS,
+    save_path: str = None,
+    figsize: tuple = (7.8, 2.6),
+    for_latex: bool = False,
+    plot_title: bool = False,
+):
+    """Plot city detour-reduction relationships split by grid intensity."""
+    import matplotlib as mpl
+    import matplotlib.pyplot as plt
+    import numpy as np
+    from matplotlib.colors import to_hex
+
+    from drone_emission.visualization._utils import (
+        _add_title_suffix,
+        write_figure_report,
+    )
+    from drone_emission.visualization.city_gef_support import (
+        _plot_grouped_scatter_split_panels_axes,
+        _weighted_reduction_column,
+    )
+
+    feature_var = "detour_ratio"
+    group_var = "grid_emission_factor"
+    threshold = 0.3
+    required = {"region_key", feature_var, group_var}
+    missing = sorted(required.difference(df.columns))
+    if missing:
+        raise ValueError(
+            "city_detour_reduction_by_gef missing columns: "
+            + ", ".join(missing)
+        )
+
+    plot_df = df.copy()
+    reduction_col = _weighted_reduction_column(plot_df)
+    numeric_columns = [feature_var, reduction_col, group_var]
+    for column in numeric_columns:
+        plot_df[column] = pd.to_numeric(plot_df[column], errors="coerce")
+    finite_mask = np.isfinite(plot_df[numeric_columns]).all(axis=1)
+    valid_df = plot_df.loc[finite_mask].copy()
+    if valid_df.empty:
+        raise ValueError("city_detour_reduction_by_gef has no valid city rows")
+
+    context_keys = [str(context["region_key"]) for context in contexts]
+    expected_keys = set(CITY_CONTEXT_MARKERS)
+    if len(context_keys) != 4 or set(context_keys) != expected_keys:
+        raise ValueError(
+            "city_detour_reduction_by_gef requires exactly Chengdu, "
+            "Guangzhou, Beijing, and Shanghai contexts"
+        )
+    valid_keys = set(valid_df["region_key"].astype(str))
+    missing_city_keys = sorted(expected_keys.difference(valid_keys))
+    if missing_city_keys:
+        raise ValueError(
+            "city_detour_reduction_by_gef missing valid selected cities: "
+            + ", ".join(missing_city_keys)
+        )
+
+    group_masks = {
+        "low_gef": valid_df[group_var] <= threshold,
+        "high_gef": valid_df[group_var] > threshold,
+    }
+    for group_name, mask in group_masks.items():
+        group = valid_df.loc[mask]
+        if len(group) < 3 or group[feature_var].nunique() < 2:
+            raise ValueError(
+                "city_detour_reduction_by_gef requires at least three rows "
+                f"and two distinct detour ratios in {group_name}"
+            )
+
+    mpl.rcParams.update(
+        {
+            "font.family": "sans-serif",
+            "font.sans-serif": [
+                "Arial",
+                "Helvetica",
+                "DejaVu Sans",
+                "sans-serif",
+            ],
+            "pdf.fonttype": 42,
+            "axes.linewidth": 0.8,
+        }
+    )
+    fig = plt.figure(figsize=figsize)
+    root = fig.add_gridspec(
+        1,
+        1,
+        left=0.085,
+        right=0.965,
+        bottom=0.19,
+        top=0.90,
+    )
+    axes = _plot_grouped_scatter_split_panels_axes(
+        fig=fig,
+        subplot_spec=root[0],
+        df=valid_df,
+        feature_var=feature_var,
+        result_var=reduction_col,
+        group_var=group_var,
+        threshold=threshold,
+        plot_title=False,
+        panel_letters=(None, None),
+        compact=True,
+        horizontal_colorbar=False,
+        colorbar_boundaries=CITY_GEF_COLOR_BIN_EDGES,
+        colorbar_label="kg CO$_2$e/kWh",
+        scatter_size=20,
+        scatter_alpha=0.45,
+        fit_linewidth=1.5,
+        show_panel_letters=False,
+        axis_label_fontsize=8,
+        tick_fontsize=7.8,
+        group_label_fontsize=8,
+        colorbar_fontsize=8,
+    )
+    if axes is None:
+        plt.close(fig)
+        raise RuntimeError("city_detour_reduction_by_gef could not draw panels")
+    ax_low, cbar_ax, ax_high = axes
+    ax_low.set_ylabel("Optimal lifecycle reduction (%)", fontsize=8)
+
+    panel_bbox = ax_low.get_position()
+    cbar_bbox = cbar_ax.get_position()
+    target_height = panel_bbox.height * 0.72
+    target_y0 = panel_bbox.y0 + (panel_bbox.height - target_height) / 2.0
+    cbar_ax.set_position(
+        [cbar_bbox.x0, target_y0, cbar_bbox.width, target_height]
+    )
+    cbar_ax.set_title("GEF", fontsize=8, pad=3)
+    cbar_ax.yaxis.labelpad = 3
+
+    fig.canvas.draw()
+    selected_city_markers = _add_city_detour_reduction_markers(
+        fig=fig,
+        axes=axes,
+        df=valid_df,
+        contexts=contexts,
+        reduction_col=reduction_col,
+        panel_letters=(None, None),
+        marker_size=34,
+    )
+    if len(selected_city_markers) != 4:
+        plt.close(fig)
+        raise RuntimeError(
+            "city_detour_reduction_by_gef could not draw all four city markers"
+        )
+
+    if plot_title:
+        fig.suptitle(
+            "Detour and Lifecycle Reduction by Grid Emission Factor",
+            fontsize=9,
+            fontweight="bold",
+        )
+
+    output_path = save_path
+    if output_path:
+        if for_latex and not output_path.endswith(".pdf"):
+            output_path = output_path.rsplit(".", 1)[0] + ".pdf"
+        if plot_title:
+            output_path = _add_title_suffix(output_path)
+        output_dir = os.path.dirname(output_path)
+        if output_dir:
+            os.makedirs(output_dir, exist_ok=True)
+        fig.canvas.draw()
+        fig.savefig(
+            output_path,
+            dpi=300,
+            bbox_inches=fig.bbox_inches,
+            pad_inches=0.0,
+        )
+
+        panel_report = _detour_reduction_scatter_report(
+            valid_df,
+            reduction_col,
+            axes,
+            panel_letters=(None, None),
+            compact=True,
+            scatter_size=20,
+            scatter_alpha=0.45,
+            fit_linewidth=1.5,
+            show_panel_letters=False,
+        )
+        cmap = ax_low.collections[0].cmap
+        colorbar_bbox = _report_axis(cbar_ax)
+        report = {
+            "schema_version": 1,
+            "figure_id": "city_detour_reduction_by_gef",
+            "core_conclusion": (
+                "Detour ratio is positively associated with lifecycle "
+                "emission reduction in both GEF groups, while high-GEF "
+                "cities are shifted toward lower reduction at a given "
+                "detour ratio."
+            ),
+            "archetype": "quantitative_grid",
+            "figure_size_inches": [float(figsize[0]), float(figsize[1])],
+            "data_contract": {
+                "feature_variable": feature_var,
+                "result_variable": reduction_col,
+                "group_variable": group_var,
+                "threshold_kg_co2e_per_kwh": threshold,
+                "low_group_rule": "grid_emission_factor <= 0.3",
+                "high_group_rule": "grid_emission_factor > 0.3",
+                "input_city_count": int(len(plot_df)),
+                "valid_city_count": int(len(valid_df)),
+                "excluded_city_count": int(len(plot_df) - len(valid_df)),
+                "exclusion_rule": (
+                    "exclude rows with non-finite detour ratio, weighted "
+                    "lifecycle reduction, or grid emission factor"
+                ),
+                "selected_city_detour_source": (
+                    "OD-derived sales-weighted road-to-air ratio using the "
+                    "city_gef_context_detour_summary cache contract"
+                ),
+            },
+            "shared_axes": {
+                "xlim_data": _report_array(ax_low.get_xlim()),
+                "ylim_data": _report_array(ax_low.get_ylim()),
+                "right_y_ticks_and_label_hidden": True,
+            },
+            "panels": panel_report["panels"],
+            "colorbar": {
+                "placement": "center_between_low_and_high_gef_panels",
+                "orientation": "vertical",
+                "title": "GEF",
+                "side_label": "kg CO2e/kWh",
+                "boundaries": _report_array(CITY_GEF_COLOR_BIN_EDGES),
+                "colors_low_to_high": [
+                    to_hex(cmap(index)) for index in range(cmap.N)
+                ],
+                "height_fraction_of_panel": _report_number(
+                    cbar_ax.get_position().height / ax_low.get_position().height
+                ),
+                "axes": colorbar_bbox,
+            },
+            "selected_city_markers": selected_city_markers,
+            "style": {
+                "ordinary_scatter_size_pt2": 20.0,
+                "ordinary_scatter_alpha": 0.45,
+                "selected_city_marker_size_pt2": 34.0,
+                "selected_city_marker_face": "none",
+                "selected_city_marker_edge": "#111111",
+                "selected_city_marker_edge_width_pt": 1.1,
+                "fit_linewidth_pt": 1.5,
+                "confidence_level": 0.95,
+                "confidence_band_alpha": 0.11,
+                "ordinary_text_size_pt": 8.0,
+            },
+            "omitted_elements": [
+                "panel letters",
+                "selected-city legend",
+                "fit equation",
+                "R-squared",
+                "p-value annotation",
+            ] + ([] if plot_title else ["title"]),
+        }
+        report_path = output_path.rsplit(".", 1)[0] + "_report.json"
+        write_figure_report(report_path, report)
+        print(f"City detour-reduction by GEF report saved to {report_path}")
+        print(f"City detour-reduction by GEF saved to {output_path}")
+    else:
+        plt.show()
+    plt.close(fig)
+    return output_path
+
+
+def _render_city_detour_reduction_by_gef(
+    data_dir,
+    save_path,
+    for_latex,
+    plot_title,
+    df_enriched,
+    city_df,
+    exp_config,
+    figure_name="city_detour_reduction_by_gef",
+):
+    """Build and render the standalone GEF-split detour-reduction figure."""
+    expected_cohort_keys = set(city_df["region_key"].astype(str))
+    enriched_keys = set(df_enriched["region_key"].astype(str))
+    if (
+        enriched_keys != expected_cohort_keys
+        or len(df_enriched) != len(expected_cohort_keys)
+    ):
+        raise RuntimeError(
+            f"{figure_name} enriched statistics do not match the locked "
+            "paper cohort"
+        )
+
+    contexts = CITY_GEF_CONTEXT_DETOUR_CONTEXTS
+    region_keys = [context["region_key"] for context in contexts]
+    selected = city_df[city_df["region_key"].isin(region_keys)].copy()
+    selected_keys = set(selected["region_key"].astype(str))
+    missing_keys = sorted(set(region_keys).difference(selected_keys))
+    if missing_keys:
+        raise ValueError(
+            f"{figure_name} missing cohort cities: " + ", ".join(missing_keys)
+        )
+
+    built = _build_reduction_detour_binned_by_city(
+        data_dir=data_dir,
+        selected=selected,
+        figure_name=figure_name,
+        exp_config=exp_config,
+        absolute_reduction_metric="per_order_g",
+        use_binned_cache=True,
+        bin_width_km=0.2,
+        cache_namespace="city_gef_context_detour_summary",
+    )
+    if built is None:
+        raise RuntimeError(f"{figure_name} could not build city distance bins")
+    binned_by_city, _ = built
+    missing_binned = sorted(set(region_keys).difference(binned_by_city))
+    if missing_binned:
+        raise RuntimeError(
+            f"{figure_name} missing binned city data: "
+            + ", ".join(missing_binned)
+        )
+
+    summary_df = df_enriched.copy()
+    if "detour_ratio" not in summary_df:
+        summary_df["detour_ratio"] = float("nan")
+    for context in contexts:
+        region_key = context["region_key"]
+        city_detour = binned_by_city[region_key].get("city_detour_ratio")
+        if city_detour is None or pd.isna(city_detour):
+            raise ValueError(f"{figure_name}: {region_key} OD detour unavailable")
+        city_mask = summary_df["region_key"].astype(str).eq(region_key)
+        if not city_mask.any():
+            raise ValueError(f"{figure_name}: {region_key} summary row missing")
+        summary_df.loc[city_mask, "detour_ratio"] = float(city_detour)
+
+    return plot_city_detour_reduction_by_gef(
+        df=summary_df,
+        contexts=contexts,
+        save_path=save_path,
+        for_latex=for_latex,
+        plot_title=plot_title,
+    )
 
 
 def _write_city_gef_context_detour_report(

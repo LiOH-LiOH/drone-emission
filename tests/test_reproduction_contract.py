@@ -23,9 +23,9 @@ def test_manifest_has_exact_locked_set():
         "inkscape",
     }
     assert sum(figure["mode"] == "direct" for figure in manifest["figures"]) == 3
-    assert manifest["render_request_count"] == 26
-    assert len(manifest["requests"]) == 26
-    assert sum(len(request["outputs"]) for request in manifest["requests"]) == 39
+    assert manifest["render_request_count"] == 27
+    assert len(manifest["requests"]) == 27
+    assert sum(len(request["outputs"]) for request in manifest["requests"]) == 40
     assert all(
         figure_required_inputs(figure, manifest)
         for figure in manifest["figures"]
@@ -39,7 +39,7 @@ def test_manifest_requests_exactly_match_registry():
         for figure in load_manifest()["figures"]
         for request in figure["render_requests"]
     ]
-    assert len(requests) == 26
+    assert len(requests) == 27
     assert len(requests) == len(set(requests))
     assert set(requests) == set(REQUEST_RENDERERS)
 
@@ -122,6 +122,25 @@ def test_city_distance_response_uses_only_declared_four_city_inputs():
     assert request["outputs"] == [
         "city_distance_drone_share_emission_fit.pdf"
     ]
+
+
+def test_city_detour_reduction_by_gef_uses_declared_cohort_and_city_inputs():
+    request = request_index()["city_detour_reduction_by_gef"]
+    assert request["cache_version"] == 1
+    assert request["required_inputs"] == [
+        "all_region_stats.csv",
+        "all_region_stats_enriched.csv",
+        "city/chengdu/chengdu_od_pairs.csv",
+        "city/guangzhou/guangzhou_od_pairs.csv",
+        "city/beijing/beijing_od_pairs.csv",
+        "city/shanghai/shanghai_od_pairs.csv",
+        "city/chengdu/chengdu_roadnet.graphml",
+        "city/guangzhou/guangzhou_roadnet.graphml",
+        "city/beijing/beijing_roadnet.graphml",
+        "city/shanghai/shanghai_roadnet.graphml",
+        "project:experiment.toml",
+    ]
+    assert request["outputs"] == ["city_detour_reduction_by_gef.pdf"]
 
 
 def test_city_reduction_scatter_consumes_cohort_statistics_only():

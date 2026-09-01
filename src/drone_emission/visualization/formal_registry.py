@@ -221,6 +221,34 @@ def _render_city_distance_drone_share_emission_fit(
     )
 
 
+def _render_city_detour_reduction_by_gef(context: RenderContext) -> None:
+    from .city_gef_detour import (
+        _render_city_detour_reduction_by_gef as render,
+    )
+
+    stats = _city_stats(context)
+    enriched = pd.read_csv(
+        context.require_file("all_region_stats_enriched.csv", stage="aggregate")
+    )
+    enriched = enriched.drop(
+        columns=["grid_emission_factor", "gef", "gef_source"],
+        errors="ignore",
+    ).merge(
+        stats[["region_key", "grid_emission_factor", "gef", "gef_source"]],
+        on="region_key",
+        how="inner",
+    )
+    render(
+        data_dir=str(context.data_root),
+        save_path=str(context.output("city_detour_reduction_by_gef.pdf")),
+        for_latex=True,
+        plot_title=False,
+        df_enriched=enriched,
+        city_df=stats,
+        exp_config=context.experiment,
+    )
+
+
 def _render_contribution(context: RenderContext) -> None:
     from .contribution_renderers import render_contribution_decomposition_city_b
 
@@ -351,6 +379,7 @@ REQUEST_RENDERERS: dict[str, Renderer] = {
     "city_gef_distribution": _render_city_gef_distribution,
     "city_gef_lifecycle_components": _render_city_gef_lifecycle_components,
     "city_distance_drone_share_emission_fit": _render_city_distance_drone_share_emission_fit,
+    "city_detour_reduction_by_gef": _render_city_detour_reduction_by_gef,
     "contribution_decomposition_city_b": _render_contribution,
     "regions_map_pathway_scenarios": lambda c: _render_scenario(c, "regions_map_pathway_scenarios"),
     "threshold_resilience_national_overview": _render_threshold_resilience,
