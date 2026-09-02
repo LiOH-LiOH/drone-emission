@@ -78,7 +78,7 @@ def test_manifest_paths_are_one_to_one():
 
 def test_contribution_figure_consumes_prepared_analysis_and_population():
     request = request_index()["contribution_decomposition_city_b"]
-    assert request["cache_version"] == 6
+    assert request["cache_version"] == 7
     assert request["required_inputs"] == [
         "all_city_contribution_decomposition.csv",
         "all_region_stats_enriched.csv",
