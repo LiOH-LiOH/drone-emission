@@ -82,6 +82,14 @@ DISTANCE_THRESHOLD_COMPARISON_LABEL_OFFSETS = {
 DISTANCE_THRESHOLD_POINT_COLOR = "#4C78A8"
 DISTANCE_THRESHOLD_POINT_SIZE = 28
 DISTANCE_THRESHOLD_POINT_ALPHA = 0.65
+DISTANCE_THRESHOLD_LANDSCAPE_AXIS_LABELS = (
+    "Road delivery distance threshold (km)",
+    "Maximum lifecycle-emissions reduction (%)",
+)
+DISTANCE_THRESHOLD_ORACLE_AXIS_LABELS = (
+    "Distance-based lifecycle-emissions\nreduction (%)",
+    "Additional reduction under trip-level allocation\n(percentage points)",
+)
 
 
 def _save_distance_threshold_figure(
@@ -528,15 +536,14 @@ def _draw_distance_threshold_representative_city_panels(
     retention_ax.set_xlabel("Retention (%)", fontsize=9, loc="left", labelpad=16)
     retention_ax.xaxis.set_label_position("top")
     for y_value, value in zip(y, retention):
-        inside = value >= 97.0
         retention_ax.annotate(
             f"{value:.1f}",
             (value, y_value),
-            xytext=(-3 if inside else 3, 0),
+            xytext=(-3, 0),
             textcoords="offset points",
             va="center",
-            ha="right" if inside else "left",
-            color="white" if inside else "#303030",
+            ha="right",
+            color="white",
             fontsize=7,
         )
 
@@ -649,8 +656,7 @@ def plot_distance_threshold_city_landscape(
         wide,
         "road_optimal_threshold_km",
         "road_annual_reduction_pct",
-        "Road threshold (km)",
-        "Maximum annual lifecycle reduction (%)",
+        *DISTANCE_THRESHOLD_LANDSCAPE_AXIS_LABELS,
         panel_idx=0,
         diagonal=False,
     )
@@ -712,9 +718,7 @@ def plot_distance_threshold_oracle_performance(
         wide,
         "road_full_domain_reduction_pct",
         "road_oracle_gap_pp",
-        "Road-policy reduction (%)",
-        "Reduction gap (percentage points)\n"
-        "(Trip-level optimum − road policy)",
+        *DISTANCE_THRESHOLD_ORACLE_AXIS_LABELS,
         panel_idx=1,
         diagonal=False,
         zero_baseline=True,

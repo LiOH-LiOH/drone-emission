@@ -3,6 +3,8 @@ import numpy as np
 import pandas as pd
 
 from drone_emission.visualization.distance_threshold import (
+    DISTANCE_THRESHOLD_LANDSCAPE_AXIS_LABELS,
+    DISTANCE_THRESHOLD_ORACLE_AXIS_LABELS,
     DISTANCE_THRESHOLD_TYPICAL_CITIES,
     _draw_distance_threshold_representative_city_panels,
     _prepare_distance_threshold_all_city_data,
@@ -91,5 +93,22 @@ def test_representative_city_retention_axis_uses_full_percentage_range() -> None
             "axis starts" not in text.get_text().lower()
             for text in axes[1].texts
         )
+        assert len(axes[1].texts) == len(representative)
+        for label, bar in zip(axes[1].texts, axes[1].patches):
+            assert label.get_color() == "white"
+            assert label.get_ha() == "right"
+            assert label.get_position()[0] < 0
+            assert label.xy[0] == bar.get_width()
     finally:
         plt.close(fig)
+
+
+def test_distance_threshold_scatter_axis_labels_are_explicit() -> None:
+    assert DISTANCE_THRESHOLD_LANDSCAPE_AXIS_LABELS == (
+        "Road delivery distance threshold (km)",
+        "Maximum lifecycle-emissions reduction (%)",
+    )
+    assert DISTANCE_THRESHOLD_ORACLE_AXIS_LABELS == (
+        "Distance-based lifecycle-emissions\nreduction (%)",
+        "Additional reduction under trip-level allocation\n(percentage points)",
+    )
