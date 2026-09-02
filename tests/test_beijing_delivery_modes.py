@@ -68,6 +68,9 @@ def test_totals_match_direct_weighted_model_for_every_mode(
     assert set(frame["annual_orders"]) == {40.0}
     assert report["od_filter"]["valid_rows"] == 2
     assert report["od_filter"]["excluded_positive_annual_orders"] == 5.0
+    assert report["input_signature"]["source"] == str(od_path)
+    assert report["input_signature"]["size_bytes"] == od_path.stat().st_size
+    assert report["input_signature"]["mtime_ns"] == od_path.stat().st_mtime_ns
     for row in frame.itertuples(index=False):
         distances = [1.0, 2.0] if row.mode == "drone" else [1.5, 3.0]
         expected_g = sum(
@@ -113,6 +116,7 @@ def test_runner_persists_plot_ready_data_and_plotter_only_reads_csv(
     csv_path, report_path = run_beijing_delivery_mode_analysis(config)
     assert csv_path.is_file()
     assert report_path.is_file()
+    assert "input_signature" in report_path.read_text(encoding="utf-8")
     plot_frame = PLOTTER.load_plot_data(csv_path)
     assert len(plot_frame) == len(DELIVERY_MODES)
     assert plot_frame["annual_lifecycle_kt"].is_monotonic_increasing

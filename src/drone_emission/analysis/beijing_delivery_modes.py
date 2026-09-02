@@ -56,6 +56,7 @@ def calculate_beijing_delivery_mode_totals(
     missing = sorted(set(REQUIRED_OD_COLUMNS) - header)
     if missing:
         raise ValueError(f"{od_csv} is missing columns: {missing}")
+    od_stat = od_csv.stat()
 
     input_rows = 0
     valid_rows = 0
@@ -165,6 +166,11 @@ def calculate_beijing_delivery_mode_totals(
             "grid_ef_kg_per_kwh": BEIJING_GRID_EF_KG_PER_KWH,
             "fuel_wtw_ef_kg_per_mj": PETROL_WTW_EF_KG_PER_MJ,
         },
+        "input_signature": {
+            "source": str(od_csv),
+            "size_bytes": od_stat.st_size,
+            "mtime_ns": od_stat.st_mtime_ns,
+        },
         "coefficients": coefficients,
         "boundary": {
             "walking_human_metabolism_included": False,
@@ -194,7 +200,7 @@ def run_beijing_delivery_mode_analysis(
         config,
         chunk_rows=chunk_rows,
     )
-    report["source"] = "city/beijing/beijing_od_pairs.csv"
+    report["input_signature"]["source"] = "city/beijing/beijing_od_pairs.csv"
     with atomic_open(csv_path, "w", encoding="utf-8", newline="") as handle:
         frame.to_csv(handle, index=False)
     with atomic_open(report_path, "w", encoding="utf-8") as handle:

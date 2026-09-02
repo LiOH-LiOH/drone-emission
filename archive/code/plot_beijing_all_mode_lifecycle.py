@@ -11,8 +11,6 @@ from datetime import datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-import matplotlib as mpl
-import matplotlib.pyplot as plt
 import pandas as pd
 
 
@@ -37,6 +35,8 @@ MODE_COLORS = {
     "drone": "#7b6aa8",
 }
 REQUIRED_COLUMNS = {"mode", "annual_lifecycle_kt"}
+WIDTH_MM = 180.0
+HEIGHT_MM = 92.0
 
 
 def _next_review_directory(project_root: Path) -> Path:
@@ -78,13 +78,17 @@ def plot_beijing_all_mode_lifecycle(
     *,
     save_path: str | Path,
     plot_title: bool = False,
-    figsize: tuple[float, float] = (180.0 / 25.4, 92.0 / 25.4),
+    figsize: tuple[float, float] = (WIDTH_MM / 25.4, HEIGHT_MM / 25.4),
 ) -> Path:
     """Plot annual lifecycle totals for eight all-Beijing mode scenarios."""
+    import matplotlib as mpl
+    import matplotlib.pyplot as plt
+
     mpl.rcParams.update(
         {
             "font.family": "sans-serif",
             "font.sans-serif": ["Arial", "Helvetica", "DejaVu Sans", "sans-serif"],
+            "svg.fonttype": "none",
             "pdf.fonttype": 42,
             "font.size": 7.5,
             "axes.linewidth": 0.8,
@@ -133,6 +137,8 @@ def plot_beijing_all_mode_lifecycle(
     fig.tight_layout(rect=(0.0, 0.045, 1.0, 1.0), pad=0.8)
     save_path.parent.mkdir(parents=True, exist_ok=False)
     fig.savefig(save_path, dpi=300, facecolor="white")
+    fig.savefig(save_path.with_suffix(".svg"), facecolor="white")
+    fig.savefig(save_path.with_suffix(".png"), dpi=600, facecolor="white")
     plt.close(fig)
     return save_path
 
