@@ -313,6 +313,7 @@ def _render_distance_threshold(context: RenderContext) -> None:
     from .distance_threshold import (
         plot_distance_threshold_city_landscape,
         plot_distance_threshold_oracle_performance,
+        plot_distance_threshold_representative_city_summary,
     )
 
     summary_path = _resolve_summary_path(context.data_root, None)
@@ -325,6 +326,17 @@ def _render_distance_threshold(context: RenderContext) -> None:
     plot_distance_threshold_oracle_performance(
         summary, oracle, save_path=str(context.output("distance_threshold_oracle_performance.pdf")),
         for_latex=True, plot_title=False,
+    )
+    plot_distance_threshold_representative_city_summary(
+        summary,
+        oracle,
+        save_path=str(
+            context.output(
+                "distance_threshold_representative_city_summary_preview.pdf"
+            )
+        ),
+        for_latex=True,
+        plot_title=False,
     )
 
 

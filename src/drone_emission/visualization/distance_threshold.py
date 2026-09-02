@@ -5,6 +5,7 @@ import os
 import pickle
 
 import matplotlib.pyplot as plt
+from matplotlib.lines import Line2D
 from matplotlib.patches import Patch
 from matplotlib.ticker import FuncFormatter
 import numpy as np
@@ -401,6 +402,226 @@ def _distance_threshold_all_city_report(
             "threshold_optimization": "valid road-distance OD pairs",
         }
     return report
+
+
+def _prepare_distance_threshold_representative_city_data(
+    wide: pd.DataFrame,
+) -> pd.DataFrame:
+    """Select representative cities and calculate road-policy retention."""
+    indexed = wide.set_index("region_key", drop=False)
+    missing = [
+        city for city in DISTANCE_THRESHOLD_TYPICAL_CITIES
+        if city not in indexed.index
+    ]
+    if missing:
+        raise ValueError(
+            "Representative cities missing from distance-threshold results: "
+            + ", ".join(missing)
+        )
+
+    representative = indexed.loc[list(DISTANCE_THRESHOLD_TYPICAL_CITIES)].copy()
+    oracle = representative["oracle_annual_reduction_pct"].to_numpy(dtype=float)
+    road = representative["road_full_domain_reduction_pct"].to_numpy(dtype=float)
+    if np.any(oracle <= 0.0):
+        invalid = representative.loc[
+            oracle <= 0.0, "region_key"
+        ].astype(str).tolist()
+        raise ValueError(
+            "Representative-city Oracle reductions must be positive: "
+            + ", ".join(invalid)
+        )
+    retention = road / oracle * 100.0
+    if np.any((retention < -1e-6) | (retention > 100.0 + 1e-6)):
+        invalid = representative.loc[
+            (retention < -1e-6) | (retention > 100.0 + 1e-6),
+            "region_key",
+        ].astype(str).tolist()
+        raise ValueError(
+            "Representative-city policy retention must be within 0--100%: "
+            + ", ".join(invalid)
+        )
+    representative["retention_pct"] = np.clip(retention, 0.0, 100.0)
+    return representative.reset_index(drop=True)
+
+
+def _draw_distance_threshold_representative_city_panels(
+    axes,
+    representative: pd.DataFrame,
+) -> None:
+    """Draw the three aligned representative-city summary panels."""
+    road_color = DISTANCE_THRESHOLD_POINT_COLOR
+    oracle_color = "#303030"
+    city_labels = [
+        DISTANCE_THRESHOLD_CITY_LABELS[city]
+        for city in representative["region_key"]
+    ]
+    y = np.arange(len(representative), dtype=float)
+
+    for ax in axes:
+        for separator in y[:-1] + 0.5:
+            ax.axhline(separator, color="#D5DADF", linewidth=0.65, zorder=0)
+        ax.set_ylim(len(representative) - 0.5, -0.5)
+        ax.spines[["top", "right", "left"]].set_visible(False)
+        ax.tick_params(axis="both", labelsize=7)
+        ax.tick_params(axis="y", length=0)
+        ax.grid(False)
+
+    road = representative["road_full_domain_reduction_pct"].to_numpy(dtype=float)
+    oracle = representative["oracle_annual_reduction_pct"].to_numpy(dtype=float)
+    reduction_ax, retention_ax, threshold_ax = axes
+    reduction_ax.hlines(y, road, oracle, color="#9AA3AA", linewidth=0.8, zorder=1)
+    reduction_ax.scatter(road, y, color=road_color, s=30, zorder=3)
+    reduction_ax.scatter(oracle, y, color=oracle_color, s=30, zorder=4)
+    reduction_upper = max(40.0, np.ceil(float(oracle.max()) / 10.0) * 10.0)
+    reduction_ax.set_xlim(0.0, reduction_upper)
+    reduction_ax.set_xticks(np.arange(0.0, reduction_upper + 0.1, 10.0))
+    reduction_ax.set_yticks(y, labels=city_labels)
+    reduction_ax.tick_params(axis="y", labelsize=8.5, pad=4)
+    reduction_ax.set_xlabel("Reduction (%)", fontsize=9, loc="left", labelpad=8)
+    reduction_ax.xaxis.set_label_position("top")
+    reduction_ax.legend(
+        handles=[
+            Line2D(
+                [], [], marker="o", linestyle="none", color=road_color,
+                markersize=5.5, label="Road policy",
+            ),
+            Line2D(
+                [], [], marker="o", linestyle="none", color=oracle_color,
+                markersize=5.5, label="Trip-level optimum",
+            ),
+        ],
+        loc="upper left",
+        bbox_to_anchor=(0.0, 1.17),
+        borderaxespad=0.0,
+        frameon=False,
+        fontsize=7.5,
+        handletextpad=0.4,
+        columnspacing=1.0,
+        ncol=2,
+    )
+    for y_value, road_value, oracle_value in zip(y, road, oracle):
+        if oracle_value - road_value >= 0.75:
+            reduction_ax.annotate(
+                f"{road_value:.1f}",
+                (road_value, y_value),
+                xytext=(-4, 6),
+                textcoords="offset points",
+                ha="right",
+                color=road_color,
+                fontsize=7,
+            )
+        reduction_ax.annotate(
+            f"{oracle_value:.1f}",
+            (oracle_value, y_value),
+            xytext=(0, 6),
+            textcoords="offset points",
+            ha="center" if oracle_value - road_value < 0.75 else "left",
+            color=oracle_color,
+            fontsize=7,
+        )
+
+    retention = representative["retention_pct"].to_numpy(dtype=float)
+    retention_ax.barh(y, retention, color=road_color, height=0.42, zorder=2)
+    retention_ax.set_xlim(0.0, 100.0)
+    retention_ax.set_xticks(np.arange(0.0, 100.1, 20.0))
+    retention_ax.set_yticks([])
+    retention_ax.set_xlabel("Retention (%)", fontsize=9, loc="left", labelpad=8)
+    retention_ax.xaxis.set_label_position("top")
+    for y_value, value in zip(y, retention):
+        inside = value >= 97.0
+        retention_ax.annotate(
+            f"{value:.1f}",
+            (value, y_value),
+            xytext=(-3 if inside else 3, 0),
+            textcoords="offset points",
+            va="center",
+            ha="right" if inside else "left",
+            color="white" if inside else "#303030",
+            fontsize=7,
+        )
+
+    thresholds = representative["road_optimal_threshold_km"].to_numpy(dtype=float)
+    threshold_ax.barh(y, thresholds, color=road_color, height=0.42, zorder=2)
+    threshold_upper = max(2.0, np.ceil(float(thresholds.max()) / 0.5) * 0.5)
+    threshold_ax.set_xlim(0.0, threshold_upper)
+    threshold_ax.set_xticks(np.arange(0.0, threshold_upper + 0.01, 0.5))
+    threshold_ax.set_yticks([])
+    threshold_ax.set_xlabel(
+        "Road threshold (km)", fontsize=9, loc="left", labelpad=8
+    )
+    threshold_ax.xaxis.set_label_position("top")
+    for y_value, value in zip(y, thresholds):
+        threshold_ax.annotate(
+            f"{value:.2f}",
+            (value, y_value),
+            xytext=(3, 0),
+            textcoords="offset points",
+            va="center",
+            ha="left",
+            color="#303030",
+            fontsize=7,
+        )
+
+
+def plot_distance_threshold_representative_city_summary(
+    summary_df: pd.DataFrame,
+    oracle_df: pd.DataFrame,
+    save_path: str = None,
+    figsize: tuple = (175.0 / 25.4, 55.0 / 25.4),
+    for_latex: bool = False,
+    plot_title: bool = False,
+):
+    """Plot reduction, retention, and thresholds for representative cities."""
+    wide = _prepare_distance_threshold_all_city_data(summary_df, oracle_df)
+    representative = _prepare_distance_threshold_representative_city_data(wide)
+    fig, axes = plt.subplots(
+        1,
+        3,
+        figsize=figsize,
+        gridspec_kw={"width_ratios": (1.45, 1.0, 1.0), "wspace": 0.30},
+    )
+    _draw_distance_threshold_representative_city_panels(axes, representative)
+    fig.subplots_adjust(
+        left=0.13,
+        right=0.98,
+        bottom=0.18,
+        top=0.73 if plot_title else 0.79,
+    )
+    if plot_title:
+        fig.suptitle(
+            "Representative-city road-distance policies",
+            fontsize=10,
+            fontweight="bold",
+            y=0.98,
+        )
+
+    records = representative[
+        [
+            "region_key",
+            "road_full_domain_reduction_pct",
+            "oracle_annual_reduction_pct",
+            "retention_pct",
+            "road_optimal_threshold_km",
+        ]
+    ].to_dict(orient="records")
+    return _save_distance_threshold_figure(
+        fig,
+        save_path,
+        for_latex,
+        plot_title,
+        "Distance-threshold representative-city summary",
+        {
+            "figure_name": "distance_threshold_representative_city_summary_preview",
+            "core_conclusion": (
+                "Representative cities retain different shares of the trip-level "
+                "optimum under city-specific road-distance policies."
+            ),
+            "native_size_mm": [175.0, 55.0],
+            "retention_axis_pct": [0.0, 100.0],
+            "representative_cities": records,
+        },
+        save_tight=False,
+    )
 
 
 def plot_distance_threshold_city_landscape(
