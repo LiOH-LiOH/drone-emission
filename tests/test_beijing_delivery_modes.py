@@ -1,4 +1,5 @@
 import importlib.util
+import json
 from pathlib import Path
 
 import pandas as pd
@@ -100,7 +101,7 @@ def test_chunk_size_does_not_change_analysis(tmp_path, emission_config):
     pd.testing.assert_frame_equal(one, all_rows)
 
 
-def test_runner_persists_plot_ready_data_and_plotter_only_reads_csv(
+def test_runner_persists_plot_ready_data_and_figure_report(
     tmp_path, emission_config
 ):
     data_dir = tmp_path / "data"
@@ -118,8 +119,21 @@ def test_runner_persists_plot_ready_data_and_plotter_only_reads_csv(
     assert report_path.is_file()
     assert "input_signature" in report_path.read_text(encoding="utf-8")
     plot_frame = PLOTTER.load_plot_data(csv_path)
-    assert len(plot_frame) == len(DELIVERY_MODES)
+    assert len(plot_frame) == len(DELIVERY_MODES) - 1
+    assert "walking" not in set(plot_frame["mode"])
     assert plot_frame["annual_lifecycle_kt"].is_monotonic_increasing
+    figure_report = PLOTTER.build_figure_report(
+        plot_frame,
+        json.loads(report_path.read_text(encoding="utf-8")),
+        figure_path=tmp_path / "beijing.pdf",
+    )
+    assert "walking" not in figure_report["displayed_modes"]
+    assert "walking" not in figure_report["analysis"]["coefficients"]
+    assert not any(
+        key.startswith("walking_")
+        for key in figure_report["analysis"]["boundary"]
+    )
+    assert len(figure_report["plotted_values"]) == len(DELIVERY_MODES) - 1
 
 
 def test_analysis_workflow_registers_both_retained_outputs(tmp_path):

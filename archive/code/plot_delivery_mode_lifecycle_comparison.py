@@ -24,7 +24,6 @@ BEIJING_GRID_EF_KG_PER_KWH = 0.558
 PETROL_WTW_EF_KG_PER_MJ = 0.08901666666666667
 
 MODE_LABELS = {
-    "walking": "Walking",
     "pedal_bicycle": "Pedal bicycle",
     "pedelec_ebike": "Pedelec e-bike",
     "electric_moped": "Electric moped",
@@ -35,7 +34,6 @@ MODE_LABELS = {
 }
 
 MODE_COLORS = {
-    "walking": "#8f8f8f",
     "pedal_bicycle": "#4f8f62",
     "pedelec_ebike": "#76a96d",
     "electric_moped": "#5f9fbd",
@@ -44,11 +42,19 @@ MODE_COLORS = {
     "fuel_car": "#a95f43",
     "drone": "#7b6aa8",
 }
+DISPLAY_MODES = tuple(mode for mode in DELIVERY_MODES if mode != "walking")
+WIDTH_MM = 180.0
+HEIGHT_MM = 92.0
 
 
 def _next_review_directory(project_root: Path) -> Path:
     date = datetime.now(ZoneInfo("Asia/Shanghai")).strftime("%Y%m%d")
-    stem = project_root / "figures" / "review" / f"mode-lifecycle-comparison_{date}"
+    stem = (
+        project_root
+        / "figures"
+        / "review"
+        / f"mode-lifecycle-comparison-no-walking_{date}"
+    )
     candidate = stem
     suffix = 2
     while candidate.exists():
@@ -75,7 +81,7 @@ def build_comparison(
     )
     distance_km = quantile.value / 1000.0
     rows = []
-    for mode in DELIVERY_MODES:
+    for mode in DISPLAY_MODES:
         emissions_g = lifecycle_emission_per_order(
             mode,
             distance_km,
@@ -84,7 +90,7 @@ def build_comparison(
             fuel_wtw_ef_kg_per_mj=fuel_wtw_ef_kg_per_mj,
         )
         rows.append((mode, float(emissions_g)))
-    rows.sort(key=lambda item: (item[1], DELIVERY_MODES.index(item[0])))
+    rows.sort(key=lambda item: (item[1], DISPLAY_MODES.index(item[0])))
     return rows, distance_km, quantile
 
 
@@ -94,7 +100,7 @@ def plot_comparison(
     distance_km: float,
     save_path: str | Path,
     plot_title: bool = False,
-    figsize=(180.0 / 25.4, 92.0 / 25.4),
+    figsize=(WIDTH_MM / 25.4, HEIGHT_MM / 25.4),
 ):
     """Plot one ascending horizontal bar per delivery mode."""
     save_path = Path(save_path)
@@ -139,6 +145,78 @@ def plot_comparison(
     return save_path
 
 
+def build_figure_report(
+    *,
+    rows,
+    distance_km: float,
+    quantile,
+    figure_path: str | Path,
+    od_csv: str | Path,
+) -> dict:
+    """Build the machine-readable report for the seven displayed modes."""
+    source = Path(od_csv)
+    stat = source.stat()
+    return {
+        "schema_version": 1,
+        "figure_name": "delivery_mode_lifecycle_comparison_candidate",
+        "figure_path": Path(figure_path).name,
+        "formal_manifest_registered": False,
+        "figure_size_mm": {"width": WIDTH_MM, "height": HEIGHT_MM},
+        "functional_unit": "g CO2e per unbundled order",
+        "displayed_modes": [mode for mode, _ in rows],
+        "excluded_modes": [
+            {"mode": "walking", "reason": "excluded from display by request"}
+        ],
+        "input_signature": {
+            "source": source.name,
+            "size_bytes": stat.st_size,
+            "mtime_ns": stat.st_mtime_ns,
+        },
+        "distance": {
+            "definition": "common one-way travelled distance; round trip is 2d",
+            "source_column": "road_distance_m",
+            "weight_column": "annual_sales",
+            "quantile": 0.75,
+            "method": "smallest value with cumulative weight >= q * total weight",
+            "value_km": distance_km,
+            "valid_rows": quantile.valid_rows,
+            "total_annual_sales": quantile.total_weight,
+        },
+        "scenario": {
+            "grid_ef_kg_per_kwh": BEIJING_GRID_EF_KG_PER_KWH,
+            "fuel_wtw_ef_kg_per_mj": PETROL_WTW_EF_KG_PER_MJ,
+            "orders_per_trip": 1,
+        },
+        "boundary": {
+            "included": [
+                "vehicle and battery manufacturing",
+                "assembly and disposal",
+                "source-included fluids",
+                "vehicle delivery at point of purchase",
+                "energy use and upstream supply",
+            ],
+            "excluded": [
+                "road and charging infrastructure",
+                "platform and warehouse operations",
+                "shared-vehicle operations and rebalancing",
+            ],
+        },
+        "sources": {
+            "ground_modes": (
+                "https://www.itf-oecd.org/"
+                "good-to-go-environmental-performance-new-mobility"
+            ),
+            "fuel_factor": (
+                "https://www.gov.uk/government/publications/"
+                "greenhouse-gas-reporting-conversion-factors-2026"
+            ),
+        },
+        "emissions_g_per_order": [
+            {"mode": mode, "value": value} for mode, value in rows
+        ],
+    }
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -172,56 +250,14 @@ def main() -> None:
         plot_title=args.plot_title,
     )
 
-    report = {
-        "schema_version": 1,
-        "figure_name": "delivery_mode_lifecycle_comparison_candidate",
-        "figure_path": str(figure_path),
-        "formal_manifest_registered": False,
-        "functional_unit": "g CO2e per unbundled order",
-        "distance": {
-            "definition": "common one-way travelled distance; round trip is 2d",
-            "source_column": "road_distance_m",
-            "weight_column": "annual_sales",
-            "quantile": 0.75,
-            "method": "smallest value with cumulative weight >= q * total weight",
-            "value_km": distance_km,
-            "valid_rows": quantile.valid_rows,
-            "total_annual_sales": quantile.total_weight,
-        },
-        "scenario": {
-            "grid_ef_kg_per_kwh": BEIJING_GRID_EF_KG_PER_KWH,
-            "fuel_wtw_ef_kg_per_mj": PETROL_WTW_EF_KG_PER_MJ,
-            "orders_per_trip": 1,
-        },
-        "boundary": {
-            "included": [
-                "vehicle and battery manufacturing",
-                "assembly and disposal",
-                "source-included fluids",
-                "vehicle delivery at point of purchase",
-                "energy use and upstream supply",
-            ],
-            "excluded": [
-                "road and charging infrastructure",
-                "platform and warehouse operations",
-                "shared-vehicle operations and rebalancing",
-                "human metabolism",
-            ],
-        },
-        "sources": {
-            "ground_modes": (
-                "https://www.itf-oecd.org/good-to-go-environmental-performance-new-mobility"
-            ),
-            "fuel_factor": (
-                "https://www.gov.uk/government/publications/"
-                "greenhouse-gas-reporting-conversion-factors-2026"
-            ),
-        },
-        "emissions_g_per_order": [
-            {"mode": mode, "value": value} for mode, value in rows
-        ],
-    }
-    report_path = output_dir / "delivery_mode_lifecycle_comparison_report.json"
+    report = build_figure_report(
+        rows=rows,
+        distance_km=distance_km,
+        quantile=quantile,
+        figure_path=figure_path,
+        od_csv=args.od_csv,
+    )
+    report_path = figure_path.with_name(f"{figure_path.stem}_report.json")
     report_path.write_text(
         json.dumps(report, indent=2, ensure_ascii=False, allow_nan=False),
         encoding="utf-8",

@@ -17,7 +17,7 @@ CANDIDATE = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(CANDIDATE)
 
 
-def test_candidate_uses_weighted_p75_and_sorts_all_modes(tmp_path):
+def test_candidate_uses_weighted_p75_and_sorts_displayed_modes(tmp_path):
     od_path = tmp_path / "beijing_od.csv"
     pd.DataFrame(
         {
@@ -47,6 +47,19 @@ def test_candidate_uses_weighted_p75_and_sorts_all_modes(tmp_path):
 
     assert distance_km == 3.0
     assert quantile.quantile == 0.75
-    assert {mode for mode, _ in rows} == set(DELIVERY_MODES)
-    assert len(rows) == 8
+    assert {mode for mode, _ in rows} == set(DELIVERY_MODES) - {"walking"}
+    assert len(rows) == 7
     assert [value for _, value in rows] == sorted(value for _, value in rows)
+
+    report = CANDIDATE.build_figure_report(
+        rows=rows,
+        distance_km=distance_km,
+        quantile=quantile,
+        figure_path=tmp_path / "comparison.pdf",
+        od_csv=od_path,
+    )
+    assert "walking" not in report["displayed_modes"]
+    assert report["excluded_modes"] == [
+        {"mode": "walking", "reason": "excluded from display by request"}
+    ]
+    assert len(report["emissions_g_per_order"]) == 7
