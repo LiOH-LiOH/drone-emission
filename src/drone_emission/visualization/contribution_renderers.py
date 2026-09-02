@@ -319,6 +319,7 @@ def _attach_contribution_population(
 def render_contribution_decomposition_city_b(context: RenderContext) -> None:
     """Render the standalone Fig. 5 contribution and population panels."""
     from drone_emission.visualization.contribution_break_even import (
+        CONTRIBUTION_CITY_PANEL_HEIGHT_MM,
         CONTRIBUTION_CITY_B_REGION_KEYS,
         plot_contribution_decomposition_city_b,
         plot_contribution_decomposition_city_population,
@@ -352,7 +353,7 @@ def render_contribution_decomposition_city_b(context: RenderContext) -> None:
     plot_contribution_decomposition_city_b(
         prepared,
         save_path=str(context.output("contribution_decomposition_city_b.pdf")),
-        figsize=(132.0 / 25.4, 190.5 / 25.4),
+        figsize=(132.0 / 25.4, CONTRIBUTION_CITY_PANEL_HEIGHT_MM / 25.4),
         for_latex=True,
         plot_title=False,
     )
@@ -361,7 +362,7 @@ def render_contribution_decomposition_city_b(context: RenderContext) -> None:
         save_path=str(
             context.output("contribution_decomposition_city_population.pdf")
         ),
-        figsize=(44.0 / 25.4, 190.5 / 25.4),
+        figsize=(44.0 / 25.4, CONTRIBUTION_CITY_PANEL_HEIGHT_MM / 25.4),
         for_latex=True,
         plot_title=False,
     )

@@ -73,6 +73,11 @@ CONTRIBUTION_CITY_B_DISPLAY_NAMES = {
     "wulumuqi": "Urumqi",
     "xian": "Xi'an",
 }
+CONTRIBUTION_CITY_PANEL_HEIGHT_MM = 170.0
+CONTRIBUTION_CITY_AXES_BOTTOM_MM = 25.0
+CONTRIBUTION_CITY_AXES_HEIGHT_MM = 125.73
+CONTRIBUTION_CITY_LEGEND_ANCHOR_MM = 5.9
+CONTRIBUTION_CITY_LEGEND_GAP_TARGET_MM = (2.5, 3.0)
 BREAK_EVEN_REPRESENTATIVE_AIR_DISTANCE_KM = 2.0
 BREAK_EVEN_CURVE_AIR_DISTANCES_KM = (0.5, 1.0, 2.0, 3.0, 5.0)
 BREAK_EVEN_DETOUR_LIMITS = (1.0, 2.4)
@@ -128,6 +133,63 @@ def _report_axis(ax):
         "ylabel": ax.get_ylabel(),
         "xticks_data": _report_array(ax.get_xticks()),
         "yticks_data": _report_array(ax.get_yticks()),
+    }
+
+
+def _artist_bbox_mm(fig, artist) -> dict:
+    """Return an artist bounding box in page millimetres from the lower left."""
+    fig.canvas.draw()
+    bbox_inches = artist.get_window_extent(
+        renderer=fig.canvas.get_renderer()
+    ).transformed(fig.dpi_scale_trans.inverted())
+    return {
+        "x0": _report_number(bbox_inches.x0 * 25.4),
+        "y0": _report_number(bbox_inches.y0 * 25.4),
+        "x1": _report_number(bbox_inches.x1 * 25.4),
+        "y1": _report_number(bbox_inches.y1 * 25.4),
+        "width": _report_number(bbox_inches.width * 25.4),
+        "height": _report_number(bbox_inches.height * 25.4),
+    }
+
+
+def _selected_city_vertical_layout(figsize: tuple) -> dict:
+    """Return shared physical vertical geometry for the two city panels."""
+    page_height_mm = float(figsize[1]) * 25.4
+    axes_top_mm = (
+        CONTRIBUTION_CITY_AXES_BOTTOM_MM + CONTRIBUTION_CITY_AXES_HEIGHT_MM
+    )
+    if page_height_mm <= axes_top_mm:
+        raise ValueError(
+            "selected-city panel is too short for the locked axes geometry: "
+            f"page_height_mm={page_height_mm:.3f}, axes_top_mm={axes_top_mm:.3f}"
+        )
+    return {
+        "page_height_mm": page_height_mm,
+        "axes_bottom_mm": CONTRIBUTION_CITY_AXES_BOTTOM_MM,
+        "axes_top_mm": axes_top_mm,
+        "axes_height_mm": CONTRIBUTION_CITY_AXES_HEIGHT_MM,
+        "top_margin_mm": page_height_mm - axes_top_mm,
+        "axes_bottom_fraction": CONTRIBUTION_CITY_AXES_BOTTOM_MM / page_height_mm,
+        "axes_top_fraction": axes_top_mm / page_height_mm,
+        "alignment_contract": (
+            "When equal-height PDF pages are top-aligned, both axes borders, "
+            "y limits and all overall-plus-city row coordinates coincide."
+        ),
+    }
+
+
+def _axis_bbox_mm(ax, figsize: tuple) -> dict:
+    """Return axis position in physical page millimetres."""
+    position = ax.get_position()
+    width_mm = float(figsize[0]) * 25.4
+    height_mm = float(figsize[1]) * 25.4
+    return {
+        "x0": _report_number(position.x0 * width_mm),
+        "y0": _report_number(position.y0 * height_mm),
+        "x1": _report_number(position.x1 * width_mm),
+        "y1": _report_number(position.y1 * height_mm),
+        "width": _report_number(position.width * width_mm),
+        "height": _report_number(position.height * height_mm),
     }
 
 
@@ -1217,6 +1279,8 @@ def _write_contribution_decomposition_city_b_report(
     prepared: Dict,
     save_path: str,
     figsize: tuple,
+    fig,
+    legend,
     axes: tuple,
     rows: list[dict],
 ):
@@ -1244,6 +1308,10 @@ def _write_contribution_decomposition_city_b_report(
     )
     city_rows = [row for row in rows if row.get("row_type") == "city"]
     plotted_region_keys = {row.get("region_key") for row in city_rows}
+    vertical_layout = _selected_city_vertical_layout(figsize)
+    xlabel_bbox_mm = _artist_bbox_mm(fig, ax_main.xaxis.label)
+    legend_bbox_mm = _artist_bbox_mm(fig, legend)
+    xlabel_to_legend_gap_mm = xlabel_bbox_mm["y0"] - legend_bbox_mm["y1"]
     payload = {
         "figure": "contribution_decomposition_city_b",
         "figure_path": save_path,
@@ -1255,6 +1323,21 @@ def _write_contribution_decomposition_city_b_report(
         "axes": {
             "bottom_relative_contribution_decomposition": _report_axis(ax_main),
             "top_absolute_net_reduction": _report_axis(ax_top),
+        },
+        "vertical_layout": {
+            **_json_safe(vertical_layout),
+            "axes_bbox_mm": _axis_bbox_mm(ax_main, figsize),
+            "bottom_xlabel_bbox_mm": xlabel_bbox_mm,
+            "legend_bbox_mm": legend_bbox_mm,
+            "xlabel_to_legend_gap_mm": _report_number(
+                xlabel_to_legend_gap_mm
+            ),
+        },
+        "row_alignment": {
+            "contract": vertical_layout["alignment_contract"],
+            "row_count": len(rows),
+            "y_positions": _report_array(ax_main.get_yticks()),
+            "y_limits": _report_array(ax_main.get_ylim()),
         },
         "selected_region_keys": list(CONTRIBUTION_CITY_B_REGION_KEYS),
         "selected_city_groups": selected_city_groups,
@@ -1318,6 +1401,13 @@ def _write_contribution_decomposition_city_b_report(
             "location": "bottom center",
             "columns": 6,
             "font_size_pt": 6.4,
+            "anchor_from_page_bottom_mm": CONTRIBUTION_CITY_LEGEND_ANCHOR_MM,
+            "xlabel_gap_target_mm": list(
+                CONTRIBUTION_CITY_LEGEND_GAP_TARGET_MM
+            ),
+            "xlabel_gap_actual_mm": _report_number(
+                xlabel_to_legend_gap_mm
+            ),
             "labels": [
                 "Embodied",
                 "Avoided road",
@@ -1355,7 +1445,7 @@ def _write_contribution_decomposition_city_b_report(
 def plot_contribution_decomposition_city_b(
     prepared: Dict,
     save_path: str = None,
-    figsize: tuple = (132.0 / 25.4, 190.5 / 25.4),
+    figsize: tuple = (132.0 / 25.4, CONTRIBUTION_CITY_PANEL_HEIGHT_MM / 25.4),
     for_latex: bool = False,
     plot_title: bool = False,
 ):
@@ -1376,7 +1466,13 @@ def plot_contribution_decomposition_city_b(
     rows = [_national_contribution_row(prepared.get("national", {})), *city_rows]
     fig = plt.figure(figsize=figsize)
     ax = fig.add_subplot(1, 1, 1)
-    fig.subplots_adjust(left=0.39, right=0.98, bottom=0.16, top=0.82)
+    vertical_layout = _selected_city_vertical_layout(figsize)
+    fig.subplots_adjust(
+        left=0.39,
+        right=0.98,
+        bottom=vertical_layout["axes_bottom_fraction"],
+        top=vertical_layout["axes_top_fraction"],
+    )
     y = _plot_selected_city_contribution_bars(ax, rows)
     ax_top = ax.twiny()
     bottom_xlim = ax.get_xlim()
@@ -1425,10 +1521,14 @@ def plot_contribution_decomposition_city_b(
             label="Absolute reduction",
         )
     )
-    fig.legend(
+    legend = fig.legend(
         handles=legend_handles,
         loc="lower center",
-        bbox_to_anchor=(0.5, 0.018),
+        bbox_to_anchor=(
+            0.5,
+            CONTRIBUTION_CITY_LEGEND_ANCHOR_MM
+            / vertical_layout["page_height_mm"],
+        ),
         ncol=6,
         frameon=False,
         fontsize=6.4,
@@ -1456,6 +1556,8 @@ def plot_contribution_decomposition_city_b(
             prepared,
             save_path,
             figsize,
+            fig,
+            legend,
             axes=(ax, ax_top),
             rows=rows,
         )
@@ -1470,6 +1572,7 @@ def _write_contribution_city_population_report(
     prepared: Dict,
     save_path: str,
     figsize: tuple,
+    fig,
     ax,
     rows: list[dict],
     y: np.ndarray,
@@ -1477,6 +1580,7 @@ def _write_contribution_city_population_report(
     """Write the population-panel coverage and row-alignment report."""
     report_path = save_path.rsplit(".", 1)[0] + "_report.json"
     city_rows = [row for row in rows if row.get("row_type") == "city"]
+    vertical_layout = _selected_city_vertical_layout(figsize)
     city_positions = {
         row["region_key"]: float(y[idx])
         for idx, row in enumerate(rows)
@@ -1504,12 +1608,14 @@ def _write_contribution_city_population_report(
             "height": figsize[1] * 25.4,
         },
         "axis": _report_axis(ax),
+        "vertical_layout": {
+            **_json_safe(vertical_layout),
+            "axes_bbox_mm": _axis_bbox_mm(ax, figsize),
+            "bottom_xlabel_bbox_mm": _artist_bbox_mm(fig, ax.xaxis.label),
+        },
         "selected_region_keys": list(CONTRIBUTION_CITY_B_REGION_KEYS),
         "row_alignment": {
-            "contract": (
-                "Identical overall-plus-representative-city y coordinates and "
-                "limits as contribution_decomposition_city_b"
-            ),
+            "contract": vertical_layout["alignment_contract"],
             "row_count": len(rows),
             "y_positions": _report_array(y),
             "y_limits": _report_array(ax.get_ylim()),
@@ -1547,7 +1653,7 @@ def _write_contribution_city_population_report(
 def plot_contribution_decomposition_city_population(
     prepared: Dict,
     save_path: str = None,
-    figsize: tuple = (44.0 / 25.4, 190.5 / 25.4),
+    figsize: tuple = (44.0 / 25.4, CONTRIBUTION_CITY_PANEL_HEIGHT_MM / 25.4),
     for_latex: bool = False,
     plot_title: bool = False,
 ):
@@ -1566,7 +1672,13 @@ def plot_contribution_decomposition_city_population(
         )
 
     fig, ax = plt.subplots(figsize=figsize)
-    fig.subplots_adjust(left=0.10, right=0.96, bottom=0.16, top=0.82)
+    vertical_layout = _selected_city_vertical_layout(figsize)
+    fig.subplots_adjust(
+        left=0.10,
+        right=0.96,
+        bottom=vertical_layout["axes_bottom_fraction"],
+        top=vertical_layout["axes_top_fraction"],
+    )
     gold = "#D4A017"
     city_population = np.array(
         [float(row["population_million"]) for row in city_rows], dtype=float
@@ -1622,6 +1734,7 @@ def plot_contribution_decomposition_city_population(
             prepared,
             save_path,
             figsize,
+            fig,
             ax,
             rows,
             y,
