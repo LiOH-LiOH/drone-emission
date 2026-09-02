@@ -29,6 +29,7 @@ ANALYSIS_MODULES = (
     "threshold-resilience",
     "city-attribution",
     "contribution-decomposition",
+    "beijing-delivery-modes",
 )
 DERIVED_GLOBAL_NAMES = {
     *AUTHORITATIVE_AGGREGATES,
@@ -406,6 +407,13 @@ def _run_city_attribution(config: dict, *, force: bool) -> Path:
     return report
 
 
+def _run_beijing_delivery_modes(config: dict, *, force: bool) -> Path:
+    from .analysis.beijing_delivery_modes import run_beijing_delivery_mode_analysis
+
+    output, _ = run_beijing_delivery_mode_analysis(config, force=force)
+    return output
+
+
 def _module_outputs(config: dict) -> dict[str, tuple[Path, ...]]:
     data = analysis_data_dir(config)
     work = analysis_root(config)
@@ -431,6 +439,14 @@ def _module_outputs(config: dict) -> dict[str, tuple[Path, ...]]:
         "contribution-decomposition": (
             data / "all_city_contribution_decomposition.csv",
             data / "all_city_contribution_decomposition_status.csv",
+        ),
+        "beijing-delivery-modes": (
+            work
+            / "beijing_delivery_modes"
+            / "beijing_all_mode_lifecycle.csv",
+            work
+            / "beijing_delivery_modes"
+            / "beijing_all_mode_lifecycle_report.json",
         ),
     }
 
@@ -484,6 +500,9 @@ def analyze(
         "city-attribution": lambda view: _run_city_attribution(view, force=force),
         "contribution-decomposition": lambda view: _run_contribution_decomposition(
             view, force=force, chunk_rows=contribution_chunk_rows
+        ),
+        "beijing-delivery-modes": lambda view: _run_beijing_delivery_modes(
+            view, force=force
         ),
     }
     selected = list(runners) if only is None else list(dict.fromkeys(only))
