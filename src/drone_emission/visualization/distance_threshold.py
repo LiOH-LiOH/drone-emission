@@ -477,7 +477,7 @@ def _draw_distance_threshold_representative_city_panels(
     reduction_ax.set_xticks(np.arange(0.0, reduction_upper + 0.1, 10.0))
     reduction_ax.set_yticks(y, labels=city_labels)
     reduction_ax.tick_params(axis="y", labelsize=8.5, pad=4)
-    reduction_ax.set_xlabel("Reduction (%)", fontsize=9, loc="left", labelpad=8)
+    reduction_ax.set_xlabel("Reduction (%)", fontsize=9, loc="left", labelpad=16)
     reduction_ax.xaxis.set_label_position("top")
     reduction_ax.legend(
         handles=[
@@ -525,7 +525,7 @@ def _draw_distance_threshold_representative_city_panels(
     retention_ax.set_xlim(0.0, 100.0)
     retention_ax.set_xticks(np.arange(0.0, 100.1, 20.0))
     retention_ax.set_yticks([])
-    retention_ax.set_xlabel("Retention (%)", fontsize=9, loc="left", labelpad=8)
+    retention_ax.set_xlabel("Retention (%)", fontsize=9, loc="left", labelpad=16)
     retention_ax.xaxis.set_label_position("top")
     for y_value, value in zip(y, retention):
         inside = value >= 97.0
@@ -547,7 +547,7 @@ def _draw_distance_threshold_representative_city_panels(
     threshold_ax.set_xticks(np.arange(0.0, threshold_upper + 0.01, 0.5))
     threshold_ax.set_yticks([])
     threshold_ax.set_xlabel(
-        "Road threshold (km)", fontsize=9, loc="left", labelpad=8
+        "Road threshold (km)", fontsize=9, loc="left", labelpad=16
     )
     threshold_ax.xaxis.set_label_position("top")
     for y_value, value in zip(y, thresholds):
