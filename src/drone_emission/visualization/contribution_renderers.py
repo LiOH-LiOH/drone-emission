@@ -211,17 +211,136 @@ def _prepared_contribution_decomposition(summary: pd.DataFrame) -> dict:
     }
 
 
+def _attach_contribution_population(
+    prepared: dict,
+    enriched: pd.DataFrame,
+    selected_region_keys: tuple[str, ...],
+) -> dict:
+    """Attach cohort population metadata after strict key and coverage checks."""
+    from drone_emission.paper_cohort import locked_region_keys
+
+    required_columns = {
+        "region_key",
+        "population_10k",
+        "population_source_year",
+    }
+    missing_columns = sorted(required_columns - set(enriched.columns))
+    if missing_columns:
+        raise ValueError(
+            "cohort population input is missing columns: "
+            f"{missing_columns}; rerun aggregate"
+        )
+
+    values = enriched.copy()
+    if "region_level" in values.columns:
+        values = values[values["region_level"].eq("city")].copy()
+    values["region_key"] = values["region_key"].astype(str)
+    expected = set(locked_region_keys())
+    values = values[values["region_key"].isin(expected)].copy()
+    region_keys = values["region_key"]
+    duplicates = sorted(region_keys[region_keys.duplicated()].unique())
+    actual = set(region_keys)
+    if len(values) != len(expected) or actual != expected or duplicates:
+        raise RuntimeError(
+            "cohort population input does not match the locked cohort: "
+            f"rows={len(values)}, missing={sorted(expected - actual)}, "
+            f"extra={sorted(actual - expected)}, duplicates={duplicates}"
+        )
+
+    values["population_10k"] = pd.to_numeric(
+        values["population_10k"], errors="coerce"
+    )
+    invalid_population = values[
+        values["population_10k"].isna() | (values["population_10k"] <= 0)
+    ]["region_key"].tolist()
+    if invalid_population:
+        raise RuntimeError(
+            "cohort population input requires positive population_10k for all "
+            f"study cities; invalid={sorted(invalid_population)}"
+        )
+
+    selected_mask = values["region_key"].isin(selected_region_keys)
+    selected = values.loc[selected_mask].copy()
+    missing_selected = sorted(set(selected_region_keys) - set(selected["region_key"]))
+    missing_source_year = sorted(
+        selected.loc[
+            selected["population_source_year"].isna()
+            | selected["population_source_year"].astype(str).str.strip().eq(""),
+            "region_key",
+        ].tolist()
+    )
+    if (
+        len(selected) != len(selected_region_keys)
+        or missing_selected
+        or missing_source_year
+    ):
+        raise RuntimeError(
+            "representative-city population metadata is incomplete: "
+            f"rows={len(selected)}, missing={missing_selected}, "
+            f"missing_source_year={missing_source_year}"
+        )
+
+    population_by_key = values.set_index("region_key")
+    for city in prepared.get("cities", []):
+        region_key = str(city.get("region_key", ""))
+        row = population_by_key.loc[region_key]
+        source_year = row["population_source_year"]
+        if hasattr(source_year, "item"):
+            source_year = source_year.item()
+        city["population_10k"] = float(row["population_10k"])
+        city["population_million"] = float(row["population_10k"]) / 100.0
+        city["population_source_year"] = source_year
+
+    minimum = values.loc[values["population_10k"].idxmin()]
+    maximum = values.loc[values["population_10k"].idxmax()]
+    prepared["population_coverage"] = {
+        "expected_city_count": len(expected),
+        "actual_city_count": len(values),
+        "positive_population_city_count": int((values["population_10k"] > 0).sum()),
+        "population_source_year_city_count": int(
+            values["population_source_year"].notna().sum()
+        ),
+        "representative_city_count_expected": len(selected_region_keys),
+        "representative_city_count_actual": len(selected),
+        "representative_source_year_count": int(
+            selected["population_source_year"].notna().sum()
+        ),
+        "unit_input": "10,000 persons",
+        "unit_plot": "million persons",
+        "unit_conversion": "population_million = population_10k / 100",
+        "all_study_city_range": {
+            "minimum_region_key": str(minimum["region_key"]),
+            "minimum_population_10k": float(minimum["population_10k"]),
+            "minimum_population_million": float(minimum["population_10k"]) / 100.0,
+            "maximum_region_key": str(maximum["region_key"]),
+            "maximum_population_10k": float(maximum["population_10k"]),
+            "maximum_population_million": float(maximum["population_10k"]) / 100.0,
+        },
+    }
+    return prepared
+
+
 def render_contribution_decomposition_city_b(context: RenderContext) -> None:
-    """Render Fig. 5 from the compact cohort contribution analysis."""
+    """Render the standalone Fig. 5 contribution and population panels."""
     from drone_emission.visualization.contribution_break_even import (
         CONTRIBUTION_CITY_B_REGION_KEYS,
         plot_contribution_decomposition_city_b,
+        plot_contribution_decomposition_city_population,
     )
     path = context.require_file(
         "all_city_contribution_decomposition.csv",
         stage="analyze --only contribution-decomposition",
     )
     prepared = _prepared_contribution_decomposition(pd.read_csv(path))
+    population_path = context.require_file(
+        "all_region_stats_enriched.csv",
+        stage="aggregate",
+    )
+    prepared = _attach_contribution_population(
+        prepared,
+        pd.read_csv(population_path),
+        CONTRIBUTION_CITY_B_REGION_KEYS,
+    )
     processed_region_keys = {
         str(city["region_key"]) for city in prepared.get("cities", [])
     }
@@ -237,6 +356,16 @@ def render_contribution_decomposition_city_b(context: RenderContext) -> None:
     plot_contribution_decomposition_city_b(
         prepared,
         save_path=str(context.output("contribution_decomposition_city_b.pdf")),
+        figsize=(132.0 / 25.4, 190.5 / 25.4),
+        for_latex=True,
+        plot_title=False,
+    )
+    plot_contribution_decomposition_city_population(
+        prepared,
+        save_path=str(
+            context.output("contribution_decomposition_city_population.pdf")
+        ),
+        figsize=(44.0 / 25.4, 190.5 / 25.4),
         for_latex=True,
         plot_title=False,
     )

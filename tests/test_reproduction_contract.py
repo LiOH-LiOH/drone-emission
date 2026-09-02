@@ -17,12 +17,15 @@ from drone_emission.visualization.formal_registry import REQUEST_RENDERERS
 
 def test_manifest_has_exact_locked_set():
     manifest = load_manifest()
-    assert manifest["figure_count"] == 10
-    assert len(manifest["figures"]) == 10
-    assert {figure["mode"] for figure in manifest["figures"]} == {"inkscape"}
+    assert manifest["figure_count"] == 11
+    assert len(manifest["figures"]) == 11
+    assert {figure["mode"] for figure in manifest["figures"]} == {
+        "direct",
+        "inkscape",
+    }
     assert manifest["render_request_count"] == 27
     assert len(manifest["requests"]) == 27
-    assert sum(len(request["outputs"]) for request in manifest["requests"]) == 40
+    assert sum(len(request["outputs"]) for request in manifest["requests"]) == 41
     assert all(
         figure_required_inputs(figure, manifest)
         for figure in manifest["figures"]
@@ -68,16 +71,29 @@ def test_manifest_paths_are_one_to_one():
     figures = load_manifest()["figures"]
     staging = [Path(figure["staging"]).name for figure in figures]
     publish = [Path(figure["publish"]).name for figure in figures]
-    assert len(set(staging)) == 10
+    assert len(set(staging)) == 11
     assert staging == publish
     assert staging == [f"{figure['id']}.pdf" for figure in figures]
 
 
-def test_contribution_figure_consumes_only_prepared_analysis():
+def test_contribution_figure_consumes_prepared_analysis_and_population():
     request = request_index()["contribution_decomposition_city_b"]
+    assert request["cache_version"] == 5
     assert request["required_inputs"] == [
-        "all_city_contribution_decomposition.csv"
+        "all_city_contribution_decomposition.csv",
+        "all_region_stats_enriched.csv",
     ]
+    assert request["outputs"] == [
+        "contribution_decomposition_city_b.pdf",
+        "contribution_decomposition_city_population.pdf",
+    ]
+    figure = next(
+        figure
+        for figure in load_manifest()["figures"]
+        if figure["id"] == "fig5_contribution_decomposition"
+    )
+    assert figure["mode"] == "direct"
+    assert figure["source_output"] == "contribution_decomposition_city_b.pdf"
 
 
 def test_city_gef_distribution_consumes_cohort_statistics_only():

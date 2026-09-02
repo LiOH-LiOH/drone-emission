@@ -480,6 +480,13 @@ def _selected_city_component_rows(
                     "macro_region_label_cn": macro_region.get("cn_label", ""),
                     "macro_region_color": macro_region.get("color", "#777777"),
                     "baseline_ebike_lifecycle_kg": city_baseline_kg,
+                    "population_10k": float(city.get("population_10k", 0.0)),
+                    "population_million": float(
+                        city.get("population_million", 0.0)
+                    ),
+                    "population_source_year": city.get(
+                        "population_source_year"
+                    ),
                     "sampled_drone_rows": int(
                         city.get("drone_assigned_sampled_rows", 0)
                     ),
@@ -961,6 +968,31 @@ def prepare_contribution_decomposition_data(
     }
 
 
+def _selected_city_y_positions(rows: list[dict]) -> np.ndarray:
+    """Return the locked overall-plus-28-city row coordinates."""
+    y_values = []
+    current_y = 0.0
+    for idx, row in enumerate(rows):
+        if idx:
+            previous = rows[idx - 1]
+            current_y += 1.0
+            if previous.get("row_type") == "overall":
+                current_y += 0.85
+            elif (
+                row.get("macro_region_key")
+                != previous.get("macro_region_key")
+            ):
+                current_y += 0.65
+        y_values.append(current_y)
+    return np.array(y_values, dtype=float)
+
+
+def _set_selected_city_y_limits(ax, y: np.ndarray) -> None:
+    """Apply deterministic vertical limits shared by both standalone panels."""
+    if y.size:
+        ax.set_ylim(float(y[-1]) + 0.72, float(y[0]) - 0.72)
+
+
 def _plot_selected_city_contribution_bars(ax, rows: list[dict]):
     """Draw one-row-per-city horizontal component bars with net points."""
     if not rows:
@@ -977,21 +1009,7 @@ def _plot_selected_city_contribution_bars(ax, rows: list[dict]):
         ax.tick_params(left=False, bottom=False, labelleft=False, labelbottom=False)
         return np.array([], dtype=float)
 
-    y_values = []
-    current_y = 0.0
-    for idx, row in enumerate(rows):
-        if idx:
-            previous = rows[idx - 1]
-            current_y += 1.0
-            if previous.get("row_type") == "overall":
-                current_y += 0.85
-            elif (
-                row.get("macro_region_key")
-                != previous.get("macro_region_key")
-            ):
-                current_y += 0.65
-        y_values.append(current_y)
-    y = np.array(y_values, dtype=float)
+    y = _selected_city_y_positions(rows)
     positive_acc = np.zeros(len(rows), dtype=float)
     negative_acc = np.zeros(len(rows), dtype=float)
     extrema = [0.0]
@@ -1040,7 +1058,7 @@ def _plot_selected_city_contribution_bars(ax, rows: list[dict]):
 
     ax.axvline(0, color="#555555", linewidth=0.8)
     ax.set_yticks(y, [row["label"] for row in rows])
-    ax.invert_yaxis()
+    _set_selected_city_y_limits(ax, y)
     tick_labels = ax.get_yticklabels()
     if tick_labels and rows[0].get("row_type") == "overall":
         tick_labels[0].set_fontweight("bold")
@@ -1230,6 +1248,10 @@ def _write_contribution_decomposition_city_b_report(
         "figure": "contribution_decomposition_city_b",
         "figure_path": save_path,
         "figure_size_inches": {"width": figsize[0], "height": figsize[1]},
+        "figure_size_mm": {
+            "width": figsize[0] * 25.4,
+            "height": figsize[1] * 25.4,
+        },
         "axes": {
             "bottom_relative_contribution_decomposition": _report_axis(ax_main),
             "top_absolute_net_reduction": _report_axis(ax_top),
@@ -1292,6 +1314,19 @@ def _write_contribution_decomposition_city_b_report(
             },
         },
         "component_specs": _json_safe(CONTRIBUTION_COMPONENT_SPECS),
+        "legend": {
+            "location": "bottom center",
+            "columns": 6,
+            "font_size_pt": 6.4,
+            "labels": [
+                "Embodied",
+                "Avoided road",
+                "Fixed flight",
+                "Cruise",
+                "Net reduction",
+                "Absolute reduction",
+            ],
+        },
         "net_marker": {"label": "Net reduction", "color": "#111111"},
         "absolute_marker": {
             "label": "Absolute net reduction",
@@ -1300,8 +1335,8 @@ def _write_contribution_decomposition_city_b_report(
             "scope": "Representative city rows only",
         },
         "export": {
-            "bbox_inches": "tight",
-            "pad_inches": 0.03,
+            "bbox_inches": None,
+            "pad_inches": 0.0,
             "source_canvas_inches": {
                 "width": figsize[0],
                 "height": figsize[1],
@@ -1320,7 +1355,7 @@ def _write_contribution_decomposition_city_b_report(
 def plot_contribution_decomposition_city_b(
     prepared: Dict,
     save_path: str = None,
-    figsize: tuple = (7.2, 7.5),
+    figsize: tuple = (132.0 / 25.4, 190.5 / 25.4),
     for_latex: bool = False,
     plot_title: bool = False,
 ):
@@ -1341,7 +1376,7 @@ def plot_contribution_decomposition_city_b(
     rows = [_national_contribution_row(prepared.get("national", {})), *city_rows]
     fig = plt.figure(figsize=figsize)
     ax = fig.add_subplot(1, 1, 1)
-    fig.subplots_adjust(left=0.375, right=0.98, bottom=0.09, top=0.80)
+    fig.subplots_adjust(left=0.39, right=0.98, bottom=0.16, top=0.82)
     y = _plot_selected_city_contribution_bars(ax, rows)
     ax_top = ax.twiny()
     bottom_xlim = ax.get_xlim()
@@ -1356,7 +1391,12 @@ def plot_contribution_decomposition_city_b(
             1,
             facecolor=spec["color"],
             edgecolor="white",
-            label=spec["label"],
+            label={
+                "embodied_balance": "Embodied",
+                "avoided_ebike_road_use": "Avoided road",
+                "drone_fixed_flight_penalty": "Fixed flight",
+                "drone_cruise_penalty": "Cruise",
+            }[spec["key"]],
         )
         for spec in CONTRIBUTION_COMPONENT_SPECS
     ]
@@ -1382,18 +1422,19 @@ def plot_contribution_decomposition_city_b(
             markeredgecolor="#1B5E20",
             markeredgewidth=1.1,
             markersize=6,
-            label="Absolute net reduction",
+            label="Absolute reduction",
         )
     )
-    ax.legend(
+    fig.legend(
         handles=legend_handles,
         loc="lower center",
-        bbox_to_anchor=(0.5, 1.105),
-        ncol=2,
+        bbox_to_anchor=(0.5, 0.018),
+        ncol=6,
         frameon=False,
-        fontsize=7.3,
-        handlelength=1.15,
-        columnspacing=0.8,
+        fontsize=6.4,
+        handlelength=0.9,
+        handletextpad=0.35,
+        columnspacing=0.55,
     )
     if plot_title:
         ax.set_title(
@@ -1410,8 +1451,6 @@ def plot_contribution_decomposition_city_b(
         fig.savefig(
             save_path,
             dpi=300,
-            bbox_inches="tight",
-            pad_inches=0.03,
         )
         _write_contribution_decomposition_city_b_report(
             prepared,
@@ -1422,6 +1461,173 @@ def plot_contribution_decomposition_city_b(
         )
         plt.close(fig)
         print(f"Contribution decomposition city-b saved to {save_path}")
+    else:
+        plt.show()
+        plt.close(fig)
+
+
+def _write_contribution_city_population_report(
+    prepared: Dict,
+    save_path: str,
+    figsize: tuple,
+    ax,
+    rows: list[dict],
+    y: np.ndarray,
+):
+    """Write the population-panel coverage and row-alignment report."""
+    report_path = save_path.rsplit(".", 1)[0] + "_report.json"
+    city_rows = [row for row in rows if row.get("row_type") == "city"]
+    city_positions = {
+        row["region_key"]: float(y[idx])
+        for idx, row in enumerate(rows)
+        if row.get("row_type") == "city"
+    }
+    cities = []
+    for row in city_rows:
+        cities.append(
+            {
+                "region_key": row["region_key"],
+                "label": row["label"],
+                "macro_region_key": row["macro_region_key"],
+                "population_10k": row["population_10k"],
+                "population_million": row["population_million"],
+                "population_source_year": row["population_source_year"],
+                "y_position": city_positions[row["region_key"]],
+            }
+        )
+    payload = {
+        "figure": "contribution_decomposition_city_population",
+        "figure_path": save_path,
+        "figure_size_inches": {"width": figsize[0], "height": figsize[1]},
+        "figure_size_mm": {
+            "width": figsize[0] * 25.4,
+            "height": figsize[1] * 25.4,
+        },
+        "axis": _report_axis(ax),
+        "selected_region_keys": list(CONTRIBUTION_CITY_B_REGION_KEYS),
+        "row_alignment": {
+            "contract": (
+                "Identical overall-plus-representative-city y coordinates and "
+                "limits as contribution_decomposition_city_b"
+            ),
+            "row_count": len(rows),
+            "y_positions": _report_array(y),
+            "y_limits": _report_array(ax.get_ylim()),
+            "city_names_repeated": False,
+        },
+        "lollipop_design": {
+            "color": "#D4A017",
+            "city_connection": "none",
+            "overall_row": "min-max range across all locked study cities",
+        },
+        "population_coverage": _json_safe(
+            prepared.get("population_coverage", {})
+        ),
+        "overall": {
+            "label": "All study regions",
+            "y_position": float(y[0]),
+            "range": _json_safe(
+                prepared.get("population_coverage", {}).get(
+                    "all_study_city_range", {}
+                )
+            ),
+        },
+        "cities": _json_safe(cities),
+        "export": {
+            "bbox_inches": None,
+            "pad_inches": 0.0,
+            "vector_format": "PDF",
+        },
+    }
+    with open(report_path, "w", encoding="utf-8") as f:
+        json.dump(payload, f, indent=2, ensure_ascii=False, allow_nan=False)
+    print(f"Contribution city population report saved to {report_path}")
+
+
+def plot_contribution_decomposition_city_population(
+    prepared: Dict,
+    save_path: str = None,
+    figsize: tuple = (44.0 / 25.4, 190.5 / 25.4),
+    for_latex: bool = False,
+    plot_title: bool = False,
+):
+    """Plot representative-city population aligned to the contribution panel."""
+    if not prepared:
+        print("Contribution city population skipped — prepared data missing")
+        return
+
+    city_rows = _selected_city_component_rows(prepared.get("cities", []))
+    rows = [_national_contribution_row(prepared.get("national", {})), *city_rows]
+    y = _selected_city_y_positions(rows)
+    if len(city_rows) != len(CONTRIBUTION_CITY_B_REGION_KEYS):
+        raise RuntimeError(
+            "population panel representative-city rows are incomplete: "
+            f"expected={len(CONTRIBUTION_CITY_B_REGION_KEYS)}, actual={len(city_rows)}"
+        )
+
+    fig, ax = plt.subplots(figsize=figsize)
+    fig.subplots_adjust(left=0.10, right=0.96, bottom=0.16, top=0.82)
+    gold = "#D4A017"
+    city_population = np.array(
+        [float(row["population_million"]) for row in city_rows], dtype=float
+    )
+    city_y = y[1:]
+    ax.hlines(city_y, 0.0, city_population, color=gold, linewidth=1.0, alpha=0.82)
+    ax.scatter(
+        city_population,
+        city_y,
+        s=24,
+        color=gold,
+        edgecolor="white",
+        linewidth=0.45,
+        zorder=4,
+    )
+
+    population_range = prepared.get("population_coverage", {}).get(
+        "all_study_city_range", {}
+    )
+    range_min = float(population_range["minimum_population_million"])
+    range_max = float(population_range["maximum_population_million"])
+    ax.hlines(y[0], range_min, range_max, color=gold, linewidth=2.0, zorder=3)
+    ax.scatter(
+        [range_min, range_max],
+        [y[0], y[0]],
+        s=28,
+        color=gold,
+        edgecolor="white",
+        linewidth=0.5,
+        zorder=4,
+    )
+
+    ax.set_xlim(0.0, max(range_max, float(np.max(city_population))) * 1.08)
+    ax.set_xlabel("Population (million)", fontsize=9.5)
+    ax.set_yticks(y)
+    ax.set_yticklabels([])
+    ax.tick_params(axis="x", labelsize=8.2)
+    ax.tick_params(axis="y", left=False)
+    ax.grid(axis="x", alpha=0.25)
+    ax.spines[["top", "right", "left"]].set_visible(False)
+    _set_selected_city_y_limits(ax, y)
+    if plot_title:
+        ax.set_title("Population", fontsize=13)
+
+    if save_path:
+        if for_latex and not save_path.endswith(".pdf"):
+            save_path = save_path.rsplit(".", 1)[0] + ".pdf"
+        if plot_title:
+            save_path = _add_title_suffix(save_path)
+        os.makedirs(os.path.dirname(save_path), exist_ok=True)
+        fig.savefig(save_path, dpi=300)
+        _write_contribution_city_population_report(
+            prepared,
+            save_path,
+            figsize,
+            ax,
+            rows,
+            y,
+        )
+        plt.close(fig)
+        print(f"Contribution city population saved to {save_path}")
     else:
         plt.show()
         plt.close(fig)
