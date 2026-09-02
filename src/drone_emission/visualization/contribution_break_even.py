@@ -1064,7 +1064,7 @@ def _plot_selected_city_contribution_bars(ax, rows: list[dict]):
         tick_labels[0].set_fontweight("bold")
         tick_labels[0].set_color("#222222")
     ax.set_xlabel(
-        "Contribution to all-e-bike baseline (percentage points)",
+        "Contribution to all-e-bike baseline (pp)",
         fontsize=9.5,
     )
     ax.grid(axis="x", alpha=0.25)
