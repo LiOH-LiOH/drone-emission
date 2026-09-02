@@ -11,6 +11,11 @@ from .cal_single_delivery import (
     create_gasoline_car_params,
     get_emission_params,
 )
+from .delivery_modes import (
+    DELIVERY_MODES,
+    DeliveryMode,
+    lifecycle_emission_per_order,
+)
 
 __all__ = [
     "cal_emission",
@@ -24,4 +29,7 @@ __all__ = [
     "create_ecar_params",
     "create_gasoline_car_params",
     "get_emission_params",
+    "DeliveryMode",
+    "DELIVERY_MODES",
+    "lifecycle_emission_per_order",
 ]
