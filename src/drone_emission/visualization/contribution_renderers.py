@@ -269,15 +269,10 @@ def _attach_contribution_population(
             "region_key",
         ].tolist()
     )
-    if (
-        len(selected) != len(selected_region_keys)
-        or missing_selected
-        or missing_source_year
-    ):
+    if len(selected) != len(selected_region_keys) or missing_selected:
         raise RuntimeError(
-            "representative-city population metadata is incomplete: "
-            f"rows={len(selected)}, missing={missing_selected}, "
-            f"missing_source_year={missing_source_year}"
+            "representative-city population coverage is incomplete: "
+            f"rows={len(selected)}, missing={missing_selected}"
         )
 
     population_by_key = values.set_index("region_key")
@@ -305,6 +300,7 @@ def _attach_contribution_population(
         "representative_source_year_count": int(
             selected["population_source_year"].notna().sum()
         ),
+        "representative_missing_source_year_region_keys": missing_source_year,
         "unit_input": "10,000 persons",
         "unit_plot": "million persons",
         "unit_conversion": "population_million = population_10k / 100",
