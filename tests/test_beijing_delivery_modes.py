@@ -1,4 +1,3 @@
-import importlib.util
 import json
 from pathlib import Path
 
@@ -13,17 +12,7 @@ from drone_emission.analysis.beijing_delivery_modes import (
     run_beijing_delivery_mode_analysis,
 )
 from drone_emission.emission import DELIVERY_MODES, lifecycle_emission_per_order
-
-
-SCRIPT_PATH = (
-    Path(__file__).resolve().parents[1]
-    / "archive"
-    / "code"
-    / "plot_beijing_all_mode_lifecycle.py"
-)
-SPEC = importlib.util.spec_from_file_location("beijing_all_mode_plot", SCRIPT_PATH)
-PLOTTER = importlib.util.module_from_spec(SPEC)
-SPEC.loader.exec_module(PLOTTER)
+from drone_emission.visualization import delivery_modes as renderer
 
 
 @pytest.fixture
@@ -118,11 +107,11 @@ def test_runner_persists_plot_ready_data_and_figure_report(
     assert csv_path.is_file()
     assert report_path.is_file()
     assert "input_signature" in report_path.read_text(encoding="utf-8")
-    plot_frame = PLOTTER.load_plot_data(csv_path)
+    plot_frame = renderer.load_beijing_mode_data(csv_path)
     assert len(plot_frame) == len(DELIVERY_MODES) - 1
     assert "walking" not in set(plot_frame["mode"])
     assert plot_frame["annual_lifecycle_kt"].is_monotonic_increasing
-    figure_report = PLOTTER.build_figure_report(
+    figure_report = renderer.build_beijing_mode_figure_report(
         plot_frame,
         json.loads(report_path.read_text(encoding="utf-8")),
         figure_path=tmp_path / "beijing.pdf",
@@ -134,6 +123,7 @@ def test_runner_persists_plot_ready_data_and_figure_report(
         for key in figure_report["analysis"]["boundary"]
     )
     assert len(figure_report["plotted_values"]) == len(DELIVERY_MODES) - 1
+    assert figure_report["formal_manifest_registered"] is True
 
 
 def test_analysis_workflow_registers_both_retained_outputs(tmp_path):

@@ -34,7 +34,7 @@ def _valid_pdf(path: Path) -> None:
 
 def test_default_compose_selection_contains_only_inkscape_figures():
     selected = paper_workflow.select_inkscape_figures(None)
-    assert len(selected) == 10
+    assert len(selected) == 11
     assert all(figure["mode"] == "inkscape" for figure in selected)
     assert {figure["id"] for figure in selected} == {
         figure["id"] for figure in paper_workflow.load_manifest()["figures"]

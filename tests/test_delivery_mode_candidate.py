@@ -1,20 +1,9 @@
-import importlib.util
 from pathlib import Path
 
 import pandas as pd
 
 from drone_emission.emission import DELIVERY_MODES
-
-
-SCRIPT_PATH = (
-    Path(__file__).resolve().parents[1]
-    / "archive"
-    / "code"
-    / "plot_delivery_mode_lifecycle_comparison.py"
-)
-SPEC = importlib.util.spec_from_file_location("delivery_mode_candidate", SCRIPT_PATH)
-CANDIDATE = importlib.util.module_from_spec(SPEC)
-SPEC.loader.exec_module(CANDIDATE)
+from drone_emission.visualization import delivery_modes as renderer
 
 
 def test_candidate_uses_weighted_p75_and_sorts_displayed_modes(tmp_path):
@@ -39,7 +28,7 @@ def test_candidate_uses_weighted_p75_and_sorts_displayed_modes(tmp_path):
         }
     }
 
-    rows, distance_km, quantile = CANDIDATE.build_comparison(
+    rows, distance_km, quantile = renderer.build_comparison(
         od_csv=od_path,
         exp_config=config,
         quantile_cache_dir=tmp_path / "cache",
@@ -51,7 +40,7 @@ def test_candidate_uses_weighted_p75_and_sorts_displayed_modes(tmp_path):
     assert len(rows) == 7
     assert [value for _, value in rows] == sorted(value for _, value in rows)
 
-    report = CANDIDATE.build_figure_report(
+    report = renderer.build_delivery_mode_figure_report(
         rows=rows,
         distance_km=distance_km,
         quantile=quantile,
@@ -63,3 +52,4 @@ def test_candidate_uses_weighted_p75_and_sorts_displayed_modes(tmp_path):
         {"mode": "walking", "reason": "excluded from display by request"}
     ]
     assert len(report["emissions_g_per_order"]) == 7
+    assert report["formal_manifest_registered"] is True

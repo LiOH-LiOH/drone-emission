@@ -360,6 +360,50 @@ def _render_beijing_endpoint_grid(context: RenderContext) -> None:
     )
 
 
+def _render_delivery_mode_lifecycle(context: RenderContext) -> None:
+    from .delivery_modes import (
+        load_analysis_report,
+        load_beijing_mode_data,
+        plot_beijing_all_mode_lifecycle,
+        plot_delivery_mode_lifecycle_comparison,
+    )
+
+    od_path = context.require_file(
+        "city/beijing/beijing_od_pairs.csv",
+        stage="cities --region beijing",
+    )
+    analysis_root = context.work_root / "analysis" / "beijing_delivery_modes"
+    analysis_csv = analysis_root / "beijing_all_mode_lifecycle.csv"
+    analysis_report = analysis_root / "beijing_all_mode_lifecycle_report.json"
+    missing = [
+        str(path)
+        for path in (analysis_csv, analysis_report)
+        if not path.is_file()
+    ]
+    if missing:
+        raise FileNotFoundError(
+            "Missing Beijing delivery-mode render input(s): "
+            + ", ".join(missing)
+            + ". Run `python -m drone_emission analyze --only "
+            "beijing-delivery-modes` first."
+        )
+    plot_delivery_mode_lifecycle_comparison(
+        od_csv=od_path,
+        exp_config=context.experiment,
+        save_path=context.output("delivery_mode_lifecycle_comparison.pdf"),
+        quantile_cache_dir=context.cache_root / "weighted_quantile",
+        for_latex=True,
+        plot_title=False,
+    )
+    plot_beijing_all_mode_lifecycle(
+        load_beijing_mode_data(analysis_csv),
+        load_analysis_report(analysis_report),
+        save_path=context.output("beijing_all_mode_lifecycle.pdf"),
+        for_latex=True,
+        plot_title=False,
+    )
+
+
 REQUEST_RENDERERS: dict[str, Renderer] = {
     "shanghai_merchant_monthly_sales": lambda c: _render_config_input(c, "shanghai_merchant_monthly_sales"),
     "shanghai_building_footprint_heatmap": lambda c: _render_config_input(c, "shanghai_building_footprint_heatmap"),
@@ -388,6 +432,7 @@ REQUEST_RENDERERS: dict[str, Renderer] = {
     "regions_map_pathway_scenario_maps": lambda c: _render_scenario(c, "regions_map_pathway_scenario_maps"),
     "beijing_order_distance_distribution": _render_beijing_order_distance,
     "beijing_endpoint_grid_heatmap": _render_beijing_endpoint_grid,
+    "delivery_mode_lifecycle_comparison": _render_delivery_mode_lifecycle,
 }
 
 

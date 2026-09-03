@@ -17,15 +17,15 @@ from drone_emission.visualization.formal_registry import REQUEST_RENDERERS
 
 def test_manifest_has_exact_locked_set():
     manifest = load_manifest()
-    assert manifest["figure_count"] == 11
-    assert len(manifest["figures"]) == 11
+    assert manifest["figure_count"] == 12
+    assert len(manifest["figures"]) == 12
     assert {figure["mode"] for figure in manifest["figures"]} == {
         "direct",
         "inkscape",
     }
-    assert manifest["render_request_count"] == 27
-    assert len(manifest["requests"]) == 27
-    assert sum(len(request["outputs"]) for request in manifest["requests"]) == 41
+    assert manifest["render_request_count"] == 28
+    assert len(manifest["requests"]) == 28
+    assert sum(len(request["outputs"]) for request in manifest["requests"]) == 44
     assert all(
         figure_required_inputs(figure, manifest)
         for figure in manifest["figures"]
@@ -39,7 +39,7 @@ def test_manifest_requests_exactly_match_registry():
         for figure in load_manifest()["figures"]
         for request in figure["render_requests"]
     ]
-    assert len(requests) == 27
+    assert len(requests) == 28
     assert len(requests) == len(set(requests))
     assert set(requests) == set(REQUEST_RENDERERS)
 
@@ -71,7 +71,7 @@ def test_manifest_paths_are_one_to_one():
     figures = load_manifest()["figures"]
     staging = [Path(figure["staging"]).name for figure in figures]
     publish = [Path(figure["publish"]).name for figure in figures]
-    assert len(set(staging)) == 11
+    assert len(set(staging)) == 12
     assert staging == publish
     assert staging == [f"{figure['id']}.pdf" for figure in figures]
 
@@ -94,6 +94,26 @@ def test_contribution_figure_consumes_prepared_analysis_and_population():
     )
     assert figure["mode"] == "direct"
     assert figure["source_output"] == "contribution_decomposition_city_b.pdf"
+
+
+def test_delivery_mode_figure_consumes_declared_beijing_inputs():
+    request = request_index()["delivery_mode_lifecycle_comparison"]
+    assert request["required_inputs"] == [
+        "city/beijing/beijing_od_pairs.csv",
+        "work:analysis/beijing_delivery_modes/beijing_all_mode_lifecycle.csv",
+        "work:analysis/beijing_delivery_modes/beijing_all_mode_lifecycle_report.json",
+        "project:experiment.toml",
+    ]
+    assert request["outputs"] == [
+        "delivery_mode_lifecycle_comparison.pdf",
+        "beijing_all_mode_lifecycle.pdf",
+    ]
+    figure = next(
+        figure
+        for figure in load_manifest()["figures"]
+        if figure["id"] == "fig7_delivery_mode_lifecycle_comparison"
+    )
+    assert figure["inkscape_source"] == "figures/inkscape/figure18.svg"
 
 
 def test_city_gef_distribution_consumes_cohort_statistics_only():
