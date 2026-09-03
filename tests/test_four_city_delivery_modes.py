@@ -228,6 +228,10 @@ def test_four_city_candidate_reports_lock_panel_encodings(tmp_path):
             assert marker["shape"] == "filled_circle"
             assert marker["connected"] is False
             assert marker["labels"] is False
+            assert (
+                encoding["bar_label_collision_avoidance"]
+                == "raise_above_secondary_axis_marker"
+            )
 
 
 def test_four_city_shared_legend_report_locks_single_row_layout(tmp_path):

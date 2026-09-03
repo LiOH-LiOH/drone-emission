@@ -575,6 +575,11 @@ def _four_city_figure_report(
                     if metric == "relative_reduction_pct"
                     else None
                 ),
+                "bar_label_collision_avoidance": (
+                    "raise_above_secondary_axis_marker"
+                    if metric == "relative_reduction_pct"
+                    else None
+                ),
             }
         ),
         "analysis": {
@@ -630,6 +635,13 @@ def _plot_four_city_grouped_bars(
     ]
     fig, ax = plt.subplots(figsize=figsize, facecolor="white")
     plotted_absolute = []
+    absolute_ceiling = None
+    if metric == "relative_reduction_pct":
+        max_absolute = float(frame["absolute_reduction_kt"].max())
+        absolute_ceiling = max(
+            25.0,
+            float(np.ceil(max_absolute * 1.1 / 25.0) * 25.0),
+        )
     for start, mode in zip(group_starts, FOUR_CITY_MODE_ORDER):
         rows = frame[frame["baseline_mode"].eq(mode)].set_index("region_key")
         values = np.array([float(rows.loc[city, metric]) for city in FOUR_CITY_ORDER])
@@ -640,10 +652,16 @@ def _plot_four_city_grouped_bars(
             width=bar_width * 0.92,
             color=MODE_COLORS[mode],
         )
-        for bar, value in zip(bars, values):
+        for city, bar, value in zip(FOUR_CITY_ORDER, bars, values):
+            label_y = value + 1.0
+            if absolute_ceiling is not None:
+                absolute = float(rows.loc[city, "absolute_reduction_kt"])
+                marker_y = absolute / absolute_ceiling * 112.0
+                if label_y <= marker_y <= label_y + 8.0:
+                    label_y = marker_y + 2.0
             ax.text(
                 bar.get_x() + bar.get_width() / 2,
-                value + 1.0,
+                label_y,
                 f"{value:.1f}%",
                 va="bottom",
                 ha="center",
@@ -692,11 +710,7 @@ def _plot_four_city_grouped_bars(
             linewidth=0.5,
             zorder=4,
         )
-        max_absolute = max(plotted_absolute)
-        absolute_ceiling = max(
-            25.0,
-            float(np.ceil(max_absolute * 1.1 / 25.0) * 25.0),
-        )
+        assert absolute_ceiling is not None
         absolute_axis.set_ylim(0, absolute_ceiling)
         absolute_axis.yaxis.set_major_locator(MaxNLocator(nbins=5))
         absolute_axis.set_ylabel(
