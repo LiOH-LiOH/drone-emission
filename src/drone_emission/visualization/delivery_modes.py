@@ -8,6 +8,7 @@ from pathlib import Path
 
 import matplotlib as mpl
 import matplotlib.pyplot as plt
+import numpy as np
 import pandas as pd
 from matplotlib import font_manager
 from matplotlib.ticker import MaxNLocator
@@ -78,6 +79,23 @@ BEIJING_HEIGHT_MM = 80.0
 FONT_FAMILY = "Arial"
 AXIS_LABEL_FONTSIZE = 7.0
 STANDARD_FONTSIZE = 6.0
+FOUR_CITY_WIDTH_MM = 180.0
+FOUR_CITY_HEIGHT_MM = 82.0
+FOUR_CITY_ORDER = ("chengdu", "guangzhou", "beijing", "shanghai")
+FOUR_CITY_MODE_ORDER = (
+    "pedelec_ebike",
+    "fuel_moped",
+    "battery_electric_car",
+    "fuel_car",
+)
+FOUR_CITY_REQUIRED_COLUMNS = {
+    "region_key",
+    "region_name_en",
+    "baseline_mode",
+    "drone_replacement_rate_pct",
+    "absolute_reduction_kt",
+    "relative_reduction_pct",
+}
 
 
 def _set_plot_style() -> None:
@@ -432,5 +450,229 @@ def plot_beijing_all_mode_lifecycle(
 
 
 def load_analysis_report(path: str | Path) -> dict:
-    """Load retained Beijing delivery-mode analysis metadata."""
+    """Load retained delivery-mode analysis metadata."""
     return json.loads(Path(path).read_text(encoding="utf-8"))
+
+
+def load_four_city_mode_data(path: str | Path) -> pd.DataFrame:
+    """Load and validate the retained four-city mode-oracle table."""
+    frame = pd.read_csv(path)
+    missing = sorted(FOUR_CITY_REQUIRED_COLUMNS - set(frame.columns))
+    if missing:
+        raise ValueError(f"four-city analysis CSV is missing columns: {missing}")
+    expected = {
+        (city, mode) for city in FOUR_CITY_ORDER for mode in FOUR_CITY_MODE_ORDER
+    }
+    observed = set(
+        zip(frame["region_key"].astype(str), frame["baseline_mode"].astype(str))
+    )
+    if len(frame) != len(expected) or observed != expected:
+        raise ValueError(
+            "four-city analysis CSV must contain each city-mode pair exactly once"
+        )
+    frame = frame.copy()
+    numeric = (
+        "drone_replacement_rate_pct",
+        "absolute_reduction_kt",
+        "relative_reduction_pct",
+    )
+    for column in numeric:
+        frame[column] = pd.to_numeric(frame[column], errors="raise")
+        if not np.isfinite(frame[column]).all():
+            raise ValueError(f"four-city analysis column {column} must be finite")
+    if (
+        (frame["drone_replacement_rate_pct"] < 0)
+        | (frame["drone_replacement_rate_pct"] > 100)
+        | (frame["absolute_reduction_kt"] < 0)
+        | (frame["relative_reduction_pct"] < 0)
+        | (frame["relative_reduction_pct"] > 100)
+    ).any():
+        raise ValueError("four-city analysis contains out-of-range metrics")
+    city_order = {value: index for index, value in enumerate(FOUR_CITY_ORDER)}
+    mode_order = {value: index for index, value in enumerate(FOUR_CITY_MODE_ORDER)}
+    frame["_city_order"] = frame["region_key"].map(city_order)
+    frame["_mode_order"] = frame["baseline_mode"].map(mode_order)
+    return (
+        frame.sort_values(["_city_order", "_mode_order"], kind="stable")
+        .drop(columns=["_city_order", "_mode_order"])
+        .reset_index(drop=True)
+    )
+
+
+def _four_city_figure_report(
+    frame: pd.DataFrame,
+    analysis_report: dict,
+    *,
+    figure_name: str,
+    figure_path: str | Path,
+    metric: str,
+) -> dict:
+    return {
+        "schema_version": 1,
+        "figure_name": figure_name,
+        "figure_path": str(figure_path),
+        "formal_manifest_registered": True,
+        "figure_size_mm": {
+            "width": FOUR_CITY_WIDTH_MM,
+            "height": FOUR_CITY_HEIGHT_MM,
+        },
+        "metric": metric,
+        "city_order": list(FOUR_CITY_ORDER),
+        "baseline_mode_order": list(FOUR_CITY_MODE_ORDER),
+        "analysis": {
+            key: analysis_report.get(key)
+            for key in (
+                "analysis_version",
+                "paper_cohort_sha256",
+                "functional_unit",
+                "assignment_rule",
+                "ground_distance_rule",
+                "energy_factors",
+                "main_experiment_validation",
+                "cities",
+            )
+        },
+        "plotted_values": frame.to_dict(orient="records"),
+    }
+
+
+def _plot_four_city_grouped_bars(
+    frame: pd.DataFrame,
+    analysis_report: dict,
+    *,
+    metric: str,
+    save_path: str | Path,
+    figsize: tuple[float, float],
+    plot_title: bool,
+) -> Path:
+    _set_plot_style()
+    output = Path(save_path)
+    if plot_title:
+        output = output.with_name(f"{output.stem}_t{output.suffix}")
+    output.parent.mkdir(parents=True, exist_ok=True)
+
+    city_names = [
+        str(frame.loc[frame["region_key"].eq(city), "region_name_en"].iloc[0])
+        for city in FOUR_CITY_ORDER
+    ]
+    centers = np.arange(len(FOUR_CITY_ORDER), dtype=float)
+    height = 0.17
+    offsets = np.linspace(-1.5 * height, 1.5 * height, len(FOUR_CITY_MODE_ORDER))
+    fig, ax = plt.subplots(figsize=figsize, facecolor="white")
+    max_value = float(frame[metric].max())
+    label_offset = max(max_value * 0.012, 0.2)
+    for offset, mode in zip(offsets, FOUR_CITY_MODE_ORDER):
+        rows = frame[frame["baseline_mode"].eq(mode)].set_index("region_key")
+        values = np.array([float(rows.loc[city, metric]) for city in FOUR_CITY_ORDER])
+        bars = ax.barh(
+            centers + offset,
+            values,
+            height=height * 0.9,
+            color=MODE_COLORS[mode],
+            label=COMPARISON_MODE_LABELS[mode],
+        )
+        for city, bar, value in zip(FOUR_CITY_ORDER, bars, values):
+            if metric == "relative_reduction_pct":
+                absolute = float(rows.loc[city, "absolute_reduction_kt"])
+                label = f"{value:.1f}% ({absolute:.1f} kt)"
+            else:
+                label = f"{value:.1f}%"
+            ax.text(
+                value + label_offset,
+                bar.get_y() + bar.get_height() / 2,
+                label,
+                va="center",
+                ha="left",
+                fontsize=5.3,
+                color="0.2",
+            )
+    ax.set_yticks(centers, city_names)
+    ax.invert_yaxis()
+    ax.set_xlim(0, max(max_value * 1.31, 5.0))
+    ax.xaxis.set_major_locator(MaxNLocator(nbins=5))
+    if metric == "drone_replacement_rate_pct":
+        ax.set_xlabel("Drone substitution (% of annual orders)")
+        figure_name = "candidate_four_city_mode_replacement_rate"
+        title = "Optimal drone substitution across incumbent delivery modes"
+    else:
+        ax.set_xlabel(
+            "Lifecycle-emissions reduction (%); labels: % "
+            "(kt CO$_2$e yr$^{-1}$)"
+        )
+        figure_name = "candidate_four_city_mode_relative_reduction"
+        title = "Lifecycle-emissions reduction from optimal drone substitution"
+    ax.tick_params(axis="both", labelsize=STANDARD_FONTSIZE, length=2.5)
+    ax.spines[["top", "right", "left"]].set_visible(False)
+    ax.grid(axis="x", color="0.9", linewidth=0.5)
+    ax.set_axisbelow(True)
+    ax.legend(
+        loc="lower center",
+        bbox_to_anchor=(0.5, 1.01),
+        ncol=4,
+        frameon=False,
+        fontsize=STANDARD_FONTSIZE,
+    )
+    if plot_title:
+        ax.set_title(title, fontsize=AXIS_LABEL_FONTSIZE, loc="left", pad=16)
+    fig.tight_layout(pad=0.8)
+    fig.savefig(output, dpi=300, facecolor="white")
+    plt.close(fig)
+    write_figure_report(
+        output.with_name(f"{output.stem}_report.json"),
+        _four_city_figure_report(
+            frame,
+            analysis_report,
+            figure_name=figure_name,
+            figure_path=output,
+            metric=metric,
+        ),
+    )
+    return output
+
+
+def plot_four_city_mode_replacement_rate(
+    frame: pd.DataFrame,
+    analysis_report: dict,
+    *,
+    save_path: str | Path,
+    figsize: tuple[float, float] = (
+        FOUR_CITY_WIDTH_MM / 25.4,
+        FOUR_CITY_HEIGHT_MM / 25.4,
+    ),
+    for_latex: bool = False,
+    plot_title: bool = False,
+) -> Path:
+    """Plot annual-sales-weighted optimal drone substitution rates."""
+    del for_latex
+    return _plot_four_city_grouped_bars(
+        frame,
+        analysis_report,
+        metric="drone_replacement_rate_pct",
+        save_path=save_path,
+        figsize=figsize,
+        plot_title=plot_title,
+    )
+
+
+def plot_four_city_mode_relative_reduction(
+    frame: pd.DataFrame,
+    analysis_report: dict,
+    *,
+    save_path: str | Path,
+    figsize: tuple[float, float] = (
+        FOUR_CITY_WIDTH_MM / 25.4,
+        FOUR_CITY_HEIGHT_MM / 25.4,
+    ),
+    for_latex: bool = False,
+    plot_title: bool = False,
+) -> Path:
+    """Plot relative reductions with absolute kt CO2e labels."""
+    del for_latex
+    return _plot_four_city_grouped_bars(
+        frame,
+        analysis_report,
+        metric="relative_reduction_pct",
+        save_path=save_path,
+        figsize=figsize,
+        plot_title=plot_title,
+    )

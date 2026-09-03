@@ -215,10 +215,16 @@ def test_render_analysis_dependencies_are_request_scoped(tmp_path):
     pathway = [
         {"required_inputs": ["all_pathway_scenario_city.csv"]}
     ]
+    four_city_modes = [
+        {"required_inputs": ["four_city_mode_oracle_summary.csv"]}
+    ]
 
     assert _analysis_modules_for_requests(aggregate_only, config) == set()
     assert _analysis_modules_for_requests(pathway, config) == {
         "pathway-scenarios"
+    }
+    assert _analysis_modules_for_requests(four_city_modes, config) == {
+        "four-city-delivery-modes"
     }
 
 

@@ -17,12 +17,15 @@ from drone_emission.visualization.formal_registry import REQUEST_RENDERERS
 
 def test_manifest_has_exact_locked_set():
     manifest = load_manifest()
-    assert manifest["figure_count"] == 12
-    assert len(manifest["figures"]) == 12
-    assert {figure["mode"] for figure in manifest["figures"]} == {"inkscape"}
-    assert manifest["render_request_count"] == 28
-    assert len(manifest["requests"]) == 28
-    assert sum(len(request["outputs"]) for request in manifest["requests"]) == 44
+    assert manifest["figure_count"] == 14
+    assert len(manifest["figures"]) == 14
+    assert {figure["mode"] for figure in manifest["figures"]} == {
+        "direct",
+        "inkscape",
+    }
+    assert manifest["render_request_count"] == 30
+    assert len(manifest["requests"]) == 30
+    assert sum(len(request["outputs"]) for request in manifest["requests"]) == 46
     assert all(
         figure_required_inputs(figure, manifest)
         for figure in manifest["figures"]
@@ -36,7 +39,7 @@ def test_manifest_requests_exactly_match_registry():
         for figure in load_manifest()["figures"]
         for request in figure["render_requests"]
     ]
-    assert len(requests) == 28
+    assert len(requests) == 30
     assert len(requests) == len(set(requests))
     assert set(requests) == set(REQUEST_RENDERERS)
 
@@ -68,7 +71,7 @@ def test_manifest_paths_are_one_to_one():
     figures = load_manifest()["figures"]
     staging = [Path(figure["staging"]).name for figure in figures]
     publish = [Path(figure["publish"]).name for figure in figures]
-    assert len(set(staging)) == 12
+    assert len(set(staging)) == 14
     assert staging == publish
     assert staging == [f"{figure['id']}.pdf" for figure in figures]
 
@@ -112,6 +115,26 @@ def test_delivery_mode_figure_consumes_declared_beijing_inputs():
         if figure["id"] == "fig7_delivery_mode_lifecycle_comparison"
     )
     assert figure["inkscape_source"] == "figures/inkscape/figure18.svg"
+
+
+def test_four_city_delivery_mode_candidates_consume_retained_analysis():
+    expected_inputs = [
+        "work:analysis/four_city_delivery_modes/four_city_mode_oracle_summary.csv",
+        "work:analysis/four_city_delivery_modes/four_city_mode_oracle_report.json",
+    ]
+    for figure_id in (
+        "candidate_four_city_mode_replacement_rate",
+        "candidate_four_city_mode_relative_reduction",
+    ):
+        request = request_index()[figure_id]
+        assert request["cache_version"] == 1
+        assert request["required_inputs"] == expected_inputs
+        assert request["outputs"] == [f"{figure_id}.pdf"]
+        figure = next(
+            item for item in load_manifest()["figures"] if item["id"] == figure_id
+        )
+        assert figure["mode"] == "direct"
+        assert figure["source_output"] == f"{figure_id}.pdf"
 
 
 def test_city_gef_distribution_consumes_cohort_statistics_only():

@@ -30,6 +30,7 @@ ANALYSIS_MODULES = (
     "city-attribution",
     "contribution-decomposition",
     "beijing-delivery-modes",
+    "four-city-delivery-modes",
 )
 DERIVED_GLOBAL_NAMES = {
     *AUTHORITATIVE_AGGREGATES,
@@ -414,6 +415,15 @@ def _run_beijing_delivery_modes(config: dict, *, force: bool) -> Path:
     return output
 
 
+def _run_four_city_delivery_modes(config: dict, *, force: bool) -> Path:
+    from .analysis.four_city_delivery_modes import (
+        run_four_city_delivery_mode_analysis,
+    )
+
+    output, _ = run_four_city_delivery_mode_analysis(config, force=force)
+    return output
+
+
 def _module_outputs(config: dict) -> dict[str, tuple[Path, ...]]:
     data = analysis_data_dir(config)
     work = analysis_root(config)
@@ -447,6 +457,14 @@ def _module_outputs(config: dict) -> dict[str, tuple[Path, ...]]:
             work
             / "beijing_delivery_modes"
             / "beijing_all_mode_lifecycle_report.json",
+        ),
+        "four-city-delivery-modes": (
+            work
+            / "four_city_delivery_modes"
+            / "four_city_mode_oracle_summary.csv",
+            work
+            / "four_city_delivery_modes"
+            / "four_city_mode_oracle_report.json",
         ),
     }
 
@@ -502,6 +520,9 @@ def analyze(
             view, force=force, chunk_rows=contribution_chunk_rows
         ),
         "beijing-delivery-modes": lambda view: _run_beijing_delivery_modes(
+            view, force=force
+        ),
+        "four-city-delivery-modes": lambda view: _run_four_city_delivery_modes(
             view, force=force
         ),
     }

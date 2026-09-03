@@ -408,6 +408,59 @@ def _render_delivery_mode_lifecycle(context: RenderContext) -> None:
     )
 
 
+def _render_four_city_mode_candidate(
+    context: RenderContext,
+    *,
+    metric: str,
+) -> None:
+    from .delivery_modes import (
+        load_analysis_report,
+        load_four_city_mode_data,
+        plot_four_city_mode_relative_reduction,
+        plot_four_city_mode_replacement_rate,
+    )
+
+    analysis_root = context.work_root / "analysis" / "four_city_delivery_modes"
+    analysis_csv = analysis_root / "four_city_mode_oracle_summary.csv"
+    analysis_report = analysis_root / "four_city_mode_oracle_report.json"
+    missing = [
+        str(path)
+        for path in (analysis_csv, analysis_report)
+        if not path.is_file()
+    ]
+    if missing:
+        raise FileNotFoundError(
+            "Missing four-city delivery-mode render input(s): "
+            + ", ".join(missing)
+            + ". Run `python -m drone_emission analyze --only "
+            "four-city-delivery-modes` first."
+        )
+    frame = load_four_city_mode_data(analysis_csv)
+    report = load_analysis_report(analysis_report)
+    if metric == "replacement_rate":
+        plot_four_city_mode_replacement_rate(
+            frame,
+            report,
+            save_path=context.output(
+                "candidate_four_city_mode_replacement_rate.pdf"
+            ),
+            for_latex=True,
+            plot_title=False,
+        )
+    elif metric == "relative_reduction":
+        plot_four_city_mode_relative_reduction(
+            frame,
+            report,
+            save_path=context.output(
+                "candidate_four_city_mode_relative_reduction.pdf"
+            ),
+            for_latex=True,
+            plot_title=False,
+        )
+    else:
+        raise ValueError(f"unknown four-city delivery-mode metric: {metric}")
+
+
 REQUEST_RENDERERS: dict[str, Renderer] = {
     "shanghai_merchant_monthly_sales": lambda c: _render_config_input(c, "shanghai_merchant_monthly_sales"),
     "shanghai_building_footprint_heatmap": lambda c: _render_config_input(c, "shanghai_building_footprint_heatmap"),
@@ -437,6 +490,12 @@ REQUEST_RENDERERS: dict[str, Renderer] = {
     "beijing_order_distance_distribution": _render_beijing_order_distance,
     "beijing_endpoint_grid_heatmap": _render_beijing_endpoint_grid,
     "delivery_mode_lifecycle_comparison": _render_delivery_mode_lifecycle,
+    "candidate_four_city_mode_replacement_rate": lambda c: (
+        _render_four_city_mode_candidate(c, metric="replacement_rate")
+    ),
+    "candidate_four_city_mode_relative_reduction": lambda c: (
+        _render_four_city_mode_candidate(c, metric="relative_reduction")
+    ),
 }
 
 

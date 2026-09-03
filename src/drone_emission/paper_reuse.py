@@ -15,7 +15,7 @@ import pandas as pd
 from .paper_cohort import cohort_hash, load_cohort_contract, locked_region_keys
 
 
-REUSE_SCHEMA_VERSION = 5
+REUSE_SCHEMA_VERSION = 6
 GLOBAL_DATA_ARTIFACTS = (
     "all_region_stats.json",
     "all_region_stats.csv",
@@ -36,6 +36,8 @@ WORK_ARTIFACTS = (
     "analysis/city_attribution/r2_city_attribution_analysis_report.json",
     "analysis/beijing_delivery_modes/beijing_all_mode_lifecycle.csv",
     "analysis/beijing_delivery_modes/beijing_all_mode_lifecycle_report.json",
+    "analysis/four_city_delivery_modes/four_city_mode_oracle_summary.csv",
+    "analysis/four_city_delivery_modes/four_city_mode_oracle_report.json",
 )
 
 
@@ -247,6 +249,7 @@ def migrate_fallback_gef_overlay(config: dict) -> dict:
         _filter_analysis_view,
         _run_beijing_delivery_modes,
         _run_city_attribution,
+        _run_four_city_delivery_modes,
     )
     from .tools.consolidate_sensitivity import consolidate as consolidate_named
     from .tools.consolidate_stats import consolidate as consolidate_stats
@@ -359,6 +362,7 @@ def migrate_fallback_gef_overlay(config: dict) -> dict:
     temporary.replace(resilience_drivers_path)
     attribution = _run_city_attribution(config, force=True)
     beijing_delivery_modes = _run_beijing_delivery_modes(config, force=True)
+    four_city_delivery_modes = _run_four_city_delivery_modes(config, force=True)
     contribution, _ = run_contribution_analysis(config, force=False)
     _, _, pathway = run_pathway_analysis(config, force=True)
     _filter_analysis_view(data_root, study)
@@ -370,6 +374,7 @@ def migrate_fallback_gef_overlay(config: dict) -> dict:
         "pathway_scenarios": str(pathway),
         "city_attribution": str(attribution),
         "beijing_delivery_modes": str(beijing_delivery_modes),
+        "four_city_delivery_modes": str(four_city_delivery_modes),
     }
 
 
