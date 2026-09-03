@@ -11,7 +11,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from matplotlib import font_manager
-from matplotlib.ticker import MaxNLocator
+from matplotlib.ticker import MaxNLocator, MultipleLocator
 
 from drone_emission.analysis.weighted_quantile import weighted_csv_quantile
 from drone_emission.emission import DELIVERY_MODES, lifecycle_emission_per_order
@@ -588,8 +588,8 @@ def _plot_four_city_grouped_bars(
             )
     ax.set_yticks(centers, city_names)
     ax.invert_yaxis()
-    ax.set_xlim(0, max(max_value * 1.31, 5.0))
-    ax.xaxis.set_major_locator(MaxNLocator(nbins=5))
+    ax.set_xlim(0, 112)
+    ax.xaxis.set_major_locator(MultipleLocator(20))
     if metric == "drone_replacement_rate_pct":
         ax.set_xlabel("Drone substitution (% of annual orders)")
         figure_name = "candidate_four_city_mode_replacement_rate"
