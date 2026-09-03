@@ -261,7 +261,7 @@ def _rewrite_local_svg_references(value: str, id_map: dict[str, str]) -> str:
 
 
 def _namespace_linked_svg_ids(tree: ElementTree.ElementTree, name: str) -> str:
-    """Make pdftocairo IDs unique before several SVGs share one document."""
+    """Make imported IDs unique before several SVGs share one document."""
     root = tree.getroot()
     prefix = _linked_subfigure_prefix(name)
     root_id = f"{prefix}-root"
@@ -297,12 +297,18 @@ def _convert_linked_subfigure(
     source: Path,
     target: Path,
     *,
-    pdftocairo: Path,
+    inkscape: Path,
 ) -> None:
     target.parent.mkdir(parents=True, exist_ok=True)
     temporary = target.with_suffix(".tmp.svg")
     subprocess.run(
-        [str(pdftocairo), "-svg", str(source), str(temporary)],
+        [
+            str(inkscape),
+            str(source),
+            "--pdf-font-strategy=keep",
+            "--export-plain-svg",
+            f"--export-filename={temporary}",
+        ],
         check=True,
     )
     tree = ElementTree.parse(temporary)
@@ -406,8 +412,7 @@ def compose(
     figures_root = Path(config["figures_dir"])
     subfigure_dir = figures_root / "paper" / "subfigure"
     paper_dir = figures_root / "paper"
-    pdftocairo = _tool_path("pdftocairo")
-    inkscape = None if prepare_links else _tool_path("inkscape")
+    inkscape = _tool_path("inkscape")
     converted: dict[str, Path] = {}
 
     for figure in selected:
@@ -420,14 +425,13 @@ def compose(
                 )
             target = LINKED_SUBFIGURE_DIR / Path(output).with_suffix(".svg").name
             if force or _is_newer(source, target):
-                _convert_linked_subfigure(source, target, pdftocairo=pdftocairo)
+                _convert_linked_subfigure(source, target, inkscape=inkscape)
             converted[output] = target
 
     if prepare_links:
         return list(dict.fromkeys(converted.values()))
 
     staged: list[Path] = []
-    assert inkscape is not None
     for figure in selected:
         source = PROJECT_ROOT / figure["inkscape_source"]
         if not source.is_file():
@@ -458,7 +462,7 @@ def compose(
                 _convert_linked_subfigure(
                     panel_pdf,
                     linked_svg,
-                    pdftocairo=pdftocairo,
+                    inkscape=inkscape,
                 )
         managed_names = required_names | extra_names
         target = paper_dir / Path(figure["staging"]).name

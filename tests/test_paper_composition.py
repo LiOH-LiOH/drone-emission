@@ -76,6 +76,50 @@ def test_namespace_linked_svg_ids_rewrites_local_references():
     assert "url(#clip-0)" not in rendered
 
 
+def test_convert_linked_subfigure_keeps_pdf_text_editable(tmp_path, monkeypatch):
+    source = tmp_path / "panel.pdf"
+    target = tmp_path / "panel.svg"
+    source.write_bytes(b"%PDF-1.4\nfixture")
+    commands = []
+
+    def run(command, *, check):
+        commands.append((command, check))
+        output = next(
+            item.split("=", 1)[1]
+            for item in command
+            if item.startswith("--export-filename=")
+        )
+        Path(output).write_text(
+            '<svg xmlns="http://www.w3.org/2000/svg">'
+            '<text id="label">Editable label</text></svg>',
+            encoding="utf-8",
+        )
+
+    monkeypatch.setattr(paper_workflow.subprocess, "run", run)
+    paper_workflow._convert_linked_subfigure(
+        source,
+        target,
+        inkscape=Path("inkscape"),
+    )
+
+    assert commands == [
+        (
+            [
+                "inkscape",
+                str(source),
+                "--pdf-font-strategy=keep",
+                "--export-plain-svg",
+                f"--export-filename={target.with_suffix('.tmp.svg')}",
+            ],
+            True,
+        )
+    ]
+    root = ElementTree.parse(target).getroot()
+    text = next(item for item in root.iter() if item.tag.endswith("}text"))
+    assert text.text == "Editable label"
+    assert text.get("id") == "linked-subfigure-panel-label"
+
+
 def test_prepare_links_converts_subfigure_without_export(tmp_path, monkeypatch):
     project = tmp_path / "project"
     figures = tmp_path / "runtime-figures"
@@ -89,8 +133,8 @@ def test_prepare_links_converts_subfigure_without_export(tmp_path, monkeypatch):
     monkeypatch.setattr(paper_workflow, "LINKED_SUBFIGURE_DIR", linked_dir)
     monkeypatch.setattr(paper_workflow, "_tool_path", lambda name: Path(name))
 
-    def convert(source, target, *, pdftocairo):
-        calls.append((source, target, pdftocairo))
+    def convert(source, target, *, inkscape):
+        calls.append((source, target, inkscape))
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text("<svg/>", encoding="utf-8")
 
@@ -101,7 +145,7 @@ def test_prepare_links_converts_subfigure_without_export(tmp_path, monkeypatch):
     )
 
     assert outputs == [linked_dir / "panel.svg"]
-    assert calls == [(panel_pdf, linked_dir / "panel.svg", Path("pdftocairo"))]
+    assert calls == [(panel_pdf, linked_dir / "panel.svg", Path("inkscape"))]
 
 
 def test_compose_exports_when_master_is_newer(tmp_path, monkeypatch):

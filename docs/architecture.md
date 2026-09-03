@@ -31,7 +31,9 @@ cohort selection themselves.
 
 `render` accepts formal manifest IDs, not internal plot-function names. The
 12 `inkscape` entries generate required panels and reports; the local-only
-`compose` command converts those panel PDFs to external SVG links and exports
+`compose` command converts those panel PDFs to external SVG links with
+Inkscape's internal importer and its keep-font strategy, preserving editable
+text labels, and exports
 the tracked Inkscape layouts to formal staging filenames. It never rewrites the
 master SVGs: linked image elements are inlined as nested SVG elements only in a
 temporary export copy. Missing inputs fail with a

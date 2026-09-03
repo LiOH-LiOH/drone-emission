@@ -13,6 +13,13 @@ from matplotlib.patches import Circle, FancyArrowPatch, FancyBboxPatch, Polygon,
 
 from drone_emission.visualization._utils import _add_title_suffix, write_figure_report
 
+plt.rcParams.update({
+    "font.family": "sans-serif",
+    "font.sans-serif": ["Arial", "Helvetica", "DejaVu Sans", "sans-serif"],
+    "svg.fonttype": "none",
+    "pdf.fonttype": 42,
+})
+
 Point = tuple[float, float]
 
 # ---------------------------------------------------------------------------
@@ -242,7 +249,6 @@ def _add_marker(
     shape: str = "circle",
     label_fontsize: float = 10.5,
     marker_scale: float = 1.0,
-    label_path_effects=None,
 ) -> Point:
     xy = _project(*xy_world)
     path_effects = [pe.SimplePatchShadow(offset=(1.0, -1.0), alpha=0.25), pe.Normal()]
@@ -271,8 +277,7 @@ def _add_marker(
     ax.add_patch(marker)
     ax.text(xy[0] + label_offset[0], xy[1] + label_offset[1], label,
             color=_COLORS["text"], fontsize=label_fontsize, fontweight="bold",
-            ha="center", va="center", zorder=zorder + 2,
-            path_effects=label_path_effects)
+            ha="center", va="center", zorder=zorder + 2)
     return xy
 
 
@@ -475,15 +480,6 @@ def _draw_detour_ratio_concept(
 
     _add_drone_path(ax, origin, destination, line_scale=route_scale)
 
-    compact_text_effects = (
-        [
-            pe.Stroke(linewidth=1.4, foreground=_COLORS["background"]),
-            pe.Normal(),
-        ]
-        if compact
-        else None
-    )
-
     origin_xy = _add_marker(
         ax,
         origin,
@@ -493,7 +489,6 @@ def _draw_detour_ratio_concept(
         zorder=65,
         label_fontsize=6.5 if compact else 10.5,
         marker_scale=1.1 if compact else 1.0,
-        label_path_effects=compact_text_effects,
     )
     dest_xy = _add_marker(
         ax,
@@ -505,7 +500,6 @@ def _draw_detour_ratio_concept(
         shape="square",
         label_fontsize=6.5 if compact else 10.5,
         marker_scale=1.1 if compact else 1.0,
-        label_path_effects=compact_text_effects,
     )
 
     if not compact:
@@ -539,13 +533,12 @@ def _draw_detour_ratio_concept(
     ax.text(straight_mid[0] + straight_offset[0], straight_mid[1] + straight_offset[1],
             "Straight-line distance", color=_COLORS["drone"],
             fontsize=6.5 if compact else 9.5, ha="center", va="bottom",
-            zorder=60, path_effects=compact_text_effects)
+            zorder=60)
 
     road_label = _project((grid_x[2] + grid_x[3]) / 2, grid_y[2])
     ax.text(road_label[0], road_label[1] - 0.28, "Road distance",
             color=_COLORS["bike"], fontsize=6.5 if compact else 9.5,
-            ha="center", va="top", zorder=60,
-            path_effects=compact_text_effects)
+            ha="center", va="top", zorder=60)
 
     if plot_title and not compact:
         _add_scale_annotation(ax, road_distance, straight_distance)
