@@ -37,9 +37,7 @@ def test_default_compose_selection_contains_only_inkscape_figures():
     assert len(selected) == 12
     assert all(figure["mode"] == "inkscape" for figure in selected)
     assert {figure["id"] for figure in selected} == {
-        figure["id"]
-        for figure in paper_workflow.load_manifest()["figures"]
-        if figure["mode"] == "inkscape"
+        figure["id"] for figure in paper_workflow.load_manifest()["figures"]
     }
 
 

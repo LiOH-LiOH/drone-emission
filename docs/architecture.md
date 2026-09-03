@@ -21,7 +21,7 @@ The active workflow has four layers:
    explicitly confirmed operation.
 
 `paper_workflow.py` is the only formal scheduler. Before rendering it verifies
-that the 28 unique manifest requests exactly equal the explicit
+that the 31 unique manifest requests exactly equal the explicit
 `formal_registry.REQUEST_RENDERERS` keys. Every renderer receives one immutable
 context containing the configured data, figures, cache, and work roots.
 Requests that consume analysis products receive a matching cohort-versioned

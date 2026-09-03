@@ -17,7 +17,7 @@ from xml.etree import ElementTree
 from .paper_cohort import cohort_hash
 from .paths import PROJECT_ROOT
 
-EXPECTED_FIGURE_COUNT = 15
+EXPECTED_FIGURE_COUNT = 12
 EXPECTED_RENDER_REQUEST_COUNT = 31
 LINKED_SUBFIGURE_DIR = (
     PROJECT_ROOT / "figures" / "inkscape" / "linked-subfigures"
