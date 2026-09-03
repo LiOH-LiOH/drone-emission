@@ -4,10 +4,6 @@ import pandas as pd
 
 from drone_emission.emission import DELIVERY_MODES
 from drone_emission.visualization import delivery_modes as renderer
-from drone_emission.visualization._delivery_mode_icons import (
-    ICON_SEMANTICS,
-    icon_modes,
-)
 
 
 def test_candidate_uses_weighted_p75_and_sorts_displayed_modes(tmp_path):
@@ -71,18 +67,10 @@ def test_candidate_uses_weighted_p75_and_sorts_displayed_modes(tmp_path):
             "reason": "excluded from display by request",
         },
     ]
-    assert report["schema_version"] == 2
+    assert report["schema_version"] == 3
     assert report["figure_size_mm"] == {"width": 180.0, "height": 60.0}
     assert len(report["emissions_g_per_order"]) == 5
-    assert report["icon_provenance"] == {
-        "creator": "authors",
-        "source": "original code-generated Matplotlib vector primitives",
-        "third_party_assets": [],
-        "third_party_permissions_required": False,
-        "size_mm": 7.0,
-        "mode_semantics": {
-            mode: ICON_SEMANTICS[mode] for mode, _ in rows
-        },
-    }
-    assert set(icon_modes()) == set(report["displayed_modes"])
+    assert "icon_provenance" not in report
+    assert renderer.COMPARISON_MODE_LABELS["pedelec_ebike"] == "E-bike"
+    assert renderer.MODE_LABELS["pedelec_ebike"] == "Pedelec e-bike"
     assert report["formal_manifest_registered"] is True

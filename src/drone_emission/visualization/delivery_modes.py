@@ -10,16 +10,10 @@ import matplotlib as mpl
 import matplotlib.pyplot as plt
 import pandas as pd
 from matplotlib import font_manager
-from matplotlib.offsetbox import AnnotationBbox
 from matplotlib.ticker import MaxNLocator
 
 from drone_emission.analysis.weighted_quantile import weighted_csv_quantile
 from drone_emission.emission import DELIVERY_MODES, lifecycle_emission_per_order
-from drone_emission.visualization._delivery_mode_icons import (
-    ICON_SEMANTICS,
-    ICON_SIZE_MM,
-    make_delivery_mode_icon,
-)
 from drone_emission.visualization._utils import write_figure_report
 
 
@@ -34,6 +28,7 @@ MODE_LABELS = {
     "fuel_car": "Fuel car",
     "drone": "Drone",
 }
+COMPARISON_MODE_LABELS = {**MODE_LABELS, "pedelec_ebike": "E-bike"}
 MODE_COLORS = {
     "pedal_bicycle": "#4f8f62",
     "pedelec_ebike": "#76a96d",
@@ -148,7 +143,7 @@ def build_delivery_mode_figure_report(
     source = Path(od_csv)
     stat = source.stat()
     return {
-        "schema_version": 2,
+        "schema_version": 3,
         "figure_name": "delivery_mode_lifecycle_comparison",
         "figure_path": str(figure_path),
         "formal_manifest_registered": True,
@@ -162,16 +157,6 @@ def build_delivery_mode_figure_report(
             {"mode": mode, "reason": "excluded from display by request"}
             for mode in COMPARISON_EXCLUDED_MODES
         ],
-        "icon_provenance": {
-            "creator": "authors",
-            "source": "original code-generated Matplotlib vector primitives",
-            "third_party_assets": [],
-            "third_party_permissions_required": False,
-            "size_mm": ICON_SIZE_MM,
-            "mode_semantics": {
-                mode: ICON_SEMANTICS[mode] for mode, _ in rows
-            },
-        },
         "input_signature": {
             "source": source.name,
             "size_bytes": stat.st_size,
@@ -247,36 +232,11 @@ def plot_delivery_mode_lifecycle_comparison(
     if plot_title:
         output = output.with_name(f"{output.stem}_t{output.suffix}")
     output.parent.mkdir(parents=True, exist_ok=True)
-    modes = [mode for mode, _ in rows]
+    labels = [COMPARISON_MODE_LABELS[mode] for mode, _ in rows]
     values = [value for _, value in rows]
-    colors = [MODE_COLORS[mode] for mode in modes]
+    colors = [MODE_COLORS[mode] for mode, _ in rows]
     fig, ax = plt.subplots(figsize=figsize, facecolor="white")
-    positions = list(range(len(rows)))
-    bars = ax.barh(positions, values, color=colors, height=0.62)
-    row_transform = ax.get_yaxis_transform()
-    for position, mode, color in zip(positions, modes, colors):
-        ax.add_artist(
-            AnnotationBbox(
-                make_delivery_mode_icon(mode, color),
-                (-0.285, position),
-                xycoords=row_transform,
-                box_alignment=(0.5, 0.5),
-                frameon=False,
-                pad=0,
-                annotation_clip=False,
-            )
-        )
-        ax.text(
-            -0.235,
-            position,
-            MODE_LABELS[mode],
-            transform=row_transform,
-            va="center",
-            ha="left",
-            fontsize=STANDARD_FONTSIZE,
-            color="0.15",
-            clip_on=False,
-        )
+    bars = ax.barh(labels, values, color=colors, height=0.62)
     max_value = max(values)
     label_offset = max(max_value * 0.012, 0.8)
     for bar, value in zip(bars, values):
@@ -295,10 +255,7 @@ def plot_delivery_mode_lifecycle_comparison(
         "Lifecycle emissions (g CO$_2$e/order)",
         fontsize=AXIS_LABEL_FONTSIZE,
     )
-    ax.set_yticks(positions)
-    ax.set_yticklabels([])
-    ax.tick_params(axis="x", labelsize=STANDARD_FONTSIZE, length=2.5)
-    ax.tick_params(axis="y", length=0)
+    ax.tick_params(axis="both", labelsize=STANDARD_FONTSIZE, length=2.5)
     ax.spines[["top", "right", "left"]].set_visible(False)
     ax.grid(axis="x", color="0.9", linewidth=0.5)
     ax.set_axisbelow(True)
@@ -308,7 +265,7 @@ def plot_delivery_mode_lifecycle_comparison(
             fontsize=AXIS_LABEL_FONTSIZE,
             loc="left",
         )
-    fig.subplots_adjust(left=0.29, right=0.965, bottom=0.23, top=0.95)
+    fig.tight_layout(pad=0.8)
     fig.savefig(output, dpi=300, facecolor="white")
     plt.close(fig)
     write_figure_report(
