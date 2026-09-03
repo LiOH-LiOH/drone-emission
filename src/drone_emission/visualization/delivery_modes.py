@@ -62,6 +62,10 @@ def _set_plot_style() -> None:
         {
             "font.family": FONT_FAMILY,
             "font.sans-serif": [FONT_FAMILY],
+            "mathtext.fontset": "custom",
+            "mathtext.rm": FONT_FAMILY,
+            "mathtext.it": f"{FONT_FAMILY}:italic",
+            "mathtext.bf": f"{FONT_FAMILY}:bold",
             "svg.fonttype": "none",
             "pdf.fonttype": 42,
             "font.size": STANDARD_FONTSIZE,
@@ -218,7 +222,7 @@ def plot_delivery_mode_lifecycle_comparison(
         )
     ax.set_xlim(0, max_value * 1.15 + label_offset)
     ax.set_xlabel(
-        "Lifecycle emissions (g CO₂e/order)",
+        "Lifecycle emissions (g CO$_2$e/order)",
         fontsize=AXIS_LABEL_FONTSIZE,
     )
     ax.tick_params(axis="both", labelsize=STANDARD_FONTSIZE, length=2.5)
@@ -346,7 +350,7 @@ def plot_beijing_all_mode_lifecycle(
         )
     ax.set_xlim(0, max_value * 1.15 + label_offset)
     ax.set_xlabel(
-        "Annual lifecycle emissions (kt CO₂e yr⁻¹)",
+        "Annual lifecycle emissions (kt CO$_2$e yr$^{-1}$)",
         fontsize=AXIS_LABEL_FONTSIZE,
     )
     ax.tick_params(axis="both", labelsize=STANDARD_FONTSIZE, length=2.5)
