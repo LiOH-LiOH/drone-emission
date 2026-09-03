@@ -128,7 +128,7 @@ def test_four_city_delivery_mode_candidates_consume_retained_analysis():
         "candidate_four_city_mode_shared_legend",
     ):
         request = request_index()[figure_id]
-        expected_cache_version = 1 if figure_id.endswith("shared_legend") else 2
+        expected_cache_version = 2 if figure_id.endswith("shared_legend") else 3
         assert request["cache_version"] == expected_cache_version
         assert request["required_inputs"] == expected_inputs
         assert request["outputs"] == [f"{figure_id}.pdf"]

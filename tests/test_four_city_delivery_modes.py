@@ -14,6 +14,7 @@ from drone_emission.analysis.four_city_delivery_modes import (
 )
 from drone_emission.emission import lifecycle_emission_per_order
 from drone_emission.visualization.delivery_modes import (
+    FOUR_CITY_LEGEND_FONTSIZE,
     FOUR_CITY_LEGEND_HEIGHT_MM,
     FOUR_CITY_LEGEND_WIDTH_MM,
     FOUR_CITY_PANEL_HEIGHT_MM,
@@ -212,6 +213,12 @@ def test_four_city_candidate_reports_lock_panel_encodings(tmp_path):
         assert encoding["within_group_order"] == "city"
         assert encoding["city_label_rotation_deg"] == 90
         assert encoding["legend_location"] == "separate_shared_asset"
+        assert encoding["font_size_pt"] == {
+            "axis_label": 8.0,
+            "tick_and_city": 7.0,
+            "bar_value": 6.3,
+        }
+        assert encoding["axes_bounds_fraction"]["bottom"] == 0.21
         expected_secondary = (
             "absolute_reduction_kt" if metric == "relative_reduction_pct" else None
         )
@@ -238,5 +245,6 @@ def test_four_city_shared_legend_report_locks_single_row_layout(tmp_path):
         "height": FOUR_CITY_LEGEND_HEIGHT_MM,
     }
     assert report["visual_encoding"]["layout"] == "single_row"
+    assert report["visual_encoding"]["font_size_pt"] == FOUR_CITY_LEGEND_FONTSIZE
     assert report["visual_encoding"]["items"][-1] == "Absolute reduction"
     assert len(report["visual_encoding"]["items"]) == 5
