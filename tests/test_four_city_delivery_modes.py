@@ -13,7 +13,16 @@ from drone_emission.analysis.four_city_delivery_modes import (
     run_four_city_delivery_mode_analysis,
 )
 from drone_emission.emission import lifecycle_emission_per_order
-from drone_emission.visualization.delivery_modes import load_four_city_mode_data
+from drone_emission.visualization.delivery_modes import (
+    FOUR_CITY_LEGEND_HEIGHT_MM,
+    FOUR_CITY_LEGEND_WIDTH_MM,
+    FOUR_CITY_PANEL_HEIGHT_MM,
+    FOUR_CITY_PANEL_WIDTH_MM,
+    load_four_city_mode_data,
+    plot_four_city_mode_relative_reduction,
+    plot_four_city_mode_replacement_rate,
+    plot_four_city_mode_shared_legend,
+)
 
 
 def _write_od(path: Path, *, gef: float = 0.5, kappa: float = 0.75) -> None:
@@ -158,3 +167,76 @@ def test_analysis_workflow_registers_four_city_outputs(tmp_path):
         "four_city_mode_oracle_summary.csv",
         "four_city_mode_oracle_report.json",
     ]
+
+
+def test_four_city_candidate_reports_lock_panel_encodings(tmp_path):
+    rows = []
+    for city_index, city in enumerate(CITY_ORDER):
+        for mode_index, mode in enumerate(BASELINE_MODES):
+            rows.append(
+                {
+                    "region_key": city,
+                    "region_name_en": city.title(),
+                    "baseline_mode": mode,
+                    "drone_replacement_rate_pct": 20 + city_index + mode_index,
+                    "absolute_reduction_kt": 10 + 5 * city_index + mode_index,
+                    "relative_reduction_pct": 15 + city_index + mode_index,
+                }
+            )
+    frame = pd.DataFrame(rows)
+    report = {"analysis_version": "test"}
+    cases = (
+        (
+            plot_four_city_mode_replacement_rate,
+            "replacement.pdf",
+            "drone_replacement_rate_pct",
+        ),
+        (
+            plot_four_city_mode_relative_reduction,
+            "reduction.pdf",
+            "relative_reduction_pct",
+        ),
+    )
+    for plotter, filename, metric in cases:
+        output = plotter(frame, report, save_path=tmp_path / filename)
+        figure_report = json.loads(
+            output.with_name(f"{output.stem}_report.json").read_text()
+        )
+        assert figure_report["figure_size_mm"] == {
+            "width": FOUR_CITY_PANEL_WIDTH_MM,
+            "height": FOUR_CITY_PANEL_HEIGHT_MM,
+        }
+        encoding = figure_report["visual_encoding"]
+        assert encoding["orientation"] == "vertical"
+        assert encoding["x_grouping"] == "baseline_mode"
+        assert encoding["within_group_order"] == "city"
+        assert encoding["city_label_rotation_deg"] == 90
+        assert encoding["legend_location"] == "separate_shared_asset"
+        expected_secondary = (
+            "absolute_reduction_kt" if metric == "relative_reduction_pct" else None
+        )
+        assert encoding["relative_reduction_secondary_axis"] == expected_secondary
+        if metric == "relative_reduction_pct":
+            marker = encoding["absolute_reduction_marker"]
+            assert marker["shape"] == "filled_circle"
+            assert marker["connected"] is False
+            assert marker["labels"] is False
+
+
+def test_four_city_shared_legend_report_locks_single_row_layout(tmp_path):
+    frame = pd.DataFrame()
+    output = plot_four_city_mode_shared_legend(
+        frame,
+        {"analysis_version": "test"},
+        save_path=tmp_path / "legend.pdf",
+    )
+    report = json.loads(
+        output.with_name(f"{output.stem}_report.json").read_text()
+    )
+    assert report["figure_size_mm"] == {
+        "width": FOUR_CITY_LEGEND_WIDTH_MM,
+        "height": FOUR_CITY_LEGEND_HEIGHT_MM,
+    }
+    assert report["visual_encoding"]["layout"] == "single_row"
+    assert report["visual_encoding"]["items"][-1] == "Absolute reduction"
+    assert len(report["visual_encoding"]["items"]) == 5

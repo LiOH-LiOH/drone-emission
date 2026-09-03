@@ -11,6 +11,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from matplotlib import font_manager
+from matplotlib.lines import Line2D
+from matplotlib.patches import Patch
 from matplotlib.ticker import MaxNLocator, MultipleLocator
 
 from drone_emission.analysis.weighted_quantile import weighted_csv_quantile
@@ -79,8 +81,10 @@ BEIJING_HEIGHT_MM = 80.0
 FONT_FAMILY = "Arial"
 AXIS_LABEL_FONTSIZE = 7.0
 STANDARD_FONTSIZE = 6.0
-FOUR_CITY_WIDTH_MM = 180.0
-FOUR_CITY_HEIGHT_MM = 82.0
+FOUR_CITY_PANEL_WIDTH_MM = 88.0
+FOUR_CITY_PANEL_HEIGHT_MM = 82.0
+FOUR_CITY_LEGEND_WIDTH_MM = 180.0
+FOUR_CITY_LEGEND_HEIGHT_MM = 10.0
 FOUR_CITY_ORDER = ("chengdu", "guangzhou", "beijing", "shanghai")
 FOUR_CITY_MODE_ORDER = (
     "pedelec_ebike",
@@ -506,6 +510,10 @@ def _four_city_figure_report(
     figure_name: str,
     figure_path: str | Path,
     metric: str,
+    figure_size_mm: tuple[float, float] = (
+        FOUR_CITY_PANEL_WIDTH_MM,
+        FOUR_CITY_PANEL_HEIGHT_MM,
+    ),
 ) -> dict:
     return {
         "schema_version": 1,
@@ -513,12 +521,46 @@ def _four_city_figure_report(
         "figure_path": str(figure_path),
         "formal_manifest_registered": True,
         "figure_size_mm": {
-            "width": FOUR_CITY_WIDTH_MM,
-            "height": FOUR_CITY_HEIGHT_MM,
+            "width": figure_size_mm[0],
+            "height": figure_size_mm[1],
         },
         "metric": metric,
         "city_order": list(FOUR_CITY_ORDER),
         "baseline_mode_order": list(FOUR_CITY_MODE_ORDER),
+        "visual_encoding": (
+            {
+                "layout": "single_row",
+                "items": [
+                    *[COMPARISON_MODE_LABELS[mode] for mode in FOUR_CITY_MODE_ORDER],
+                    "Absolute reduction",
+                ],
+            }
+            if metric == "shared_legend"
+            else {
+                "orientation": "vertical",
+                "x_grouping": "baseline_mode",
+                "within_group_order": "city",
+                "city_label_rotation_deg": 90,
+                "mode_encoding": "bar_color",
+                "legend_location": "separate_shared_asset",
+                "relative_reduction_secondary_axis": (
+                    "absolute_reduction_kt"
+                    if metric == "relative_reduction_pct"
+                    else None
+                ),
+                "absolute_reduction_marker": (
+                    {
+                        "shape": "filled_circle",
+                        "facecolor": "#3f3f3f",
+                        "edgecolor": "white",
+                        "connected": False,
+                        "labels": False,
+                    }
+                    if metric == "relative_reduction_pct"
+                    else None
+                ),
+            }
+        ),
         "analysis": {
             key: analysis_report.get(key)
             for key in (
@@ -551,70 +593,108 @@ def _plot_four_city_grouped_bars(
         output = output.with_name(f"{output.stem}_t{output.suffix}")
     output.parent.mkdir(parents=True, exist_ok=True)
 
-    city_names = [
-        str(frame.loc[frame["region_key"].eq(city), "region_name_en"].iloc[0])
+    city_names = {
+        city: str(
+            frame.loc[frame["region_key"].eq(city), "region_name_en"].iloc[0]
+        )
+        for city in FOUR_CITY_ORDER
+    }
+    bars_per_group = len(FOUR_CITY_ORDER)
+    bar_width = 0.18
+    group_gap = 0.34
+    group_step = bars_per_group * bar_width + group_gap
+    group_starts = np.arange(len(FOUR_CITY_MODE_ORDER), dtype=float) * group_step
+    x_positions = np.concatenate(
+        [start + np.arange(bars_per_group) * bar_width for start in group_starts]
+    )
+    x_labels = [
+        city_names[city]
+        for _ in FOUR_CITY_MODE_ORDER
         for city in FOUR_CITY_ORDER
     ]
-    centers = np.arange(len(FOUR_CITY_ORDER), dtype=float)
-    height = 0.17
-    offsets = np.linspace(-1.5 * height, 1.5 * height, len(FOUR_CITY_MODE_ORDER))
     fig, ax = plt.subplots(figsize=figsize, facecolor="white")
-    max_value = float(frame[metric].max())
-    label_offset = max(max_value * 0.012, 0.2)
-    for offset, mode in zip(offsets, FOUR_CITY_MODE_ORDER):
+    plotted_absolute = []
+    for start, mode in zip(group_starts, FOUR_CITY_MODE_ORDER):
         rows = frame[frame["baseline_mode"].eq(mode)].set_index("region_key")
         values = np.array([float(rows.loc[city, metric]) for city in FOUR_CITY_ORDER])
-        bars = ax.barh(
-            centers + offset,
+        positions = start + np.arange(bars_per_group) * bar_width
+        bars = ax.bar(
+            positions,
             values,
-            height=height * 0.9,
+            width=bar_width * 0.88,
             color=MODE_COLORS[mode],
-            label=COMPARISON_MODE_LABELS[mode],
         )
-        for city, bar, value in zip(FOUR_CITY_ORDER, bars, values):
-            if metric == "relative_reduction_pct":
-                absolute = float(rows.loc[city, "absolute_reduction_kt"])
-                label = f"{value:.1f}% ({absolute:.1f} kt)"
-            else:
-                label = f"{value:.1f}%"
+        for bar, value in zip(bars, values):
             ax.text(
-                value + label_offset,
-                bar.get_y() + bar.get_height() / 2,
-                label,
-                va="center",
-                ha="left",
-                fontsize=5.3,
+                bar.get_x() + bar.get_width() / 2,
+                value + 1.0,
+                f"{value:.1f}%",
+                va="bottom",
+                ha="center",
+                rotation=90,
+                fontsize=4.8,
                 color="0.2",
             )
-    ax.set_yticks(centers, city_names)
-    ax.invert_yaxis()
-    ax.set_xlim(0, 112)
-    ax.xaxis.set_major_locator(MultipleLocator(20))
+        plotted_absolute.extend(
+            float(rows.loc[city, "absolute_reduction_kt"])
+            for city in FOUR_CITY_ORDER
+        )
+    for left_start, right_start in zip(group_starts[:-1], group_starts[1:]):
+        separator = (
+            left_start
+            + (bars_per_group - 0.5) * bar_width
+            + right_start
+            - 0.5 * bar_width
+        ) / 2
+        ax.axvline(separator, color="0.88", linewidth=0.5, zorder=0)
+    ax.set_xticks(x_positions, x_labels, rotation=90)
+    ax.set_ylim(0, 112)
+    ax.yaxis.set_major_locator(MultipleLocator(20))
     if metric == "drone_replacement_rate_pct":
-        ax.set_xlabel("Drone substitution (% of annual orders)")
+        ax.set_ylabel("Drone substitution (% of annual orders)")
         figure_name = "candidate_four_city_mode_replacement_rate"
         title = "Optimal drone substitution across incumbent delivery modes"
     else:
-        ax.set_xlabel(
-            "Lifecycle-emissions reduction (%); labels: % "
-            "(kt CO$_2$e yr$^{-1}$)"
+        ax.set_ylabel("Lifecycle-emissions reduction (%)")
+        absolute_axis = ax.twinx()
+        absolute_axis.scatter(
+            x_positions,
+            plotted_absolute,
+            s=16,
+            facecolor="#3f3f3f",
+            edgecolor="white",
+            linewidth=0.5,
+            zorder=4,
         )
+        max_absolute = max(plotted_absolute)
+        absolute_ceiling = max(
+            25.0,
+            float(np.ceil(max_absolute * 1.1 / 25.0) * 25.0),
+        )
+        absolute_axis.set_ylim(0, absolute_ceiling)
+        absolute_axis.yaxis.set_major_locator(MaxNLocator(nbins=5))
+        absolute_axis.set_ylabel(
+            "Absolute reduction (kt CO$_2$e yr$^{-1}$)",
+            fontsize=AXIS_LABEL_FONTSIZE,
+        )
+        absolute_axis.tick_params(
+            axis="y", labelsize=STANDARD_FONTSIZE, length=2.5
+        )
+        absolute_axis.spines[["top", "left"]].set_visible(False)
         figure_name = "candidate_four_city_mode_relative_reduction"
         title = "Lifecycle-emissions reduction from optimal drone substitution"
     ax.tick_params(axis="both", labelsize=STANDARD_FONTSIZE, length=2.5)
-    ax.spines[["top", "right", "left"]].set_visible(False)
-    ax.grid(axis="x", color="0.9", linewidth=0.5)
+    ax.spines[["top", "right"]].set_visible(False)
+    ax.grid(axis="y", color="0.9", linewidth=0.5)
     ax.set_axisbelow(True)
-    ax.legend(
-        loc="lower center",
-        bbox_to_anchor=(0.5, 1.01),
-        ncol=4,
-        frameon=False,
-        fontsize=STANDARD_FONTSIZE,
-    )
     if plot_title:
-        ax.set_title(title, fontsize=AXIS_LABEL_FONTSIZE, loc="left", pad=16)
-    fig.tight_layout(pad=0.8)
+        ax.set_title(title, fontsize=AXIS_LABEL_FONTSIZE, loc="left")
+    fig.subplots_adjust(
+        left=0.18,
+        right=0.80 if metric == "relative_reduction_pct" else 0.97,
+        bottom=0.35,
+        top=0.94,
+    )
     fig.savefig(output, dpi=300, facecolor="white")
     plt.close(fig)
     write_figure_report(
@@ -636,8 +716,8 @@ def plot_four_city_mode_replacement_rate(
     *,
     save_path: str | Path,
     figsize: tuple[float, float] = (
-        FOUR_CITY_WIDTH_MM / 25.4,
-        FOUR_CITY_HEIGHT_MM / 25.4,
+        FOUR_CITY_PANEL_WIDTH_MM / 25.4,
+        FOUR_CITY_PANEL_HEIGHT_MM / 25.4,
     ),
     for_latex: bool = False,
     plot_title: bool = False,
@@ -660,13 +740,13 @@ def plot_four_city_mode_relative_reduction(
     *,
     save_path: str | Path,
     figsize: tuple[float, float] = (
-        FOUR_CITY_WIDTH_MM / 25.4,
-        FOUR_CITY_HEIGHT_MM / 25.4,
+        FOUR_CITY_PANEL_WIDTH_MM / 25.4,
+        FOUR_CITY_PANEL_HEIGHT_MM / 25.4,
     ),
     for_latex: bool = False,
     plot_title: bool = False,
 ) -> Path:
-    """Plot relative reductions with absolute kt CO2e labels."""
+    """Plot relative reductions and absolute reductions on a second axis."""
     del for_latex
     return _plot_four_city_grouped_bars(
         frame,
@@ -676,3 +756,66 @@ def plot_four_city_mode_relative_reduction(
         figsize=figsize,
         plot_title=plot_title,
     )
+
+
+def plot_four_city_mode_shared_legend(
+    frame: pd.DataFrame,
+    analysis_report: dict,
+    *,
+    save_path: str | Path,
+    figsize: tuple[float, float] = (
+        FOUR_CITY_LEGEND_WIDTH_MM / 25.4,
+        FOUR_CITY_LEGEND_HEIGHT_MM / 25.4,
+    ),
+    for_latex: bool = False,
+    plot_title: bool = False,
+) -> Path:
+    """Render the single-row legend shared by both four-city panels."""
+    del for_latex, plot_title
+    _set_plot_style()
+    output = Path(save_path)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    handles = [
+        Patch(facecolor=MODE_COLORS[mode], label=COMPARISON_MODE_LABELS[mode])
+        for mode in FOUR_CITY_MODE_ORDER
+    ]
+    handles.append(
+        Line2D(
+            [],
+            [],
+            linestyle="none",
+            marker="o",
+            markersize=4.2,
+            markerfacecolor="#3f3f3f",
+            markeredgecolor="white",
+            markeredgewidth=0.5,
+            label="Absolute reduction",
+        )
+    )
+    fig = plt.figure(figsize=figsize, facecolor="white")
+    fig.legend(
+        handles=handles,
+        loc="center",
+        ncol=5,
+        frameon=False,
+        fontsize=STANDARD_FONTSIZE,
+        handlelength=1.4,
+        columnspacing=1.5,
+    )
+    fig.savefig(output, dpi=300, facecolor="white")
+    plt.close(fig)
+    write_figure_report(
+        output.with_name(f"{output.stem}_report.json"),
+        _four_city_figure_report(
+            frame,
+            analysis_report,
+            figure_name="candidate_four_city_mode_shared_legend",
+            figure_path=output,
+            metric="shared_legend",
+            figure_size_mm=(
+                FOUR_CITY_LEGEND_WIDTH_MM,
+                FOUR_CITY_LEGEND_HEIGHT_MM,
+            ),
+        ),
+    )
+    return output

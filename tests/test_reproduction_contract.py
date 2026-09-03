@@ -17,15 +17,15 @@ from drone_emission.visualization.formal_registry import REQUEST_RENDERERS
 
 def test_manifest_has_exact_locked_set():
     manifest = load_manifest()
-    assert manifest["figure_count"] == 14
-    assert len(manifest["figures"]) == 14
+    assert manifest["figure_count"] == 15
+    assert len(manifest["figures"]) == 15
     assert {figure["mode"] for figure in manifest["figures"]} == {
         "direct",
         "inkscape",
     }
-    assert manifest["render_request_count"] == 30
-    assert len(manifest["requests"]) == 30
-    assert sum(len(request["outputs"]) for request in manifest["requests"]) == 46
+    assert manifest["render_request_count"] == 31
+    assert len(manifest["requests"]) == 31
+    assert sum(len(request["outputs"]) for request in manifest["requests"]) == 47
     assert all(
         figure_required_inputs(figure, manifest)
         for figure in manifest["figures"]
@@ -39,7 +39,7 @@ def test_manifest_requests_exactly_match_registry():
         for figure in load_manifest()["figures"]
         for request in figure["render_requests"]
     ]
-    assert len(requests) == 30
+    assert len(requests) == 31
     assert len(requests) == len(set(requests))
     assert set(requests) == set(REQUEST_RENDERERS)
 
@@ -71,7 +71,7 @@ def test_manifest_paths_are_one_to_one():
     figures = load_manifest()["figures"]
     staging = [Path(figure["staging"]).name for figure in figures]
     publish = [Path(figure["publish"]).name for figure in figures]
-    assert len(set(staging)) == 14
+    assert len(set(staging)) == 15
     assert staging == publish
     assert staging == [f"{figure['id']}.pdf" for figure in figures]
 
@@ -125,9 +125,11 @@ def test_four_city_delivery_mode_candidates_consume_retained_analysis():
     for figure_id in (
         "candidate_four_city_mode_replacement_rate",
         "candidate_four_city_mode_relative_reduction",
+        "candidate_four_city_mode_shared_legend",
     ):
         request = request_index()[figure_id]
-        assert request["cache_version"] == 1
+        expected_cache_version = 1 if figure_id.endswith("shared_legend") else 2
+        assert request["cache_version"] == expected_cache_version
         assert request["required_inputs"] == expected_inputs
         assert request["outputs"] == [f"{figure_id}.pdf"]
         figure = next(

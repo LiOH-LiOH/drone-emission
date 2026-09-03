@@ -418,6 +418,7 @@ def _render_four_city_mode_candidate(
         load_four_city_mode_data,
         plot_four_city_mode_relative_reduction,
         plot_four_city_mode_replacement_rate,
+        plot_four_city_mode_shared_legend,
     )
 
     analysis_root = context.work_root / "analysis" / "four_city_delivery_modes"
@@ -453,6 +454,16 @@ def _render_four_city_mode_candidate(
             report,
             save_path=context.output(
                 "candidate_four_city_mode_relative_reduction.pdf"
+            ),
+            for_latex=True,
+            plot_title=False,
+        )
+    elif metric == "shared_legend":
+        plot_four_city_mode_shared_legend(
+            frame,
+            report,
+            save_path=context.output(
+                "candidate_four_city_mode_shared_legend.pdf"
             ),
             for_latex=True,
             plot_title=False,
@@ -495,6 +506,9 @@ REQUEST_RENDERERS: dict[str, Renderer] = {
     ),
     "candidate_four_city_mode_relative_reduction": lambda c: (
         _render_four_city_mode_candidate(c, metric="relative_reduction")
+    ),
+    "candidate_four_city_mode_shared_legend": lambda c: (
+        _render_four_city_mode_candidate(c, metric="shared_legend")
     ),
 }
 
