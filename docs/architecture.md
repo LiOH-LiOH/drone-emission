@@ -16,12 +16,12 @@ The active workflow has four layers:
    analysis functions cannot write through to city data. The view is versioned
    by the cohort SHA-256 and contains only the locked cities.
 4. **Final figures** — the machine-readable
-   `src/drone_emission/paper_figures.json` declares exactly 10 assets. Rendering
+   `src/drone_emission/paper_figures.json` declares exactly 12 assets. Rendering
    creates only declared sources/staging files. Publication is a separate,
    explicitly confirmed operation.
 
 `paper_workflow.py` is the only formal scheduler. Before rendering it verifies
-that the 27 unique manifest requests exactly equal the explicit
+that the 28 unique manifest requests exactly equal the explicit
 `formal_registry.REQUEST_RENDERERS` keys. Every renderer receives one immutable
 context containing the configured data, figures, cache, and work roots.
 Requests that consume analysis products receive a matching cohort-versioned
@@ -30,7 +30,7 @@ read their declared inputs directly; nationwide renderers apply the locked
 cohort selection themselves.
 
 `render` accepts formal manifest IDs, not internal plot-function names. The
-10 `inkscape` entries generate required panels and reports; the local-only
+12 `inkscape` entries generate required panels and reports; the local-only
 `compose` command converts those panel PDFs to external SVG links and exports
 the tracked Inkscape layouts to formal staging filenames. It never rewrites the
 master SVGs: linked image elements are inlined as nested SVG elements only in a
@@ -67,7 +67,7 @@ are not declared in `paper_figures.json` or the renderer registry. Acceptance is
 a separate explicit operation that validates convergence and all live input
 fingerprints before changing the three `od_params` values.
 
-`promote` validates all 10 staging filenames, manifest mappings, and PDF magic
+`promote` validates all 12 staging filenames, manifest mappings, and PDF magic
 headers before copying. Neither `render` nor `reproduce` writes to the ignored
 Overleaf working tree under `docs/paper/`. `supplementary.tex` remains outside
 the active reproduction, validation, and publication scope.

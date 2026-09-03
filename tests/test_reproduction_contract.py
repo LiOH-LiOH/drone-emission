@@ -19,10 +19,7 @@ def test_manifest_has_exact_locked_set():
     manifest = load_manifest()
     assert manifest["figure_count"] == 12
     assert len(manifest["figures"]) == 12
-    assert {figure["mode"] for figure in manifest["figures"]} == {
-        "direct",
-        "inkscape",
-    }
+    assert {figure["mode"] for figure in manifest["figures"]} == {"inkscape"}
     assert manifest["render_request_count"] == 28
     assert len(manifest["requests"]) == 28
     assert sum(len(request["outputs"]) for request in manifest["requests"]) == 44
@@ -92,8 +89,8 @@ def test_contribution_figure_consumes_prepared_analysis_and_population():
         for figure in load_manifest()["figures"]
         if figure["id"] == "fig5_contribution_decomposition"
     )
-    assert figure["mode"] == "direct"
-    assert figure["source_output"] == "contribution_decomposition_city_b.pdf"
+    assert figure["mode"] == "inkscape"
+    assert figure["inkscape_source"] == "figures/inkscape/figure17.svg"
 
 
 def test_delivery_mode_figure_consumes_declared_beijing_inputs():
