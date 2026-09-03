@@ -1526,6 +1526,7 @@ def plot_contribution_decomposition_city_b(
     )
     y = _plot_selected_city_contribution_bars(ax, rows)
     ax_top = ax.twiny()
+    ax_top.set_position(ax.get_position())
     bottom_xlim = ax.get_xlim()
     zero_fraction = (0.0 - bottom_xlim[0]) / (bottom_xlim[1] - bottom_xlim[0])
     _plot_selected_city_absolute_reduction_points(ax_top, rows, y, zero_fraction)
