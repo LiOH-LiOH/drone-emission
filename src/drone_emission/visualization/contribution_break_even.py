@@ -6,11 +6,14 @@ import json
 import os
 import time
 import zlib
+from functools import wraps
 from typing import Dict
 
+import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from matplotlib import font_manager
 from matplotlib.cm import ScalarMappable
 from matplotlib.colors import BoundaryNorm, TwoSlopeNorm
 
@@ -78,6 +81,7 @@ CONTRIBUTION_CITY_AXES_BOTTOM_MM = 25.0
 CONTRIBUTION_CITY_AXES_HEIGHT_MM = 125.73
 CONTRIBUTION_CITY_LEGEND_ANCHOR_MM = 7.3
 CONTRIBUTION_CITY_LEGEND_GAP_TARGET_MM = (2.5, 3.0)
+CONTRIBUTION_CITY_FONT_FAMILY = "Arial"
 BREAK_EVEN_REPRESENTATIVE_AIR_DISTANCE_KM = 2.0
 BREAK_EVEN_CURVE_AIR_DISTANCES_KM = (0.5, 1.0, 2.0, 3.0, 5.0)
 BREAK_EVEN_DETOUR_LIMITS = (1.0, 2.4)
@@ -171,11 +175,58 @@ def _selected_city_vertical_layout(figsize: tuple) -> dict:
         "top_margin_mm": page_height_mm - axes_top_mm,
         "axes_bottom_fraction": CONTRIBUTION_CITY_AXES_BOTTOM_MM / page_height_mm,
         "axes_top_fraction": axes_top_mm / page_height_mm,
+        "axes_height_fraction": (
+            CONTRIBUTION_CITY_AXES_HEIGHT_MM / page_height_mm
+        ),
         "alignment_contract": (
             "When equal-height PDF pages are top-aligned, both axes borders, "
             "y limits and all overall-plus-city row coordinates coincide."
         ),
     }
+
+
+def _set_selected_city_axes_position(
+    ax,
+    figsize: tuple,
+    *,
+    left: float,
+    right: float,
+) -> dict:
+    """Apply the shared physical vertical geometry to a city-panel axis."""
+    layout = _selected_city_vertical_layout(figsize)
+    ax.set_position(
+        [
+            left,
+            layout["axes_bottom_fraction"],
+            right - left,
+            layout["axes_height_fraction"],
+        ]
+    )
+    return layout
+
+
+def _with_contribution_city_typography(plot_function):
+    """Render a selected-city panel with explicit Arial typography."""
+
+    @wraps(plot_function)
+    def wrapped(*args, **kwargs):
+        font_manager.findfont(
+            font_manager.FontProperties(family=CONTRIBUTION_CITY_FONT_FAMILY),
+            fallback_to_default=False,
+        )
+        with mpl.rc_context(
+            {
+                "font.family": CONTRIBUTION_CITY_FONT_FAMILY,
+                "font.sans-serif": [CONTRIBUTION_CITY_FONT_FAMILY],
+                "mathtext.fontset": "custom",
+                "mathtext.rm": CONTRIBUTION_CITY_FONT_FAMILY,
+                "mathtext.it": f"{CONTRIBUTION_CITY_FONT_FAMILY}:italic",
+                "mathtext.bf": f"{CONTRIBUTION_CITY_FONT_FAMILY}:bold",
+            }
+        ):
+            return plot_function(*args, **kwargs)
+
+    return wrapped
 
 
 def _axis_bbox_mm(ax, figsize: tuple) -> dict:
@@ -1442,6 +1493,7 @@ def _write_contribution_decomposition_city_b_report(
     print(f"Contribution decomposition city-b report saved to {report_path}")
 
 
+@_with_contribution_city_typography
 def plot_contribution_decomposition_city_b(
     prepared: Dict,
     save_path: str = None,
@@ -1466,12 +1518,11 @@ def plot_contribution_decomposition_city_b(
     rows = [_national_contribution_row(prepared.get("national", {})), *city_rows]
     fig = plt.figure(figsize=figsize)
     ax = fig.add_subplot(1, 1, 1)
-    vertical_layout = _selected_city_vertical_layout(figsize)
-    fig.subplots_adjust(
+    vertical_layout = _set_selected_city_axes_position(
+        ax,
+        figsize,
         left=0.39,
         right=0.98,
-        bottom=vertical_layout["axes_bottom_fraction"],
-        top=vertical_layout["axes_top_fraction"],
     )
     y = _plot_selected_city_contribution_bars(ax, rows)
     ax_top = ax.twiny()
@@ -1650,6 +1701,7 @@ def _write_contribution_city_population_report(
     print(f"Contribution city population report saved to {report_path}")
 
 
+@_with_contribution_city_typography
 def plot_contribution_decomposition_city_population(
     prepared: Dict,
     save_path: str = None,
@@ -1672,12 +1724,11 @@ def plot_contribution_decomposition_city_population(
         )
 
     fig, ax = plt.subplots(figsize=figsize)
-    vertical_layout = _selected_city_vertical_layout(figsize)
-    fig.subplots_adjust(
+    vertical_layout = _set_selected_city_axes_position(
+        ax,
+        figsize,
         left=0.10,
         right=0.96,
-        bottom=vertical_layout["axes_bottom_fraction"],
-        top=vertical_layout["axes_top_fraction"],
     )
     gold = "#D4A017"
     city_population = np.array(
