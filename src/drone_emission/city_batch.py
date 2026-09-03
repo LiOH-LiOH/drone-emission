@@ -235,6 +235,7 @@ def run_city_batch(
     environment_overrides: dict[str, str] | None = None,
     repair_keys: list[str] | None = None,
     result_validator: ResultValidator | None = None,
+    batch_mode: str = "full",
 ) -> int:
     """Run cities with bounded subprocess concurrency and one status writer."""
     if jobs < 1:
@@ -266,6 +267,7 @@ def run_city_batch(
     commit = source_commit or _source_commit()
     contract = {
         "schema_version": 1,
+        "batch_mode": batch_mode,
         "source_commit": commit,
         "environment": environment,
         "cohort_hash": cohort_hash,

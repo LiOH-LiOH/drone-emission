@@ -90,6 +90,28 @@ def run_region_from_roadnet(region_key: str, config: dict):
     cal_emission(region_info=region, exp_config=config)
 
 
+def run_region_from_road_clean(region_key: str, config: dict):
+    """Resume from an already-routed OD checkpoint without loading GraphML."""
+    registry = get_registry()
+    if region_key not in registry:
+        raise KeyError(f"Region '{region_key}' not found in configuration")
+    region = registry[region_key]
+    region_config = region.to_dict()
+    name = region_config["region_name_en"].lower()
+    od_path = (
+        Path(config["data_dir"])
+        / region_config["region_level"]
+        / name
+        / f"{name}_od_pairs.csv"
+    )
+    from drone_emission.roadnet.api import clean_routed_od_checkpoint
+
+    _record_stage("road-clean")
+    clean_routed_od_checkpoint(od_path, region_info=region)
+    _record_stage("emission")
+    cal_emission(region_info=region, exp_config=config)
+
+
 def has_city_results(region_config, config: dict) -> bool:
     """Check the completion marker and required reusable city artifacts."""
     if "total_ebike_lifecycle" not in region_config.stats:

@@ -135,8 +135,8 @@ def process_emission_csv(
             total_orders += float(annual_sales.sum())
             row_count += len(frame)
             road_km = pd.to_numeric(frame["road_distance_m"], errors="coerce").to_numpy() / 1000
-            if not np.isfinite(road_km).all():
-                raise ValueError(f"{path} has non-finite road distances")
+            if not np.isfinite(road_km).all() or (road_km <= 0).any():
+                raise ValueError(f"{path} has non-positive or non-finite road distances")
             min_road_km = min(min_road_km, float(road_km.min()))
             max_road_km = max(max_road_km, float(road_km.max()))
             total_drone_use += float(np.sum(frame["drone_emission_kg"] * annual_sales))

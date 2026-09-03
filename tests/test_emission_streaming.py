@@ -99,3 +99,17 @@ def test_midstream_emission_failure_preserves_old_csv(tmp_path):
         _run(path, Region(), Lca(fail_distance=3.0))
     assert path.read_bytes() == original
     assert not list(tmp_path.glob(".*.tmp"))
+
+
+def test_emission_rejects_nonpositive_road_distance_atomically(tmp_path):
+    path = tmp_path / "od.csv"
+    _input(path)
+    frame = pd.read_csv(path)
+    frame.loc[1, "road_distance_m"] = 0.0
+    frame.to_csv(path, index=False)
+    original = path.read_bytes()
+
+    with pytest.raises(ValueError, match="non-positive"):
+        _run(path, Region(), Lca())
+
+    assert path.read_bytes() == original

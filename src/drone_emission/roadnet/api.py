@@ -16,6 +16,7 @@ OD_BASE_COLUMNS = (
     "distance_km",
     "annual_sales",
 )
+ROAD_DISTANCE_CLEANUP_VERSION = 1
 
 
 def validate_od_checkpoint(path: str | Path, chunk_rows: int = OD_CHUNK_ROWS) -> dict:
@@ -53,6 +54,131 @@ def validate_od_checkpoint(path: str | Path, chunk_rows: int = OD_CHUNK_ROWS) ->
         "annual_sales": annual_sales_total,
         "columns": list(columns),
     }
+
+
+def validate_clean_routed_od_checkpoint(
+    path: str | Path, chunk_rows: int = OD_CHUNK_ROWS
+) -> dict:
+    """Validate an OD checkpoint after the positive-road-distance cleanup."""
+    checkpoint = validate_od_checkpoint(path, chunk_rows=chunk_rows)
+    if "road_distance_m" not in checkpoint["columns"]:
+        raise ValueError(f"Routed OD checkpoint is missing road_distance_m: {path}")
+    for chunk in pd.read_csv(path, usecols=["road_distance_m"], chunksize=chunk_rows):
+        road = pd.to_numeric(chunk["road_distance_m"], errors="coerce").to_numpy()
+        if not (np.isfinite(road) & (road > 0)).all():
+            raise ValueError(
+                "Routed OD checkpoint contains a non-positive or non-finite "
+                f"road distance: {path}"
+            )
+    return checkpoint
+
+
+def clean_routed_od_checkpoint(
+    path: str | Path,
+    *,
+    region_info,
+    chunk_rows: int = OD_CHUNK_ROWS,
+) -> dict:
+    """Atomically discard OD rows without a finite, positive road distance."""
+    path = Path(path)
+    if not path.is_file():
+        raise FileNotFoundError(f"OD checkpoint is missing: {path}")
+    columns = tuple(pd.read_csv(path, nrows=0).columns)
+    missing = [
+        column for column in (*OD_BASE_COLUMNS, "road_distance_m")
+        if column not in columns
+    ]
+    if missing:
+        raise ValueError(f"Routed OD checkpoint is missing columns {missing}: {path}")
+    source_stat = path.stat()
+    counts = {
+        "input_rows": 0,
+        "kept_rows": 0,
+        "nonfinite_rows": 0,
+        "nonpositive_rows": 0,
+    }
+    sales_totals = {
+        "input_annual_sales": 0.0,
+        "kept_annual_sales": 0.0,
+        "nonfinite_annual_sales": 0.0,
+        "nonpositive_annual_sales": 0.0,
+    }
+    weighted_road = 0.0
+    weighted_straight = 0.0
+    with atomic_open(path, "w", encoding="utf-8", newline="") as handle:
+        first = True
+        for frame in pd.read_csv(path, chunksize=chunk_rows):
+            road = pd.to_numeric(frame["road_distance_m"], errors="coerce").to_numpy()
+            sales = pd.to_numeric(frame["annual_sales"], errors="coerce").to_numpy()
+            straight = pd.to_numeric(frame["distance_km"], errors="coerce").to_numpy()
+            coordinates = frame[list(OD_BASE_COLUMNS[:-1])].apply(
+                pd.to_numeric, errors="coerce"
+            ).to_numpy()
+            if not np.isfinite(coordinates).all():
+                raise ValueError(
+                    f"OD checkpoint has non-finite coordinates/distances: {path}"
+                )
+            if (
+                not np.isfinite(sales).all()
+                or (sales <= 0).any()
+                or (sales != np.floor(sales)).any()
+                or (sales % 12 != 0).any()
+            ):
+                raise ValueError(f"OD checkpoint violates annual_sales contract: {path}")
+            nonfinite = ~np.isfinite(road)
+            nonpositive = np.isfinite(road) & (road <= 0)
+            valid = ~(nonfinite | nonpositive)
+
+            counts["input_rows"] += len(frame)
+            counts["kept_rows"] += int(valid.sum())
+            counts["nonfinite_rows"] += int(nonfinite.sum())
+            counts["nonpositive_rows"] += int(nonpositive.sum())
+            sales_totals["input_annual_sales"] += float(sales.sum())
+            sales_totals["kept_annual_sales"] += float(sales[valid].sum())
+            sales_totals["nonfinite_annual_sales"] += float(sales[nonfinite].sum())
+            sales_totals["nonpositive_annual_sales"] += float(
+                sales[nonpositive].sum()
+            )
+            weighted_road += float(np.sum(road[valid] * sales[valid]))
+            weighted_straight += float(
+                np.sum(straight[valid] * 1000.0 * sales[valid])
+            )
+            if valid.any():
+                frame.loc[valid].to_csv(handle, index=False, header=first)
+                first = False
+        if counts["kept_rows"] == 0 or sales_totals["kept_annual_sales"] <= 0:
+            raise ValueError(f"No finite positive road distances remain in {path}")
+
+    kept_sales = sales_totals["kept_annual_sales"]
+    avg_road = weighted_road / kept_sales
+    avg_straight = weighted_straight / kept_sales
+    audit = {
+        "cleanup_version": ROAD_DISTANCE_CLEANUP_VERSION,
+        "source_size_bytes": source_stat.st_size,
+        "source_mtime_ns": source_stat.st_mtime_ns,
+        **counts,
+        **sales_totals,
+        "excluded_rows": counts["nonfinite_rows"] + counts["nonpositive_rows"],
+        "excluded_annual_sales": (
+            sales_totals["nonfinite_annual_sales"]
+            + sales_totals["nonpositive_annual_sales"]
+        ),
+    }
+    region_info.set_stat("road_distance_cleanup", audit)
+    region_info.set_stat("odpair_count", counts["kept_rows"])
+    region_info.set_stat("total_odpair_annual_sales", int(kept_sales))
+    region_info.set_stat("avg_road_distance_m", avg_road)
+    region_info.set_stat("avg_straight_distance_m", avg_straight)
+    region_info.set_stat(
+        "detour_ratio", avg_road / avg_straight if avg_straight > 0 else 0
+    )
+    region_info.set_stat("valid_path_count", counts["kept_rows"])
+    region_info.set_stat("invalid_path_count", audit["excluded_rows"])
+    print(
+        f"Road-distance cleanup kept {counts['kept_rows']:,}/{counts['input_rows']:,} "
+        f"rows and excluded {audit['excluded_annual_sales']:,.0f} annual orders"
+    )
+    return audit
 
 
 def _fetch_bikeable_roadnet(*, bbox_4326, save_path):
@@ -163,11 +289,6 @@ def load_roadnet(region_info, exp_config):
     # Build tile router
     router = _make_tile_router(graph)
 
-    valid_count = 0
-    invalid_count = 0
-    valid_sales = 0.0
-    weighted_road = 0.0
-    weighted_straight = 0.0
     computed_count = 0
     with atomic_open(od_save_path, "w", encoding="utf-8", newline="") as handle:
         first = True
@@ -183,48 +304,25 @@ def load_roadnet(region_info, exp_config):
                 )
                 od_df.loc[nan_mask, "road_distance_m"] = distances
                 computed_count += int(nan_mask.sum())
-            road_distances = pd.to_numeric(
-                od_df["road_distance_m"], errors="coerce"
-            ).to_numpy()
-            annual_sales = pd.to_numeric(
-                od_df["annual_sales"], errors="coerce"
-            ).to_numpy()
-            straight = pd.to_numeric(od_df["distance_km"], errors="coerce").to_numpy()
-            valid_mask = np.isfinite(road_distances) & (road_distances >= 0)
-            valid_count += int(valid_mask.sum())
-            invalid_count += int((~valid_mask).sum())
-            valid_sales += float(annual_sales[valid_mask].sum())
-            weighted_road += float(
-                np.sum(road_distances[valid_mask] * annual_sales[valid_mask])
-            )
-            weighted_straight += float(
-                np.sum(straight[valid_mask] * annual_sales[valid_mask] * 1000)
-            )
             od_df.to_csv(handle, index=False, header=first)
             first = False
-        if valid_count == 0 or valid_sales <= 0:
-            raise ValueError(f"No valid routed OD rows in {od_save_path}")
 
     print(
         f"Updated {computed_count} road distances in bounded chunks; "
         f"saved {od_save_path}"
     )
-    if valid_count > 0:
-        avg_road_dist = weighted_road / valid_sales
-        avg_straight_dist = weighted_straight / valid_sales
-        detour_ratio = avg_road_dist / avg_straight_dist if avg_straight_dist > 0 else 0
-
-        region_info.set_stat("avg_road_distance_m", avg_road_dist)
-        region_info.set_stat("avg_straight_distance_m", avg_straight_dist)
-        region_info.set_stat("detour_ratio", detour_ratio)
-        region_info.set_stat("valid_path_count", valid_count)
-        region_info.set_stat("invalid_path_count", invalid_count)
-
-        print(f"\n=== Road Distance Statistics ===")
-        print(f"Valid paths: {valid_count:,} / {valid_count + invalid_count:,}")
-        print(f"Avg straight-line distance: {avg_straight_dist:.1f} m")
-        print(f"Avg road network distance: {avg_road_dist:.1f} m")
-        print(f"Detour ratio: {detour_ratio:.2f}")
+    audit = clean_routed_od_checkpoint(od_save_path, region_info=region_info)
+    print(f"\n=== Road Distance Statistics ===")
+    print(f"Valid paths: {audit['kept_rows']:,} / {audit['input_rows']:,}")
+    print(
+        f"Avg straight-line distance: "
+        f"{region_info.get_stat('avg_straight_distance_m'):.1f} m"
+    )
+    print(
+        f"Avg road network distance: "
+        f"{region_info.get_stat('avg_road_distance_m'):.1f} m"
+    )
+    print(f"Detour ratio: {region_info.get_stat('detour_ratio'):.2f}")
 
 
 

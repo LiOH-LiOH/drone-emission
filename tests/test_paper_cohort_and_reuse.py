@@ -9,6 +9,7 @@ import pandas as pd
 import pytest
 
 from drone_emission.paper_cohort import (
+    accept_candidate_cohort,
     cohort_hash,
     load_cohort_contract,
     locked_region_keys,
@@ -135,3 +136,29 @@ def test_subset_refresh_preserves_unaffected_city_rows():
         "beijing": 3,
         "lasa": 20,
     }
+
+
+def test_locked_only_candidate_contract_can_only_shrink(tmp_path, monkeypatch):
+    contract = load_cohort_contract()
+    monkeypatch.setattr(
+        "drone_emission.paper_cohort.load_cohort_contract",
+        lambda: json.loads(json.dumps(contract)),
+    )
+    retained = locked_region_keys(contract)[:-1]
+    removed = locked_region_keys(contract)[-1]
+    payload = {
+        "candidate_scope": "locked-only",
+        "candidate_region_keys": retained,
+        "candidate_region_keys_sha256": region_keys_sha256(retained),
+        "locked_region_keys": locked_region_keys(contract),
+        "cities": [{"region_key": removed, "eligible": False, "reason": "insufficient_od_pairs"}],
+    }
+    target = tmp_path / "candidate.json"
+
+    accept_candidate_cohort(payload, target=target)
+
+    candidate = json.loads(target.read_text(encoding="utf-8"))
+    assert candidate["expected_city_count"] == 312
+    assert candidate["cohort_id"] == "paper-312-gef-0.5366-20260904"
+    assert candidate["excluded_regions"]["linzhi"] == "insufficient_od_pairs"
+    assert candidate["excluded_regions"][removed] == "insufficient_od_pairs"

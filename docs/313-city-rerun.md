@@ -44,3 +44,27 @@ partial failure, and removes backups after success.
 Then point `DRONE_EMISSION_DATA_ROOT` at the formal data root and run `aggregate
 --force`, `cohort`, `analyze --force`, and `render --force` in order. Figure
 promotion to `docs/paper` remains a separate manual action.
+
+## Positive-road-distance cleanup
+
+Legacy results can be repaired without repeating sales, building, demand, or
+routing stages. A new audited batch scans the locked cohort and runs only the
+affected cities from the atomic road-distance cleanup through emissions:
+
+```bash
+./entrypoint.sh --jobs 4 cities \
+  --cohort locked --run-dir <new-run-dir> \
+  --source-data-root <formal-data-root> \
+  --staging-data-root <empty-staging-root> \
+  --start-at road-clean --no-fetch
+```
+
+After reviewing the preflight and acceptance reports, publish only the repaired
+OD and region-stat files:
+
+```bash
+./entrypoint.sh city-promote \
+  --source-data-root <formal-data-root> \
+  --staging-data-root <staging-root> \
+  --run-dir <same-run-dir> --yes
+```

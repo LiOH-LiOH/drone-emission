@@ -41,6 +41,12 @@ no username is embedded in source code.
 | `python -m drone_emission status` | Reports staging and required-subfigure completeness without writing. |
 | `python -m drone_emission reproduce` | Runs inputs → cities → aggregate → cohort → analyze → render. Existing compatible results are reused; `--force` deliberately recomputes them. It never promotes. |
 
+For an audited cleanup of legacy routed OD data, run the locked city batch with
+`--start-at road-clean`. It scans every locked city, stages only cities containing
+non-finite or non-positive road distances (or inconsistent OD statistics), and
+recomputes emissions without loading the road network. Bind `city-promote` to the
+resulting `--run-dir` to publish only the cleaned OD and region statistics.
+
 All 12 manifest entries declare Inkscape sources. Their rendered panel PDFs are
 converted into external SVG links by the local `compose` command. Inkscape's
 internal PDF importer keeps labels as editable SVG text instead of converting

@@ -134,7 +134,7 @@ def _scan_weighted_paths(path: Path) -> tuple[int, float]:
     return valid_count, annual_sales_sum
 
 
-def audit_city_cohort(config: dict) -> dict:
+def audit_city_cohort(config: dict, *, restrict_to_locked: bool = False) -> dict:
     """Audit every configured city after aggregate without changing city data."""
     contract = load_cohort_contract()
     threshold = int(contract["minimum_valid_weighted_od_pairs"])
@@ -143,7 +143,8 @@ def audit_city_cohort(config: dict) -> dict:
     rows: list[dict] = []
     candidate: list[str] = []
 
-    for region_key in configured_city_keys():
+    audited_keys = locked_region_keys(contract) if restrict_to_locked else configured_city_keys()
+    for region_key in audited_keys:
         region = registry[region_key]
         stats_path, od_path = _city_paths(data_root, region_key, region)
         reason = None
@@ -157,13 +158,10 @@ def audit_city_cohort(config: dict) -> dict:
                 )
             except (OSError, json.JSONDecodeError):
                 reason = "invalid_region_stats"
-        counts = []
-        for count_name in ("valid_path_count", "odpair_count"):
-            try:
-                counts.append(int(stats.get(count_name, 0)))
-            except (TypeError, ValueError):
-                continue
-        valid_count = max(counts, default=0)
+        try:
+            valid_count = int(stats.get("valid_path_count", 0))
+        except (TypeError, ValueError):
+            valid_count = 0
         annual_sales_sum = stats.get("total_odpair_annual_sales")
         if reason is None and (
             valid_count < threshold or not _finite(annual_sales_sum)
@@ -201,6 +199,7 @@ def audit_city_cohort(config: dict) -> dict:
     payload = {
         "schema_version": 1,
         "cohort_id": contract["cohort_id"],
+        "candidate_scope": "locked-only" if restrict_to_locked else "configured",
         "minimum_valid_weighted_od_pairs": threshold,
         "candidate_region_keys": candidate,
         "candidate_region_keys_sha256": region_keys_sha256(candidate),
@@ -248,7 +247,7 @@ def assert_locked_cohort(config: dict) -> Path:
     return path
 
 
-def accept_candidate_cohort(payload: dict) -> Path:
+def accept_candidate_cohort(payload: dict, *, target: Path | None = None) -> Path:
     """Explicitly replace the tracked lock with a reviewed audit candidate."""
     contract = load_cohort_contract()
     excluded = {
@@ -256,16 +255,23 @@ def accept_candidate_cohort(payload: dict) -> Path:
         for row in payload["cities"]
         if not row["eligible"]
     }
+    if payload.get("candidate_scope") == "locked-only":
+        excluded = {**contract.get("excluded_regions", {}), **excluded}
     contract["expected_city_count"] = len(payload["candidate_region_keys"])
     contract["included_region_keys_sha256"] = payload[
         "candidate_region_keys_sha256"
     ]
     contract["excluded_regions"] = dict(sorted(excluded.items()))
+    if len(payload["candidate_region_keys"]) != len(payload["locked_region_keys"]):
+        contract["cohort_id"] = (
+            f"paper-{len(payload['candidate_region_keys'])}-gef-0.5366-20260904"
+        )
     fallback = contract["grid_emission_factor_fallback"]
     fallback["affected_region_keys"] = sorted(
         set(fallback["affected_region_keys"]) & set(payload["candidate_region_keys"])
     )
-    target = PROJECT_ROOT / "src" / "drone_emission" / COHORT_FILENAME
+    target = target or PROJECT_ROOT / "src" / "drone_emission" / COHORT_FILENAME
+    target.parent.mkdir(parents=True, exist_ok=True)
     temporary = target.with_suffix(".json.tmp")
     temporary.write_text(
         json.dumps(contract, ensure_ascii=False, indent=2) + "\n",

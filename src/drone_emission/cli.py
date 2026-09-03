@@ -202,9 +202,11 @@ def command_cities(args: argparse.Namespace) -> None:
     )
     if args.region and batch_requested:
         raise ValueError("--region cannot be combined with audited batch options")
-    if start_at and not args.region and not repair_keys:
+    if start_at == "road-clean" and not args.region and not batch_requested:
+        raise ValueError("--start-at road-clean requires --region or audited batch options")
+    if start_at and not args.region and not repair_keys and start_at != "road-clean":
         raise ValueError("--start-at requires at least one --region")
-    if start_at and batch_requested and not repair_keys:
+    if start_at and batch_requested and not repair_keys and start_at != "road-clean":
         raise ValueError("--start-at cannot be combined with audited batch options")
     if batch_requested:
         if jobs is None or cohort is None or run_dir is None:
@@ -212,7 +214,10 @@ def command_cities(args: argparse.Namespace) -> None:
                 "audited batch mode requires --jobs, --cohort, and --run-dir"
             )
         from drone_emission.city_batch import run_city_batch
-        from drone_emission.city_staging import prepare_isolated_run
+        from drone_emission.city_staging import (
+            prepare_isolated_run,
+            prepare_road_clean_run,
+        )
         from drone_emission.paper_cohort import cohort_hash, locked_region_keys
         from drone_emission.utils.region_config import RegionRegistry
 
@@ -253,19 +258,33 @@ def command_cities(args: argparse.Namespace) -> None:
                 "audited batch requires --source-data-root and --staging-data-root"
             )
         registry = RegionRegistry(str(PROJECT_ROOT / "regions.json"))
-        region_keys = locked_region_keys()
+        locked_keys = locked_region_keys()
+        region_keys = locked_keys
         if manifest is None:
             _require_clean_source_commit()
-            preflight = prepare_isolated_run(
-                source_root=source_root,
-                staging_root=staging_root,
-                regions=dict(registry.items()),
-                region_keys=region_keys,
-                exp_config=config,
-            )
+            if start_at == "road-clean":
+                preflight = prepare_road_clean_run(
+                    source_root=source_root,
+                    staging_root=staging_root,
+                    regions=dict(registry.items()),
+                    region_keys=locked_keys,
+                )
+                region_keys = preflight["affected_region_keys"]
+            else:
+                preflight = prepare_isolated_run(
+                    source_root=source_root,
+                    staging_root=staging_root,
+                    regions=dict(registry.items()),
+                    region_keys=region_keys,
+                    exp_config=config,
+                )
             resource_plan = preflight["resource_plan"]
         else:
             resource_plan = manifest["resource_plan"]
+            region_keys = manifest["region_keys"]
+        if not region_keys:
+            print("Road-distance scan found no affected cities")
+            return
         environment_overrides = {
             "DRONE_EMISSION_SOURCE_DATA_ROOT": str(source_root.resolve()),
             "DRONE_EMISSION_DATA_ROOT": str(staging_root.resolve()),
@@ -281,10 +300,18 @@ def command_cities(args: argparse.Namespace) -> None:
                     "cities", "--region", region_key, "--start-at", start_at,
                     "--no-fetch",
                 ]
-        from drone_emission.city_staging import validate_staged_city
+        from drone_emission.city_staging import (
+            validate_road_clean_city,
+            validate_staged_city,
+        )
 
         def result_validator(region_key: str) -> None:
-            validate_staged_city(staging_root, registry[region_key])
+            validator = (
+                validate_road_clean_city
+                if start_at == "road-clean"
+                else validate_staged_city
+            )
+            validator(staging_root, registry[region_key])
 
         exit_code = run_city_batch(
             region_keys=region_keys,
@@ -296,18 +323,30 @@ def command_cities(args: argparse.Namespace) -> None:
             cohort_hash=cohort_hash(),
             resume=resume,
             resource_plan=resource_plan,
-            canary_keys=["anqing", "beijing", "chongqing"],
+            canary_keys=[
+                key for key in ("anqing", "beijing", "chongqing")
+                if key in region_keys
+            ],
             memory_budget_gb=args.memory_budget_gb,
             environment_overrides=environment_overrides,
             repair_keys=repair_keys,
             command_factory=command_factory,
             result_validator=result_validator,
+            batch_mode=start_at or "full",
         )
         if exit_code:
             raise SystemExit(exit_code)
-        from drone_emission.city_staging import audit_staged_results
+        from drone_emission.city_staging import (
+            audit_road_clean_results,
+            audit_staged_results,
+        )
 
-        audit_staged_results(
+        auditor = (
+            audit_road_clean_results
+            if start_at == "road-clean"
+            else audit_staged_results
+        )
+        auditor(
             source_root=source_root,
             staging_root=staging_root,
             regions=dict(registry.items()),
@@ -324,6 +363,7 @@ def command_cities(args: argparse.Namespace) -> None:
         has_city_results,
         run_all,
         run_region_analysis,
+        run_region_from_road_clean,
         run_region_from_roadnet,
     )
     from drone_emission.utils.config import configure_cache
@@ -341,6 +381,10 @@ def command_cities(args: argparse.Namespace) -> None:
         for region_key in args.region:
             if start_at == "roadnet":
                 run_region_from_roadnet(region_key, config)
+                registry.save_region(region_key)
+                continue
+            if start_at == "road-clean":
+                run_region_from_road_clean(region_key, config)
                 registry.save_region(region_key)
                 continue
             if (
@@ -383,7 +427,13 @@ def command_cohort(args: argparse.Namespace) -> None:
         write_cohort_audit,
     )
 
-    payload = audit_city_cohort(config)
+    write_contract = getattr(args, "write_contract", None)
+    shrink_only = bool(getattr(args, "shrink_only", False))
+    if write_contract is not None and not shrink_only:
+        raise ValueError("--write-contract requires --shrink-only")
+    payload = audit_city_cohort(
+        config, restrict_to_locked=shrink_only
+    )
     path = write_cohort_audit(config, payload)
     summary = {
         "audit": str(path),
@@ -397,6 +447,10 @@ def command_cohort(args: argparse.Namespace) -> None:
     if args.accept:
         accepted = accept_candidate_cohort(payload)
         print(f"Accepted reviewed cohort into {accepted}")
+        return
+    if write_contract is not None:
+        accepted = accept_candidate_cohort(payload, target=write_contract)
+        print(f"Wrote candidate cohort contract to {accepted}")
         return
     if not payload["matches_locked"]:
         raise SystemExit(2)
@@ -514,12 +568,50 @@ def command_city_promote(args: argparse.Namespace) -> None:
     from drone_emission.utils.region_config import RegionRegistry
 
     registry = RegionRegistry(str(PROJECT_ROOT / "regions.json"))
+    region_keys = locked_region_keys()
+    extra = {}
+    if args.run_dir is not None:
+        manifest_path = args.run_dir / "batch_manifest.json"
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        if manifest.get("batch_mode") != "road-clean":
+            raise ValueError("--run-dir partial promotion requires a road-clean batch")
+        recorded = manifest.get("environment_overrides", {})
+        expected_source = Path(
+            recorded.get("DRONE_EMISSION_SOURCE_DATA_ROOT", "")
+        ).resolve()
+        expected_staging = Path(
+            recorded.get("DRONE_EMISSION_DATA_ROOT", "")
+        ).resolve()
+        if args.source_data_root.resolve() != expected_source:
+            raise ValueError("source data root does not match the road-clean batch")
+        if args.staging_data_root.resolve() != expected_staging:
+            raise ValueError("staging data root does not match the road-clean batch")
+        region_keys = manifest["region_keys"]
+        preflight = json.loads(
+            (args.staging_data_root / "preflight.json").read_text(encoding="utf-8")
+        )
+        scans = {row["region_key"]: row for row in preflight["cities"]}
+        for key in region_keys:
+            region = registry[key]
+            name = region.region_name_en.lower()
+            source_od = (
+                args.source_data_root / region.region_level / name / f"{name}_od_pairs.csv"
+            )
+            source_stat = source_od.stat()
+            scan = scans[key]
+            if (
+                source_stat.st_size != scan["source_size_bytes"]
+                or source_stat.st_mtime_ns != scan["source_mtime_ns"]
+            ):
+                raise RuntimeError(f"source OD changed after road-clean preflight: {key}")
+        extra["promoted_suffixes"] = ("_od_pairs.csv",)
     operations = promote_city_results(
         source_root=args.source_data_root,
         staging_root=args.staging_data_root,
         regions=dict(registry.items()),
-        region_keys=locked_region_keys(),
+        region_keys=region_keys,
         yes=args.yes,
+        **extra,
     )
     print(json.dumps({"promoted": len(operations)}, indent=2))
 
@@ -617,7 +709,7 @@ def build_parser() -> argparse.ArgumentParser:
     cities.add_argument("--cohort", choices=("locked",))
     cities.add_argument("--run-dir", type=Path)
     cities.add_argument("--resume", action="store_true")
-    cities.add_argument("--start-at", choices=("roadnet",))
+    cities.add_argument("--start-at", choices=("roadnet", "road-clean"))
     cities.add_argument("--source-data-root", type=Path)
     cities.add_argument("--staging-data-root", type=Path)
     cities.add_argument("--memory-budget-gb", type=int, choices=(84,), default=84)
@@ -629,7 +721,18 @@ def build_parser() -> argparse.ArgumentParser:
     aggregate.set_defaults(func=command_aggregate)
 
     cohort = subparsers.add_parser("cohort", help="audit the locked paper-city cohort")
-    cohort.add_argument("--accept", action="store_true")
+    cohort_output = cohort.add_mutually_exclusive_group()
+    cohort_output.add_argument("--accept", action="store_true")
+    cohort.add_argument(
+        "--shrink-only",
+        action="store_true",
+        help="audit only the currently locked cities; never re-admit exclusions",
+    )
+    cohort_output.add_argument(
+        "--write-contract",
+        type=Path,
+        help="write the audited candidate contract without editing source",
+    )
     cohort.set_defaults(func=command_cohort)
 
     analyze = subparsers.add_parser("analyze", help="build retained paper analyses")
@@ -705,6 +808,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
     city_promote.add_argument("--source-data-root", type=Path, required=True)
     city_promote.add_argument("--staging-data-root", type=Path, required=True)
+    city_promote.add_argument(
+        "--run-dir", type=Path, help="bind partial promotion to a road-clean batch"
+    )
     city_promote.add_argument("--yes", action="store_true")
     city_promote.set_defaults(func=command_city_promote)
 
