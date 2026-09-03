@@ -95,6 +95,7 @@ def test_contribution_figure_consumes_prepared_analysis_and_population():
 
 def test_delivery_mode_figure_consumes_declared_beijing_inputs():
     request = request_index()["delivery_mode_lifecycle_comparison"]
+    assert request["cache_version"] == 2
     assert request["required_inputs"] == [
         "city/beijing/beijing_od_pairs.csv",
         "work:analysis/beijing_delivery_modes/beijing_all_mode_lifecycle.csv",

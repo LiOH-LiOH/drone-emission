@@ -362,6 +362,7 @@ def _render_beijing_endpoint_grid(context: RenderContext) -> None:
 
 def _render_delivery_mode_lifecycle(context: RenderContext) -> None:
     from .delivery_modes import (
+        build_comparison,
         load_analysis_report,
         load_beijing_mode_data,
         plot_beijing_all_mode_lifecycle,
@@ -387,6 +388,11 @@ def _render_delivery_mode_lifecycle(context: RenderContext) -> None:
             + ". Run `python -m drone_emission analyze --only "
             "beijing-delivery-modes` first."
         )
+    comparison_rows, _, _ = build_comparison(
+        od_csv=od_path,
+        exp_config=context.experiment,
+        quantile_cache_dir=context.cache_root / "weighted_quantile",
+    )
     plot_delivery_mode_lifecycle_comparison(
         od_csv=od_path,
         exp_config=context.experiment,
@@ -396,7 +402,10 @@ def _render_delivery_mode_lifecycle(context: RenderContext) -> None:
         plot_title=False,
     )
     plot_beijing_all_mode_lifecycle(
-        load_beijing_mode_data(analysis_csv),
+        load_beijing_mode_data(
+            analysis_csv,
+            mode_order=[mode for mode, _ in comparison_rows],
+        ),
         load_analysis_report(analysis_report),
         save_path=context.output("beijing_all_mode_lifecycle.pdf"),
         for_latex=True,

@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Sequence
 from pathlib import Path
 
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import pandas as pd
 from matplotlib import font_manager
+from matplotlib.ticker import MaxNLocator
 
 from drone_emission.analysis.weighted_quantile import weighted_csv_quantile
 from drone_emission.emission import DELIVERY_MODES, lifecycle_emission_per_order
@@ -35,7 +37,10 @@ MODE_COLORS = {
     "fuel_car": "#a95f43",
     "drone": "#7b6aa8",
 }
-DISPLAY_MODES = tuple(mode for mode in DELIVERY_MODES if mode != "walking")
+EXCLUDED_DISPLAY_MODES = ("walking", "electric_moped")
+DISPLAY_MODES = tuple(
+    mode for mode in DELIVERY_MODES if mode not in EXCLUDED_DISPLAY_MODES
+)
 SOURCE_MODES = tuple(DELIVERY_MODES)
 REQUIRED_COLUMNS = {
     "mode",
@@ -46,8 +51,8 @@ REQUIRED_COLUMNS = {
     "annual_lifecycle_kg",
     "annual_lifecycle_kt",
 }
-WIDTH_MM = 180.0
-HEIGHT_MM = 92.0
+WIDTH_MM = 88.0
+HEIGHT_MM = 80.0
 FONT_FAMILY = "Arial"
 AXIS_LABEL_FONTSIZE = 7.0
 STANDARD_FONTSIZE = 6.0
@@ -129,7 +134,8 @@ def build_delivery_mode_figure_report(
         "functional_unit": "g CO2e per unbundled order",
         "displayed_modes": [mode for mode, _ in rows],
         "excluded_modes": [
-            {"mode": "walking", "reason": "excluded from display by request"}
+            {"mode": mode, "reason": "excluded from display by request"}
+            for mode in EXCLUDED_DISPLAY_MODES
         ],
         "input_signature": {
             "source": source.name,
@@ -191,7 +197,7 @@ def plot_delivery_mode_lifecycle_comparison(
     for_latex: bool = False,
     plot_title: bool = False,
 ) -> Path:
-    """Plot lifecycle emissions for seven modes at one common distance."""
+    """Plot lifecycle emissions for six modes at one common distance."""
     del for_latex
     rows, distance_km, quantile = build_comparison(
         od_csv=od_csv,
@@ -221,6 +227,7 @@ def plot_delivery_mode_lifecycle_comparison(
             color="0.2",
         )
     ax.set_xlim(0, max_value * 1.15 + label_offset)
+    ax.xaxis.set_major_locator(MaxNLocator(nbins=4))
     ax.set_xlabel(
         "Lifecycle emissions (g CO$_2$e/order)",
         fontsize=AXIS_LABEL_FONTSIZE,
@@ -251,8 +258,12 @@ def plot_delivery_mode_lifecycle_comparison(
     return output
 
 
-def load_beijing_mode_data(path: str | Path) -> pd.DataFrame:
-    """Load the retained eight-mode table and return seven displayed modes."""
+def load_beijing_mode_data(
+    path: str | Path,
+    *,
+    mode_order: Sequence[str] | None = None,
+) -> pd.DataFrame:
+    """Load the retained table and return the six displayed modes."""
     frame = pd.read_csv(path)
     missing = sorted(REQUIRED_COLUMNS - set(frame.columns))
     if missing:
@@ -266,9 +277,16 @@ def load_beijing_mode_data(path: str | Path) -> pd.DataFrame:
     frame["annual_lifecycle_kt"] = pd.to_numeric(
         frame["annual_lifecycle_kt"], errors="raise"
     )
+    frame = frame[frame["mode"].isin(DISPLAY_MODES)].copy()
+    if mode_order is None:
+        return frame.sort_values(
+            ["annual_lifecycle_kt", "mode"], kind="stable"
+        ).reset_index(drop=True)
+    order = {mode: index for index, mode in enumerate(mode_order)}
+    frame["_display_order"] = frame["mode"].map(order)
     return (
-        frame[frame["mode"].isin(MODE_LABELS)]
-        .sort_values(["annual_lifecycle_kt", "mode"], kind="stable")
+        frame.sort_values("_display_order", kind="stable")
+        .drop(columns="_display_order")
         .reset_index(drop=True)
     )
 
@@ -295,7 +313,8 @@ def build_beijing_mode_figure_report(
         "functional_unit": analysis_report.get("functional_unit"),
         "displayed_modes": displayed_modes,
         "excluded_modes": [
-            {"mode": "walking", "reason": "excluded from display by request"}
+            {"mode": mode, "reason": "excluded from display by request"}
+            for mode in EXCLUDED_DISPLAY_MODES
         ],
         "analysis": {
             "analysis_version": analysis_report.get("analysis_version"),
@@ -324,7 +343,7 @@ def plot_beijing_all_mode_lifecycle(
     for_latex: bool = False,
     plot_title: bool = False,
 ) -> Path:
-    """Plot annual lifecycle totals for seven all-Beijing mode scenarios."""
+    """Plot annual lifecycle totals for six all-Beijing mode scenarios."""
     del for_latex
     _set_plot_style()
     output = Path(save_path)
@@ -349,6 +368,7 @@ def plot_beijing_all_mode_lifecycle(
             color="0.2",
         )
     ax.set_xlim(0, max_value * 1.15 + label_offset)
+    ax.xaxis.set_major_locator(MaxNLocator(nbins=4))
     ax.set_xlabel(
         "Annual lifecycle emissions (kt CO$_2$e yr$^{-1}$)",
         fontsize=AXIS_LABEL_FONTSIZE,

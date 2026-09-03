@@ -107,22 +107,38 @@ def test_runner_persists_plot_ready_data_and_figure_report(
     assert csv_path.is_file()
     assert report_path.is_file()
     assert "input_signature" in report_path.read_text(encoding="utf-8")
-    plot_frame = renderer.load_beijing_mode_data(csv_path)
-    assert len(plot_frame) == len(DELIVERY_MODES) - 1
-    assert "walking" not in set(plot_frame["mode"])
-    assert plot_frame["annual_lifecycle_kt"].is_monotonic_increasing
+    mode_order = [
+        "pedal_bicycle",
+        "pedelec_ebike",
+        "drone",
+        "fuel_moped",
+        "battery_electric_car",
+        "fuel_car",
+    ]
+    plot_frame = renderer.load_beijing_mode_data(
+        csv_path,
+        mode_order=mode_order,
+    )
+    assert len(plot_frame) == len(DELIVERY_MODES) - 2
+    assert {"walking", "electric_moped"}.isdisjoint(plot_frame["mode"])
+    assert plot_frame["mode"].tolist() == mode_order
     figure_report = renderer.build_beijing_mode_figure_report(
         plot_frame,
         json.loads(report_path.read_text(encoding="utf-8")),
         figure_path=tmp_path / "beijing.pdf",
     )
-    assert "walking" not in figure_report["displayed_modes"]
-    assert "walking" not in figure_report["analysis"]["coefficients"]
+    assert {"walking", "electric_moped"}.isdisjoint(
+        figure_report["displayed_modes"]
+    )
+    assert {"walking", "electric_moped"}.isdisjoint(
+        figure_report["analysis"]["coefficients"]
+    )
     assert not any(
         key.startswith("walking_")
         for key in figure_report["analysis"]["boundary"]
     )
-    assert len(figure_report["plotted_values"]) == len(DELIVERY_MODES) - 1
+    assert figure_report["figure_size_mm"] == {"width": 88.0, "height": 80.0}
+    assert len(figure_report["plotted_values"]) == len(DELIVERY_MODES) - 2
     assert figure_report["formal_manifest_registered"] is True
 
 
