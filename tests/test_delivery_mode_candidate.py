@@ -6,7 +6,7 @@ from drone_emission.emission import DELIVERY_MODES
 from drone_emission.visualization import delivery_modes as renderer
 
 
-def test_candidate_uses_weighted_p75_and_sorts_displayed_modes(tmp_path):
+def test_candidate_uses_weighted_p75_and_requested_display_order(tmp_path):
     od_path = tmp_path / "beijing_od.csv"
     pd.DataFrame(
         {
@@ -42,7 +42,13 @@ def test_candidate_uses_weighted_p75_and_sorts_displayed_modes(tmp_path):
         "pedal_bicycle",
     }
     assert len(rows) == 5
-    assert [value for _, value in rows] == sorted(value for _, value in rows)
+    assert [mode for mode, _ in rows] == [
+        "drone",
+        "pedelec_ebike",
+        "fuel_moped",
+        "battery_electric_car",
+        "fuel_car",
+    ]
 
     report = renderer.build_delivery_mode_figure_report(
         rows=rows,

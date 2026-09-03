@@ -42,6 +42,13 @@ COMPARISON_EXCLUDED_MODES = ("walking", "electric_moped", "pedal_bicycle")
 COMPARISON_DISPLAY_MODES = tuple(
     mode for mode in DELIVERY_MODES if mode not in COMPARISON_EXCLUDED_MODES
 )
+COMPARISON_BOTTOM_TO_TOP_MODES = (
+    "drone",
+    "pedelec_ebike",
+    "fuel_moped",
+    "battery_electric_car",
+    "fuel_car",
+)
 BEIJING_EXCLUDED_MODES = ("walking", "electric_moped")
 BEIJING_DISPLAY_MODES = tuple(
     mode for mode in DELIVERY_MODES if mode not in BEIJING_EXCLUDED_MODES
@@ -111,24 +118,22 @@ def build_comparison(
         cache_dir=quantile_cache_dir,
     )
     distance_km = quantile.value / 1000.0
-    rows = [
-        (
-            mode,
-            float(
-                lifecycle_emission_per_order(
-                    mode,
-                    distance_km,
-                    exp_config=exp_config,
-                    grid_ef_kg_per_kwh=grid_ef_kg_per_kwh,
-                    fuel_wtw_ef_kg_per_mj=fuel_wtw_ef_kg_per_mj,
-                )
-            ),
+    values_by_mode = {
+        mode: float(
+            lifecycle_emission_per_order(
+                mode,
+                distance_km,
+                exp_config=exp_config,
+                grid_ef_kg_per_kwh=grid_ef_kg_per_kwh,
+                fuel_wtw_ef_kg_per_mj=fuel_wtw_ef_kg_per_mj,
+            )
         )
         for mode in COMPARISON_DISPLAY_MODES
+    }
+    rows = [
+        (mode, values_by_mode[mode])
+        for mode in COMPARISON_BOTTOM_TO_TOP_MODES
     ]
-    rows.sort(
-        key=lambda item: (item[1], COMPARISON_DISPLAY_MODES.index(item[0]))
-    )
     return rows, distance_km, quantile
 
 
