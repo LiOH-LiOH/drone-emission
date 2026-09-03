@@ -310,31 +310,6 @@ def plot_road_network_subfigure(
     plt.close(fig)
 
 
-def _compute_distance_sample_at_quantile(od_df, router, quantile=0.5):
-    """Return the OD sample closest to one detour-ratio quantile."""
-    valid_df = od_df[
-        (od_df["road_distance_m"] > 100) & (od_df["distance_km"] > 0)
-    ].copy()
-    if len(valid_df) == 0:
-        return None
-
-    valid_df["detour_ratio"] = (
-        valid_df["road_distance_m"] / (valid_df["distance_km"] * 1000)
-    )
-    quantile_value = valid_df["detour_ratio"].quantile(quantile)
-    sample_idx = (valid_df["detour_ratio"] - quantile_value).abs().idxmin()
-    row = valid_df.loc[sample_idx]
-    origin = (row["from_lat"], row["from_lng"])
-    destination = (row["to_lat"], row["to_lng"])
-    return {
-        "origin": origin,
-        "destination": destination,
-        "straight_distance": row["distance_km"] * 1000,
-        "road_distance": row["road_distance_m"],
-        "path_result": router.find_shortest_path(origin, destination),
-    }
-
-
 def _draw_distance_panel(
     ax,
     sample,
@@ -682,8 +657,9 @@ def _draw_distance_panel(
         ax.legend(loc="upper left", fontsize=9, framealpha=0.9)
 
 
-def plot_distance_comparison_single_panel(
-    od_df,
+def plot_beijing_p75_trip_route_comparison(
+    selected_trip,
+    selection_report,
     graph,
     router,
     save_path: Optional[str] = None,
@@ -691,10 +667,11 @@ def plot_distance_comparison_single_panel(
     for_latex: bool = False,
     plot_title: bool = False,
 ) -> None:
-    """Plot a compact median-trip road-versus-air distance comparison.
+    """Plot the selected Beijing P75 trip's road and air routes.
 
     Args:
-        od_df: OD DataFrame with coordinates and road/air distances.
+        selected_trip: Shared representative OD row.
+        selection_report: Shared representative-trip provenance.
         graph: SparseGraph built from the region's graphml file.
         router: TileRouter wrapping the SparseGraph.
         save_path: Path to save figure. Shows plot if None.
@@ -702,10 +679,21 @@ def plot_distance_comparison_single_panel(
         for_latex: If True, save as PDF.
         plot_title: If True, show title.
     """
-    sample = _compute_distance_sample_at_quantile(od_df, router, quantile=0.5)
-    if sample is None:
-        print("No valid sample for single-panel distance comparison")
-        return
+    origin = (float(selected_trip["from_lat"]), float(selected_trip["from_lng"]))
+    destination = (float(selected_trip["to_lat"]), float(selected_trip["to_lng"]))
+    path_result = router.find_shortest_path(origin, destination)
+    if not path_result.get("success"):
+        raise RuntimeError(
+            "Beijing P75 representative trip could not be reconstructed on the "
+            f"current road network: {path_result.get('message', 'unknown error')}"
+        )
+    sample = {
+        "origin": origin,
+        "destination": destination,
+        "straight_distance": float(selected_trip["distance_km"]) * 1000.0,
+        "road_distance": float(selected_trip["road_distance_m"]),
+        "path_result": path_result,
+    }
 
     fig, ax = plt.subplots(figsize=figsize)
     _draw_distance_panel(
@@ -747,28 +735,13 @@ def plot_distance_comparison_single_panel(
         straight_distance = float(sample["straight_distance"])
         road_distance = float(sample["road_distance"])
         path_result = sample.get("path_result", {})
-        valid = od_df[
-            (od_df["road_distance_m"] > 100) & (od_df["distance_km"] > 0)
-        ].copy()
-        detour_values = (
-            valid["road_distance_m"] / (valid["distance_km"] * 1000)
-        )
         write_figure_report(
             save_path.rsplit(".", 1)[0] + "_report.json",
             {
-                "figure_name": "distance_comparison_single_panel",
+                "schema_version": 1,
+                "figure_name": "beijing_p75_trip_route_comparison",
                 "figure_path": save_path,
-                "sample_selection": {
-                    "rule": "OD pair closest to the median detour ratio",
-                    "quantile": 0.5,
-                    "eligible_od_count": int(len(valid)),
-                    "eligible_detour_ratio": {
-                        "min": float(detour_values.min()),
-                        "median": float(detour_values.median()),
-                        "mean": float(detour_values.mean()),
-                        "max": float(detour_values.max()),
-                    },
-                },
+                "selection": selection_report,
                 "selected_trip": {
                     "origin_lat_lng": [float(value) for value in sample["origin"]],
                     "destination_lat_lng": [
@@ -779,6 +752,9 @@ def plot_distance_comparison_single_panel(
                     "detour_ratio": road_distance / straight_distance,
                     "road_path_success": bool(path_result.get("success", False)),
                     "road_path_message": path_result.get("message"),
+                    "reconstructed_road_distance_m": float(
+                        path_result.get("total_distance", 0.0)
+                    ),
                     "road_path_coordinate_count": len(
                         path_result.get("path_coordinates", [])
                     ),
@@ -789,7 +765,7 @@ def plot_distance_comparison_single_panel(
                 },
             },
         )
-        print(f"Single-panel distance comparison saved to {save_path}")
+        print(f"Beijing P75 trip route comparison saved to {save_path}")
     else:
         plt.show()
 

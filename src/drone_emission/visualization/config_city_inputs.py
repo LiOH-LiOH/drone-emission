@@ -435,79 +435,56 @@ def _render_beijing_road_network_subfigure(
     )
 
 
-def _render_beijing_median_trip_phase_emissions(
+def _render_beijing_p75_trip_phase_emissions(
     data_dir,
     out,
+    cache_dir,
     for_latex,
     plot_title,
     only,
 ):
-    """Render selected Beijing median-trip lifecycle subfigures."""
+    """Render lifecycle subfigures for the shared Beijing P75 trip."""
     region_key = "beijing"
-    region_level = "city"
     od_path = os.path.join(
         data_dir,
-        region_level,
+        "city",
         region_key,
         f"{region_key}_od_pairs.csv",
     )
     if not os.path.exists(od_path):
-        print(f"Beijing median trip phase emissions skipped — missing {od_path}")
-        return
+        raise FileNotFoundError(
+            f"missing Beijing OD input {od_path}; run cities --region beijing"
+        )
 
     from drone_emission.visualization.city_input_support import (
-        _save_median_trip_lifecycle_subfigures,
-        _selected_trip_phase_parts,
+        _save_beijing_p75_trip_lifecycle_subfigures,
+        _selected_p75_trip_phase_parts,
     )
-    from drone_emission.visualization.city_input_support import _select_median_trip_emission_sample
+    from drone_emission.visualization.representative_trip import (
+        select_beijing_p75_trip,
+    )
 
-    desired = {
-        "distance_km",
-        "road_distance_m",
-        "drone_emission_kg",
-        "ebike_emission_kg",
-        "annual_sales",
-        "ebike_kappa",
-    }
-    if "median_trip_production_emissions" in only:
-        desired.update(
-            {"drone_lifecycle_production_g", "ebike_lifecycle_production_g"}
-        )
-    if "median_trip_eol_emissions" in only:
-        desired.update({"drone_lifecycle_eol_g", "ebike_lifecycle_eol_g"})
-    df = pd.read_csv(od_path, usecols=lambda column: column in desired)
-    required = {
-        "distance_km",
-        "road_distance_m",
-        "drone_emission_kg",
-        "ebike_emission_kg",
-    }
-    if not required.issubset(df.columns):
-        missing = required - set(df.columns)
-        print(
-            "Beijing median trip phase emissions skipped — "
-            f"{od_path} missing columns {missing}"
-        )
-        return
-
-    selected_trip = _select_median_trip_emission_sample(df)
+    representative = select_beijing_p75_trip(od_path, cache_dir=cache_dir)
+    selected_trip = representative.row
     production_df = (
-        _selected_trip_phase_parts(selected_trip, "production")
-        if "median_trip_production_emissions" in only
+        _selected_p75_trip_phase_parts(selected_trip, "production")
+        if "beijing_p75_trip_production_emissions" in only
         else None
     )
     eol_df = (
-        _selected_trip_phase_parts(selected_trip, "eol")
-        if "median_trip_eol_emissions" in only
+        _selected_p75_trip_phase_parts(selected_trip, "eol")
+        if "beijing_p75_trip_eol_emissions" in only
         else None
     )
-    _save_median_trip_lifecycle_subfigures(
+    _save_beijing_p75_trip_lifecycle_subfigures(
         production_df=production_df,
         eol_df=eol_df,
-        median_trip_od_df=(
-            df if "median_trip_use_phase_emissions" in only else None
+        selected_trip=(
+            selected_trip
+            if "beijing_p75_trip_use_phase_emissions" in only
+            else None
         ),
-        median_trip_city_label="Beijing",
+        selection_report=representative.selection,
         distance_label="",
         phase_body_colors={"E-bike": "#d95f35", "Drone": "#1f77b4"},
         phase_battery_colors={"E-bike": "#f2a07f", "Drone": "#9ecae1"},
@@ -518,61 +495,45 @@ def _render_beijing_median_trip_phase_emissions(
     )
 
 
-def _render_distance_comparison_single_panel(
+def _render_beijing_p75_trip_route_comparison(
     data_dir,
     out,
+    cache_dir,
     for_latex,
     plot_title,
     graph_cache=None,
     router_cache=None,
 ):
-    """Render a compact median-trip distance comparison for Shanghai."""
-    region_key = "shanghai"
-    region_level = "city"
-    od_path = os.path.join(
-        data_dir,
-        region_level,
-        region_key,
-        f"{region_key}_od_pairs.csv",
-    )
-    graphml_path = os.path.join(
-        data_dir,
-        region_level,
-        region_key,
-        f"{region_key}_roadnet.graphml",
-    )
-
+    """Render the shared Beijing P75 trip's road and air routes."""
+    region_key = "beijing"
+    region_dir = os.path.join(data_dir, "city", region_key)
+    od_path = os.path.join(region_dir, f"{region_key}_od_pairs.csv")
+    graphml_path = os.path.join(region_dir, f"{region_key}_roadnet.graphml")
     if not os.path.exists(od_path) or not os.path.exists(graphml_path):
-        print(
-            "Single-panel distance comparison skipped — "
-            f"missing data for {region_key}"
+        raise FileNotFoundError(
+            "missing Beijing OD or road-network input; run cities --region beijing"
         )
-        return
 
-    from drone_emission.visualization.roadnet import plot_distance_comparison_single_panel
-
-    od_df = pd.read_csv(
-        od_path,
-        usecols=[
-            "road_distance_m",
-            "distance_km",
-            "from_lat",
-            "from_lng",
-            "to_lat",
-            "to_lng",
-        ],
+    from drone_emission.visualization.representative_trip import (
+        select_beijing_p75_trip,
     )
+    from drone_emission.visualization.roadnet import (
+        plot_beijing_p75_trip_route_comparison,
+    )
+
+    representative = select_beijing_p75_trip(od_path, cache_dir=cache_dir)
     graph = _get_cached_sparse_graph(graphml_path, graph_cache=graph_cache)
     router = _get_cached_tile_router(
         graphml_path,
         graph,
         router_cache=router_cache,
     )
-    plot_distance_comparison_single_panel(
-        od_df=od_df,
+    plot_beijing_p75_trip_route_comparison(
+        selected_trip=representative.row,
+        selection_report=representative.selection,
         graph=graph,
         router=router,
-        save_path=os.path.join(out, "distance_comparison_single_panel.png"),
+        save_path=os.path.join(out, "beijing_p75_trip_route_comparison.png"),
         for_latex=for_latex,
         plot_title=plot_title,
     )

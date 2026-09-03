@@ -73,13 +73,17 @@ def _render_config_input(context: RenderContext, request: str) -> None:
         "shanghai_building_footprint_heatmap": renderer._render_shanghai_building_footprint_heatmap,
         "beijing_road_network_subfigure": renderer._render_beijing_road_network_subfigure,
         "shanghai_building_height_merchant": renderer._render_shanghai_building_height_merchant,
-        "distance_comparison_single_panel": renderer._render_distance_comparison_single_panel,
+        "beijing_p75_trip_route_comparison": renderer._render_beijing_p75_trip_route_comparison,
     }
     extra = {}
     if request in {"beijing_road_network_subfigure", "shanghai_building_height_merchant"}:
         extra["graph_cache"] = {}
-    if request == "distance_comparison_single_panel":
-        extra.update(graph_cache={}, router_cache={})
+    if request == "beijing_p75_trip_route_comparison":
+        extra.update(
+            cache_dir=context.cache_root,
+            graph_cache={},
+            router_cache={},
+        )
     functions[request](**common, **extra)
 
 
@@ -107,12 +111,13 @@ def _render_detour_concept(context: RenderContext) -> None:
     )
 
 
-def _render_median_phase(context: RenderContext, request: str) -> None:
-    from .config_city_inputs import _render_beijing_median_trip_phase_emissions
+def _render_beijing_p75_phase(context: RenderContext, request: str) -> None:
+    from .config_city_inputs import _render_beijing_p75_trip_phase_emissions
 
-    _render_beijing_median_trip_phase_emissions(
+    _render_beijing_p75_trip_phase_emissions(
         data_dir=str(context.data_root),
         out=str(context.subfigure_dir),
+        cache_dir=context.cache_root,
         for_latex=True,
         plot_title=False,
         only={request},
@@ -447,11 +452,11 @@ REQUEST_RENDERERS: dict[str, Renderer] = {
     "province_gef_china_map": _render_province_gef,
     "beijing_road_network_subfigure": lambda c: _render_config_input(c, "beijing_road_network_subfigure"),
     "shanghai_building_height_merchant": lambda c: _render_config_input(c, "shanghai_building_height_merchant"),
-    "distance_comparison_single_panel": lambda c: _render_config_input(c, "distance_comparison_single_panel"),
+    "beijing_p75_trip_route_comparison": lambda c: _render_config_input(c, "beijing_p75_trip_route_comparison"),
     "detour_ratio_concept": _render_detour_concept,
-    "median_trip_production_emissions": lambda c: _render_median_phase(c, "median_trip_production_emissions"),
-    "median_trip_use_phase_emissions": lambda c: _render_median_phase(c, "median_trip_use_phase_emissions"),
-    "median_trip_eol_emissions": lambda c: _render_median_phase(c, "median_trip_eol_emissions"),
+    "beijing_p75_trip_production_emissions": lambda c: _render_beijing_p75_phase(c, "beijing_p75_trip_production_emissions"),
+    "beijing_p75_trip_use_phase_emissions": lambda c: _render_beijing_p75_phase(c, "beijing_p75_trip_use_phase_emissions"),
+    "beijing_p75_trip_eol_emissions": lambda c: _render_beijing_p75_phase(c, "beijing_p75_trip_eol_emissions"),
     "province_total_ebike_lifecycle": _render_province_lifecycle,
     "regions_map_oracle_reduction_rank_map_only": lambda c: _render_priority(c, "regions_map_oracle_reduction_rank_map_only"),
     "city_reduction_potential_scatter": _render_city_screening,

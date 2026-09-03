@@ -37,57 +37,6 @@ from drone_emission.analysis.constants import (
 from drone_emission.analysis.city_attribution import R2_ABSOLUTE_OUTCOME, R2_OUTCOME
 
 
-def _select_median_trip_emission_sample(od_df: pd.DataFrame):
-    """Return an OD row close to both median air and road distances."""
-    required = [
-        "distance_km",
-        "road_distance_m",
-        "drone_emission_kg",
-        "ebike_emission_kg",
-    ]
-    valid = od_df.dropna(subset=required).copy()
-    for col in required:
-        valid[col] = pd.to_numeric(valid[col], errors="coerce")
-    valid = valid.dropna(subset=required)
-    valid = valid[
-        (valid["distance_km"] > 0)
-        & (valid["road_distance_m"] > 0)
-        & (valid["drone_emission_kg"] >= 0)
-        & (valid["ebike_emission_kg"] >= 0)
-    ]
-    if valid.empty:
-        return None
-
-    if "annual_sales" in valid.columns:
-        valid["annual_sales"] = pd.to_numeric(valid["annual_sales"], errors="coerce")
-        weighted = valid.dropna(subset=["annual_sales"])
-        weighted = weighted[weighted["annual_sales"] > 0]
-    else:
-        weighted = pd.DataFrame()
-
-    def _median(value_col):
-        if weighted.empty:
-            return valid[value_col].median()
-        ordered = weighted.sort_values(value_col)
-        cumulative = ordered["annual_sales"].cumsum()
-        index = cumulative.searchsorted(cumulative.iloc[-1] / 2.0)
-        return ordered.iloc[min(index, len(ordered) - 1)][value_col]
-
-    target_air = _median("distance_km")
-    target_road = _median("road_distance_m")
-    air_scale = valid["distance_km"].quantile(0.75) - valid["distance_km"].quantile(0.25)
-    road_scale = valid["road_distance_m"].quantile(0.75) - valid["road_distance_m"].quantile(0.25)
-    if pd.isna(air_scale) or air_scale <= 0:
-        air_scale = max(float(valid["distance_km"].median()), 1.0)
-    if pd.isna(road_scale) or road_scale <= 0:
-        road_scale = max(float(valid["road_distance_m"].median()), 1.0)
-    valid["_median_trip_score"] = (
-        (valid["distance_km"] - target_air).abs() / air_scale
-        + (valid["road_distance_m"] - target_road).abs() / road_scale
-    )
-    return valid.sort_values("_median_trip_score").iloc[0]
-
-
 def _json_safe_scalar(value):
     """Return a JSON-safe scalar with missing numeric values represented as None."""
     if value is None:
@@ -249,7 +198,7 @@ def _model_phase_component_shares(distance_km, vehicle, phase):
     return body_g / total_g, battery_g / total_g
 
 
-def _selected_trip_phase_parts(sample, phase):
+def _selected_p75_trip_phase_parts(sample, phase):
     """Return body/battery production or EOL parts for the selected OD row."""
     if sample is None:
         return None
@@ -309,8 +258,8 @@ def _selected_trip_phase_parts(sample, phase):
     )
 
 
-def _normalize_median_trip_subfigure_text(ax):
-    """Apply consistent publication-scale typography to a median-trip panel."""
+def _normalize_p75_trip_subfigure_text(ax):
+    """Apply consistent publication-scale typography to a P75-trip panel."""
     ax.xaxis.label.set_fontsize(8.5)
     ax.yaxis.label.set_fontsize(8.5)
     ax.tick_params(axis="both", labelsize=8)
@@ -324,11 +273,11 @@ def _normalize_median_trip_subfigure_text(ax):
             legend_text.set_fontsize(8)
 
 
-def _save_median_trip_lifecycle_subfigures(
+def _save_beijing_p75_trip_lifecycle_subfigures(
     production_df,
     eol_df,
-    median_trip_od_df,
-    median_trip_city_label,
+    selected_trip,
+    selection_report,
     distance_label,
     phase_body_colors,
     phase_battery_colors,
@@ -337,8 +286,10 @@ def _save_median_trip_lifecycle_subfigures(
     plot_title=False,
     only=None,
 ):
-    """Save production, use-phase, and EOL median-trip subfigures."""
-    from drone_emission.visualization.lifecycle_panels import _draw_median_trip_emission_process
+    """Save production, use-phase, and EOL panels for one Beijing P75 trip."""
+    from drone_emission.visualization.lifecycle_panels import (
+        _draw_selected_trip_emission_process,
+    )
 
     mm_per_inch = 25.4
     extension = ".pdf" if for_latex else ".png"
@@ -348,12 +299,12 @@ def _save_median_trip_lifecycle_subfigures(
     phase_battery_color = "#c7c9cc"
     panel_specs = (
         (
-            "median_trip_production_emissions",
+            "beijing_p75_trip_production_emissions",
             production_df,
             "Production emissions\n(g CO$_2$e/order)",
         ),
         (
-            "median_trip_eol_emissions",
+            "beijing_p75_trip_eol_emissions",
             eol_df,
             "End-of-life emissions\n(g CO$_2$e/order)",
         ),
@@ -368,7 +319,7 @@ def _save_median_trip_lifecycle_subfigures(
             ax.text(
                 0.5,
                 0.5,
-                f"{median_trip_city_label} median trip {phase_name} data\nnot available",
+                f"Beijing P75 trip {phase_name} data\nnot available",
                 transform=ax.transAxes,
                 ha="center",
                 va="center",
@@ -428,7 +379,7 @@ def _save_median_trip_lifecycle_subfigures(
                     else "End-of-life emissions"
                 )
                 ax.set_title(title, fontsize=9, y=1.30)
-        _normalize_median_trip_subfigure_text(ax)
+        _normalize_p75_trip_subfigure_text(ax)
         output_path = os.path.join(save_dir, figure_name + extension)
         if plot_title:
             output_path = _add_title_suffix(output_path)
@@ -466,28 +417,28 @@ def _save_median_trip_lifecycle_subfigures(
         write_figure_report(
             output_path.rsplit(".", 1)[0] + "_report.json",
             {
+                "schema_version": 1,
                 "figure_name": figure_name,
                 "figure_path": output_path,
-                "source_city": median_trip_city_label,
-                "sample_selection": "annual-sales-weighted median trip when annual_sales is available",
+                "selection": selection_report,
                 "lifecycle_phase": phase_name,
                 "unit": "g CO2e per order",
                 **phase_facts,
             },
         )
         plt.close(fig)
-        print(f"Median-trip lifecycle subfigure saved to {output_path}")
+        print(f"Beijing P75 lifecycle subfigure saved to {output_path}")
 
-    if only is not None and "median_trip_use_phase_emissions" not in only:
+    if only is not None and "beijing_p75_trip_use_phase_emissions" not in only:
         return
 
     fig, ax = plt.subplots(figsize=(87.0 / mm_per_inch, 50.0 / mm_per_inch))
     fig.subplots_adjust(left=0.17, right=0.98, bottom=0.23, top=0.80)
-    if median_trip_od_df is None:
+    if selected_trip is None:
         ax.text(
             0.5,
             0.5,
-            f"{median_trip_city_label} median trip emission data\nnot available",
+            "Beijing P75 trip emission data\nnot available",
             transform=ax.transAxes,
             ha="center",
             va="center",
@@ -498,9 +449,9 @@ def _save_median_trip_lifecycle_subfigures(
         for spine in ax.spines.values():
             spine.set_visible(False)
     else:
-        use_phase_result = _draw_median_trip_emission_process(
+        use_phase_result = _draw_selected_trip_emission_process(
             ax,
-            median_trip_od_df,
+            selected_trip,
             plot_title=plot_title,
         )
         ax.set_xlabel("Distance (km)")
@@ -520,38 +471,27 @@ def _save_median_trip_lifecycle_subfigures(
             columnspacing=1.0,
         )
         for text_artist in ax.texts:
-            if text_artist.get_text().endswith("median trip"):
+            if text_artist.get_text().endswith("road-distance P75"):
                 text_artist.remove()
-    _normalize_median_trip_subfigure_text(ax)
-    output_path = os.path.join(save_dir, "median_trip_use_phase_emissions" + extension)
+    _normalize_p75_trip_subfigure_text(ax)
+    output_path = os.path.join(
+        save_dir,
+        "beijing_p75_trip_use_phase_emissions" + extension,
+    )
     if plot_title:
         output_path = _add_title_suffix(output_path)
     fig.savefig(output_path, dpi=300, facecolor="white")
-    if median_trip_od_df is None or use_phase_result is None:
+    if selected_trip is None or use_phase_result is None:
         use_phase_facts = {
             "status": "unavailable",
-            "reason": "Median-trip use-phase data were unavailable",
+            "reason": "Selected Beijing P75 use-phase data were unavailable",
         }
     else:
         selected_sample = use_phase_result["sample"]
         use_phase_facts = {
             "status": "ok",
-            "eligible_od_count": int(
-                len(
-                    median_trip_od_df.dropna(
-                        subset=[
-                            "distance_km",
-                            "road_distance_m",
-                            "drone_emission_kg",
-                            "ebike_emission_kg",
-                        ]
-                    )
-                )
-            ),
             "selected_trip": {
-                "source_row_index": _json_safe_scalar(
-                    use_phase_result["sample_index"]
-                ),
+                "source_row_index": selection_report["source_row_index"],
                 "air_distance_km": float(use_phase_result["air_km"]),
                 "road_distance_km": float(use_phase_result["road_km"]),
                 "detour_ratio": float(
@@ -571,14 +511,14 @@ def _save_median_trip_lifecycle_subfigures(
     write_figure_report(
         output_path.rsplit(".", 1)[0] + "_report.json",
         {
-            "figure_name": "median_trip_use_phase_emissions",
+            "schema_version": 1,
+            "figure_name": "beijing_p75_trip_use_phase_emissions",
             "figure_path": output_path,
-            "source_city": median_trip_city_label,
-            "sample_selection": "annual-sales-weighted median trip when annual_sales is available",
+            "selection": selection_report,
             "lifecycle_phase": "use",
             "unit": "g CO2e per delivery leg",
             **use_phase_facts,
         },
     )
     plt.close(fig)
-    print(f"Median-trip use-phase subfigure saved to {output_path}")
+    print(f"Beijing P75 use-phase subfigure saved to {output_path}")
