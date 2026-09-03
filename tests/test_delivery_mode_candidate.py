@@ -4,6 +4,10 @@ import pandas as pd
 
 from drone_emission.emission import DELIVERY_MODES
 from drone_emission.visualization import delivery_modes as renderer
+from drone_emission.visualization._delivery_mode_icons import (
+    ICON_SEMANTICS,
+    icon_modes,
+)
 
 
 def test_candidate_uses_weighted_p75_and_sorts_displayed_modes(tmp_path):
@@ -39,8 +43,9 @@ def test_candidate_uses_weighted_p75_and_sorts_displayed_modes(tmp_path):
     assert {mode for mode, _ in rows} == set(DELIVERY_MODES) - {
         "walking",
         "electric_moped",
+        "pedal_bicycle",
     }
-    assert len(rows) == 6
+    assert len(rows) == 5
     assert [value for _, value in rows] == sorted(value for _, value in rows)
 
     report = renderer.build_delivery_mode_figure_report(
@@ -50,14 +55,34 @@ def test_candidate_uses_weighted_p75_and_sorts_displayed_modes(tmp_path):
         figure_path=tmp_path / "comparison.pdf",
         od_csv=od_path,
     )
-    assert {"walking", "electric_moped"}.isdisjoint(report["displayed_modes"])
+    assert {
+        "walking",
+        "electric_moped",
+        "pedal_bicycle",
+    }.isdisjoint(report["displayed_modes"])
     assert report["excluded_modes"] == [
         {"mode": "walking", "reason": "excluded from display by request"},
         {
             "mode": "electric_moped",
             "reason": "excluded from display by request",
         },
+        {
+            "mode": "pedal_bicycle",
+            "reason": "excluded from display by request",
+        },
     ]
-    assert report["figure_size_mm"] == {"width": 88.0, "height": 80.0}
-    assert len(report["emissions_g_per_order"]) == 6
+    assert report["schema_version"] == 2
+    assert report["figure_size_mm"] == {"width": 180.0, "height": 60.0}
+    assert len(report["emissions_g_per_order"]) == 5
+    assert report["icon_provenance"] == {
+        "creator": "authors",
+        "source": "original code-generated Matplotlib vector primitives",
+        "third_party_assets": [],
+        "third_party_permissions_required": False,
+        "size_mm": 7.0,
+        "mode_semantics": {
+            mode: ICON_SEMANTICS[mode] for mode, _ in rows
+        },
+    }
+    assert set(icon_modes()) == set(report["displayed_modes"])
     assert report["formal_manifest_registered"] is True

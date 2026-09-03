@@ -10,10 +10,16 @@ import matplotlib as mpl
 import matplotlib.pyplot as plt
 import pandas as pd
 from matplotlib import font_manager
+from matplotlib.offsetbox import AnnotationBbox
 from matplotlib.ticker import MaxNLocator
 
 from drone_emission.analysis.weighted_quantile import weighted_csv_quantile
 from drone_emission.emission import DELIVERY_MODES, lifecycle_emission_per_order
+from drone_emission.visualization._delivery_mode_icons import (
+    ICON_SEMANTICS,
+    ICON_SIZE_MM,
+    make_delivery_mode_icon,
+)
 from drone_emission.visualization._utils import write_figure_report
 
 
@@ -37,9 +43,21 @@ MODE_COLORS = {
     "fuel_car": "#a95f43",
     "drone": "#7b6aa8",
 }
-EXCLUDED_DISPLAY_MODES = ("walking", "electric_moped")
-DISPLAY_MODES = tuple(
-    mode for mode in DELIVERY_MODES if mode not in EXCLUDED_DISPLAY_MODES
+COMPARISON_EXCLUDED_MODES = ("walking", "electric_moped", "pedal_bicycle")
+COMPARISON_DISPLAY_MODES = tuple(
+    mode for mode in DELIVERY_MODES if mode not in COMPARISON_EXCLUDED_MODES
+)
+BEIJING_EXCLUDED_MODES = ("walking", "electric_moped")
+BEIJING_DISPLAY_MODES = tuple(
+    mode for mode in DELIVERY_MODES if mode not in BEIJING_EXCLUDED_MODES
+)
+BEIJING_MODE_ORDER = (
+    "pedal_bicycle",
+    "pedelec_ebike",
+    "drone",
+    "fuel_moped",
+    "battery_electric_car",
+    "fuel_car",
 )
 SOURCE_MODES = tuple(DELIVERY_MODES)
 REQUIRED_COLUMNS = {
@@ -51,8 +69,10 @@ REQUIRED_COLUMNS = {
     "annual_lifecycle_kg",
     "annual_lifecycle_kt",
 }
-WIDTH_MM = 88.0
-HEIGHT_MM = 80.0
+COMPARISON_WIDTH_MM = 180.0
+COMPARISON_HEIGHT_MM = 60.0
+BEIJING_WIDTH_MM = 88.0
+BEIJING_HEIGHT_MM = 80.0
 FONT_FAMILY = "Arial"
 AXIS_LABEL_FONTSIZE = 7.0
 STANDARD_FONTSIZE = 6.0
@@ -109,9 +129,11 @@ def build_comparison(
                 )
             ),
         )
-        for mode in DISPLAY_MODES
+        for mode in COMPARISON_DISPLAY_MODES
     ]
-    rows.sort(key=lambda item: (item[1], DISPLAY_MODES.index(item[0])))
+    rows.sort(
+        key=lambda item: (item[1], COMPARISON_DISPLAY_MODES.index(item[0]))
+    )
     return rows, distance_km, quantile
 
 
@@ -126,17 +148,30 @@ def build_delivery_mode_figure_report(
     source = Path(od_csv)
     stat = source.stat()
     return {
-        "schema_version": 1,
+        "schema_version": 2,
         "figure_name": "delivery_mode_lifecycle_comparison",
         "figure_path": str(figure_path),
         "formal_manifest_registered": True,
-        "figure_size_mm": {"width": WIDTH_MM, "height": HEIGHT_MM},
+        "figure_size_mm": {
+            "width": COMPARISON_WIDTH_MM,
+            "height": COMPARISON_HEIGHT_MM,
+        },
         "functional_unit": "g CO2e per unbundled order",
         "displayed_modes": [mode for mode, _ in rows],
         "excluded_modes": [
             {"mode": mode, "reason": "excluded from display by request"}
-            for mode in EXCLUDED_DISPLAY_MODES
+            for mode in COMPARISON_EXCLUDED_MODES
         ],
+        "icon_provenance": {
+            "creator": "authors",
+            "source": "original code-generated Matplotlib vector primitives",
+            "third_party_assets": [],
+            "third_party_permissions_required": False,
+            "size_mm": ICON_SIZE_MM,
+            "mode_semantics": {
+                mode: ICON_SEMANTICS[mode] for mode, _ in rows
+            },
+        },
         "input_signature": {
             "source": source.name,
             "size_bytes": stat.st_size,
@@ -193,11 +228,14 @@ def plot_delivery_mode_lifecycle_comparison(
     exp_config: dict,
     save_path: str | Path,
     quantile_cache_dir: str | Path | None = None,
-    figsize: tuple[float, float] = (WIDTH_MM / 25.4, HEIGHT_MM / 25.4),
+    figsize: tuple[float, float] = (
+        COMPARISON_WIDTH_MM / 25.4,
+        COMPARISON_HEIGHT_MM / 25.4,
+    ),
     for_latex: bool = False,
     plot_title: bool = False,
 ) -> Path:
-    """Plot lifecycle emissions for six modes at one common distance."""
+    """Plot lifecycle emissions for five powered modes at one common distance."""
     del for_latex
     rows, distance_km, quantile = build_comparison(
         od_csv=od_csv,
@@ -209,11 +247,36 @@ def plot_delivery_mode_lifecycle_comparison(
     if plot_title:
         output = output.with_name(f"{output.stem}_t{output.suffix}")
     output.parent.mkdir(parents=True, exist_ok=True)
-    labels = [MODE_LABELS[mode] for mode, _ in rows]
+    modes = [mode for mode, _ in rows]
     values = [value for _, value in rows]
-    colors = [MODE_COLORS[mode] for mode, _ in rows]
+    colors = [MODE_COLORS[mode] for mode in modes]
     fig, ax = plt.subplots(figsize=figsize, facecolor="white")
-    bars = ax.barh(labels, values, color=colors, height=0.68)
+    positions = list(range(len(rows)))
+    bars = ax.barh(positions, values, color=colors, height=0.62)
+    row_transform = ax.get_yaxis_transform()
+    for position, mode, color in zip(positions, modes, colors):
+        ax.add_artist(
+            AnnotationBbox(
+                make_delivery_mode_icon(mode, color),
+                (-0.285, position),
+                xycoords=row_transform,
+                box_alignment=(0.5, 0.5),
+                frameon=False,
+                pad=0,
+                annotation_clip=False,
+            )
+        )
+        ax.text(
+            -0.235,
+            position,
+            MODE_LABELS[mode],
+            transform=row_transform,
+            va="center",
+            ha="left",
+            fontsize=STANDARD_FONTSIZE,
+            color="0.15",
+            clip_on=False,
+        )
     max_value = max(values)
     label_offset = max(max_value * 0.012, 0.8)
     for bar, value in zip(bars, values):
@@ -232,7 +295,10 @@ def plot_delivery_mode_lifecycle_comparison(
         "Lifecycle emissions (g CO$_2$e/order)",
         fontsize=AXIS_LABEL_FONTSIZE,
     )
-    ax.tick_params(axis="both", labelsize=STANDARD_FONTSIZE, length=2.5)
+    ax.set_yticks(positions)
+    ax.set_yticklabels([])
+    ax.tick_params(axis="x", labelsize=STANDARD_FONTSIZE, length=2.5)
+    ax.tick_params(axis="y", length=0)
     ax.spines[["top", "right", "left"]].set_visible(False)
     ax.grid(axis="x", color="0.9", linewidth=0.5)
     ax.set_axisbelow(True)
@@ -242,7 +308,7 @@ def plot_delivery_mode_lifecycle_comparison(
             fontsize=AXIS_LABEL_FONTSIZE,
             loc="left",
         )
-    fig.tight_layout(pad=0.8)
+    fig.subplots_adjust(left=0.29, right=0.965, bottom=0.23, top=0.95)
     fig.savefig(output, dpi=300, facecolor="white")
     plt.close(fig)
     write_figure_report(
@@ -277,7 +343,7 @@ def load_beijing_mode_data(
     frame["annual_lifecycle_kt"] = pd.to_numeric(
         frame["annual_lifecycle_kt"], errors="raise"
     )
-    frame = frame[frame["mode"].isin(DISPLAY_MODES)].copy()
+    frame = frame[frame["mode"].isin(BEIJING_DISPLAY_MODES)].copy()
     if mode_order is None:
         return frame.sort_values(
             ["annual_lifecycle_kt", "mode"], kind="stable"
@@ -309,12 +375,15 @@ def build_beijing_mode_figure_report(
         "figure_name": "beijing_all_mode_lifecycle",
         "figure_path": str(figure_path),
         "formal_manifest_registered": True,
-        "figure_size_mm": {"width": WIDTH_MM, "height": HEIGHT_MM},
+        "figure_size_mm": {
+            "width": BEIJING_WIDTH_MM,
+            "height": BEIJING_HEIGHT_MM,
+        },
         "functional_unit": analysis_report.get("functional_unit"),
         "displayed_modes": displayed_modes,
         "excluded_modes": [
             {"mode": mode, "reason": "excluded from display by request"}
-            for mode in EXCLUDED_DISPLAY_MODES
+            for mode in BEIJING_EXCLUDED_MODES
         ],
         "analysis": {
             "analysis_version": analysis_report.get("analysis_version"),
@@ -339,7 +408,10 @@ def plot_beijing_all_mode_lifecycle(
     analysis_report: dict,
     *,
     save_path: str | Path,
-    figsize: tuple[float, float] = (WIDTH_MM / 25.4, HEIGHT_MM / 25.4),
+    figsize: tuple[float, float] = (
+        BEIJING_WIDTH_MM / 25.4,
+        BEIJING_HEIGHT_MM / 25.4,
+    ),
     for_latex: bool = False,
     plot_title: bool = False,
 ) -> Path:
