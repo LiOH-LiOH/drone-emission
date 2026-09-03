@@ -99,6 +99,26 @@ def test_city_grid_factor_changes_electric_car_but_not_fuel_modes(tmp_path):
         )
 
 
+def test_road_unreachable_rows_are_audited_and_excluded(tmp_path):
+    od_path = tmp_path / "beijing_od_pairs.csv"
+    _write_od(od_path)
+    od = pd.read_csv(od_path)
+    od.loc[2, "road_distance_m"] = -1.0
+    od.to_csv(od_path, index=False)
+
+    frame, report = calculate_city_mode_oracle(od_path, _stats(), {})
+
+    ebike = frame.set_index("baseline_mode").loc["pedelec_ebike"]
+    assert ebike["annual_orders"] == pytest.approx(40.0)
+    assert report["input_od_rows"] == 3
+    assert report["valid_od_rows"] == 2
+    assert report["invalid_od_rows"] == 1
+    assert report["excluded_positive_annual_orders"] == pytest.approx(60.0)
+    comparison = report["main_experiment_comparison"]
+    assert comparison["exact_match_required"] is False
+    assert comparison["metrics"]["baseline_lifecycle_kg"]["matches"] is False
+
+
 def test_runner_writes_sixteen_plot_ready_rows(tmp_path):
     data_dir = tmp_path / "data"
     stats_rows = []

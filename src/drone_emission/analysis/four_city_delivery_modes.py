@@ -80,21 +80,44 @@ def _require_constant(values: np.ndarray, name: str, previous: float | None) -> 
     return value
 
 
-def _validate_main_experiment(row: dict, stats: pd.Series) -> None:
+def _compare_main_experiment(
+    row: dict,
+    stats: pd.Series,
+    *,
+    enforce_exact: bool,
+) -> dict:
     expected = {
         "baseline_lifecycle_kg": "total_ebike_lifecycle",
         "oracle_mixed_lifecycle_kg": "oracle_min_lifecycle_kg",
         "drone_replacement_rate_pct": "oracle_drone_order_ratio_pct",
         "relative_reduction_pct": "oracle_min_reduction_vs_ebike_pct",
     }
+    comparisons = {}
     for observed_name, expected_name in expected.items():
         observed = float(row[observed_name])
         reference = float(stats[expected_name])
-        if not math.isclose(observed, reference, rel_tol=1e-9, abs_tol=1e-6):
+        matches = math.isclose(observed, reference, rel_tol=1e-9, abs_tol=1e-6)
+        comparisons[observed_name] = {
+            "main_experiment_field": expected_name,
+            "common_valid_value": observed,
+            "full_city_value": reference,
+            "difference": observed - reference,
+            "matches": matches,
+        }
+        if enforce_exact and not matches:
             raise ValueError(
                 f"{row['region_key']} E-bike {observed_name} does not match "
                 f"main experiment {expected_name}: {observed} != {reference}"
             )
+    return {
+        "exact_match_required": enforce_exact,
+        "reason": (
+            "common-valid set covers every OD row"
+            if enforce_exact
+            else "full-city main experiment includes road-unreachable OD rows"
+        ),
+        "metrics": comparisons,
+    }
 
 
 def calculate_city_mode_oracle(
@@ -118,7 +141,9 @@ def calculate_city_mode_oracle(
         for mode in BASELINE_MODES
     }
     annual_orders = 0.0
-    row_count = 0
+    input_rows = 0
+    valid_rows = 0
+    excluded_positive_orders = 0.0
     gef = None
     kappa = None
     ground_slopes = None
@@ -147,10 +172,19 @@ def calculate_city_mode_oracle(
             | ~np.isfinite(numeric["grid_emission_factor"])
             | (numeric["grid_emission_factor"] < 0)
         )
-        if invalid.any():
-            raise ValueError(
-                f"{od_csv} contains {int(invalid.sum())} invalid oracle input rows"
-            )
+        input_rows += len(chunk)
+        valid = ~invalid
+        valid_rows += int(valid.sum())
+        positive_weight = (
+            np.isfinite(numeric["annual_sales"])
+            & (numeric["annual_sales"] > 0)
+        )
+        excluded_positive_orders += float(
+            numeric["annual_sales"][positive_weight & invalid].sum()
+        )
+        if not valid.any():
+            continue
+        numeric = {name: values[valid] for name, values in numeric.items()}
         gef = _require_constant(
             numeric["grid_emission_factor"], "grid_emission_factor", gef
         )
@@ -164,7 +198,6 @@ def calculate_city_mode_oracle(
         drone_g = numeric["drone_lifecycle_g"]
         road_km = numeric["road_distance_m"] / 1000.0 * kappa
         annual_orders += float(weights.sum())
-        row_count += len(chunk)
 
         baselines = {"pedelec_ebike": numeric["ebike_lifecycle_g"]}
         for mode in BASELINE_MODES[1:]:
@@ -178,7 +211,7 @@ def calculate_city_mode_oracle(
             totals[mode]["drone_orders"] += float(weights[use_drone].sum())
 
     if (
-        row_count == 0
+        valid_rows == 0
         or annual_orders <= 0
         or gef is None
         or kappa is None
@@ -211,19 +244,23 @@ def calculate_city_mode_oracle(
             }
         )
     result = pd.DataFrame(rows, columns=OUTPUT_COLUMNS)
-    _validate_main_experiment(
+    main_comparison = _compare_main_experiment(
         result[result["baseline_mode"].eq("pedelec_ebike")].iloc[0].to_dict(),
         stats,
+        enforce_exact=valid_rows == input_rows,
     )
     return result, {
         "region_key": str(stats["region_key"]),
         "region_name_en": str(stats["region_name_en"]),
-        "od_rows": row_count,
-        "invalid_od_rows": 0,
+        "input_od_rows": input_rows,
+        "valid_od_rows": valid_rows,
+        "invalid_od_rows": input_rows - valid_rows,
+        "excluded_positive_annual_orders": excluded_positive_orders,
         "annual_orders": annual_orders,
         "grid_emission_factor_kg_per_kwh": gef,
         "ground_distance_kappa": kappa,
         "ground_mode_g_per_effective_road_km": ground_slopes,
+        "main_experiment_comparison": main_comparison,
         "od_input": {
             "path": f"city/{stats['region_key']}/{stats['region_key']}_od_pairs.csv",
             "size_bytes": od_csv.stat().st_size,
@@ -302,8 +339,9 @@ def run_four_city_delivery_mode_analysis(
             "fuel_modes_petrol_wtw_kg_per_mj": PETROL_WTW_EF_KG_PER_MJ,
         },
         "main_experiment_validation": (
-            "E-bike baseline, oracle total, replacement rate, and relative "
-            "reduction must match all_region_stats.csv."
+            "E-bike uses stored main-experiment per-OD emissions. Exact equality "
+            "to full-city aggregates is required only when every OD has a valid "
+            "positive road distance; otherwise full-city differences are audited."
         ),
         "cities": city_reports,
         "aggregate_input": {
