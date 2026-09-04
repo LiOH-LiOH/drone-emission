@@ -97,6 +97,7 @@ def test_scatter_writes_exact_size_and_traceable_report(tmp_path) -> None:
         200_000.0,
     ]
     assert report["colorbar"]["tick_labels"] == ["5", "10", "20"]
+    assert report["colorbar"]["bbox_figure_fraction"]["y0"] == pytest.approx(0.11)
     assert report["colorbar"]["bbox_figure_fraction"]["y0"] < report["axes"][
         "bbox_figure_fraction"
     ]["y0"]
