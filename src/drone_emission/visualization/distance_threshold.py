@@ -79,9 +79,8 @@ DISTANCE_THRESHOLD_COMPARISON_LABEL_OFFSETS = {
         "shanghai": (-12, 20),
     },
 }
-DISTANCE_THRESHOLD_POINT_COLOR = "#4C78A8"
 DISTANCE_THRESHOLD_POINT_SIZE = 28
-DISTANCE_THRESHOLD_POINT_ALPHA = 0.65
+DISTANCE_THRESHOLD_POINT_ALPHA = 0.9
 DISTANCE_THRESHOLD_LANDSCAPE_AXIS_LABELS = (
     "Road delivery distance threshold (km)",
     "Maximum lifecycle-emissions reduction (%)",
@@ -165,13 +164,41 @@ def _prepare_distance_threshold_all_city_data(
             + ", ".join(incomplete.index.astype(str))
         )
 
-    if "region_key" not in oracle_df.columns:
-        raise KeyError("Missing Oracle city key: region_key")
+    oracle_required = {"region_key", "province"}
+    missing_oracle_columns = oracle_required.difference(oracle_df.columns)
+    if missing_oracle_columns:
+        raise KeyError(
+            "Missing Oracle city columns: "
+            f"{sorted(missing_oracle_columns)}"
+        )
     oracle = oracle_df.copy()
     if "region_level" in oracle.columns:
         oracle = oracle[oracle["region_level"] == "city"].copy()
     if oracle.duplicated("region_key").any():
         raise ValueError("Duplicate city rows in Oracle results")
+    oracle["macro_region"] = oracle["province"].map(
+        macro_region_for_province
+    )
+    unmapped = oracle[oracle["macro_region"].isna()]
+    if not unmapped.empty:
+        details = ", ".join(
+            f"{row.region_key} ({row.province})"
+            for row in unmapped[["region_key", "province"]].itertuples(
+                index=False
+            )
+        )
+        raise ValueError(
+            "Oracle cities without a China macro-region mapping: " + details
+        )
+    oracle["macro_region_key"] = oracle["macro_region"].map(
+        lambda spec: spec["key"]
+    )
+    oracle["macro_region_label"] = oracle["macro_region"].map(
+        lambda spec: spec["label"]
+    )
+    oracle["macro_region_color"] = oracle["macro_region"].map(
+        lambda spec: spec["color"]
+    )
     if {"total_ebike_lifecycle", "oracle_min_lifecycle_kg"}.issubset(
         oracle.columns
     ):
@@ -206,6 +233,10 @@ def _prepare_distance_threshold_all_city_data(
     oracle = oracle[
         [
             "region_key",
+            "province",
+            "macro_region_key",
+            "macro_region_label",
+            "macro_region_color",
             "oracle_annual_reduction_pct",
             "total_ebike_lifecycle",
         ]
@@ -279,7 +310,7 @@ def _plot_distance_threshold_all_city_scatter(
     ax.scatter(
         wide.loc[~highlight, x_col],
         wide.loc[~highlight, y_col],
-        color=DISTANCE_THRESHOLD_POINT_COLOR,
+        color=wide.loc[~highlight, "macro_region_color"],
         s=DISTANCE_THRESHOLD_POINT_SIZE,
         alpha=DISTANCE_THRESHOLD_POINT_ALPHA,
         edgecolor="white",
@@ -288,7 +319,7 @@ def _plot_distance_threshold_all_city_scatter(
     ax.scatter(
         wide.loc[highlight, x_col],
         wide.loc[highlight, y_col],
-        color=DISTANCE_THRESHOLD_POINT_COLOR,
+        color=wide.loc[highlight, "macro_region_color"],
         s=DISTANCE_THRESHOLD_POINT_SIZE,
         alpha=DISTANCE_THRESHOLD_POINT_ALPHA,
         edgecolor="#151515",
@@ -378,6 +409,7 @@ def _distance_threshold_all_city_report(
         "city_count": city_count,
         "configured_city_count": configured_count,
         "highlighted_cities": list(DISTANCE_THRESHOLD_TYPICAL_CITIES),
+        "macro_regions": _distance_threshold_macro_region_records(wide),
         "road_threshold_km": _writing_numeric_summary(
             wide["road_optimal_threshold_km"]
         ),
@@ -410,6 +442,50 @@ def _distance_threshold_all_city_report(
             "threshold_optimization": "valid road-distance OD pairs",
         }
     return report
+
+
+def _distance_threshold_macro_region_records(
+    wide: pd.DataFrame,
+) -> list[dict]:
+    """Summarize the shared macro-region color encoding."""
+    records = []
+    for spec in CHINA_MACRO_REGION_SPECS:
+        count = int((wide["macro_region_key"] == spec["key"]).sum())
+        if count:
+            records.append(
+                {
+                    "macro_region": spec["key"],
+                    "label": spec["label"],
+                    "color": spec["color"],
+                    "city_count": count,
+                }
+            )
+    return records
+
+
+def _add_distance_threshold_macro_region_legend(fig, wide: pd.DataFrame):
+    """Add one shared macro-region legend for the full Figure 4 panel."""
+    handles = []
+    for record in _distance_threshold_macro_region_records(wide):
+        handles.append(
+            Patch(
+                facecolor=record["color"],
+                edgecolor="none",
+                label=f"{record['label']} ({record['city_count']})",
+            )
+        )
+    return fig.legend(
+        handles=handles,
+        loc="lower center",
+        bbox_to_anchor=(0.5, 0.005),
+        ncol=len(handles),
+        frameon=False,
+        fontsize=6.0,
+        handlelength=0.9,
+        handletextpad=0.35,
+        labelspacing=0.25,
+        columnspacing=0.65,
+    )
 
 
 def _prepare_distance_threshold_representative_city_data(
@@ -457,8 +533,7 @@ def _draw_distance_threshold_representative_city_panels(
     representative: pd.DataFrame,
 ) -> None:
     """Draw the three aligned representative-city summary panels."""
-    road_color = DISTANCE_THRESHOLD_POINT_COLOR
-    oracle_color = "#303030"
+    city_colors = representative["macro_region_color"].tolist()
     city_labels = [
         DISTANCE_THRESHOLD_CITY_LABELS[city]
         for city in representative["region_key"]
@@ -478,8 +553,26 @@ def _draw_distance_threshold_representative_city_panels(
     oracle = representative["oracle_annual_reduction_pct"].to_numpy(dtype=float)
     reduction_ax, retention_ax, threshold_ax = axes
     reduction_ax.hlines(y, road, oracle, color="#9AA3AA", linewidth=0.8, zorder=1)
-    reduction_ax.scatter(road, y, color=road_color, s=30, zorder=3)
-    reduction_ax.scatter(oracle, y, color=oracle_color, s=30, zorder=4)
+    reduction_ax.scatter(
+        road,
+        y,
+        color=city_colors,
+        marker="o",
+        s=30,
+        edgecolor="white",
+        linewidth=0.45,
+        zorder=3,
+    )
+    reduction_ax.scatter(
+        oracle,
+        y,
+        color=city_colors,
+        marker="D",
+        s=28,
+        edgecolor="#303030",
+        linewidth=0.55,
+        zorder=4,
+    )
     reduction_upper = max(40.0, np.ceil(float(oracle.max()) / 10.0) * 10.0)
     reduction_ax.set_xlim(0.0, reduction_upper)
     reduction_ax.set_xticks(np.arange(0.0, reduction_upper + 0.1, 10.0))
@@ -490,11 +583,11 @@ def _draw_distance_threshold_representative_city_panels(
     reduction_ax.legend(
         handles=[
             Line2D(
-                [], [], marker="o", linestyle="none", color=road_color,
+                [], [], marker="o", linestyle="none", color="#777777",
                 markersize=5.5, label="Road policy",
             ),
             Line2D(
-                [], [], marker="o", linestyle="none", color=oracle_color,
+                [], [], marker="D", linestyle="none", color="#777777",
                 markersize=5.5, label="Trip-level optimum",
             ),
         ],
@@ -507,7 +600,9 @@ def _draw_distance_threshold_representative_city_panels(
         columnspacing=1.0,
         ncol=2,
     )
-    for y_value, road_value, oracle_value in zip(y, road, oracle):
+    for y_value, road_value, oracle_value, city_color in zip(
+        y, road, oracle, city_colors
+    ):
         if oracle_value - road_value >= 0.75:
             reduction_ax.annotate(
                 f"{road_value:.1f}",
@@ -515,7 +610,7 @@ def _draw_distance_threshold_representative_city_panels(
                 xytext=(-4, 6),
                 textcoords="offset points",
                 ha="right",
-                color=road_color,
+                color=city_color,
                 fontsize=7,
             )
         reduction_ax.annotate(
@@ -524,12 +619,12 @@ def _draw_distance_threshold_representative_city_panels(
             xytext=(0, 6),
             textcoords="offset points",
             ha="center" if oracle_value - road_value < 0.75 else "left",
-            color=oracle_color,
+            color=city_color,
             fontsize=7,
         )
 
     retention = representative["retention_pct"].to_numpy(dtype=float)
-    retention_ax.barh(y, retention, color=road_color, height=0.42, zorder=2)
+    retention_ax.barh(y, retention, color=city_colors, height=0.42, zorder=2)
     retention_ax.set_xlim(0.0, 100.0)
     retention_ax.set_xticks(np.arange(0.0, 100.1, 20.0))
     retention_ax.set_yticks([])
@@ -548,7 +643,7 @@ def _draw_distance_threshold_representative_city_panels(
         )
 
     thresholds = representative["road_optimal_threshold_km"].to_numpy(dtype=float)
-    threshold_ax.barh(y, thresholds, color=road_color, height=0.42, zorder=2)
+    threshold_ax.barh(y, thresholds, color=city_colors, height=0.42, zorder=2)
     threshold_upper = max(2.0, np.ceil(float(thresholds.max()) / 0.5) * 0.5)
     threshold_ax.set_xlim(0.0, threshold_upper)
     threshold_ax.set_xticks(np.arange(0.0, threshold_upper + 0.01, 0.5))
@@ -588,10 +683,11 @@ def plot_distance_threshold_representative_city_summary(
         gridspec_kw={"width_ratios": (1.45, 1.0, 1.0), "wspace": 0.30},
     )
     _draw_distance_threshold_representative_city_panels(axes, representative)
+    _add_distance_threshold_macro_region_legend(fig, wide)
     fig.subplots_adjust(
         left=0.13,
         right=0.98,
-        bottom=0.18,
+        bottom=0.27,
         top=0.73 if plot_title else 0.79,
     )
     if plot_title:
@@ -605,6 +701,10 @@ def plot_distance_threshold_representative_city_summary(
     records = representative[
         [
             "region_key",
+            "province",
+            "macro_region_key",
+            "macro_region_label",
+            "macro_region_color",
             "road_full_domain_reduction_pct",
             "oracle_annual_reduction_pct",
             "retention_pct",
@@ -625,6 +725,7 @@ def plot_distance_threshold_representative_city_summary(
             ),
             "native_size_mm": [175.0, 55.0],
             "retention_axis_pct": [0.0, 100.0],
+            "macro_regions": _distance_threshold_macro_region_records(wide),
             "representative_cities": records,
         },
         save_tight=False,
