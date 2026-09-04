@@ -154,8 +154,36 @@ def _render_priority(context: RenderContext, request: str) -> None:
 def _render_city_screening(context: RenderContext) -> None:
     from .city_screening import plot_city_reduction_potential_scatter
 
+    stats = _city_stats(context)
+    enriched_path = context.require_file(
+        "all_region_stats_enriched.csv", stage="aggregate"
+    )
+    enriched = pd.read_csv(enriched_path)
+    required = {"region_key", "gdp_per_capita"}
+    missing = sorted(required.difference(enriched.columns))
+    if missing:
+        raise ValueError(
+            f"City reduction scatter enriched statistics missing columns: {missing}"
+        )
+    gdp = enriched[["region_key", "gdp_per_capita"]].copy()
+    duplicated = sorted(
+        gdp.loc[gdp["region_key"].duplicated(keep=False), "region_key"]
+        .astype(str)
+        .unique()
+    )
+    if duplicated:
+        raise ValueError(
+            "City reduction scatter has duplicate enriched region keys: "
+            + ", ".join(duplicated)
+        )
+    stats = stats.drop(columns=["gdp_per_capita"], errors="ignore").merge(
+        gdp,
+        on="region_key",
+        how="left",
+        validate="one_to_one",
+    )
     plot_city_reduction_potential_scatter(
-        _city_stats(context),
+        stats,
         save_path=str(context.output("city_reduction_potential_scatter.pdf")),
         for_latex=True,
         plot_title=False,
