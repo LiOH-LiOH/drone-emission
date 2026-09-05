@@ -17,7 +17,7 @@ RELATIVE_REDUCTION_COL = "oracle_min_reduction_vs_ebike_pct"
 POPULATION_COL = "population_10k"
 POPULATION_THRESHOLDS = (50.0, 100.0, 500.0, 1000.0)
 POPULATION_LABELS = ("<0.5", "0.5–1", "1–5", "5–10", "≥10")
-POPULATION_COLORS = ("#9692B6", "#7973A3", "#5E548E", "#44336F", "#29164F")
+POPULATION_COLORS = ("#0072B2", "#009E73", "#E69F00", "#D55E00", "#882255")
 BACKGROUND_COLORS = {
     "upper_left": "#EAF2F8",
     "upper_right": "#FBEEDD",

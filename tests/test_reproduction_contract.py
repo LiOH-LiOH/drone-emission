@@ -203,7 +203,7 @@ def test_city_detour_reduction_by_gef_uses_declared_cohort_and_city_inputs():
 
 def test_city_reduction_scatter_consumes_cohort_statistics_only():
     request = request_index()["city_reduction_potential_scatter"]
-    assert request["cache_version"] == 4
+    assert request["cache_version"] == 5
     assert request["required_inputs"] == [
         "all_region_stats.csv",
         "all_region_stats_enriched.csv",
