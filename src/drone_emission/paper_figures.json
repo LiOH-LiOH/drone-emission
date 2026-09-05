@@ -16,7 +16,7 @@
     {"id": "beijing_p75_trip_eol_emissions", "cache_version": 1, "required_inputs": ["city/beijing/*_od_pairs.csv"], "outputs": ["beijing_p75_trip_eol_emissions.pdf"]},
     {"id": "province_total_ebike_lifecycle", "cache_version": 1, "required_inputs": ["all_region_stats.csv", "all_region_stats_enriched.csv"], "outputs": ["province_total_ebike_lifecycle.pdf"]},
     {"id": "regions_map_oracle_reduction_rank_map_only", "cache_version": 1, "required_inputs": ["all_region_stats.csv", "all_region_stats_enriched.csv"], "outputs": ["regions_map_oracle_reduction_rank_map_only.pdf"]},
-    {"id": "city_reduction_potential_scatter", "cache_version": 3, "required_inputs": ["all_region_stats.csv", "all_region_stats_enriched.csv"], "outputs": ["city_reduction_potential_scatter.pdf"]},
+    {"id": "city_reduction_potential_scatter", "cache_version": 4, "required_inputs": ["all_region_stats.csv", "all_region_stats_enriched.csv"], "outputs": ["city_reduction_potential_scatter.pdf"]},
     {"id": "city_reduction_rank_all_macro_region", "cache_version": 1, "required_inputs": ["all_region_stats.csv", "all_region_stats_enriched.csv"], "outputs": ["city_reduction_rank_all_macro_region.pdf"]},
     {"id": "city_gef_distribution", "cache_version": 4, "required_inputs": ["all_region_stats.csv", "all_region_stats_enriched.csv"], "outputs": ["city_gef_distribution.pdf"]},
     {"id": "city_gef_lifecycle_components", "cache_version": 6, "required_inputs": ["all_region_stats.csv", "all_region_stats_enriched.csv"], "outputs": ["city_gef_lifecycle_components.pdf"]},

@@ -159,15 +159,15 @@ def _render_city_screening(context: RenderContext) -> None:
         "all_region_stats_enriched.csv", stage="aggregate"
     )
     enriched = pd.read_csv(enriched_path)
-    required = {"region_key", "gdp_per_capita"}
+    required = {"region_key", "population_10k"}
     missing = sorted(required.difference(enriched.columns))
     if missing:
         raise ValueError(
             f"City reduction scatter enriched statistics missing columns: {missing}"
         )
-    gdp = enriched[["region_key", "gdp_per_capita"]].copy()
+    population = enriched[["region_key", "population_10k"]].copy()
     duplicated = sorted(
-        gdp.loc[gdp["region_key"].duplicated(keep=False), "region_key"]
+        population.loc[population["region_key"].duplicated(keep=False), "region_key"]
         .astype(str)
         .unique()
     )
@@ -176,8 +176,8 @@ def _render_city_screening(context: RenderContext) -> None:
             "City reduction scatter has duplicate enriched region keys: "
             + ", ".join(duplicated)
         )
-    stats = stats.drop(columns=["gdp_per_capita"], errors="ignore").merge(
-        gdp,
+    stats = stats.drop(columns=["population_10k"], errors="ignore").merge(
+        population,
         on="region_key",
         how="left",
         validate="one_to_one",

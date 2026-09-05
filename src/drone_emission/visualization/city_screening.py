@@ -14,9 +14,15 @@ from drone_emission.visualization._utils import (
 
 ABSOLUTE_REDUCTION_COL = "annual_absolute_reduction_t_co2e"
 RELATIVE_REDUCTION_COL = "oracle_min_reduction_vs_ebike_pct"
-GDP_PER_CAPITA_COL = "gdp_per_capita"
-GDP_COLORMAP = "viridis"
-GDP_DISPLAY_SCALE = 10_000.0
+POPULATION_COL = "population_10k"
+POPULATION_THRESHOLDS = (50.0, 100.0, 500.0, 1000.0)
+POPULATION_LABELS = ("<0.5", "0.5–1", "1–5", "5–10", "≥10")
+POPULATION_COLORS = ("#9692B6", "#7973A3", "#5E548E", "#44336F", "#29164F")
+BACKGROUND_COLORS = {
+    "upper_left": "#EAF2F8",
+    "upper_right": "#FBEEDD",
+    "lower": "#F1F1F1",
+}
 
 
 def _reduction_metrics(df: pd.DataFrame) -> pd.DataFrame:
@@ -49,13 +55,13 @@ def _reduction_metrics(df: pd.DataFrame) -> pd.DataFrame:
     return result
 
 
-def _validate_gdp_per_capita(plot_df: pd.DataFrame) -> pd.Series:
-    """Return positive finite per-capita GDP or identify invalid cities."""
-    if GDP_PER_CAPITA_COL not in plot_df.columns:
+def _validate_population(plot_df: pd.DataFrame) -> pd.Series:
+    """Return positive finite population for every plotted city."""
+    if POPULATION_COL not in plot_df.columns:
         raise ValueError(
-            f"City reduction scatter missing columns: ['{GDP_PER_CAPITA_COL}']"
+            f"City reduction scatter missing columns: ['{POPULATION_COL}']"
         )
-    values = pd.to_numeric(plot_df[GDP_PER_CAPITA_COL], errors="coerce")
+    values = pd.to_numeric(plot_df[POPULATION_COL], errors="coerce")
     invalid = ~np.isfinite(values) | (values <= 0)
     if invalid.any():
         if "region_key" in plot_df.columns:
@@ -63,25 +69,15 @@ def _validate_gdp_per_capita(plot_df: pd.DataFrame) -> pd.Series:
         else:
             names = [str(value) for value in plot_df.index[invalid]]
         raise ValueError(
-            "City reduction scatter requires positive finite gdp_per_capita for: "
+            "City reduction scatter requires positive finite population_10k for: "
             + ", ".join(names)
         )
     return values.astype(float)
 
 
-def _log_colorbar_ticks(vmin: float, vmax: float) -> list[float]:
-    """Return compact 1-2-5 log ticks within the observed GDP range."""
-    lower = int(np.floor(np.log10(vmin))) - 1
-    upper = int(np.ceil(np.log10(vmax))) + 1
-    ticks = [
-        multiplier * 10.0**exponent
-        for exponent in range(lower, upper + 1)
-        for multiplier in (1.0, 2.0, 5.0)
-        if vmin <= multiplier * 10.0**exponent <= vmax
-    ]
-    if ticks:
-        return ticks
-    return [float(vmin)] if np.isclose(vmin, vmax) else [float(vmin), float(vmax)]
+def _population_classes(values) -> np.ndarray:
+    """Assign threshold values to the higher population interval."""
+    return np.searchsorted(POPULATION_THRESHOLDS, values, side="right")
 
 
 def plot_city_reduction_potential_scatter(
@@ -93,7 +89,7 @@ def plot_city_reduction_potential_scatter(
 ):
     """Plot absolute against relative city emission-reduction potential."""
     import matplotlib.pyplot as plt
-    from matplotlib.colors import LogNorm
+    from matplotlib.colors import BoundaryNorm, ListedColormap
 
     plt.rcParams.update(
         {
@@ -109,20 +105,13 @@ def plot_city_reduction_potential_scatter(
         }
     )
     plot_df = _reduction_metrics(df)
-    gdp_per_capita = _validate_gdp_per_capita(plot_df)
-    plot_df[GDP_PER_CAPITA_COL] = gdp_per_capita
+    population = _validate_population(plot_df)
+    plot_df[POPULATION_COL] = population
+    population_classes = _population_classes(population)
     absolute_median = float(plot_df[ABSOLUTE_REDUCTION_COL].median())
     relative_median = float(plot_df[RELATIVE_REDUCTION_COL].median())
-    gdp_min = float(gdp_per_capita.min())
-    gdp_max = float(gdp_per_capita.max())
-    if np.isclose(gdp_min, gdp_max):
-        gdp_min *= 0.99
-        gdp_max *= 1.01
-    color_norm = LogNorm(vmin=gdp_min, vmax=gdp_max)
-    colorbar_ticks = _log_colorbar_ticks(gdp_min, gdp_max)
-    colorbar_tick_labels = [
-        f"{value / GDP_DISPLAY_SCALE:g}" for value in colorbar_ticks
-    ]
+    color_norm = BoundaryNorm(np.arange(6) - 0.5, ncolors=5)
+    color_map = ListedColormap(POPULATION_COLORS)
 
     fig, ax = plt.subplots(figsize=figsize)
     fig.subplots_adjust(
@@ -135,9 +124,9 @@ def plot_city_reduction_potential_scatter(
         plot_df[ABSOLUTE_REDUCTION_COL],
         plot_df[RELATIVE_REDUCTION_COL],
         s=18,
-        alpha=0.68,
-        c=gdp_per_capita,
-        cmap=GDP_COLORMAP,
+        alpha=1.0,
+        c=population_classes,
+        cmap=color_map,
         norm=color_norm,
         edgecolor="white",
         linewidth=0.3,
@@ -159,6 +148,17 @@ def plot_city_reduction_potential_scatter(
     )
     ax.set_xscale("log")
     ax.set_ylim(0.0, 50.0)
+    # Freeze data-derived limits before adding background rectangles on log x.
+    x_min, x_max = ax.get_xlim()
+    ax.set_xlim(x_min, x_max)
+    ax.axhspan(0.0, relative_median, color=BACKGROUND_COLORS["lower"],
+               linewidth=0, zorder=0)
+    for left, right, key in (
+        (x_min, absolute_median, "upper_left"),
+        (absolute_median, x_max, "upper_right"),
+    ):
+        ax.fill_between([left, right], relative_median, 50.0,
+                        color=BACKGROUND_COLORS[key], linewidth=0, zorder=0)
 
     ax.set_xlabel(
         "Annual absolute reduction\n(t CO$_2$e yr$^{-1}$)",
@@ -172,13 +172,15 @@ def plot_city_reduction_potential_scatter(
         scatter,
         cax=colorbar_ax,
         orientation="horizontal",
-        ticks=colorbar_ticks,
+        ticks=np.arange(5),
+        spacing="uniform",
+        drawedges=True,
     )
-    colorbar.ax.set_xticklabels(colorbar_tick_labels)
+    colorbar.ax.set_xticklabels(POPULATION_LABELS)
     colorbar.ax.tick_params(labelsize=5.5, length=1.5, pad=1.0)
     colorbar.outline.set_linewidth(0.4)
     colorbar.set_label(
-        "GDP per capita ($10^4$ CNY person$^{-1}$)",
+        "Population (million)",
         fontsize=6.0,
         labelpad=1.5,
     )
@@ -212,7 +214,8 @@ def plot_city_reduction_potential_scatter(
                 "region_name_en": city_name,
                 ABSOLUTE_REDUCTION_COL: float(row[ABSOLUTE_REDUCTION_COL]),
                 RELATIVE_REDUCTION_COL: float(row[RELATIVE_REDUCTION_COL]),
-                GDP_PER_CAPITA_COL: float(row[GDP_PER_CAPITA_COL]),
+                POPULATION_COL: float(row[POPULATION_COL]),
+                "population_class_index": int(_population_classes(row[POPULATION_COL])),
                 "highlighted": False,
             }
         )
@@ -234,7 +237,7 @@ def plot_city_reduction_potential_scatter(
                 "plotted_city_count": int(len(plot_df)),
                 "absolute_reduction_field": ABSOLUTE_REDUCTION_COL,
                 "relative_reduction_field": RELATIVE_REDUCTION_COL,
-                "color_field": GDP_PER_CAPITA_COL,
+                "color_field": POPULATION_COL,
                 "points": point_records,
             },
             "axes": {
@@ -252,18 +255,21 @@ def plot_city_reduction_potential_scatter(
                 },
             },
             "color_encoding": {
-                "field": GDP_PER_CAPITA_COL,
-                "colormap": GDP_COLORMAP,
-                "normalization": "log",
-                "range_cny_per_person": [gdp_min, gdp_max],
-                "point_alpha": 0.68,
+                "field": POPULATION_COL,
+                "colors": list(POPULATION_COLORS),
+                "normalization": "discrete",
+                "thresholds_10k": list(POPULATION_THRESHOLDS),
+                "interval_closure": "left",
+                "point_alpha": 1.0,
+                "population_basis": "Existing socioeconomic population_10k; not uniform urban population",
+                "official_city_size_classification": False,
             },
             "colorbar": {
                 "orientation": "horizontal",
-                "label": "GDP per capita (10^4 CNY person-1)",
-                "display_scale_cny_per_unit": GDP_DISPLAY_SCALE,
-                "ticks_cny_per_person": colorbar_ticks,
-                "tick_labels": colorbar_tick_labels,
+                "label": "Population (million)",
+                "display_scale_10k_per_unit": 100.0,
+                "tick_labels": list(POPULATION_LABELS),
+                "spacing": "uniform",
                 "bbox_figure_fraction": {
                     "x0": float(colorbar_position.x0),
                     "y0": float(colorbar_position.y0),
@@ -275,6 +281,12 @@ def plot_city_reduction_potential_scatter(
                 "absolute_reduction_t_co2e": absolute_median,
                 "relative_reduction_pct": relative_median,
                 "legend_drawn": False,
+            },
+            "background_regions": {
+                "colors": BACKGROUND_COLORS,
+                "split_x": absolute_median,
+                "split_y": relative_median,
+                "lower_quadrants_share_color": True,
             },
             "highlighted_cities": [],
             "city_name_labels_drawn": False,
