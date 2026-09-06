@@ -209,9 +209,9 @@ def test_four_city_candidate_reports_lock_panel_encodings(tmp_path):
         }
         encoding = figure_report["visual_encoding"]
         assert encoding["orientation"] == "vertical"
-        assert encoding["x_grouping"] == "baseline_mode"
-        assert encoding["within_group_order"] == "city"
-        assert encoding["city_label_rotation_deg"] == 90
+        assert encoding["x_grouping"] == "city"
+        assert encoding["within_group_order"] == "baseline_mode"
+        assert encoding["city_label_rotation_deg"] == 0
         assert encoding["legend_location"] == "separate_shared_asset"
         assert encoding["font_size_pt"] == {
             "axis_label": 8.0,

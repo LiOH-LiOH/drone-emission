@@ -543,9 +543,9 @@ def _four_city_figure_report(
             if metric == "shared_legend"
             else {
                 "orientation": "vertical",
-                "x_grouping": "baseline_mode",
-                "within_group_order": "city",
-                "city_label_rotation_deg": 90,
+                "x_grouping": "city",
+                "within_group_order": "baseline_mode",
+                "city_label_rotation_deg": 0,
                 "mode_encoding": "bar_color",
                 "legend_location": "separate_shared_asset",
                 "font_size_pt": {
@@ -620,19 +620,16 @@ def _plot_four_city_grouped_bars(
         )
         for city in FOUR_CITY_ORDER
     }
-    bars_per_group = len(FOUR_CITY_ORDER)
+    bars_per_group = len(FOUR_CITY_MODE_ORDER)
     bar_width = 0.20
     group_gap = 0.27
     group_step = bars_per_group * bar_width + group_gap
-    group_starts = np.arange(len(FOUR_CITY_MODE_ORDER), dtype=float) * group_step
+    group_starts = np.arange(len(FOUR_CITY_ORDER), dtype=float) * group_step
     x_positions = np.concatenate(
         [start + np.arange(bars_per_group) * bar_width for start in group_starts]
     )
-    x_labels = [
-        city_names[city]
-        for _ in FOUR_CITY_MODE_ORDER
-        for city in FOUR_CITY_ORDER
-    ]
+    group_centers = group_starts + (bars_per_group - 1) * bar_width / 2
+    x_labels = [city_names[city] for city in FOUR_CITY_ORDER]
     fig, ax = plt.subplots(figsize=figsize, facecolor="white")
     plotted_absolute = []
     absolute_ceiling = None
@@ -642,20 +639,22 @@ def _plot_four_city_grouped_bars(
             25.0,
             float(np.ceil(max_absolute * 1.1 / 25.0) * 25.0),
         )
-    for start, mode in zip(group_starts, FOUR_CITY_MODE_ORDER):
-        rows = frame[frame["baseline_mode"].eq(mode)].set_index("region_key")
-        values = np.array([float(rows.loc[city, metric]) for city in FOUR_CITY_ORDER])
+    for start, city in zip(group_starts, FOUR_CITY_ORDER):
+        rows = frame[frame["region_key"].eq(city)].set_index("baseline_mode")
+        values = np.array(
+            [float(rows.loc[mode, metric]) for mode in FOUR_CITY_MODE_ORDER]
+        )
         positions = start + np.arange(bars_per_group) * bar_width
         bars = ax.bar(
             positions,
             values,
             width=bar_width * 0.92,
-            color=MODE_COLORS[mode],
+            color=[MODE_COLORS[mode] for mode in FOUR_CITY_MODE_ORDER],
         )
-        for city, bar, value in zip(FOUR_CITY_ORDER, bars, values):
+        for mode, bar, value in zip(FOUR_CITY_MODE_ORDER, bars, values):
             label_y = value + 1.0
             if absolute_ceiling is not None:
-                absolute = float(rows.loc[city, "absolute_reduction_kt"])
+                absolute = float(rows.loc[mode, "absolute_reduction_kt"])
                 marker_y = absolute / absolute_ceiling * 112.0
                 if label_y <= marker_y <= label_y + 8.0:
                     label_y = marker_y + 2.0
@@ -670,8 +669,8 @@ def _plot_four_city_grouped_bars(
                 color="0.2",
             )
         plotted_absolute.extend(
-            float(rows.loc[city, "absolute_reduction_kt"])
-            for city in FOUR_CITY_ORDER
+            float(rows.loc[mode, "absolute_reduction_kt"])
+            for mode in FOUR_CITY_MODE_ORDER
         )
     for left_start, right_start in zip(group_starts[:-1], group_starts[1:]):
         separator = (
@@ -681,7 +680,7 @@ def _plot_four_city_grouped_bars(
             - 0.5 * bar_width
         ) / 2
         ax.axvline(separator, color="0.88", linewidth=0.5, zorder=0)
-    ax.set_xticks(x_positions, x_labels, rotation=90)
+    ax.set_xticks(group_centers, x_labels, rotation=0)
     ax.set_xlim(
         x_positions[0] - 0.65 * bar_width,
         x_positions[-1] + 0.65 * bar_width,
