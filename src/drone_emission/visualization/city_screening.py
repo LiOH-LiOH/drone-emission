@@ -118,7 +118,7 @@ def plot_city_reduction_potential_scatter(
     fig.subplots_adjust(
         left=0.31,
         right=0.97,
-        bottom=0.31,
+        bottom=0.35,
         top=0.91 if plot_title else 0.98,
     )
     scatter = ax.scatter(
@@ -168,7 +168,7 @@ def plot_city_reduction_potential_scatter(
     ax.set_ylabel("Relative lifecycle reduction (%)", fontsize=7.5)
     ax.tick_params(axis="both", labelsize=7)
     ax.spines[["top", "right"]].set_visible(False)
-    colorbar_ax = fig.add_axes((0.31, 0.15, 0.66, 0.018))
+    colorbar_ax = fig.add_axes((0.31, 0.125, 0.66, 0.018))
     colorbar = fig.colorbar(
         scatter,
         cax=colorbar_ax,
