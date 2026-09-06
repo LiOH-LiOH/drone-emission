@@ -82,11 +82,11 @@ DISTANCE_THRESHOLD_COMPARISON_LABEL_OFFSETS = {
 DISTANCE_THRESHOLD_POINT_SIZE = 28
 DISTANCE_THRESHOLD_POINT_ALPHA = 0.9
 DISTANCE_THRESHOLD_LANDSCAPE_AXIS_LABELS = (
-    "Road delivery distance threshold (km)",
     "Maximum lifecycle-emissions reduction (%)",
+    "Road delivery distance threshold (km)",
 )
 DISTANCE_THRESHOLD_ORACLE_AXIS_LABELS = (
-    "Distance-based lifecycle-emissions\nreduction (%)",
+    "Maximum lifecycle-emissions reduction (%)",
     "Additional reduction under trip-level allocation\n(percentage points)",
 )
 
@@ -270,7 +270,7 @@ def _prepare_distance_threshold_all_city_data(
     )
     wide["road_oracle_gap_pp"] = (
         wide["oracle_annual_reduction_pct"]
-        - wide["road_full_domain_reduction_pct"]
+        - wide["road_annual_reduction_pct"]
     )
     numeric = [
         f"{basis}_{column}"
@@ -345,6 +345,7 @@ def _plot_distance_threshold_all_city_scatter(
     elif zero_baseline:
         x_upper = max(float(wide[x_col].max()) * 1.06, 0.1)
         y_upper = max(float(wide[y_col].max()) * 1.08, 0.1)
+        y_lower = min(float(wide[y_col].min()) * 1.08, 0.0)
         ax.axhline(
             0.0,
             color="#8A8A8A",
@@ -353,7 +354,7 @@ def _plot_distance_threshold_all_city_scatter(
             zorder=0,
         )
         ax.set_xlim(0.0, x_upper)
-        ax.set_ylim(0.0, y_upper)
+        ax.set_ylim(y_lower, y_upper)
     for _, row in wide[highlight].iterrows():
         offset = DISTANCE_THRESHOLD_COMPARISON_LABEL_OFFSETS.get(
             panel_idx, {}
@@ -393,7 +394,7 @@ def _plot_distance_threshold_all_city_scatter(
 def _distance_threshold_all_city_report(
     summary_df: pd.DataFrame,
     wide: pd.DataFrame,
-    road_reduction_col: str = "road_annual_reduction_pct",
+    include_oracle_gap: bool = False,
 ) -> dict:
     """Return shared report fields for the split all-city figures."""
     city_count = int(wide["region_key"].nunique())
@@ -414,7 +415,7 @@ def _distance_threshold_all_city_report(
             wide["road_optimal_threshold_km"]
         ),
         "road_reduction_pct": _writing_numeric_summary(
-            wide[road_reduction_col]
+            wide["road_annual_reduction_pct"]
         ),
         "oracle_reduction_pct": _writing_numeric_summary(
             wide["oracle_annual_reduction_pct"]
@@ -430,15 +431,15 @@ def _distance_threshold_all_city_report(
             ),
         },
     }
-    if road_reduction_col == "road_full_domain_reduction_pct":
+    if include_oracle_gap:
         report["oracle_minus_road_gap_pp"] = _writing_numeric_summary(
             wide["road_oracle_gap_pp"]
         )
         report["road_policy_comparison_scope"] = {
             "reduction_denominator": (
-                "full-city all-e-bike lifecycle emissions"
+                "all-e-bike lifecycle emissions over valid road-distance OD pairs"
             ),
-            "unreachable_road_assignment": "e-bike",
+            "unreachable_road_assignment": "excluded",
             "threshold_optimization": "valid road-distance OD pairs",
         }
     return report
@@ -755,8 +756,8 @@ def plot_distance_threshold_city_landscape(
     _plot_distance_threshold_all_city_scatter(
         ax,
         wide,
-        "road_optimal_threshold_km",
         "road_annual_reduction_pct",
+        "road_optimal_threshold_km",
         *DISTANCE_THRESHOLD_LANDSCAPE_AXIS_LABELS,
         panel_idx=0,
         diagonal=False,
@@ -817,7 +818,7 @@ def plot_distance_threshold_oracle_performance(
     _plot_distance_threshold_all_city_scatter(
         ax,
         wide,
-        "road_full_domain_reduction_pct",
+        "road_annual_reduction_pct",
         "road_oracle_gap_pp",
         *DISTANCE_THRESHOLD_ORACLE_AXIS_LABELS,
         panel_idx=1,
@@ -840,7 +841,7 @@ def plot_distance_threshold_oracle_performance(
     report = _distance_threshold_all_city_report(
         summary_df,
         wide,
-        road_reduction_col="road_full_domain_reduction_pct",
+        include_oracle_gap=True,
     )
     return _save_distance_threshold_figure(
         fig,
@@ -852,7 +853,8 @@ def plot_distance_threshold_oracle_performance(
             "figure_name": "distance_threshold_oracle_performance",
             "core_conclusion": (
                 "The remaining trip-level performance gap is shown against "
-                "the full-city reduction achieved by each road policy."
+                "the maximum reduction achieved by each road policy over "
+                "valid road-distance OD pairs."
             ),
             "native_size_mm": [84.0, 78.0],
             **report,
