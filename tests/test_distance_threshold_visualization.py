@@ -23,7 +23,7 @@ MACRO_REGION_COLOR_BY_KEY = {
 }
 
 
-def test_road_policy_uses_full_city_baseline_for_oracle_comparison() -> None:
+def test_road_policy_gap_uses_threshold_reduction_for_oracle_comparison() -> None:
     summary = pd.DataFrame(
         {
             "region_key": ["example", "example"],
@@ -54,7 +54,7 @@ def test_road_policy_uses_full_city_baseline_for_oracle_comparison() -> None:
     assert row["road_annual_reduction_pct"] == 20.0
     assert row["road_full_domain_reduction_pct"] == 10.0
     assert row["oracle_annual_reduction_pct"] == 15.0
-    assert row["road_oracle_gap_pp"] == 5.0
+    assert row["road_oracle_gap_pp"] == -5.0
     assert row["macro_region_key"] == "north_china"
     assert (
         row["macro_region_color"]
@@ -188,8 +188,8 @@ def test_all_city_scatter_and_shared_legend_use_macro_region_colors() -> None:
         _plot_distance_threshold_all_city_scatter(
             ax,
             wide,
-            "road_optimal_threshold_km",
             "road_annual_reduction_pct",
+            "road_optimal_threshold_km",
             "Threshold",
             "Reduction",
             panel_idx=0,
@@ -215,10 +215,10 @@ def test_all_city_scatter_and_shared_legend_use_macro_region_colors() -> None:
 
 def test_distance_threshold_scatter_axis_labels_are_explicit() -> None:
     assert DISTANCE_THRESHOLD_LANDSCAPE_AXIS_LABELS == (
-        "Road delivery distance threshold (km)",
         "Maximum lifecycle-emissions reduction (%)",
+        "Road delivery distance threshold (km)",
     )
     assert DISTANCE_THRESHOLD_ORACLE_AXIS_LABELS == (
-        "Distance-based lifecycle-emissions\nreduction (%)",
+        "Maximum lifecycle-emissions reduction (%)",
         "Additional reduction under trip-level allocation\n(percentage points)",
     )
