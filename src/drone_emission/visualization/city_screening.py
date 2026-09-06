@@ -90,6 +90,7 @@ def plot_city_reduction_potential_scatter(
     """Plot absolute against relative city emission-reduction potential."""
     import matplotlib.pyplot as plt
     from matplotlib.colors import BoundaryNorm, ListedColormap
+    from matplotlib.patches import Patch
 
     plt.rcParams.update(
         {
@@ -167,7 +168,7 @@ def plot_city_reduction_potential_scatter(
     ax.set_ylabel("Relative lifecycle reduction (%)", fontsize=7.5)
     ax.tick_params(axis="both", labelsize=7)
     ax.spines[["top", "right"]].set_visible(False)
-    colorbar_ax = fig.add_axes((0.31, 0.11, 0.66, 0.018))
+    colorbar_ax = fig.add_axes((0.31, 0.15, 0.66, 0.018))
     colorbar = fig.colorbar(
         scatter,
         cax=colorbar_ax,
@@ -183,6 +184,26 @@ def plot_city_reduction_potential_scatter(
         "Population (million)",
         fontsize=6.0,
         labelpad=1.5,
+    )
+    background_legend_entries = (
+        ("upper_right", "Highest\npriority"),
+        ("upper_left", "Pilot\ncandidates"),
+        ("lower", "Lower\npriority"),
+    )
+    fig.legend(
+        handles=[
+            Patch(facecolor=BACKGROUND_COLORS[key], edgecolor="none", label=label)
+            for key, label in background_legend_entries
+        ],
+        loc="lower center",
+        bbox_to_anchor=(0.5, 0.005),
+        ncol=3,
+        frameon=False,
+        fontsize=5.5,
+        handlelength=1.1,
+        handletextpad=0.4,
+        columnspacing=0.8,
+        borderaxespad=0.0,
     )
     if plot_title:
         ax.set_title("City mitigation priorities", fontsize=9, fontweight="bold")
@@ -284,6 +305,11 @@ def plot_city_reduction_potential_scatter(
             },
             "background_regions": {
                 "colors": BACKGROUND_COLORS,
+                "legend_drawn": True,
+                "legend_entries": [
+                    {"region": key, "label": label.replace("\n", " ")}
+                    for key, label in background_legend_entries
+                ],
                 "split_x": absolute_median,
                 "split_y": relative_median,
                 "lower_quadrants_share_color": True,
