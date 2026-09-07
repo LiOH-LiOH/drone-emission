@@ -521,6 +521,8 @@ def compose(
         refresh_previews(figures_root, manifest["figures"], rasterizer=_tool_path("pdftoppm"))
     else:
         print("Overview is stale after partial composition; run full compose to refresh it.")
+    from .paper_typography_report import write_typography_summary
+    write_typography_summary(figures_root)
     return staged
 
 
@@ -932,6 +934,9 @@ def render(
     figures_root = Path(config["figures_dir"])
     paper_dir = figures_root / "paper"
     subfigure_dir = paper_dir / "subfigure"
+    if not prepare_only:
+        from .paper_preview import invalidate_preview
+        invalidate_preview(figures_root, "Rendering started; run full compose after rendering to refresh previews.")
     directories = (
         paper_dir,
         subfigure_dir,
@@ -990,6 +995,8 @@ def render(
         _write_source_report(figure, config, figure_outputs, manifest)
 
     failed = [result for result in results.values() if result["status"] == "failed"]
+    from .paper_typography_report import write_typography_summary
+    write_typography_summary(figures_root)
     if failed:
         details = "\n".join(f"- {item['id']}: {item['error']}" for item in failed)
         raise RuntimeError(f"Formal render request failure(s):\n{details}")

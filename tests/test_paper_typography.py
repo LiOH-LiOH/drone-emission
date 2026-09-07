@@ -29,6 +29,8 @@ def test_roles_cover_explicit_fonts_legends_and_insets():
     assert annotation.get_fontsize() == 7
     assert all(record["size_pt"] >= 7 for record in report["texts"])
     assert list(ax.lines[0].get_ydata()) == [1, 0]
+    repeated = typography.apply_typography(fig, "test.svg")
+    assert [row["size_pt"] for row in repeated["texts"]] == [row["size_pt"] for row in report["texts"]]
 
 
 def test_dense_exception_is_explicit_and_reported():

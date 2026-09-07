@@ -71,13 +71,14 @@ def apply_typography(figure, output, config=None):
         label = text.get_text()
         if not text.get_visible() or not label.strip():
             continue
+        original = getattr(text, "_paper_original_size", text.get_fontsize())
         role = roles.get(text, "annotation")
         if text not in roles:
             if re.fullmatch(r"\(?[a-z]\)?", label) and text.get_fontweight() in ("bold", "heavy", 700):
                 role = "panel"
-            elif text.get_fontsize() < 7 or "©" in label or "OpenStreetMap" in label:
+            elif original < 7 or "©" in label or "OpenStreetMap" in label:
                 role = "secondary"
-        original = text.get_fontsize()
+        text._paper_original_size = original
         size = config["sizes"][role]
         reason = None
         for rule in config.get("exceptions", []):
