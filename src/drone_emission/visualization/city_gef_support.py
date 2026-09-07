@@ -85,7 +85,7 @@ def _plot_grouped_scatter_split_panels_axes(
     colorbar_boundaries: tuple = None,
     colorbar_label: str = None,
     scatter_size: float = None,
-    scatter_alpha: float = 0.68,
+    scatter_alpha: float = paper_alpha("city_gef_support.opacity_0_68"),
     fit_linewidth: float = None,
     show_panel_letters: bool = True,
     axis_label_fontsize: float = None,

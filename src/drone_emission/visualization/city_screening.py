@@ -287,7 +287,7 @@ def plot_city_reduction_potential_scatter(
                 "normalization": "discrete",
                 "thresholds_10k": list(POPULATION_THRESHOLDS),
                 "interval_closure": "left",
-                "point_alpha": 1.0,
+                "point_alpha": paper_alpha("city_screening.opacity_1_0"),
                 "population_basis": "Existing socioeconomic population_10k; not uniform urban population",
                 "official_city_size_classification": False,
             },

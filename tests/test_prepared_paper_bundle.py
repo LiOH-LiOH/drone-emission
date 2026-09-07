@@ -10,7 +10,7 @@ import unittest
 import numpy as np
 import pandas as pd
 
-from drone_emission.visualization.palette import configure_palette, color, DEFAULT_PALETTE
+from drone_emission.visualization.palette import configure_palette, color, opacity, DEFAULT_PALETTE
 from drone_emission.visualization.prepared_bundle import (
     Codec, SourceOnly, capture, prepared_data, prepared_plot, replay,
     PLOT_FUNCTIONS,
@@ -57,6 +57,18 @@ class PreparedBundleTests(unittest.TestCase):
         self.assertEqual(elsewhere.decode(encoded), str(self.root / "new-figures/paper/plot.pdf"))
         with self.assertRaises(ValueError):
             self.codec.decode({"type": "root_path", "root": "figures", "relative": "../escape"})
+
+    def test_opacity_remains_editable_after_preparation(self):
+        key = "roadnet.opacity_0_65"
+        encoded = self.codec.encode(opacity(key))
+        original = configure_palette()
+        usage = {"colors": [], "colormaps": [], "alpha": [key]}
+        alternate = self.root / "palette.toml"
+        alternate.write_text(DEFAULT_PALETTE.read_text().replace(
+            f'"{key}" = 0.65', f'"{key}" = 0.25'))
+        changed = configure_palette(alternate)
+        self.assertEqual(self.codec.decode(encoded), 0.25)
+        self.assertNotEqual(original.signature_for(usage), changed.signature_for(usage))
 
     def test_replay_does_not_run_preparation_and_detects_call_mismatch(self):
         outputs = []

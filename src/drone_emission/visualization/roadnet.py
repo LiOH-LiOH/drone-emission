@@ -177,7 +177,7 @@ def plot_road_network_subfigure(
     ax.set_facecolor(background_color)
 
     building_color = paper_color("roadnet.c8c1b3")
-    building_alpha = 0.65
+    building_alpha = paper_alpha("roadnet.opacity_0_65")
     building_count = 0
     building_context_available = buildings_gdf is not None
     if buildings_gdf is None:

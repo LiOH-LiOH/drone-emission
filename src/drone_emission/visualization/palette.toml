@@ -369,3 +369,14 @@
 "sales.alpha_0_86" = 0.86
 "sales.alpha_0_88" = 0.88
 "threshold_resilience.alpha_0_18" = 0.18
+"_utils.opacity_0_8" = 0.8
+"city_gef_detour.opacity_0_11" = 0.11
+"city_gef_detour.opacity_0_18" = 0.18
+"city_gef_detour.opacity_0_45" = 0.45
+"city_gef_detour.opacity_0_72" = 0.72
+"city_gef_detour.opacity_0_78" = 0.78
+"city_gef_detour.opacity_0_82" = 0.82
+"city_gef_support.opacity_0_68" = 0.68
+"city_screening.opacity_1_0" = 1.0
+"distance_threshold.opacity_0_9" = 0.9
+"roadnet.opacity_0_65" = 0.65

@@ -173,7 +173,7 @@ def add_basemap_and_boundaries(
     alpha=paper_alpha("_utils.alpha_0_6"),
     boundary_color=paper_color("ink.gray"),
     boundary_linewidth=2,
-    boundary_alpha=0.8,
+    boundary_alpha=paper_alpha("_utils.opacity_0_8"),
     attribution_size=8,
     attribution_text=None,
     attribution_wrap=True,

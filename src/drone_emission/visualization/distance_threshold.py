@@ -85,7 +85,7 @@ DISTANCE_THRESHOLD_COMPARISON_LABEL_OFFSETS = {
     },
 }
 DISTANCE_THRESHOLD_POINT_SIZE = 28
-DISTANCE_THRESHOLD_POINT_ALPHA = 0.9
+DISTANCE_THRESHOLD_POINT_ALPHA = paper_alpha("distance_threshold.opacity_0_9")
 DISTANCE_THRESHOLD_LANDSCAPE_AXIS_LABELS = (
     "Maximum lifecycle-emissions reduction (%)",
     "Road delivery distance threshold (km)",

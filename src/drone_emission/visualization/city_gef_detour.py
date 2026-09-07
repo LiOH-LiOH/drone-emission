@@ -70,7 +70,7 @@ CITY_CONTEXT_MARKERS = {
 CITY_GEF_COLOR_BIN_EDGES = tuple(value / 10.0 for value in range(1, 9))
 CITY_GEF_SUMMARY_ROW_HSPACE = 0.32
 CITY_GEF_BOTTOM_SCATTER_SIZE = 18
-CITY_GEF_BOTTOM_SCATTER_ALPHA = 0.45
+CITY_GEF_BOTTOM_SCATTER_ALPHA = paper_alpha("city_gef_detour.opacity_0_45")
 
 REDUCTION_DETOUR_CACHE_VERSION = 8
 REDUCTION_DETOUR_CHUNK_ROWS = 250_000
@@ -155,7 +155,7 @@ CITY_GEF_GRAYSCALE_BIN_COLORS = (
     paper_color("scale.gef.bin5"),
     paper_color("scale.gef.bin6"),
 )
-CITY_GEF_GRAYSCALE_BOTTOM_SCATTER_ALPHA = 0.78
+CITY_GEF_GRAYSCALE_BOTTOM_SCATTER_ALPHA = paper_alpha("city_gef_detour.opacity_0_78")
 
 
 def _get_ebike_kappa(exp_config):
@@ -2247,7 +2247,7 @@ def plot_city_gef_lifecycle_components(
         "total_label_rotation": 90,
         "legend_title_fontsize": 8.0,
         "legend_fontsize": 7.5,
-        "grid_alpha": 0.18,
+        "grid_alpha": paper_alpha("city_gef_detour.opacity_0_18"),
         "panel_hspace": 0.245,
         "legend_height_ratio": 0.208,
         "delta_height_ratio": 0.278,
@@ -2761,16 +2761,16 @@ def plot_city_distance_drone_share_emission_fit(
         "bar_color": paper_color("city_gef_detour.9ecae1"),
         "scatter_color": paper_color("city_gef_detour.555555"),
         "scatter_size": 14.0,
-        "scatter_alpha": 0.72,
+        "scatter_alpha": paper_alpha("city_gef_detour.opacity_0_72"),
         "fit_color": paper_color("city_gef_detour.111111"),
         "fit_linewidth": 1.0,
-        "fit_alpha": 0.82,
+        "fit_alpha": paper_alpha("city_gef_detour.opacity_0_82"),
         "zero_line_color": paper_color("city_gef_detour.555555"),
         "zero_linewidth": 0.45,
         "tick_fontsize": 8.0,
         "axis_label_fontsize": 8.0,
         "city_label_fontsize": 8.0,
-        "grid_alpha": 0.18,
+        "grid_alpha": paper_alpha("city_gef_detour.opacity_0_18"),
         "panel_wspace": 0.24,
     }
 
@@ -3542,7 +3542,7 @@ def plot_city_detour_reduction_by_gef(
         colorbar_boundaries=CITY_GEF_COLOR_BIN_EDGES,
         colorbar_label="kg CO$_2$e/kWh",
         scatter_size=20,
-        scatter_alpha=0.45,
+        scatter_alpha=paper_alpha("city_gef_detour.opacity_0_45"),
         fit_linewidth=1.5,
         show_panel_letters=False,
         axis_label_fontsize=8,
@@ -3613,7 +3613,7 @@ def plot_city_detour_reduction_by_gef(
             panel_letters=(None, None),
             compact=True,
             scatter_size=20,
-            scatter_alpha=0.45,
+            scatter_alpha=paper_alpha("city_gef_detour.opacity_0_45"),
             fit_linewidth=1.5,
             show_panel_letters=False,
         )
@@ -3672,14 +3672,14 @@ def plot_city_detour_reduction_by_gef(
             "selected_city_markers": selected_city_markers,
             "style": {
                 "ordinary_scatter_size_pt2": 20.0,
-                "ordinary_scatter_alpha": 0.45,
+                "ordinary_scatter_alpha": paper_alpha("city_gef_detour.opacity_0_45"),
                 "selected_city_marker_size_pt2": 34.0,
                 "selected_city_marker_face": "none",
                 "selected_city_marker_edge": paper_color("city_gef_detour.111111"),
                 "selected_city_marker_edge_width_pt": 1.1,
                 "fit_linewidth_pt": 1.5,
                 "confidence_level": 0.95,
-                "confidence_band_alpha": 0.11,
+                "confidence_band_alpha": paper_alpha("city_gef_detour.opacity_0_11"),
                 "ordinary_text_size_pt": 8.0,
             },
             "omitted_elements": [
