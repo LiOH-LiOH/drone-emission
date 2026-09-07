@@ -24,6 +24,8 @@ do not edit numeric bins, normalizations, figure layouts, line styles or markers
 keys retain the old hex suffix as a stable migration identifier; the value is
 the current colour and need not equal that suffix. Colormap choices are in the
 same file under `[colormaps]`. `@scale.gef` selects the three named GEF stops.
+When changing a mode's hue, adjust its `.light` and `.dark` entries together;
+these are explicit colour choices rather than automatically generated shades.
 Discrete ramps use `scale.gef.bin*` and `scale.reduction.bin*`; these change
 colours only, while the existing numerical bin boundaries stay in the renderer.
 Transparency is under `[alpha]`; initial values preserve the existing figures.
@@ -98,3 +100,41 @@ expensive intermediate results.
 `paper/report/render_timings.json` records preparation or replay timings and
 request failures. Rendering geometry, PDF export and Inkscape composition still
 have their own costs; no fixed timing threshold is promised.
+
+## Validated local review batch (2026-09-07)
+
+The review batch is `figures/review/palette-refresh_20260907/`:
+
+- `drawing-bundle/`: the independent, checksummed bundle, about 194 MB including
+  12 composition templates. Unused individual detour observations are excluded
+  from the city-distance figure; its saved data are bin summaries and audit
+  metadata. The earlier transfer staging folder is `drawing-inputs/`.
+- `paper/subfigure/`: all 46 manifest PDFs; `paper/`: the 12 assembled PDFs.
+- `preview/`: raster review copies of the assembled PDFs.
+- `paper/report/`: per-request colour usage, timing and validation records.
+
+To try the next palette locally, edit `palette.toml`, then run outside the sandbox:
+
+```bash
+PYTHONPATH=src DRONE_EMISSION_FIGURES_ROOT=figures/review/palette-refresh_20260907 \
+  .venv/bin/python -m drone_emission --env local render \
+  --from-bundle figures/review/palette-refresh_20260907/drawing-bundle
+PYTHONPATH=src DRONE_EMISSION_FIGURES_ROOT=figures/review/palette-refresh_20260907 \
+  .venv/bin/python -m drone_emission --env local compose
+```
+
+Validation used the audited 313-city cohort. All 31 remote preparation requests
+and all 31 local replay requests passed; local replay produced 46 PDFs in 75.84
+seconds across requests (1.48–13.08 seconds per request). A request may produce
+several PDFs. Eighteen focused bundle/composition regression tests passed.
+The palette-switch smoke check preserved all 25 input files byte-for-byte and
+the unchanged repeat hit the render cache. The city-distance report matched
+before and after removing unused observations, excluding colour/path fields.
+
+Fifteen first-batch reports matched the numerical fields of existing local
+reports. The old local city-reduction scatter report used different inputs;
+all 313 new scatter points instead match the audited prepared snapshot.
+Existing Arial warnings for Unicode subscript two and superscript minus remain
+in the province lifecycle figure. Fonts and layout were kept within the agreed
+colour-only scope. Inkscape also reports PDF font-import warnings;
+the assembled figures were rasterized and visually checked.
