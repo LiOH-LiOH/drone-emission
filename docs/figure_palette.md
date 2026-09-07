@@ -24,6 +24,8 @@ do not edit numeric bins, normalizations, figure layouts, line styles or markers
 keys retain the old hex suffix as a stable migration identifier; the value is
 the current colour and need not equal that suffix. Colormap choices are in the
 same file under `[colormaps]`. `@scale.gef` selects the three named GEF stops.
+Discrete ramps use `scale.gef.bin*` and `scale.reduction.bin*`; these change
+colours only, while the existing numerical bin boundaries stay in the renderer.
 Transparency is under `[alpha]`; initial values preserve the existing figures.
 `paper/report/palette_usage.json` lists each request's colours, colormaps and
 opacity settings, so experiments can target the affected figures.
@@ -88,6 +90,10 @@ source commit, source signatures, output names and checksums. Paths relocate
 through named roots. Immutable assets are written before the document is
 atomically replaced. A source/schema change requires a fresh preparation;
 palette edits invalidate PDFs without invalidating the saved scientific inputs.
+The shared four-city bin cache also ignores display ordering when comparing
+city sets, while retaining source-file, cohort-related input and model checks.
+This prevents two panels with different city orders from rebuilding the same
+expensive intermediate results.
 
 `paper/report/render_timings.json` records preparation or replay timings and
 request failures. Rendering geometry, PDF export and Inkscape composition still

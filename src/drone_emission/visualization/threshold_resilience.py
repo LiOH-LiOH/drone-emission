@@ -3,7 +3,7 @@
 from __future__ import annotations
 from .palette import opacity as paper_alpha
 
-from .prepared_bundle import prepared_plot, prepared_data, evaluate_kde, fit_polynomial
+from .prepared_bundle import prepared_plot, prepared_data, kde_with_factor, fit_polynomial
 
 from .palette import color as paper_color, colormap as paper_cmap
 
@@ -279,7 +279,7 @@ def plot_threshold_resilience_national_kdes(
     ):
         values = wide[scenario].to_numpy(float)
         x = np.linspace(0, 1, 500)
-        density = evaluate_kde(values, x)
+        density, bandwidth_factor = kde_with_factor(values, x)
         fig, ax = plt.subplots(figsize=(88 / 25.4, 55 / 25.4))
         ax.plot(x, density, color=color, linewidth=1.4)
         ax.fill_between(x, density, color=color, alpha=paper_alpha("threshold_resilience.alpha_0_18"))
@@ -296,5 +296,5 @@ def plot_threshold_resilience_national_kdes(
         )
         fig.savefig(path, dpi=300, facecolor=paper_color("ink.background"))
         plt.close(fig)
-        outputs[scenario] = {"path": path, "bandwidth_factor": float(kde.factor)}
+        outputs[scenario] = {"path": path, "bandwidth_factor": bandwidth_factor}
     return outputs
