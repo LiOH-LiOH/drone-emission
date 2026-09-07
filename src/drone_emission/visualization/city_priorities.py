@@ -1,4 +1,5 @@
 """Visualization functions for cross-region correlation and emission analysis."""
+from .palette import opacity as paper_alpha
 
 from .prepared_bundle import prepared_plot, prepared_data, read_plot_csv, box_statistics
 
@@ -365,7 +366,7 @@ def _draw_bubble_size_legend(
     bbox_to_anchor=(0.98, 0.31),
     fontsize=8,
     title_fontsize=8,
-    framealpha=0.92,
+    framealpha=paper_alpha("city_priorities.alpha_0_92"),
     borderpad=0.7,
     labelspacing=1.0,
     handletextpad=1.2,
@@ -396,7 +397,7 @@ def _draw_bubble_size_legend(
                 facecolor=paper_color("city_priorities.bdbdbd"),
                 edgecolor=paper_color("city_priorities.ffffff"),
                 linewidth=0.65,
-                alpha=0.82,
+                alpha=paper_alpha("city_priorities.alpha_0_82"),
             )
         )
         labels.append(f"{value:,.0f}" if value >= 100 else f"{value:,.1f}")
@@ -429,7 +430,7 @@ def _draw_bubble_color_legend(
     bbox_to_anchor=(0.02, 0.02),
     fontsize=7.2,
     title_fontsize=7.5,
-    framealpha=0.92,
+    framealpha=paper_alpha("city_priorities.alpha_0_92"),
     borderpad=0.55,
     labelspacing=0.35,
     handletextpad=0.55,
@@ -589,7 +590,7 @@ def plot_province_total_ebike_lifecycle(
         x,
         ebike_t,
         color=bar_color,
-        alpha=0.85,
+        alpha=paper_alpha("city_priorities.alpha_0_85"),
         zorder=2,
         label="Kappa-adjusted e-bike emission",
     )
@@ -604,7 +605,7 @@ def plot_province_total_ebike_lifecycle(
         ax1.tick_params(axis="y", labelsize=8)
     ax1.set_xticks(x)
     ax1.set_xticklabels(ordered, rotation=45, ha="right", fontsize=x_tick_size)
-    ax1.yaxis.grid(True, linestyle="--", alpha=0.4)
+    ax1.yaxis.grid(True, linestyle="--", alpha=paper_alpha("city_priorities.alpha_0_4"))
     ax1.set_axisbelow(True)
 
     ax2 = ax1.twinx()
@@ -619,7 +620,7 @@ def plot_province_total_ebike_lifecycle(
             "markersize": 3.5,
             "markerfacecolor": "none",
             "markeredgecolor": box_color,
-            "alpha": 0.75,
+            "alpha": paper_alpha("city_priorities.alpha_0_75"),
         },
         manage_ticks=False,
         zorder=3,
@@ -627,7 +628,7 @@ def plot_province_total_ebike_lifecycle(
     for patch in bp["boxes"]:
         patch.set_facecolor(box_color)
         patch.set_edgecolor(box_color)
-        patch.set_alpha(0.35)
+        patch.set_alpha(paper_alpha("city_priorities.alpha_0_35"))
     for whisker in bp["whiskers"]:
         whisker.set_color(box_color)
     for cap in bp["caps"]:
@@ -636,7 +637,7 @@ def plot_province_total_ebike_lifecycle(
         median.set_color(box_color)
         median.set_linewidth(1.5)
     if reduction_metric == "absolute":
-        ax2.axhline(0.0, color=box_color, linewidth=0.8, alpha=0.55, zorder=1)
+        ax2.axhline(0.0, color=box_color, linewidth=0.8, alpha=paper_alpha("city_priorities.alpha_0_55"), zorder=1)
     ax2.set_ylabel(
         reduction_axis_label,
         fontsize=axis_label_size,
@@ -649,13 +650,13 @@ def plot_province_total_ebike_lifecycle(
 
     if _external_ax:
         handles = [
-            plt.Rectangle((0, 0), 1, 1, color=bar_color, alpha=0.85),
+            plt.Rectangle((0, 0), 1, 1, color=bar_color, alpha=paper_alpha("city_priorities.alpha_0_85")),
             plt.Rectangle(
                 (0, 0),
                 1,
                 1,
                 facecolor=box_color,
-                alpha=0.35,
+                alpha=paper_alpha("city_priorities.alpha_0_35"),
                 edgecolor=box_color,
             ),
         ]
@@ -980,7 +981,7 @@ def plot_regions_map_oracle_reduction_rank(
         c=bubble_draw_df[reduction_pct_col],
         cmap=cmap,
         norm=norm,
-        alpha=0.82,
+        alpha=paper_alpha("city_priorities.alpha_0_82"),
         edgecolor=paper_color("city_priorities.ffffff"),
         linewidth=0.65,
         zorder=8,
@@ -1010,7 +1011,7 @@ def plot_regions_map_oracle_reduction_rank(
         "loc": "lower right",
         "fontsize": 6.5,
         "title_fontsize": 6.5,
-        "framealpha": 0.92,
+        "framealpha": paper_alpha("city_priorities.alpha_0_92"),
         "borderpad": 0.35,
         "labelspacing": 0.2,
         "handletextpad": 0.5,
@@ -1022,7 +1023,7 @@ def plot_regions_map_oracle_reduction_rank(
             "bbox_to_anchor": (0.015, 0.015),
             "fontsize": 6.2,
             "title_fontsize": 6.3,
-            "framealpha": 0.78,
+            "framealpha": paper_alpha("city_priorities.alpha_0_78"),
             "borderpad": 0.3,
             "labelspacing": 0.25,
             "handletextpad": 0.45,
@@ -1043,7 +1044,7 @@ def plot_regions_map_oracle_reduction_rank(
     )
     if size_legend is not None:
         if is_map_only_figure:
-            size_legend.get_frame().set_edgepaper_color("none")
+            size_legend.get_frame().set_edgecolor("none")
             size_legend.get_frame().set_linewidth(0.0)
         ax_map.add_artist(size_legend)
     if color_scale_style == "legend":
@@ -1093,8 +1094,8 @@ def plot_regions_map_oracle_reduction_rank(
             invert_vertical=True,
             compact=True,
         )
-        inset_ax.set_facepaper_color("none")
-        inset_ax.patch.set_alpha(0.0)
+        inset_ax.set_facecolor("none")
+        inset_ax.patch.set_alpha(paper_alpha("city_priorities.alpha_0_0"))
         for name, spine in inset_ax.spines.items():
             spine.set_visible(name in {"left", "bottom"})
             spine.set_edgecolor(paper_color("city_priorities.666666"))
@@ -1440,7 +1441,7 @@ def _add_regions_oracle_city_highlights(
                 boxstyle="round,pad=0.18",
                 facecolor=paper_color("ink.background"),
                 edgecolor=paper_color("ink.0_55"),
-                alpha=0.9,
+                alpha=paper_alpha("city_priorities.alpha_0_9"),
             ),
             zorder=20,
             clip_on=False,
@@ -1529,7 +1530,7 @@ def _add_regions_oracle_inset_bubbles(
         c=inset_df[reduction_pct_col],
         cmap=cmap,
         norm=norm,
-        alpha=0.82,
+        alpha=paper_alpha("city_priorities.alpha_0_82"),
         edgecolor=paper_color("city_priorities.ffffff"),
         linewidth=0.35,
         zorder=8,
@@ -1589,7 +1590,7 @@ def _city_oracle_rank_report(
                     else "width_t_co2e_per_year"
                 ): _json_safe_scalar(row[reduction_col]),
                 "color": paper_color("city_priorities.1f6e2d"),
-                "alpha": 0.88,
+                "alpha": paper_alpha("city_priorities.alpha_0_88"),
             }
         )
     return {
@@ -1655,7 +1656,7 @@ def _plot_city_oracle_reduction_rank(
     else:
         fig, ax = plt.subplots(figsize=figsize)
 
-    ax.barh(y, reductions, height=0.6, color=bar_color, alpha=0.88, zorder=2)
+    ax.barh(y, reductions, height=0.6, color=bar_color, alpha=paper_alpha("city_priorities.alpha_0_88"), zorder=2)
     ax.set_yticks(y)
     ax.set_yticklabels(cities, fontsize=7 if compact else 10)
     xlabel = (
@@ -1667,7 +1668,7 @@ def _plot_city_oracle_reduction_rank(
     if compact:
         ax.grid(False)
     else:
-        ax.xaxis.grid(True, linestyle="--", alpha=0.4)
+        ax.xaxis.grid(True, linestyle="--", alpha=paper_alpha("city_priorities.alpha_0_4"))
     ax.set_axisbelow(True)
     ax.tick_params(axis="x", labelsize=7 if compact else 10, pad=1 if compact else 3)
     ax.tick_params(axis="y", pad=1 if compact else 3)
@@ -1792,14 +1793,14 @@ def plot_city_reduction_rank_all_macro_region(
         plot_df[reduction_col].to_numpy(dtype=float),
         width=0.9,
         color=colors,
-        alpha=0.9,
+        alpha=paper_alpha("city_priorities.alpha_0_9"),
         linewidth=0,
         zorder=2,
     )
 
     ax.set_xlabel("City rank", fontsize=7)
     ax.set_ylabel("Optimal reduction vs e-bike (pp)", fontsize=7)
-    ax.yaxis.grid(True, linestyle="--", alpha=0.35)
+    ax.yaxis.grid(True, linestyle="--", alpha=paper_alpha("city_priorities.alpha_0_35"))
     ax.set_axisbelow(True)
     ax.set_xlim(0.5, len(plot_df) + 0.5)
     ymax = max(0.0, float(plot_df[reduction_col].max()))
@@ -1853,7 +1854,7 @@ def plot_city_reduction_rank_all_macro_region(
             "boxstyle": "round,pad=0.18",
             "facecolor": "white",
             "edgecolor": "0.55",
-            "alpha": 1.0,
+            "alpha": paper_alpha("city_priorities.alpha_1_0"),
         }
 
         label_records = []

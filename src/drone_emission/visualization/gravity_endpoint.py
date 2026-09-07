@@ -1,6 +1,7 @@
 """Formal spatial validation for the accepted Beijing gravity model."""
 
 from __future__ import annotations
+from .palette import opacity as paper_alpha
 
 from .palette import color as paper_color, colormap as paper_cmap
 
@@ -155,7 +156,7 @@ def plot_beijing_endpoint_grid_heatmap(
             np.ma.masked_less(values, norm.vmin),
             cmap=paper_cmap("gravity_endpoint.orders"),
             norm=norm,
-            alpha=0.82,
+            alpha=paper_alpha("gravity_endpoint.alpha_0_82"),
             shading="flat",
             linewidth=0,
             zorder=3,

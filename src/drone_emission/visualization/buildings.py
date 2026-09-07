@@ -1,5 +1,6 @@
+from .palette import opacity as paper_alpha
 
-from .prepared_bundle import prepared_plot, prepared_data, local_road_edges, shortest_path
+from .prepared_bundle import prepared_plot, prepared_data, local_road_edges, quantile
 
 from .palette import color as paper_color, colormap as paper_cmap
 import os
@@ -164,7 +165,7 @@ def plot_building_height_merchant_map(
         )
         return
 
-    height_cap = buildings_in_frame["height"].quantile(0.95)
+    height_cap = quantile(buildings_in_frame["height"], 0.95)
     if not np.isfinite(height_cap) or height_cap <= 0:
         print(
             "Building height merchant map skipped - invalid building heights "
@@ -211,7 +212,7 @@ def plot_building_height_merchant_map(
                 segments,
                 colors=paper_color("buildings.aeb4b9"),
                 linewidths=0.45 if compact else 0.75,
-                alpha=0.6 if compact else 0.75,
+                alpha=paper_alpha("buildings.alpha_0_6") if compact else paper_alpha("buildings.alpha_0_75"),
                 zorder=2,
             )
             ax.add_collection(roads)
@@ -227,7 +228,7 @@ def plot_building_height_merchant_map(
         cmap=cmap,
         norm=norm,
         edgecolor="none",
-        alpha=0.92,
+        alpha=paper_alpha("buildings.alpha_0_92"),
         zorder=10,
         legend=False,
     )
@@ -290,7 +291,7 @@ def plot_building_height_merchant_map(
                     [row["from_lat"], row["to_lat"]],
                     color=paper_color("buildings.005f9e"),
                     linewidth=line_width,
-                    alpha=0.8 if compact else 0.88,
+                    alpha=paper_alpha("buildings.alpha_0_8") if compact else paper_alpha("buildings.alpha_0_88"),
                     solid_capstyle="round",
                     zorder=25,
                 )
@@ -358,7 +359,7 @@ def plot_building_height_merchant_map(
             transform=ax.transAxes,
             fontsize=6.5 if compact else 10,
             verticalalignment="top",
-            bbox=dict(boxstyle="round", facecolor=paper_color("ink.background"), alpha=0.85),
+            bbox=dict(boxstyle="round", facecolor=paper_color("ink.background"), alpha=paper_alpha("buildings.alpha_0_85")),
             zorder=100,
         )
 
@@ -388,7 +389,7 @@ def plot_building_height_merchant_map(
                     [2.5, 4.0] if compact else [4.0, 10.0]
                 ),
                 "equal_sales_line_width_points": 3.25 if compact else 2.5,
-                "alpha": 0.8 if compact else 0.88,
+                "alpha": paper_alpha("buildings.alpha_0_8") if compact else paper_alpha("buildings.alpha_0_88"),
                 "scaling": "linear min-max within selected OD demands",
             },
             "coordinate_convention": (
@@ -569,7 +570,7 @@ def plot_building_footprint_heatmap(
         print("Building footprint heatmap skipped - no valid building heights in frame")
         return
 
-    height_cap = buildings_in_frame["height"].quantile(0.95)
+    height_cap = quantile(buildings_in_frame["height"], 0.95)
     if not np.isfinite(height_cap) or height_cap <= 0:
         print("Building footprint heatmap skipped - invalid building heights in frame")
         return
@@ -602,7 +603,7 @@ def plot_building_footprint_heatmap(
         cmap=cmap,
         norm=norm,
         edgecolor="none",
-        alpha=0.94,
+        alpha=paper_alpha("buildings.alpha_0_94"),
         zorder=10,
         legend=False,
     )
@@ -628,7 +629,7 @@ def plot_building_footprint_heatmap(
             transform=ax.transAxes,
             fontsize=10,
             verticalalignment="top",
-            bbox=dict(boxstyle="round", facecolor=paper_color("ink.background"), alpha=0.85),
+            bbox=dict(boxstyle="round", facecolor=paper_color("ink.background"), alpha=paper_alpha("buildings.alpha_0_85")),
             zorder=100,
         )
 

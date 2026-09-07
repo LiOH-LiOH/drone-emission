@@ -1,6 +1,7 @@
 """
 排放分析可视化模块
 """
+from .palette import opacity as paper_alpha
 
 from .prepared_bundle import prepared_plot, prepared_data
 
@@ -1184,7 +1185,7 @@ def _plot_selected_city_contribution_bars(ax, rows: list[dict]):
         "Contribution to all-e-bike baseline (pp)",
         fontsize=9.5,
     )
-    ax.grid(axis="x", alpha=0.25)
+    ax.grid(axis="x", alpha=paper_alpha("contribution_break_even.alpha_0_25"))
     ax.tick_params(axis="both", labelsize=8.2)
 
     xmin = min(extrema)
@@ -1497,8 +1498,8 @@ def _write_contribution_decomposition_city_b_report(
     print(f"Contribution decomposition city-b report saved to {report_path}")
 
 
-@_with_contribution_city_typography
 @prepared_plot()
+@_with_contribution_city_typography
 def plot_contribution_decomposition_city_b(
     prepared: Dict,
     save_path: str = None,
@@ -1707,8 +1708,8 @@ def _write_contribution_city_population_report(
     print(f"Contribution city population report saved to {report_path}")
 
 
-@_with_contribution_city_typography
 @prepared_plot()
+@_with_contribution_city_typography
 def plot_contribution_decomposition_city_population(
     prepared: Dict,
     save_path: str = None,
@@ -1742,7 +1743,7 @@ def plot_contribution_decomposition_city_population(
         [float(row["population_million"]) for row in city_rows], dtype=float
     )
     city_y = y[1:]
-    ax.hlines(city_y, 0.0, city_population, color=gold, linewidth=1.0, alpha=0.82)
+    ax.hlines(city_y, 0.0, city_population, color=gold, linewidth=1.0, alpha=paper_alpha("contribution_break_even.alpha_0_82"))
     ax.scatter(
         city_population,
         city_y,
@@ -1775,7 +1776,7 @@ def plot_contribution_decomposition_city_population(
     ax.set_yticklabels([])
     ax.tick_params(axis="x", labelsize=8.2)
     ax.tick_params(axis="y", left=False)
-    ax.grid(axis="x", alpha=0.25)
+    ax.grid(axis="x", alpha=paper_alpha("contribution_break_even.alpha_0_25"))
     ax.spines[["top", "right", "left"]].set_visible(False)
     _set_selected_city_y_limits(ax, y)
     if plot_title:
@@ -2585,7 +2586,7 @@ def _plot_break_even_surface_panel(
                 linewidth=0.0,
                 antialiased=False,
                 shade=False,
-                alpha=1.0,
+                alpha=paper_alpha("contribution_break_even.alpha_1_0"),
                 edgecolor="none",
                 rasterized=True,
             )
@@ -2616,7 +2617,7 @@ def _plot_break_even_surface_panel(
                 line["z"],
                 color=line_color,
                 linewidth=1.55,
-                alpha=0.95,
+                alpha=paper_alpha("contribution_break_even.alpha_0_95"),
             )
 
     if show_annotations:
@@ -2648,7 +2649,7 @@ def _plot_break_even_surface_panel(
                 bbox={
                     "boxstyle": "round,pad=0.22",
                     "facecolor": "white",
-                    "alpha": 0.84,
+                    "alpha": paper_alpha("contribution_break_even.alpha_0_84"),
                     "edgecolor": "none",
                 },
             )
@@ -2663,10 +2664,10 @@ def _plot_break_even_surface_panel(
         ax.view_init(elev=20, azim=225)
     else:
         ax.view_init(elev=28, azim=-128)
-    ax.grid(alpha=0.2)
-    ax.xaxis.pane.set_alpha(0.0)
-    ax.yaxis.pane.set_alpha(0.0)
-    ax.zaxis.pane.set_alpha(0.0)
+    ax.grid(alpha=paper_alpha("contribution_break_even.alpha_0_2"))
+    ax.xaxis.pane.set_alpha(paper_alpha("contribution_break_even.alpha_0_0"))
+    ax.yaxis.pane.set_alpha(paper_alpha("contribution_break_even.alpha_0_0"))
+    ax.zaxis.pane.set_alpha(paper_alpha("contribution_break_even.alpha_0_0"))
     if surface_colorbar_mappable is not None:
         if colorbar_ticks is None:
             colorbar_ticks = np.linspace(gef_limits[0], gef_limits[1], 4)
@@ -2762,7 +2763,7 @@ def _plot_break_even_heatmap_panel(
     )
     if not show_y_ticklabels:
         ax.tick_params(axis="y", left=False, labelleft=False)
-    ax.grid(alpha=0.15)
+    ax.grid(alpha=paper_alpha("contribution_break_even.alpha_0_15"))
     if plot_title:
         ax.set_title(
             f"{gef_panel['label']} ({gef_panel['gef']:.2f})",
@@ -2780,7 +2781,7 @@ def _plot_break_even_heatmap_panel(
             bbox={
                 "boxstyle": "round,pad=0.22",
                 "facecolor": "white",
-                "alpha": 0.82,
+                "alpha": paper_alpha("contribution_break_even.alpha_0_82"),
                 "edgecolor": "none",
             },
             zorder=7,

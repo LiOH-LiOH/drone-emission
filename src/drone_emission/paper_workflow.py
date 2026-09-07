@@ -11,6 +11,7 @@ import time
 import traceback
 import tempfile
 import hashlib
+import os
 from dataclasses import replace
 from importlib.resources import files
 from pathlib import Path
@@ -320,7 +321,7 @@ def _convert_linked_subfigure(
     temporary.replace(target)
 
 
-def _vector_export_source(source: Path, managed_names: set[str]) -> Path:
+def _vector_export_source(source: Path, managed_names: set[str], *, linked_dir: Path | None = None) -> Path:
     """Inline linked SVG images in a temporary vector export document."""
     tree = ElementTree.parse(source)
     converted: set[str] = set()
@@ -336,7 +337,7 @@ def _vector_export_source(source: Path, managed_names: set[str]) -> Path:
             if name not in managed_names:
                 continue
             linked_root = ElementTree.parse(
-                LINKED_SUBFIGURE_DIR / name
+                (linked_dir or LINKED_SUBFIGURE_DIR) / name
             ).getroot()
             namespace = element.tag.rsplit("}", 1)[0]
             svg_tag = (
@@ -415,6 +416,18 @@ def compose(
     figures_root = Path(config["figures_dir"])
     subfigure_dir = figures_root / "paper" / "subfigure"
     paper_dir = figures_root / "paper"
+    bundle_reference = paper_dir / "report" / "drawing_bundle.json"
+    bundle = None
+    bundle_index = None
+    linked_dir = LINKED_SUBFIGURE_DIR
+    if bundle_reference.is_file():
+        from .visualization.prepared_bundle import file_hash
+        reference = json.loads(bundle_reference.read_text())
+        bundle = Path(reference["path"])
+        bundle_index = json.loads((bundle / "bundle.json").read_text())
+        if bundle_index["cohort_sha256"] != cohort_hash():
+            raise ValueError("Composition bundle belongs to a different cohort")
+        linked_dir = figures_root / "inkscape" / "linked-subfigures"
     inkscape = _tool_path("inkscape")
     converted: dict[str, Path] = {}
 
@@ -426,7 +439,7 @@ def compose(
                     f"{figure['id']} missing valid subfigure PDF: {source}. "
                     "Run render first."
                 )
-            target = LINKED_SUBFIGURE_DIR / Path(output).with_suffix(".svg").name
+            target = linked_dir / Path(output).with_suffix(".svg").name
             if force or _is_newer(source, target):
                 _convert_linked_subfigure(source, target, inkscape=inkscape)
             converted[output] = target
@@ -437,6 +450,15 @@ def compose(
     staged: list[Path] = []
     for figure in selected:
         source = PROJECT_ROOT / figure["inkscape_source"]
+        if bundle is not None:
+            specification = bundle_index["composition"][figure["id"]]
+            bundled_source = bundle / specification["file"]
+            if file_hash(bundled_source) != specification["sha256"]:
+                raise ValueError(f"Corrupt composition template: {bundled_source}")
+            source = figures_root / "inkscape" / Path(figure["inkscape_source"]).name
+            source.parent.mkdir(parents=True, exist_ok=True)
+            if not source.exists() or file_hash(source) != specification["sha256"]:
+                shutil.copy2(bundled_source, source)
         if not source.is_file():
             raise FileNotFoundError(f"Missing Inkscape source: {source}")
         required_names = {
@@ -460,7 +482,7 @@ def compose(
         }
         for name in extra_names:
             panel_pdf = subfigure_dir / Path(name).with_suffix(".pdf")
-            linked_svg = LINKED_SUBFIGURE_DIR / name
+            linked_svg = linked_dir / name
             if force or _is_newer(panel_pdf, linked_svg):
                 _convert_linked_subfigure(
                     panel_pdf,
@@ -472,11 +494,11 @@ def compose(
         dependencies = [source] + [
             converted[name]
             for name in figure_required_outputs(figure, manifest)
-        ] + [LINKED_SUBFIGURE_DIR / name for name in sorted(extra_names)]
+        ] + [linked_dir / name for name in sorted(extra_names)]
         if force or not _valid_pdf(target) or any(
             _is_newer(dependency, target) for dependency in dependencies
         ):
-            export_source = _vector_export_source(source, managed_names)
+            export_source = _vector_export_source(source, managed_names, linked_dir=linked_dir)
             try:
                 _export_inkscape_figure(export_source, target, inkscape=inkscape)
             finally:
@@ -486,6 +508,34 @@ def compose(
         else:
             print(f"Composition is fresh: {target}")
     return staged
+
+
+def _prepare_composition_bundle(root: Path, figures: list[dict]) -> None:
+    from .visualization.prepared_bundle import file_hash, write_document
+
+    index_path = root / "bundle.json"
+    index = {"schema_version": 1, "cohort_sha256": cohort_hash(), "composition": {}}
+    if index_path.is_file():
+        previous = json.loads(index_path.read_text())
+        if previous.get("cohort_sha256") == cohort_hash():
+            index = previous
+    for figure in figures:
+        source = PROJECT_ROOT / figure["inkscape_source"]
+        if not source.is_file():
+            raise FileNotFoundError(f"Missing formal composition template: {source}")
+        expected = {Path(name).with_suffix(".svg").name for name in figure_required_outputs(figure)}
+        external = _linked_subfigure_names(source)
+        if external != expected:
+            raise ValueError(f"Composition template {source.name} has undeclared or missing panel links: {external ^ expected}")
+        digest = file_hash(source)
+        target = root / "composition" / f"{digest}.svg"
+        target.parent.mkdir(parents=True, exist_ok=True)
+        if not target.exists():
+            shutil.copy2(source, target)
+        index["composition"][figure["id"]] = {
+            "file": str(target.relative_to(root)), "sha256": digest,
+        }
+    write_document(index_path, index)
 
 
 def _declaration_root(config: dict, declaration: str) -> tuple[Path, str]:
@@ -530,9 +580,15 @@ def _file_signature(path: Path) -> dict:
 
 def _request_signature(request: dict, config: dict) -> dict:
     from .visualization.prepared_bundle import drawing_code_hash, file_hash
+    from .visualization.palette import load_palette
 
+    usage = None
+    if config.get("bundle_dir"):
+        prepared_path = Path(config["bundle_dir"]) / request["id"] / "prepared.json"
+        if prepared_path.is_file():
+            usage = json.loads(prepared_path.read_text()).get("palette_usage")
     styling = {
-        "palette_sha256": config["palette_sha256"],
+        "palette_sha256": load_palette(config.get("palette_path")).signature_for(usage),
         "drawing_code_sha256": drawing_code_hash(),
     }
     if config.get("from_bundle"):
@@ -606,6 +662,7 @@ def _render_request_worker(config: dict, request_id: str) -> None:
     try:
         from drone_emission.utils.config import configure_cache
         from drone_emission.visualization.render_context import RenderContext
+        from drone_emission.visualization.palette import palette_usage
         from drone_emission.visualization.prepared_bundle import (
             SCHEMA_VERSION, Codec, capture, drawing_code_hash, file_hash,
             replay, validate_bundle, write_document,
@@ -673,6 +730,7 @@ def _render_request_worker(config: dict, request_id: str) -> None:
                 "source_commit": subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=PROJECT_ROOT, text=True).strip(),
                 "outputs": request["outputs"],
                 "entries": session.entries,
+                "palette_usage": palette_usage(),
                 "files": {str(p.relative_to(temporary)): file_hash(p) for p in sorted((temporary / "assets").glob("*"))},
             }
             document["payload_sha256"] = hashlib.sha256(
@@ -684,12 +742,19 @@ def _render_request_worker(config: dict, request_id: str) -> None:
             destination.mkdir(exist_ok=True)
             if (temporary / "assets").exists():
                 (destination / "assets").mkdir(exist_ok=True)
+                shared_root = bundle_root / "shared_assets"
+                shared_root.mkdir(exist_ok=True)
                 for source in (temporary / "assets").glob("*"):
                     target = destination / "assets" / source.name
-                    if not target.exists():
-                        staged = target.with_suffix(".tmp")
+                    shared = shared_root / source.name
+                    if not shared.exists() or file_hash(shared) != file_hash(source):
+                        staged = shared.with_suffix(".tmp")
                         shutil.copy2(source, staged)
-                        staged.replace(target)
+                        staged.replace(shared)
+                    link = target.with_suffix(target.suffix + ".link.tmp")
+                    link.unlink(missing_ok=True)
+                    os.symlink(f"../../shared_assets/{source.name}", link)
+                    link.replace(target)
             write_document(destination / "prepared.json", document)
     except Exception:
         traceback.print_exc()
@@ -724,7 +789,7 @@ def _execute_request(request: dict, config: dict, *, force: bool) -> dict:
         if invalid:
             raise RuntimeError("renderer did not produce valid PDF(s): " + ", ".join(invalid))
         elapsed = time.monotonic() - started
-        _write_receipt(request, config, signature, elapsed)
+        _write_receipt(request, config, _request_signature(request, config), elapsed)
         print(f"[render:{request_id}] success {elapsed:.1f}s", flush=True)
         return {"id": request_id, "status": "success", "elapsed": elapsed}
     except Exception as exc:
@@ -863,10 +928,23 @@ def render(
         "from_bundle": bool(from_bundle), "prepare_only": prepare_only,
         "palette_sha256": chosen_palette.digest, "requests": list(results.values()),
     })
+    usage_report = {}
+    for request in selected_requests:
+        prepared_path = Path(config["bundle_dir"]) / request["id"] / "prepared.json"
+        if prepared_path.is_file():
+            usage = json.loads(prepared_path.read_text()).get("palette_usage", {})
+            usage_report[request["id"]] = {
+                "outputs": request["outputs"],
+                "colors": {key: str(chosen_palette.colour(key)) for key in usage.get("colors", [])},
+                "colormaps": {key: chosen_palette.colormaps[key] for key in usage.get("colormaps", [])},
+                "alpha": {key: chosen_palette.opacities[key] for key in usage.get("alpha", [])},
+            }
+    write_document(paper_dir / "report" / "palette_usage.json", usage_report)
     if prepare_only:
         failures = [result for result in results.values() if result["status"] == "failed"]
         if failures:
             raise RuntimeError(f"Prepared input failures: {failures}")
+        _prepare_composition_bundle(Path(config["bundle_dir"]), selected_figures)
         return []
     request_specs = request_index(manifest)
     for figure in selected_figures:
@@ -890,6 +968,11 @@ def render(
     if failed:
         details = "\n".join(f"- {item['id']}: {item['error']}" for item in failed)
         raise RuntimeError(f"Formal render request failure(s):\n{details}")
+    if from_bundle:
+        write_document(paper_dir / "report" / "drawing_bundle.json", {"path": config["bundle_dir"]})
+    else:
+        _prepare_composition_bundle(Path(config["bundle_dir"]), selected_figures)
+        write_document(paper_dir / "report" / "drawing_bundle.json", {"path": config["bundle_dir"]})
     return staged
 
 

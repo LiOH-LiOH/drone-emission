@@ -1,3 +1,4 @@
+from .palette import opacity as paper_alpha
 
 from .prepared_bundle import prepared_plot, prepared_data, local_road_edges, shortest_path
 
@@ -90,7 +91,7 @@ def _add_context_road_lines(ax, edge_coords, compact):
                 segments,
                 colors=paper_color("ink.background"),
                 linewidths=1.05,
-                alpha=0.92,
+                alpha=paper_alpha("roadnet.alpha_0_92"),
                 zorder=15,
             )
         )
@@ -98,7 +99,7 @@ def _add_context_road_lines(ax, edge_coords, compact):
             segments,
             colors=paper_color("roadnet.3f4852"),
             linewidths=0.5,
-            alpha=0.98,
+            alpha=paper_alpha("roadnet.alpha_0_98"),
             zorder=20,
         )
     else:
@@ -106,7 +107,7 @@ def _add_context_road_lines(ax, edge_coords, compact):
             segments,
             colors=paper_color("roadnet.4f5963"),
             linewidths=0.55,
-            alpha=0.95,
+            alpha=paper_alpha("roadnet.alpha_0_95"),
             zorder=10,
         )
     ax.add_collection(roads)
@@ -236,7 +237,7 @@ def plot_road_network_subfigure(
             transform=ax.transAxes,
             fontsize=10,
             verticalalignment="top",
-            bbox=dict(boxstyle="round", facecolor=paper_color("ink.background"), alpha=0.85),
+            bbox=dict(boxstyle="round", facecolor=paper_color("ink.background"), alpha=paper_alpha("roadnet.alpha_0_85")),
             zorder=100,
         )
 
@@ -472,7 +473,7 @@ def _draw_distance_panel(
                     extent=(0, img.shape[1], 0, img.shape[0]),
                     origin="lower",
                     transform=image_transform,
-                    alpha=0.5,
+                    alpha=paper_alpha("roadnet.alpha_0_5"),
                     zorder=0,
                 )
             except Exception as e:
@@ -504,7 +505,7 @@ def _draw_distance_panel(
             ])
             road_width = 1.5 if compact else 2.5
             ax.plot(path_xy[:, 0], path_xy[:, 1], color=paper_color("roadnet.d95f35"), linewidth=road_width,
-                    alpha=0.9, zorder=10, label="E-bike (road)")
+                    alpha=paper_alpha("roadnet.alpha_0_9"), zorder=10, label="E-bike (road)")
 
         origin_rot = _transform(origin[0], origin[1])
         dest_rot = _transform(destination[0], destination[1])
@@ -513,7 +514,7 @@ def _draw_distance_panel(
         marker_edge_width = 0.7 if compact else 1.5
         ax.plot(
             [origin_rot[0], dest_rot[0]], [origin_rot[1], dest_rot[1]],
-            color=paper_color("roadnet.1f77b4"), linewidth=drone_width, linestyle="--", alpha=0.9, zorder=20,
+            color=paper_color("roadnet.1f77b4"), linewidth=drone_width, linestyle="--", alpha=paper_alpha("roadnet.alpha_0_9"), zorder=20,
             label="Drone (straight)",
         )
         ax.scatter(origin_rot[0], origin_rot[1], c=paper_color("roadnet.2f6f4e"), s=marker_size, marker="o",
@@ -564,7 +565,7 @@ def _draw_distance_panel(
                 0.97, 0.03,
                 f"Straight: {straight_dist:.0f} m\nRoad: {road_dist:.0f} m\nDetour: {detour:.2f}",
                 transform=ax.transAxes, fontsize=9, va="bottom", ha="right", zorder=80,
-                bbox=dict(boxstyle="round,pad=0.4", facecolor=paper_color("ink.background"), edgecolor=paper_color("roadnet.d3d8d5"), alpha=0.92),
+                bbox=dict(boxstyle="round,pad=0.4", facecolor=paper_color("ink.background"), edgecolor=paper_color("roadnet.d3d8d5"), alpha=paper_alpha("roadnet.alpha_0_92")),
             )
         if show_legend:
             handles, labels = ax.get_legend_handles_labels()
@@ -585,7 +586,7 @@ def _draw_distance_panel(
                 handletextpad=0.4 if compact else 0.8,
                 columnspacing=0.8 if compact else 2,
                 borderpad=0.25 if compact else 0.4,
-                framealpha=0.85 if compact else 0.9,
+                framealpha=paper_alpha("roadnet.alpha_0_85") if compact else paper_alpha("roadnet.alpha_0_9"),
             )
         return
 
@@ -617,12 +618,12 @@ def _draw_distance_panel(
     if path_result["success"] and len(path_result["path_coordinates"]) > 1:
         path_lngs = [c[1] for c in path_result["path_coordinates"]]
         path_lats = [c[0] for c in path_result["path_coordinates"]]
-        ax.plot(path_lngs, path_lats, color=paper_color("roadnet.d95f35"), linewidth=2.5, alpha=0.9, zorder=10,
+        ax.plot(path_lngs, path_lats, color=paper_color("roadnet.d95f35"), linewidth=2.5, alpha=paper_alpha("roadnet.alpha_0_9"), zorder=10,
                 label="E-bike (road)")
 
     ax.plot(
         [origin[1], destination[1]], [origin[0], destination[0]],
-        color=paper_color("roadnet.1f77b4"), linewidth=2, linestyle="--", alpha=0.9, zorder=20,
+        color=paper_color("roadnet.1f77b4"), linewidth=2, linestyle="--", alpha=paper_alpha("roadnet.alpha_0_9"), zorder=20,
         label="Drone (straight)",
     )
     ax.scatter(origin[1], origin[0], c=paper_color("roadnet.2f6f4e"), s=90, marker="o",
@@ -639,7 +640,7 @@ def _draw_distance_panel(
             configure_contextily_cache()
             ctx.add_basemap(ax, crs="EPSG:4326",
                             source=ctx.providers.OpenStreetMap.Mapnik,
-                            zoom=16, alpha=0.5, zorder=0)
+                            zoom=16, alpha=paper_alpha("roadnet.alpha_0_5"), zorder=0)
         except Exception as e:
             print(f"Could not add basemap: {e}")
 
@@ -656,10 +657,10 @@ def _draw_distance_panel(
             0.97, 0.03,
             f"Straight: {straight_dist:.0f} m\nRoad: {road_dist:.0f} m\nDetour: {detour:.2f}",
             transform=ax.transAxes, fontsize=9, va="bottom", ha="right", zorder=80,
-            bbox=dict(boxstyle="round,pad=0.4", facecolor=paper_color("ink.background"), edgecolor=paper_color("roadnet.d3d8d5"), alpha=0.92),
+            bbox=dict(boxstyle="round,pad=0.4", facecolor=paper_color("ink.background"), edgecolor=paper_color("roadnet.d3d8d5"), alpha=paper_alpha("roadnet.alpha_0_92")),
         )
     if show_legend:
-        ax.legend(loc="upper left", fontsize=9, framealpha=0.9)
+        ax.legend(loc="upper left", fontsize=9, framealpha=paper_alpha("roadnet.alpha_0_9"))
 
 
 @prepared_plot(omit=('graph', 'router'))

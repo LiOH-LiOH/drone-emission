@@ -1,3 +1,4 @@
+from .palette import opacity as paper_alpha
 from .palette import color as paper_color
 from .palette import colormap as paper_cmap
 import json
@@ -67,7 +68,7 @@ def plot_geojson_boundaries(
     zorder=15,
     color=paper_color("ink.gray"),
     linewidth=2,
-    alpha=0.8,
+    alpha=paper_alpha("_utils.alpha_0_8"),
 ):
     if not geojson_data:
         return
@@ -169,7 +170,7 @@ def add_basemap_and_boundaries(
     city_name_cn,
     boundaries_dict=None,
     zoom=14,
-    alpha=0.6,
+    alpha=paper_alpha("_utils.alpha_0_6"),
     boundary_color=paper_color("ink.gray"),
     boundary_linewidth=2,
     boundary_alpha=0.8,
@@ -400,7 +401,7 @@ def finalize_plot(
 
     # Add grid
     if show_grid:
-        ax.grid(True, alpha=0.3, linestyle="--", color=paper_color("ink.background"))
+        ax.grid(True, alpha=paper_alpha("_utils.alpha_0_3"), linestyle="--", color=paper_color("ink.background"))
     else:
         ax.grid(False)
 
@@ -420,7 +421,7 @@ def finalize_plot(
             transform=ax.transAxes,
             fontsize=10,
             verticalalignment="top",
-            bbox=dict(boxstyle="round", facecolor=paper_color("ink.wheat"), alpha=0.8),
+            bbox=dict(boxstyle="round", facecolor=paper_color("ink.wheat"), alpha=paper_alpha("_utils.alpha_0_8")),
             zorder=100,  # Ensure text is on top of all plot elements
         )
 

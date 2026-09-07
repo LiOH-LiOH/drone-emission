@@ -1,3 +1,4 @@
+from .palette import opacity as paper_alpha
 
 from .prepared_bundle import prepared_plot, prepared_data, read_plot_csv
 
@@ -131,7 +132,7 @@ def _plot_china_boundaries(ax, geojson_data):
                     plot_polygon(ring)
                 else:
                     xs, ys = zip(*[(pt[0], pt[1]) for pt in ring])
-                    ax.plot(xs, ys, color=paper_color("ink.gray"), linewidth=0.5, alpha=0.8, zorder=1)
+                    ax.plot(xs, ys, color=paper_color("ink.gray"), linewidth=0.5, alpha=paper_alpha("regions.alpha_0_8"), zorder=1)
 
         if geom_type == "Polygon":
             plot_polygon(coords)
@@ -204,7 +205,7 @@ def _normalize_province_feature_name(name: str) -> str:
     return name
 
 
-def _plot_geometry_outline(ax, geometry, color=paper_color("regions.666666"), linewidth=0.5, alpha=1.0, zorder=4):
+def _plot_geometry_outline(ax, geometry, color=paper_color("regions.666666"), linewidth=0.5, alpha=paper_alpha("regions.alpha_1_0"), zorder=4):
     """Plot GeoJSON polygon rings as outlines."""
     if not geometry:
         return
@@ -395,7 +396,7 @@ def plot_province_gef_china_map(
                 geometry,
                 color=paper_color("regions.888888") if simplified else outline_color,
                 linewidth=0.14 if simplified else (0.18 if compact else 0.35),
-                alpha=0.7 if simplified else 0.8,
+                alpha=paper_alpha("regions.alpha_0_7") if simplified else paper_alpha("regions.alpha_0_8"),
                 zorder=3,
             )
 
@@ -407,7 +408,7 @@ def plot_province_gef_china_map(
                 nine_dash_feature.get("geometry"),
                 color=paper_color("regions.666666") if compact else paper_color("regions.4d4d4d"),
                 linewidth=0.28 if compact else 0.55,
-                alpha=0.85 if compact else 0.95,
+                alpha=paper_alpha("regions.alpha_0_85") if compact else paper_alpha("regions.alpha_0_95"),
                 zorder=5,
             )
             jd_drawn = True
@@ -458,7 +459,7 @@ def plot_province_gef_china_map(
     inset_ax.set_aspect(1.0 / np.cos(np.radians(inset_avg_lat)), adjustable="box")
     inset_ax.set_xticks([])
     inset_ax.set_yticks([])
-    inset_ax.set_facepaper_color("white")
+    inset_ax.set_facecolor(paper_color("ink.background"))
     for spine in inset_ax.spines.values():
         spine.set_linestyle("-" if compact else "--")
         spine.set_linewidth(0.25 if compact else 0.7)
@@ -748,7 +749,7 @@ def plot_regions_on_china_map(
             handles=[Patch(facecolor=GRAY_FILL, edgecolor="none", label="Unstudied regions")],
             loc="lower left",
             fontsize=12,
-            framealpha=0.8,
+            framealpha=paper_alpha("regions.alpha_0_8"),
             handlelength=1.5,
             handleheight=1.2,
         )
@@ -763,7 +764,7 @@ def plot_regions_on_china_map(
     ax.set_ylim(china_lat_range)
     ax.set_xlabel("Longitude", fontsize=12)
     ax.set_ylabel("Latitude", fontsize=12)
-    ax.grid(True, alpha=0.3, linestyle="--")
+    ax.grid(True, alpha=paper_alpha("regions.alpha_0_3"), linestyle="--")
 
     avg_lat = np.mean(china_lat_range)
     ax.set_aspect(1.0 / np.cos(np.radians(avg_lat)))
@@ -782,7 +783,7 @@ def plot_regions_on_china_map(
     for spine in inset_ax.spines.values():
         spine.set_linestyle("--")
         spine.set_linewidth(1.0)
-        spine.set_edgepaper_color("gray")
+        spine.set_edgecolor(paper_color("ink.gray"))
 
     if not _external_ax:
         plt.tight_layout()

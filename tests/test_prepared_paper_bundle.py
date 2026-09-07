@@ -1,10 +1,11 @@
 """Portable, colour-independent data and strict replay regression checks."""
 
 import json
+import hashlib
+import ast
 from pathlib import Path
 import tempfile
 import unittest
-from unittest.mock import patch
 
 import numpy as np
 import pandas as pd
@@ -13,6 +14,7 @@ from drone_emission.visualization.palette import configure_palette, color, DEFAU
 from drone_emission.visualization.prepared_bundle import (
     Codec, SourceOnly, capture, prepared_data, prepared_plot, replay,
     PLOT_FUNCTIONS,
+    SCHEMA_VERSION, drawing_code_hash, file_hash, validate_bundle, write_document,
 )
 
 
@@ -87,6 +89,64 @@ class PreparedBundleTests(unittest.TestCase):
             self.codec.encode(object())
         with self.assertRaisesRegex(RuntimeError, "raw source"):
             self.codec.decode(self.codec.encode(SourceOnly("graph"))).get_local_edges({})
+
+    def test_bundle_corruption_and_cohort_are_rejected(self):
+        root = self.root / "prepared"
+        request = {"id": "sample", "cache_version": 1, "outputs": ["sample.pdf"]}
+        directory = root / "sample"
+        directory.mkdir(parents=True)
+        document = {
+            "schema_version": SCHEMA_VERSION, "request_id": "sample",
+            "request_version": 1, "outputs": request["outputs"],
+            "cohort_sha256": "cohort-a", "drawing_code_sha256": drawing_code_hash(),
+            "files": {}, "entries": [],
+        }
+        document["payload_sha256"] = hashlib.sha256(json.dumps(document, ensure_ascii=False, sort_keys=True, allow_nan=False).encode()).hexdigest()
+        write_document(directory / "prepared.json", document)
+        validate_bundle(root, request, "cohort-a")
+        with self.assertRaisesRegex(ValueError, "cohort_sha256"):
+            validate_bundle(root, request, "cohort-b")
+        document["entries"] = ["corrupted"]
+        write_document(directory / "prepared.json", document)
+        with self.assertRaisesRegex(ValueError, "Corrupt prepared document"):
+            validate_bundle(root, request, "cohort-a")
+
+    def test_raw_read_is_fatal_even_if_plot_catches_it(self):
+        self.roots["data"].mkdir()
+        source = self.roots["data"] / "forbidden.csv"
+        source.write_text("do not read")
+
+        def draw(source):
+            try:
+                Path(source).read_text()
+            except RuntimeError:
+                pass
+
+        draw.__module__ = "drone_emission.visualization.prepared_bundle"
+        draw.__name__ = "_test_forbidden_draw"
+        draw = prepared_plot()(draw)
+        entry = {"function": f"{draw.__module__}:{draw.__name__}",
+                 "arguments": self.codec.encode({"source": str(source)}), "data": []}
+        with self.assertRaisesRegex(RuntimeError, "forbidden input access"):
+            replay(self.codec.root, {"entries": [entry]}, self.roots)
+        PLOT_FUNCTIONS.pop(entry["function"])
+
+    def test_palette_extraction_does_not_rename_artist_methods(self):
+        root = Path(__file__).parents[1] / "src/drone_emission/visualization"
+        for source in root.glob("*.py"):
+            for node in ast.walk(ast.parse(source.read_text())):
+                if isinstance(node, ast.Attribute):
+                    self.assertNotIn("paper_color", node.attr, (source.name, node.lineno))
+
+    def test_palette_signature_tracks_alias_and_colormap_dependencies(self):
+        original = configure_palette()
+        usage = {"colors": ["roadnet.1f77b4"], "colormaps": []}
+        signature = original.signature_for(usage)
+        alternate = self.root / "palette.toml"
+        alternate.write_text(DEFAULT_PALETTE.read_text().replace('"mode.drone" = "#0072B2"', '"mode.drone" = "#123456"'))
+        self.assertNotEqual(configure_palette(alternate).signature_for(usage), signature)
+        alternate.write_text(DEFAULT_PALETTE.read_text().replace('"mode.fuel_car" = "#4D4D4D"', '"mode.fuel_car" = "#123456"'))
+        self.assertEqual(configure_palette(alternate).signature_for(usage), signature)
 
 
 if __name__ == "__main__":

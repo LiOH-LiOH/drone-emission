@@ -1,6 +1,7 @@
 """Concept illustration figures for the paper."""
 
 from __future__ import annotations
+from .palette import opacity as paper_alpha
 
 from .prepared_bundle import prepared_plot, prepared_data
 
@@ -166,7 +167,7 @@ def _add_road_network(
             color=_COLORS["road_dark"],
             linewidth=1.0,
             zorder=6,
-            alpha=0.32,
+            alpha=paper_alpha("route_concepts.alpha_0_32"),
             clip_patch=clip_patch,
         )
     for y in grid_y:
@@ -184,7 +185,7 @@ def _add_road_network(
             color=_COLORS["road_dark"],
             linewidth=1.0,
             zorder=6,
-            alpha=0.32,
+            alpha=paper_alpha("route_concepts.alpha_0_32"),
             clip_patch=clip_patch,
         )
 
@@ -255,7 +256,7 @@ def _add_marker(
     marker_scale: float = 1.0,
 ) -> Point:
     xy = _project(*xy_world)
-    path_effects = [pe.SimplePatchShadow(offset=(1.0, -1.0), alpha=0.25), pe.Normal()]
+    path_effects = [pe.SimplePatchShadow(offset=(1.0, -1.0), alpha=paper_alpha("route_concepts.alpha_0_25")), pe.Normal()]
     if shape == "square":
         side = 0.26 * marker_scale
         marker = Rectangle(
@@ -291,7 +292,7 @@ def _add_arrow_head(
     color: str,
     zorder: int,
     z: float = 0.0,
-    alpha: float = 1.0,
+    alpha: float = paper_alpha("route_concepts.alpha_1_0"),
     mutation_scale: float = 18.0,
 ) -> None:
     start = _project(points[-2][0], points[-2][1], z)
@@ -345,7 +346,7 @@ def _add_drone_path(
                 pe.Stroke(
                     linewidth=5.5 * line_scale,
                     foreground=_COLORS["white"],
-                    alpha=0.85,
+                    alpha=paper_alpha("route_concepts.alpha_0_85"),
                 ),
                 pe.Normal(),
             ],
@@ -378,7 +379,7 @@ def _add_scale_annotation(ax: plt.Axes, road_distance: float, straight_distance:
     ax.text(8.15, 6.62, text, fontsize=10.2, color=_COLORS["text"], ha="left", va="top",
             linespacing=1.25,
             bbox=dict(boxstyle="round,pad=0.45,rounding_size=0.08", facecolor=paper_color("route_concepts.ffffff"),
-                      edgecolor=paper_color("route_concepts.d3d8d5"), alpha=0.94),
+                      edgecolor=paper_color("route_concepts.d3d8d5"), alpha=paper_alpha("route_concepts.alpha_0_94")),
             zorder=70)
 
 # ---------------------------------------------------------------------------
@@ -448,7 +449,7 @@ def _draw_detour_ratio_concept(
         color=_COLORS["bike_shadow"],
         linewidth=7.5 * route_scale,
         zorder=7,
-        alpha=0.16,
+        alpha=paper_alpha("route_concepts.alpha_0_16"),
     )
     _add_polyline(
         ax,
@@ -471,14 +472,14 @@ def _draw_detour_ratio_concept(
         color=_COLORS["bike"],
         linewidth=4.0 * route_scale,
         zorder=25,
-        alpha=0.2,
+        alpha=paper_alpha("route_concepts.alpha_0_2"),
     )
     _add_arrow_head(
         ax,
         bike_route,
         _COLORS["bike"],
         zorder=25,
-        alpha=0.2,
+        alpha=paper_alpha("route_concepts.alpha_0_2"),
         mutation_scale=arrow_scale,
     )
 
@@ -530,7 +531,7 @@ def _draw_detour_ratio_concept(
 
     ax.plot([origin_xy[0], dest_xy[0]], [origin_xy[1], dest_xy[1]],
             color=_COLORS["drone"], linewidth=0.8 if compact else 1.2,
-            alpha=0.28, linestyle=":", zorder=18)
+            alpha=paper_alpha("route_concepts.alpha_0_28"), linestyle=":", zorder=18)
 
     straight_mid = (np.array(origin_xy) + np.array(dest_xy)) / 2
     straight_offset = (-1.25, 0.55) if compact else (-1.8, 1.4)

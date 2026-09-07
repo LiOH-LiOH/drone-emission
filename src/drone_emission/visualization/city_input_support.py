@@ -1,4 +1,5 @@
 """Visualization functions for cross-region correlation and emission analysis."""
+from .palette import opacity as paper_alpha
 
 from .prepared_bundle import prepared_plot, prepared_data
 
@@ -135,7 +136,7 @@ def _draw_trip_phase_barplot(
     ax.set_xlabel(distance_label)
     ax.set_ylabel(ylabel)
     ax.set_ylim(0, max_total * 1.25)
-    ax.grid(axis="y", alpha=0.25, linewidth=0.8)
+    ax.grid(axis="y", alpha=paper_alpha("city_input_support.alpha_0_25"), linewidth=0.8)
     ax.set_axisbelow(True)
     ax.spines["top"].set_visible(False)
     ax.spines["right"].set_visible(False)

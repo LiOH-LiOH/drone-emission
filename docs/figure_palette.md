@@ -24,8 +24,16 @@ do not edit numeric bins, normalizations, figure layouts, line styles or markers
 keys retain the old hex suffix as a stable migration identifier; the value is
 the current colour and need not equal that suffix. Colormap choices are in the
 same file under `[colormaps]`. `@scale.gef` selects the three named GEF stops.
+Transparency is under `[alpha]`; initial values preserve the existing figures.
+`paper/report/palette_usage.json` lists each request's colours, colormaps and
+opacity settings, so experiments can target the affected figures.
 External basemap pixels are preserved unchanged. Colour-vision accessibility is
 a preference, not a hard acceptance criterion; no redundant encodings are added.
+
+The bundle also contains checksummed copies of the formal Inkscape templates,
+which are not tracked by Git. After a bundle render, `compose` automatically
+uses these copies and places refreshed linked SVG panels in the current output
+root. It preserves the original templates and their layout.
 
 ## Prepare once, redraw locally
 
@@ -65,6 +73,10 @@ computed results (KDEs, fits, bins, box summaries, projected/local geometry,
 paths and three-dimensional meshes). Large graph/router/OD inputs are replaced
 with explicit unavailable-source markers after the final display data are saved.
 The remaining drawing code performs small array/axis operations only.
+
+Assets shared by several requests live once in `shared_assets`; request folders
+refer to them through relative symlinks. Transfer the entire bundle with
+`rsync -a` to preserve this deduplication and portability.
 
 Arrays use NPZ without pickle; tables have exact typed array storage plus readable
 CSV; map geometry uses GeoJSON or WKB. Basemap arrays and extents are included.

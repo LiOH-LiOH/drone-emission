@@ -1,4 +1,5 @@
 """Visualization functions for cross-region correlation and emission analysis."""
+from .palette import opacity as paper_alpha
 
 from .prepared_bundle import prepared_plot, prepared_data
 
@@ -131,7 +132,7 @@ def _save_distance_threshold_figure(
 
 def _style_distance_threshold_axis(ax):
     """Apply restrained exploratory-analysis styling."""
-    ax.grid(color=paper_color("distance_threshold.d9d9d9"), linewidth=0.55, alpha=0.65)
+    ax.grid(color=paper_color("distance_threshold.d9d9d9"), linewidth=0.55, alpha=paper_alpha("distance_threshold.alpha_0_65"))
     ax.spines[["top", "right"]].set_visible(False)
     ax.tick_params(labelsize=8)
 
@@ -380,7 +381,7 @@ def _plot_distance_threshold_all_city_scatter(
                 "boxstyle": "square,pad=0.15",
                 "facecolor": "white",
                 "edgecolor": "none",
-                "alpha": 0.78,
+                "alpha": paper_alpha("distance_threshold.alpha_0_78"),
             },
             arrowprops={
                 "arrowstyle": "-",

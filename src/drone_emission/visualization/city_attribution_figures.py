@@ -1,4 +1,5 @@
 """Visualization functions for cross-region correlation and emission analysis."""
+from .palette import opacity as paper_alpha
 
 from .prepared_bundle import prepared_plot, prepared_data, evaluate_kde, fit_polynomial
 
@@ -117,7 +118,7 @@ def plot_r2_population_reduction_contrast(
         plot_df = df[["region_key", "population_10k", outcome]].dropna().copy()
         population_million = plot_df["population_10k"] / 100.0
         ax.scatter(population_million, plot_df[outcome], s=20, color=paper_color("city_attribution_figures.4c78a8"),
-                   alpha=0.52, edgecolor=paper_color("ink.background"), linewidth=0.3)
+                   alpha=paper_alpha("city_attribution_figures.alpha_0_52"), edgecolor=paper_color("ink.background"), linewidth=0.3)
         slope, intercept = fit_polynomial(population_million, plot_df[outcome], 1)
         x_line = np.linspace(population_million.min(), population_million.max(), 120)
         ax.plot(x_line, slope * x_line + intercept, color=paper_color("city_attribution_figures.d95f02"), linewidth=1.5)

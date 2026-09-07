@@ -1,3 +1,4 @@
+from .palette import opacity as paper_alpha
 
 from .prepared_bundle import prepared_plot, prepared_data
 
@@ -154,7 +155,7 @@ def plot_merchant_monthly_sales_map(
         ax=ax,
         facecolor=paper_color("sales.d7d9dc"),
         edgecolor="none",
-        alpha=0.86,
+        alpha=paper_alpha("sales.alpha_0_86"),
         zorder=1,
     )
     merchant_color = paper_color("sales.d94b3f")
@@ -163,7 +164,7 @@ def plot_merchant_monthly_sales_map(
         merchants_in_frame["_lat_wgs84"],
         s=merchants_in_frame["_marker_size"],
         c=merchant_color,
-        alpha=0.88,
+        alpha=paper_alpha("sales.alpha_0_88"),
         edgecolors="white",
         linewidths=0.22,
         zorder=10,

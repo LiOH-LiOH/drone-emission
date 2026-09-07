@@ -1,6 +1,7 @@
 """Formal national threshold-resilience renderers."""
 
 from __future__ import annotations
+from .palette import opacity as paper_alpha
 
 from .prepared_bundle import prepared_plot, prepared_data, evaluate_kde, fit_polynomial
 
@@ -281,7 +282,7 @@ def plot_threshold_resilience_national_kdes(
         density = evaluate_kde(values, x)
         fig, ax = plt.subplots(figsize=(88 / 25.4, 55 / 25.4))
         ax.plot(x, density, color=color, linewidth=1.4)
-        ax.fill_between(x, density, color=color, alpha=0.18)
+        ax.fill_between(x, density, color=color, alpha=paper_alpha("threshold_resilience.alpha_0_18"))
         ax.set_xlim(0, 1)
         ax.xaxis.set_major_formatter(FuncFormatter(lambda v, _: f"{v:.0%}"))
         ax.set_xlabel("Probability of positive reduction")

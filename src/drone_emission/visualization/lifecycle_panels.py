@@ -1,6 +1,7 @@
 """
 排放分析可视化模块
 """
+from .palette import opacity as paper_alpha
 
 from .palette import color as paper_color
 from .prepared_bundle import prepared_data
@@ -141,14 +142,14 @@ def _draw_selected_trip_emission_process(
         color=drone_color,
         linestyle="--",
         linewidth=1.0,
-        alpha=0.55,
+        alpha=paper_alpha("lifecycle_panels.alpha_0_55"),
     )
     ax.axvline(
         road_km,
         color=ebike_color,
         linestyle="--",
         linewidth=1.0,
-        alpha=0.55,
+        alpha=paper_alpha("lifecycle_panels.alpha_0_55"),
     )
 
     if road_km > air_km:
@@ -215,7 +216,7 @@ def _draw_selected_trip_emission_process(
         "Accumulated use-phase emission (g CO$_2$e / delivery leg)",
         fontsize=12,
     )
-    ax.grid(True, alpha=0.25, linewidth=0.8)
+    ax.grid(True, alpha=paper_alpha("lifecycle_panels.alpha_0_25"), linewidth=0.8)
     ax.set_axisbelow(True)
     ax.spines["top"].set_visible(False)
     ax.spines["right"].set_visible(False)

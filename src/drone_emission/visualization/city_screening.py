@@ -1,6 +1,7 @@
 """City-level climate-mitigation screening visualization."""
 
 from __future__ import annotations
+from .palette import opacity as paper_alpha
 
 from .prepared_bundle import prepared_plot, prepared_data
 
@@ -130,7 +131,7 @@ def plot_city_reduction_potential_scatter(
         plot_df[ABSOLUTE_REDUCTION_COL],
         plot_df[RELATIVE_REDUCTION_COL],
         s=18,
-        alpha=1.0,
+        alpha=paper_alpha("city_screening.alpha_1_0"),
         c=population_classes,
         cmap=color_map,
         norm=color_norm,

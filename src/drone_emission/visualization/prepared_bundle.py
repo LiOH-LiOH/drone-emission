@@ -23,7 +23,7 @@ from dataclasses import asdict, is_dataclass
 import numpy as np
 import pandas as pd
 
-from .palette import Colour, color
+from .palette import Colour, Opacity, color, opacity
 
 SCHEMA_VERSION = 1
 _SESSION = ContextVar("prepared_plot_session", default=None)
@@ -75,9 +75,18 @@ class Codec:
             path.write_text(text)
         return f"assets/{name}"
 
+    def asset_path(self, relative):
+        path = (self.root / relative).resolve()
+        shared = self.root.parent.resolve() / "shared_assets"
+        if self.root.resolve() not in path.parents and shared not in path.parents:
+            raise ValueError("Prepared asset escapes bundle")
+        return path
+
     def encode(self, value):
         if isinstance(value, Colour):
             return {"type": "colour", "key": value.key}
+        if isinstance(value, Opacity):
+            return {"type": "opacity", "key": value.key}
         if isinstance(value, SourceOnly):
             return {"type": "source_only", "name": value.name}
         if is_dataclass(value) and type(value).__name__ == "WeightedQuantileResult":
@@ -117,6 +126,12 @@ class Codec:
                 "index_name": self.encode(value.index.name),
                 "data": [self.encode(value[column].to_numpy()) for column in columns],
                 "dtypes": [str(value[column].dtype) for column in columns],
+                "categories": {
+                    str(index): {"values": self.encode(value[column].cat.categories.tolist()),
+                                 "ordered": value[column].cat.ordered}
+                    for index, column in enumerate(columns)
+                    if isinstance(value[column].dtype, pd.CategoricalDtype)
+                },
             }
             if is_geo:
                 result.update(geometry=geometry.name, crs=str(value.crs))
@@ -151,6 +166,8 @@ class Codec:
         kind = value["type"]
         if kind == "colour":
             return color(value["key"])
+        if kind == "opacity":
+            return opacity(value["key"])
         if kind == "source_only":
             return SourceOnly(value["name"])
         if kind == "weighted_quantile":
@@ -167,15 +184,11 @@ class Codec:
                 raise ValueError("Prepared path escapes its declared root")
             return str(path)
         if kind == "array":
-            path = (self.root / value["file"]).resolve()
-            if self.root.resolve() not in path.parents:
-                raise ValueError("Prepared array escapes bundle")
+            path = self.asset_path(value["file"])
             with np.load(path, allow_pickle=False) as archive:
                 return archive["values"]
         if kind == "geojson":
-            path = (self.root / value["file"]).resolve()
-            if self.root.resolve() not in path.parents:
-                raise ValueError("Prepared geometry escapes bundle")
+            path = self.asset_path(value["file"])
             return json.loads(path.read_text())
         if kind == "object_array":
             return np.array(self.decode(value["items"]), dtype=object).reshape(value["shape"])
@@ -183,8 +196,11 @@ class Codec:
             columns = self.decode(value["columns"])
             result = pd.DataFrame({k: self.decode(v) for k, v in zip(columns, value["data"])}, index=self.decode(value["index"]))
             result.index.name = self.decode(value["index_name"])
-            for column, dtype in zip(columns, value["dtypes"]):
-                if dtype not in {"geometry", "object"}:
+            for index, (column, dtype) in enumerate(zip(columns, value["dtypes"])):
+                if str(index) in value.get("categories", {}):
+                    category = value["categories"][str(index)]
+                    result[column] = pd.Categorical(result[column], categories=self.decode(category["values"]), ordered=category["ordered"])
+                elif dtype not in {"geometry", "object"}:
                     result[column] = result[column].astype(dtype)
             if "geometry" in value:
                 import geopandas as gpd
@@ -295,6 +311,7 @@ def replay(root: Path, document: dict, roots: dict):
     denied = []
     guard_active = True
     allowed = root.resolve()
+    shared_allowed = root.parent.resolve() / "shared_assets"
     blocked_roots = [Path(roots["data"]).resolve(), Path(roots["work"]).resolve(),
                      Path(roots["project"]).resolve() / "data"]
 
@@ -309,7 +326,7 @@ def replay(root: Path, document: dict, roots: dict):
             if isinstance(mode, str) and any(flag in mode for flag in "wax+"):
                 return
             path = Path(args[0]).resolve()
-            if path == allowed or allowed in path.parents:
+            if path == allowed or allowed in path.parents or shared_allowed in path.parents:
                 return
             if any(path == base or base in path.parents for base in blocked_roots):
                 denied.append(str(path))
@@ -365,7 +382,8 @@ def validate_bundle(root: Path, request: dict, cohort_hash: str) -> dict:
             raise ValueError(f"Prepared input {request['id']} has incompatible {key}; prepare again")
     for relative, digest in document["files"].items():
         asset = (path.parent / relative).resolve()
-        if path.parent.resolve() not in asset.parents:
+        shared = root.resolve() / "shared_assets"
+        if path.parent.resolve() not in asset.parents and shared not in asset.parents:
             raise ValueError("Prepared asset escapes request directory")
         if not asset.is_file() or file_hash(asset) != digest:
             raise ValueError(f"Missing or corrupt prepared asset: {asset}")
@@ -396,6 +414,11 @@ def fit_polynomial(x, y, deg=1):
 @prepared_data
 def histogram(values, **kwargs):
     return np.histogram(values, **kwargs)
+
+
+@prepared_data
+def quantile(values, probability):
+    return values.quantile(probability)
 
 
 @prepared_data

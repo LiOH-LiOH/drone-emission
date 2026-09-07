@@ -1,4 +1,5 @@
 """Visualization functions for cross-region correlation and emission analysis."""
+from .palette import opacity as paper_alpha
 
 from .prepared_bundle import prepared_plot, prepared_data, box_statistics
 
@@ -272,14 +273,14 @@ def _plot_pathway_curve_panel(
 
     if orientation == "vertical":
         if saved_as_bar:
-            ax.barh(x, saved, height=bar_width, left=0.0, color=paper_color("national_scenarios.1b7837"), alpha=0.75)
+            ax.barh(x, saved, height=bar_width, left=0.0, color=paper_color("national_scenarios.1b7837"), alpha=paper_alpha("national_scenarios.alpha_0_75"))
         else:
             ax.plot(saved, x, color=paper_color("national_scenarios.1b7837"), marker="o", linewidth=1.8, markersize=4)
         ax.set_xlabel(r"CO$_2$ saved (kt/yr)", fontsize=10, color=paper_color("national_scenarios.1b7837"))
         ax.set_ylabel(axis_label, fontsize=10)
         ax.tick_params(axis="x", labelcolor=paper_color("national_scenarios.1b7837"), labelsize=8)
         ax.tick_params(axis="y", labelsize=8)
-        ax.grid(True, linestyle=":", alpha=0.35)
+        ax.grid(True, linestyle=":", alpha=paper_alpha("national_scenarios.alpha_0_35"))
         if saved_limits is not None:
             ax.set_xlim(*saved_limits)
         if saved_as_bar:
@@ -294,14 +295,14 @@ def _plot_pathway_curve_panel(
             ax_share.set_xlim(*share_limits)
     else:
         if saved_as_bar:
-            ax.bar(x, saved, width=bar_width, bottom=0.0, color=paper_color("national_scenarios.1b7837"), alpha=0.75)
+            ax.bar(x, saved, width=bar_width, bottom=0.0, color=paper_color("national_scenarios.1b7837"), alpha=paper_alpha("national_scenarios.alpha_0_75"))
         else:
             ax.plot(x, saved, color=paper_color("national_scenarios.1b7837"), marker="o", linewidth=1.8, markersize=4)
         ax.set_xlabel(axis_label, fontsize=10)
         ax.set_ylabel(r"CO$_2$ saved (kt/yr)", fontsize=10, color=paper_color("national_scenarios.1b7837"))
         ax.tick_params(axis="y", labelcolor=paper_color("national_scenarios.1b7837"), labelsize=8)
         ax.tick_params(axis="x", labelsize=8)
-        ax.grid(True, linestyle=":", alpha=0.35)
+        ax.grid(True, linestyle=":", alpha=paper_alpha("national_scenarios.alpha_0_35"))
         if x[0] > x[-1]:
             ax.invert_xaxis()
         if saved_limits is not None:
@@ -397,8 +398,8 @@ def _add_map_parameter_bars(
     colors = [paper_color("national_scenarios.2166ac"), paper_color("national_scenarios.e08214")]
     value_labels = [f"{gef_mult:.1f}", _format_kappa_value(kappa)]
 
-    inset.patch.set_alpha(0.0)
-    inset.bar([0, 1], values, width=0.55, color=colors, alpha=0.9, zorder=3)
+    inset.patch.set_alpha(paper_alpha("national_scenarios.alpha_0_0"))
+    inset.bar([0, 1], values, width=0.55, color=colors, alpha=paper_alpha("national_scenarios.alpha_0_9"), zorder=3)
 
     inset.set_xlim(-0.6, 1.6)
     inset.set_ylim(0.0, 1.14)
@@ -1056,8 +1057,8 @@ def plot_regions_map_pathway_scenarios(
         ax_box.set_xticklabels(province_order, rotation=90, fontsize=5.2)
         ax_box.set_ylabel("Drone share (%)", fontsize=6.5)
         ax_box.tick_params(axis="y", labelsize=5.8, length=2)
-        ax_box.grid(axis="y", linestyle=":", alpha=0.4)
-        ax_box.axhline(drone_share_median[label], color=paper_color("national_scenarios.1a9641"), linestyle="--", linewidth=0.55, alpha=0.8)
+        ax_box.grid(axis="y", linestyle=":", alpha=paper_alpha("national_scenarios.alpha_0_4"))
+        ax_box.axhline(drone_share_median[label], color=paper_color("national_scenarios.1a9641"), linestyle="--", linewidth=0.55, alpha=paper_alpha("national_scenarios.alpha_0_8"))
 
         # Overlay: total annual lifecycle emission per province (gray line, right axis).
         emission_series = panel_province_emission_kt[label]
@@ -1066,7 +1067,7 @@ def plot_regions_map_pathway_scenarios(
         ax_line.plot(
             range(len(province_order)), emission_y,
             color="dimgray", linewidth=0.7, marker="o", markersize=1.7,
-            alpha=0.85, zorder=5,
+            alpha=paper_alpha("national_scenarios.alpha_0_85"), zorder=5,
         )
         ax_line.set_ylim(0, line_y_max)
         ax_line.set_ylabel("Annual lifecycle (kt CO$_2$)", fontsize=6.5, color="dimgray")

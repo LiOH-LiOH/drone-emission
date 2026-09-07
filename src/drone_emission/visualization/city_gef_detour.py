@@ -1,4 +1,5 @@
 """Formal city gef detour renderers used only by the manifest registry."""
+from .palette import opacity as paper_alpha
 
 from .prepared_bundle import prepared_plot, prepared_data, evaluate_kde, fit_polynomial, kde_with_factor
 
@@ -917,7 +918,7 @@ def _plot_compact_city_context_summary_panels(
         ax_distance.set_yticks([0, 50, 100])
         ax_distance.tick_params(axis="both", labelsize=7, length=2.5, pad=1.5)
         ax_distance.yaxis.set_ticks_position("right")
-        ax_distance.grid(True, axis="y", alpha=0.18, linewidth=0.45)
+        ax_distance.grid(True, axis="y", alpha=paper_alpha("city_gef_detour.alpha_0_18"), linewidth=0.45)
         ax_distance.set_axisbelow(True)
         ax_distance.spines["top"].set_visible(False)
         ax_distance.spines["left"].set_visible(False)
@@ -930,7 +931,7 @@ def _plot_compact_city_context_summary_panels(
             reduction_abs[visible],
             s=7,
             color=paper_color("city_gef_detour.555555"),
-            alpha=0.72,
+            alpha=paper_alpha("city_gef_detour.alpha_0_72"),
             linewidth=0,
             zorder=5,
         )
@@ -944,10 +945,10 @@ def _plot_compact_city_context_summary_panels(
                 slope * x_fit + intercept,
                 color=paper_color("city_gef_detour.111111"),
                 linewidth=0.9,
-                alpha=0.82,
+                alpha=paper_alpha("city_gef_detour.alpha_0_82"),
                 zorder=6,
             )
-        ax_absolute.axhline(0, color=paper_color("city_gef_detour.555555"), linewidth=0.4, alpha=0.3)
+        ax_absolute.axhline(0, color=paper_color("city_gef_detour.555555"), linewidth=0.4, alpha=paper_alpha("city_gef_detour.alpha_0_3"))
         ax_absolute.set_ylim(*shared_absolute_ylim)
         ax_absolute.tick_params(
             axis="y",
@@ -1087,13 +1088,13 @@ def _create_city_gef_summary_legend_rail(
         component_handles = [
             Patch(
                 facecolor=paper_color("city_gef_detour.777777"),
-                alpha=0.35,
+                alpha=paper_alpha("city_gef_detour.alpha_0_35"),
                 edgecolor=paper_color("city_gef_detour.555555"),
                 label="Production + EOL",
             ),
             Patch(
                 facecolor=paper_color("city_gef_detour.777777"),
-                alpha=0.90,
+                alpha=paper_alpha("city_gef_detour.alpha_0_9"),
                 edgecolor=paper_color("city_gef_detour.555555"),
                 label="Use phase",
             ),
@@ -1299,7 +1300,7 @@ def _city_gef_components_report(df, axes, grayscale=False):
                     bar["production_eol"]
                 ),
                 "top": _report_number(bar["production_eol"]),
-                "alpha": 1.0 if grayscale else 0.38,
+                "alpha": paper_alpha("city_gef_detour.alpha_1_0") if grayscale else paper_alpha("city_gef_detour.alpha_0_38"),
                 "hatch": "////" if grayscale else None,
                 "edgecolor": paper_color("city_gef_detour.222222") if grayscale else "white",
             },
@@ -1309,7 +1310,7 @@ def _city_gef_components_report(df, axes, grayscale=False):
                     bar["use_phase"]
                 ),
                 "top": _report_number(bar["total"]),
-                "alpha": 1.0 if grayscale else 0.88,
+                "alpha": paper_alpha("city_gef_detour.alpha_1_0") if grayscale else paper_alpha("city_gef_detour.alpha_0_88"),
                 "hatch": None,
                 "edgecolor": paper_color("city_gef_detour.222222") if grayscale else "white",
             },
@@ -1835,7 +1836,7 @@ def plot_city_gef_distribution(
         0.0,
         curve_y,
         color=paper_color("city_gef_detour.afafaf"),
-        alpha=0.35,
+        alpha=paper_alpha("city_gef_detour.alpha_0_35"),
         linewidth=0,
         zorder=1,
     )
@@ -2389,7 +2390,7 @@ def plot_city_gef_lifecycle_components(
             production_eol,
             width=style["bar_width_gef"],
             color=spec["color"],
-            alpha=0.38,
+            alpha=paper_alpha("city_gef_detour.alpha_0_38"),
             edgecolor=paper_color("ink.background"),
             linewidth=0.6,
             zorder=3,
@@ -2400,7 +2401,7 @@ def plot_city_gef_lifecycle_components(
             width=style["bar_width_gef"],
             bottom=production_eol,
             color=spec["color"],
-            alpha=0.88,
+            alpha=paper_alpha("city_gef_detour.alpha_0_88"),
             edgecolor=paper_color("ink.background"),
             linewidth=0.6,
             zorder=3,
@@ -2456,7 +2457,7 @@ def plot_city_gef_lifecycle_components(
         text,
         width,
         facecolor=None,
-        alpha=1.0,
+        alpha=paper_alpha("city_gef_detour.alpha_1_0"),
         fontweight="normal",
     ):
         cell = DrawingArea(width, 13.0, 0.0, 0.0)
@@ -2506,13 +2507,13 @@ def plot_city_gef_lifecycle_components(
                     "E-bike",
                     column_widths[1],
                     facecolor=vehicle_by_name["E-bike"]["color"],
-                    alpha=0.88,
+                    alpha=paper_alpha("city_gef_detour.alpha_0_88"),
                 ),
                 _legend_cell(
                     "Drone",
                     column_widths[2],
                     facecolor=vehicle_by_name["Drone"]["color"],
-                    alpha=0.88,
+                    alpha=paper_alpha("city_gef_detour.alpha_0_88"),
                 ),
             ],
             align="center",
@@ -2530,13 +2531,13 @@ def plot_city_gef_lifecycle_components(
                     "Production + EOL",
                     column_widths[1],
                     facecolor=paper_color("city_gef_detour.777777"),
-                    alpha=0.38,
+                    alpha=paper_alpha("city_gef_detour.alpha_0_38"),
                 ),
                 _legend_cell(
                     "Use phase",
                     column_widths[2],
                     facecolor=paper_color("city_gef_detour.777777"),
-                    alpha=0.88,
+                    alpha=paper_alpha("city_gef_detour.alpha_0_88"),
                 ),
             ],
             align="center",
@@ -2598,13 +2599,13 @@ def plot_city_gef_lifecycle_components(
                         bar["production_eol"]
                     ),
                     "top": float(bar["production_eol"]),
-                    "alpha": 0.38,
+                    "alpha": paper_alpha("city_gef_detour.alpha_0_38"),
                 },
                 "use_phase_segment": {
                     "bottom": float(bar["production_eol"]),
                     "height_g_co2e_per_order": float(bar["use_phase"]),
                     "top": float(bar["total"]),
-                    "alpha": 0.88,
+                    "alpha": paper_alpha("city_gef_detour.alpha_0_88"),
                 },
                 "total_label": {
                     "text": f'{bar["total"]:.1f}',
@@ -2895,7 +2896,7 @@ def plot_city_distance_drone_share_emission_fit(
             0.0,
             color=style["zero_line_color"],
             linewidth=style["zero_linewidth"],
-            alpha=0.3,
+            alpha=paper_alpha("city_gef_detour.alpha_0_3"),
             zorder=3,
         )
 
@@ -3403,7 +3404,7 @@ def _detour_reduction_scatter_report(
                         if grayscale and compact
                         else CITY_GEF_BOTTOM_SCATTER_ALPHA
                         if compact
-                        else 0.68
+                        else paper_alpha("city_gef_detour.alpha_0_68")
                     ),
                     "edgecolors": "none",
                     "zorder": 10,

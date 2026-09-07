@@ -1,4 +1,5 @@
 """Visualization functions for cross-region correlation and emission analysis."""
+from .palette import opacity as paper_alpha
 
 from .prepared_bundle import evaluate_kde, fit_polynomial, linear_fit_interval, prepared_data
 
@@ -233,14 +234,14 @@ def _plot_grouped_scatter_split_panels_axes(
                     if fit_linewidth is not None
                     else (1.35 if compact else 2.5)
                 ),
-                alpha=0.42,
+                alpha=paper_alpha("city_gef_support.alpha_0_42"),
                 zorder=15,
             )
             ax.fill_between(
                 x_line,
                 y_line - ci,
                 y_line + ci,
-                alpha=0.11,
+                alpha=paper_alpha("city_gef_support.alpha_0_11"),
                 color=line_color,
                 zorder=5,
             )
@@ -272,7 +273,7 @@ def _plot_grouped_scatter_split_panels_axes(
                 boxstyle="round,pad=0.14" if compact else "round,pad=0.22",
                 facecolor=paper_color("ink.background"),
                 edgecolor=paper_color("ink.0_7"),
-                alpha=0.9,
+                alpha=paper_alpha("city_gef_support.alpha_0_9"),
             ),
         )
         ax.set_xlim(x_global_min, x_global_max)
@@ -296,7 +297,7 @@ def _plot_grouped_scatter_split_panels_axes(
             )
         ax.grid(
             True,
-            alpha=0.18 if compact else 0.3,
+            alpha=paper_alpha("city_gef_support.alpha_0_18") if compact else paper_alpha("city_gef_support.alpha_0_3"),
             linestyle="--",
             linewidth=0.45 if compact else 0.8,
         )
@@ -598,7 +599,7 @@ def _plot_city_gef_scatter_components_axes(
             1,
             1,
             facecolor=paper_color("city_gef_support.777777"),
-            alpha=0.35,
+            alpha=paper_alpha("city_gef_support.alpha_0_35"),
             edgecolor=paper_color("city_gef_support.555555"),
             label="Production + EOL",
         ),
@@ -607,7 +608,7 @@ def _plot_city_gef_scatter_components_axes(
             1,
             1,
             facecolor=paper_color("city_gef_support.777777"),
-            alpha=0.9,
+            alpha=paper_alpha("city_gef_support.alpha_0_9"),
             edgecolor=paper_color("city_gef_support.555555"),
             label="Use phase",
         ),
@@ -637,7 +638,7 @@ def _plot_city_gef_scatter_components_axes(
             fixed_values,
             width=width,
             color=spec["color"],
-            alpha=1.0 if grayscale else 0.38,
+            alpha=paper_alpha("city_gef_support.alpha_1_0") if grayscale else paper_alpha("city_gef_support.alpha_0_38"),
             edgecolor=paper_color("city_gef_support.222222") if grayscale else "white",
             linewidth=0.45 if grayscale else 0.6,
             hatch="////" if grayscale else None,
@@ -649,7 +650,7 @@ def _plot_city_gef_scatter_components_axes(
             width=width,
             bottom=fixed_values,
             color=spec["color"],
-            alpha=1.0 if grayscale else 0.88,
+            alpha=paper_alpha("city_gef_support.alpha_1_0") if grayscale else paper_alpha("city_gef_support.alpha_0_88"),
             edgecolor=paper_color("city_gef_support.222222") if grayscale else "white",
             linewidth=0.45 if grayscale else 0.6,
             zorder=3,
@@ -682,7 +683,7 @@ def _plot_city_gef_scatter_components_axes(
     ax.grid(
         True,
         axis="y",
-        alpha=0.18 if compact else 0.3,
+        alpha=paper_alpha("city_gef_support.alpha_0_18") if compact else paper_alpha("city_gef_support.alpha_0_3"),
         linestyle="--",
         linewidth=0.45 if compact else 0.8,
     )
@@ -696,7 +697,7 @@ def _plot_city_gef_scatter_components_axes(
             1,
             1,
             facecolor=spec["color"],
-            alpha=1.0 if grayscale else 0.88,
+            alpha=paper_alpha("city_gef_support.alpha_1_0") if grayscale else paper_alpha("city_gef_support.alpha_0_88"),
             edgecolor=paper_color("city_gef_support.222222") if grayscale else "white",
             label=spec["label"],
         )
@@ -750,7 +751,7 @@ def _plot_city_gef_scatter_components_axes(
         0,
         density,
         color=paper_color("city_gef_support.7a7a7a"),
-        alpha=0.35,
+        alpha=paper_alpha("city_gef_support.alpha_0_35"),
         linewidth=0,
         zorder=1,
     )
@@ -761,7 +762,7 @@ def _plot_city_gef_scatter_components_axes(
         marker="|",
         s=16,
         color=paper_color("city_gef_support.333333"),
-        alpha=0.35,
+        alpha=paper_alpha("city_gef_support.alpha_0_35"),
         linewidths=0.6,
         zorder=3,
     )
