@@ -530,7 +530,7 @@ def plot_province_total_ebike_lifecycle(
     )
     if reduction_metric == "absolute":
         reduction_col = _oracle_reduction_tonnes_column(sub)
-        reduction_axis_label = "City optimal reduction\n(t CO₂eq / yr)"
+        reduction_axis_label = "City optimal reduction\n(t CO$_2$eq / yr)"
         reduction_legend_label = "City optimal reduction (per city)"
     else:
         sub["oracle_min_reduction_vs_ebike_pct"] = np.where(
@@ -581,9 +581,9 @@ def plot_province_total_ebike_lifecycle(
     axis_label_size = 12 if _external_ax else 9
     x_tick_size = 9 if _external_ax else 7
     ebike_axis_label = (
-        "Kappa-adjusted e-bike\nlifecycle emission\n(t CO₂eq / yr)"
+        "Kappa-adjusted e-bike\nlifecycle emission\n(t CO$_2$eq / yr)"
         if _external_ax
-        else "Annual e-bike lifecycle emissions\n(t CO₂eq yr⁻¹)"
+        else "Annual e-bike lifecycle emissions\n(t CO$_2$eq yr$^{-1}$)"
     )
 
     ax1.bar(
@@ -1662,7 +1662,7 @@ def _plot_city_oracle_reduction_rank(
     xlabel = (
         "Optimal reduction (%)"
         if reduction_metric == "percentage"
-        else "E-bike - Optimal (t CO₂eq / yr)"
+        else "E-bike - Optimal (t CO$_2$eq / yr)"
     )
     ax.set_xlabel(xlabel, fontsize=7 if compact else 12)
     if compact:

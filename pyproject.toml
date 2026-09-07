@@ -16,4 +16,4 @@ package-dir = {"" = "src"}
 where = ["src"]
 
 [tool.setuptools.package-data]
-drone_emission = ["paper_figures.json", "paper_cohort.json", "calibration/*.csv", "calibration/*.json", "visualization/layouts/*.json", "visualization/palette.toml"]
+drone_emission = ["paper_figures.json", "paper_cohort.json", "calibration/*.csv", "calibration/*.json", "visualization/layouts/*.json", "visualization/palette.toml", "visualization/typography.toml"]

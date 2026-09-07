@@ -149,6 +149,9 @@ def test_prepare_links_converts_subfigure_without_export(tmp_path, monkeypatch):
 
 
 def test_compose_exports_when_master_is_newer(tmp_path, monkeypatch):
+    from drone_emission import paper_preview
+    preview_calls = []
+    monkeypatch.setattr(paper_preview, "refresh_previews", lambda *args, **kwargs: preview_calls.append(args))
     project = tmp_path / "project"
     figures = tmp_path / "runtime-figures"
     panel_pdf = figures / "paper" / "subfigure" / "panel.pdf"
@@ -210,6 +213,7 @@ def test_compose_exports_when_master_is_newer(tmp_path, monkeypatch):
 
     assert outputs == [target]
     assert len(exported) == 1
+    assert len(preview_calls) == 1
     exported_svg, exported_target, exported_inkscape = exported[0]
     assert "panel-mark" in exported_svg
     assert "extra-mark" in exported_svg
@@ -221,6 +225,7 @@ def test_compose_exports_when_master_is_newer(tmp_path, monkeypatch):
     assert exported_inkscape == Path("inkscape")
     assert paper_workflow.compose({"figures_dir": str(figures)}) == []
     assert len(exported) == 1
+    assert len(preview_calls) == 2
 
 
 def test_compose_rejects_missing_required_link(tmp_path, monkeypatch):

@@ -1,0 +1,15 @@
+# Physical points in the exported PDF, before any preview thumbnail scaling.
+family = "Arial"
+exceptions = []
+
+[sizes]
+axis_label = 9.0
+tick = 8.0
+legend = 8.0
+annotation = 8.0
+secondary = 7.0
+panel = 11.0
+title = 11.0
+
+# Explicit dense-label exceptions are added only after visual review.
+# Each exception specifies output, role, text_regex, size and reason.

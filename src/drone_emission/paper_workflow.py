@@ -324,6 +324,11 @@ def _convert_linked_subfigure(
 def _vector_export_source(source: Path, managed_names: set[str], *, linked_dir: Path | None = None) -> Path:
     """Inline linked SVG images in a temporary vector export document."""
     tree = ElementTree.parse(source)
+    from .paper_svg_style import style_master
+    master_report = style_master(tree.getroot(), linked_dir or LINKED_SUBFIGURE_DIR, managed_names)
+    report_path = source.parent / "typography" / (source.stem + ".json")
+    report_path.parent.mkdir(parents=True, exist_ok=True)
+    report_path.write_text(json.dumps(master_report, ensure_ascii=False, indent=2) + "\n")
     converted: set[str] = set()
     for element in tree.getroot().iter():
         if element.tag.rsplit("}", 1)[-1] != "image":
@@ -414,6 +419,9 @@ def compose(
     manifest = load_manifest()
     selected = select_inkscape_figures(only)
     figures_root = Path(config["figures_dir"])
+    from .paper_preview import invalidate_preview, refresh_previews
+    if not prepare_links:
+        invalidate_preview(figures_root, "Composition has started; a full successful compose refreshes the overview.")
     subfigure_dir = figures_root / "paper" / "subfigure"
     paper_dir = figures_root / "paper"
     bundle_reference = paper_dir / "report" / "drawing_bundle.json"
@@ -495,6 +503,8 @@ def compose(
             converted[name]
             for name in figure_required_outputs(figure, manifest)
         ] + [linked_dir / name for name in sorted(extra_names)]
+        from .visualization.typography import DEFAULT_TYPOGRAPHY
+        dependencies.extend([DEFAULT_TYPOGRAPHY, Path(__file__), Path(__file__).with_name("paper_svg_style.py")])
         if force or not _valid_pdf(target) or any(
             _is_newer(dependency, target) for dependency in dependencies
         ):
@@ -507,6 +517,10 @@ def compose(
             staged.append(target)
         else:
             print(f"Composition is fresh: {target}")
+    if {figure["id"] for figure in selected} == {figure["id"] for figure in manifest["figures"]}:
+        refresh_previews(figures_root, manifest["figures"], rasterizer=_tool_path("pdftoppm"))
+    else:
+        print("Overview is stale after partial composition; run full compose to refresh it.")
     return staged
 
 
@@ -581,6 +595,7 @@ def _file_signature(path: Path) -> dict:
 def _request_signature(request: dict, config: dict) -> dict:
     from .visualization.prepared_bundle import drawing_code_hash, file_hash
     from .visualization.palette import load_palette
+    from .visualization.typography import typography_signature
 
     usage = None
     if config.get("bundle_dir"):
@@ -588,6 +603,7 @@ def _request_signature(request: dict, config: dict) -> dict:
         if prepared_path.is_file():
             usage = json.loads(prepared_path.read_text()).get("palette_usage")
     styling = {
+        "typography_sha256": typography_signature(),
         "palette_sha256": load_palette(config.get("palette_path")).signature_for(usage),
         "drawing_code_sha256": drawing_code_hash(),
     }
@@ -658,6 +674,14 @@ def _write_receipt(request: dict, config: dict, signature: dict, elapsed: float)
 
 
 def _render_request_worker(config: dict, request_id: str) -> None:
+    from .visualization.typography import paper_typography
+
+    report_dir = Path(config["figures_dir"]) / "paper" / "report" / "typography"
+    with paper_typography(report_dir):
+        _render_request_worker_impl(config, request_id)
+
+
+def _render_request_worker_impl(config: dict, request_id: str) -> None:
     """Run exactly one renderer in a short-lived process."""
     try:
         from drone_emission.utils.config import configure_cache
@@ -684,6 +708,7 @@ def _render_request_worker(config: dict, request_id: str) -> None:
             return
         source_signature = _request_signature(request, config)
         source_signature.pop("palette_sha256")
+        source_signature.pop("typography_sha256")
         source_signature = Codec(bundle_root / request_id, roots).encode(source_signature)
         try:
             document = validate_bundle(bundle_root, request, cohort_hash())
