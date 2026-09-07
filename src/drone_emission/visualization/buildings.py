@@ -304,7 +304,7 @@ def plot_building_height_merchant_map(
         c=paper_color("buildings.ffd400"),
         s=95 if compact else 260,
         marker="*",
-        edgecolors="black",
+        edgecolors=paper_color("ink.black"),
         linewidths=0.6 if compact else 1.2,
         zorder=30,
         label="Merchant",

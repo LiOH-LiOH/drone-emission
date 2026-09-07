@@ -165,7 +165,7 @@ def plot_merchant_monthly_sales_map(
         s=merchants_in_frame["_marker_size"],
         c=merchant_color,
         alpha=paper_alpha("sales.alpha_0_88"),
-        edgecolors="white",
+        edgecolors=paper_color("ink.background"),
         linewidths=0.22,
         zorder=10,
     )
@@ -193,7 +193,7 @@ def plot_merchant_monthly_sales_map(
         [0.31, 0.31],
         s=[marker_min, marker_max],
         c=merchant_color,
-        edgecolors="white",
+        edgecolors=paper_color("ink.background"),
         linewidths=0.22,
     )
     legend_ax.text(0.33, 0.31, "Low", ha="right", va="center", fontsize=4.5)

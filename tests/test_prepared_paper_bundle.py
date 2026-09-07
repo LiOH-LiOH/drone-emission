@@ -150,6 +150,19 @@ class PreparedBundleTests(unittest.TestCase):
                 if isinstance(node, ast.Attribute):
                     self.assertNotIn("paper_color", node.attr, (source.name, node.lineno))
 
+    def test_city_binned_cache_ignores_display_order_but_not_source_changes(self):
+        from drone_emission.visualization.city_gef_detour import _canonical_binned_cache_meta
+        first = {"city_keys": ["beijing", "chengdu"],
+                 "merchant_filter": {"region_keys": ["beijing", "chengdu"], "quantile": 0.99},
+                 "source_files": {"beijing": {"mtime_ns": 123}}}
+        second = {"city_keys": ["chengdu", "beijing"],
+                  "merchant_filter": {"region_keys": ["chengdu", "beijing"], "quantile": 0.99},
+                  "source_files": {"beijing": {"mtime_ns": 123}}}
+        self.assertEqual(_canonical_binned_cache_meta(first), _canonical_binned_cache_meta(second))
+        second["source_files"]["beijing"]["mtime_ns"] = 124
+        self.assertNotEqual(_canonical_binned_cache_meta(first), _canonical_binned_cache_meta(second))
+        self.assertEqual(second["city_keys"], ["chengdu", "beijing"])
+
     def test_palette_signature_tracks_alias_and_colormap_dependencies(self):
         original = configure_palette()
         usage = {"colors": ["roadnet.1f77b4"], "colormaps": []}

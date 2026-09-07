@@ -518,9 +518,9 @@ def _draw_distance_panel(
             label="Drone (straight)",
         )
         ax.scatter(origin_rot[0], origin_rot[1], c=paper_color("roadnet.2f6f4e"), s=marker_size, marker="o",
-                   zorder=25, edgecolors="white", linewidth=marker_edge_width, label="Merchant")
+                   zorder=25, edgecolors=paper_color("ink.background"), linewidth=marker_edge_width, label="Merchant")
         ax.scatter(dest_rot[0], dest_rot[1], c=paper_color("roadnet.3f4b64"), s=marker_size, marker="s",
-                   zorder=25, edgecolors="white", linewidth=marker_edge_width, label="Customer")
+                   zorder=25, edgecolors=paper_color("ink.background"), linewidth=marker_edge_width, label="Customer")
 
         if show_endpoint_labels:
             from matplotlib import patheffects
@@ -627,9 +627,9 @@ def _draw_distance_panel(
         label="Drone (straight)",
     )
     ax.scatter(origin[1], origin[0], c=paper_color("roadnet.2f6f4e"), s=90, marker="o",
-               zorder=25, edgecolors="white", linewidth=1.5, label="Merchant")
+               zorder=25, edgecolors=paper_color("ink.background"), linewidth=1.5, label="Merchant")
     ax.scatter(destination[1], destination[0], c=paper_color("roadnet.3f4b64"), s=90, marker="s",
-               zorder=25, edgecolors="white", linewidth=1.5, label="Customer")
+               zorder=25, edgecolors=paper_color("ink.background"), linewidth=1.5, label="Customer")
 
     ax.set_xlim(local_bounds["min_lng"], local_bounds["max_lng"])
     ax.set_ylim(local_bounds["min_lat"], local_bounds["max_lat"])

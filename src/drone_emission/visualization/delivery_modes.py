@@ -573,7 +573,7 @@ def _four_city_figure_report(
                     {
                         "shape": "filled_circle",
                         "facecolor": paper_color("delivery_modes.3f3f3f"),
-                        "edgecolor": "white",
+                        "edgecolor": paper_color("ink.background"),
                         "connected": False,
                         "labels": False,
                     }

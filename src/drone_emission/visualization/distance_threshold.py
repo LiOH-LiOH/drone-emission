@@ -379,7 +379,7 @@ def _plot_distance_threshold_all_city_scatter(
             ha="right" if offset[0] < 0 else "left",
             bbox={
                 "boxstyle": "square,pad=0.15",
-                "facecolor": "white",
+                "facecolor": paper_color("ink.background"),
                 "edgecolor": "none",
                 "alpha": paper_alpha("distance_threshold.alpha_0_78"),
             },

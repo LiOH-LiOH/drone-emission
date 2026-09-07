@@ -1476,7 +1476,7 @@ def _write_contribution_decomposition_city_b_report(
         "net_marker": {"label": "Net reduction", "color": paper_color("contribution_break_even.111111")},
         "absolute_marker": {
             "label": "Absolute net reduction",
-            "facecolor": "white",
+            "facecolor": paper_color("ink.background"),
             "edgecolor": paper_color("contribution_break_even.1b5e20"),
             "scope": "Representative city rows only",
         },
@@ -2648,7 +2648,7 @@ def _plot_break_even_surface_panel(
                 color=color,
                 bbox={
                     "boxstyle": "round,pad=0.22",
-                    "facecolor": "white",
+                    "facecolor": paper_color("ink.background"),
                     "alpha": paper_alpha("contribution_break_even.alpha_0_84"),
                     "edgecolor": "none",
                 },
@@ -2780,7 +2780,7 @@ def _plot_break_even_heatmap_panel(
             fontsize=9.2 * font_scale,
             bbox={
                 "boxstyle": "round,pad=0.22",
-                "facecolor": "white",
+                "facecolor": paper_color("ink.background"),
                 "alpha": paper_alpha("contribution_break_even.alpha_0_82"),
                 "edgecolor": "none",
             },

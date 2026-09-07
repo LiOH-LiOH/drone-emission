@@ -411,6 +411,18 @@ def _finalize_merchant_filter_bin_audit(audit):
     return records
 
 
+def _canonical_binned_cache_meta(metadata):
+    """City-keyed bins do not depend on the requesting panel's city order."""
+    result = dict(metadata)
+    result["city_keys"] = sorted(result.get("city_keys", []))
+    if "merchant_filter" in result:
+        result["merchant_filter"] = dict(result["merchant_filter"])
+        result["merchant_filter"]["region_keys"] = sorted(
+            result["merchant_filter"].get("region_keys", [])
+        )
+    return result
+
+
 def _build_reduction_detour_binned_by_city(
     data_dir,
     selected,
@@ -519,7 +531,9 @@ def _build_reduction_detour_binned_by_city(
             try:
                 with open(cache_path, "rb") as f:
                     cache = pickle.load(f)
-                if cache.get("meta") == cache_meta:
+                cached_meta = _canonical_binned_cache_meta(cache.get("meta", {}))
+                expected_meta = _canonical_binned_cache_meta(cache_meta)
+                if cached_meta == expected_meta:
                     print(f"{figure_name}: loading binned data cache {cache_path}")
                     return cache["binned_by_city"], labels
                 print(f"{figure_name}: binned data cache is stale; rebuilding")
@@ -865,7 +879,7 @@ def _plot_compact_city_context_summary_panels(
                     ha="center",
                     va="center",
                     fontsize=7,
-                    color="white" if name in {"Hydro", "Thermal"} else paper_color("city_gef_detour.222222"),
+                    color=paper_color("ink.background") if name in {"Hydro", "Thermal"} else paper_color("city_gef_detour.222222"),
                     fontweight="bold",
                     zorder=4,
                 )
@@ -1302,7 +1316,7 @@ def _city_gef_components_report(df, axes, grayscale=False):
                 "top": _report_number(bar["production_eol"]),
                 "alpha": paper_alpha("city_gef_detour.alpha_1_0") if grayscale else paper_alpha("city_gef_detour.alpha_0_38"),
                 "hatch": "////" if grayscale else None,
-                "edgecolor": paper_color("city_gef_detour.222222") if grayscale else "white",
+                "edgecolor": paper_color("city_gef_detour.222222") if grayscale else paper_color("ink.background"),
             },
             "use_phase_segment": {
                 "bottom": _report_number(bar["production_eol"]),
@@ -1312,7 +1326,7 @@ def _city_gef_components_report(df, axes, grayscale=False):
                 "top": _report_number(bar["total"]),
                 "alpha": paper_alpha("city_gef_detour.alpha_1_0") if grayscale else paper_alpha("city_gef_detour.alpha_0_88"),
                 "hatch": None,
-                "edgecolor": paper_color("city_gef_detour.222222") if grayscale else "white",
+                "edgecolor": paper_color("city_gef_detour.222222") if grayscale else paper_color("ink.background"),
             },
             "total_label": {
                 "x": _report_number(bar["x_center"]),
@@ -1847,7 +1861,7 @@ def plot_city_gef_distribution(
             [0.0],
             s=24,
             marker=marker_row["marker"],
-            facecolors="white",
+            facecolors=paper_color("ink.background"),
             edgecolors=paper_color("city_gef_detour.111111"),
             linewidths=0.9,
             zorder=4,
@@ -1921,7 +1935,7 @@ def plot_city_gef_distribution(
             [0.5],
             s=power_mix_style["marker_size"],
             marker=marker_row["marker"],
-            facecolors="white",
+            facecolors=paper_color("ink.background"),
             edgecolors=paper_color("city_gef_detour.111111"),
             linewidths=power_mix_style["marker_linewidth"],
             clip_on=False,
@@ -1962,7 +1976,7 @@ def plot_city_gef_distribution(
                     ],
                     fontweight="bold",
                     color=(
-                        "white"
+                        paper_color("ink.background")
                         if name in {"Hydro", "Thermal"}
                         else paper_color("city_gef_detour.222222")
                     ),
@@ -2313,7 +2327,7 @@ def plot_city_gef_lifecycle_components(
             [x],
             [delta],
             s=style["delta_point_size"],
-            facecolors="white",
+            facecolors=paper_color("ink.background"),
             edgecolors=paper_color("city_gef_detour.222222"),
             linewidths=style["delta_point_edge_width"],
             zorder=3,

@@ -1852,7 +1852,7 @@ def plot_city_reduction_rank_all_macro_region(
         selected_cities = selected_cities.sort_values("rank")
         label_box_style = {
             "boxstyle": "round,pad=0.18",
-            "facecolor": "white",
+            "facecolor": paper_color("ink.background"),
             "edgecolor": "0.55",
             "alpha": paper_alpha("city_priorities.alpha_1_0"),
         }

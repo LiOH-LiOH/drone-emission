@@ -639,7 +639,7 @@ def _plot_city_gef_scatter_components_axes(
             width=width,
             color=spec["color"],
             alpha=paper_alpha("city_gef_support.alpha_1_0") if grayscale else paper_alpha("city_gef_support.alpha_0_38"),
-            edgecolor=paper_color("city_gef_support.222222") if grayscale else "white",
+            edgecolor=paper_color("city_gef_support.222222") if grayscale else paper_color("ink.background"),
             linewidth=0.45 if grayscale else 0.6,
             hatch="////" if grayscale else None,
             zorder=3,
@@ -651,7 +651,7 @@ def _plot_city_gef_scatter_components_axes(
             bottom=fixed_values,
             color=spec["color"],
             alpha=paper_alpha("city_gef_support.alpha_1_0") if grayscale else paper_alpha("city_gef_support.alpha_0_88"),
-            edgecolor=paper_color("city_gef_support.222222") if grayscale else "white",
+            edgecolor=paper_color("city_gef_support.222222") if grayscale else paper_color("ink.background"),
             linewidth=0.45 if grayscale else 0.6,
             zorder=3,
             label=spec["label"],
@@ -698,7 +698,7 @@ def _plot_city_gef_scatter_components_axes(
             1,
             facecolor=spec["color"],
             alpha=paper_alpha("city_gef_support.alpha_1_0") if grayscale else paper_alpha("city_gef_support.alpha_0_88"),
-            edgecolor=paper_color("city_gef_support.222222") if grayscale else "white",
+            edgecolor=paper_color("city_gef_support.222222") if grayscale else paper_color("ink.background"),
             label=spec["label"],
         )
         for spec in vehicle_specs
