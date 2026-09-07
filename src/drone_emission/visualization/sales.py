@@ -1,3 +1,7 @@
+
+from .prepared_bundle import prepared_plot, prepared_data
+
+from .palette import color as paper_color
 import os
 
 import matplotlib.pyplot as plt
@@ -20,6 +24,7 @@ from ._utils import (
 
 # Padding coefficient for heatmap Gaussian smoothing boundary extension
 # This ensures heat diffusion doesn't get clipped at data boundaries
+@prepared_plot()
 def plot_merchant_monthly_sales_map(
     stores_df,
     buildings_gdf,
@@ -139,20 +144,20 @@ def plot_merchant_monthly_sales_map(
     merchants_in_frame["_marker_size"] = marker_sizes
     merchants_in_frame = merchants_in_frame.sort_values("_marker_size")
 
-    fig = plt.figure(figsize=figsize, facecolor="white")
+    fig = plt.figure(figsize=figsize, facecolor=paper_color("ink.background"))
     ax = fig.add_axes(map_rect)
-    ax.set_facecolor("#fafafa")
+    ax.set_facecolor(paper_color("sales.fafafa"))
     ax.set_aspect(aspect_ratio)
     ax.set_xlim(boundaries["min_lng"], boundaries["max_lng"])
     ax.set_ylim(boundaries["min_lat"], boundaries["max_lat"])
     buildings_in_frame.plot(
         ax=ax,
-        facecolor="#d7d9dc",
+        facecolor=paper_color("sales.d7d9dc"),
         edgecolor="none",
         alpha=0.86,
         zorder=1,
     )
-    merchant_color = "#d94b3f"
+    merchant_color = paper_color("sales.d94b3f")
     ax.scatter(
         merchants_in_frame["_lng_wgs84"],
         merchants_in_frame["_lat_wgs84"],

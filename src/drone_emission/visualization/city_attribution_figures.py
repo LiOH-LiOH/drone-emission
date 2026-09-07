@@ -1,5 +1,9 @@
 """Visualization functions for cross-region correlation and emission analysis."""
 
+from .prepared_bundle import prepared_plot, prepared_data, evaluate_kde, fit_polynomial
+
+from .palette import color as paper_color
+
 import json
 import os
 import pickle
@@ -73,6 +77,7 @@ def _r2_save_figure(
     plt.close(fig)
 
 
+@prepared_plot()
 def plot_r2_population_reduction_contrast(
     df: pd.DataFrame,
     analysis: dict,
@@ -111,11 +116,11 @@ def plot_r2_population_reduction_contrast(
         fig, ax = plt.subplots(figsize=figsize)
         plot_df = df[["region_key", "population_10k", outcome]].dropna().copy()
         population_million = plot_df["population_10k"] / 100.0
-        ax.scatter(population_million, plot_df[outcome], s=20, color="#4C78A8",
-                   alpha=0.52, edgecolor="white", linewidth=0.3)
-        slope, intercept = np.polyfit(population_million, plot_df[outcome], 1)
+        ax.scatter(population_million, plot_df[outcome], s=20, color=paper_color("city_attribution_figures.4c78a8"),
+                   alpha=0.52, edgecolor=paper_color("ink.background"), linewidth=0.3)
+        slope, intercept = fit_polynomial(population_million, plot_df[outcome], 1)
         x_line = np.linspace(population_million.min(), population_million.max(), 120)
-        ax.plot(x_line, slope * x_line + intercept, color="#D95F02", linewidth=1.5)
+        ax.plot(x_line, slope * x_line + intercept, color=paper_color("city_attribution_figures.d95f02"), linewidth=1.5)
         label_x = population_million.min() + 0.65 * (
             population_million.max() - population_million.min()
         )
@@ -131,7 +136,7 @@ def plot_r2_population_reduction_contrast(
             ha="center",
             va="top" if label_below_line else "bottom",
             fontsize=7.5,
-            color="#444444",
+            color=paper_color("city_attribution_figures.444444"),
             linespacing=1.15,
             zorder=5,
         )

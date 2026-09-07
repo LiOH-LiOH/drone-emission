@@ -1,3 +1,7 @@
+
+from .prepared_bundle import prepared_plot, prepared_data, local_road_edges, shortest_path
+
+from .palette import color as paper_color, colormap as paper_cmap
 import os
 
 import geopandas as gpd
@@ -31,6 +35,27 @@ MERCHANT_MAP_OD_LINE_COUNT = 15
 MERCHANT_MAP_HEIGHT_BINS = 6
 
 
+
+
+@prepared_data
+def _prepare_merchant_od_overlay(od_df, merchant_lat, merchant_lng, bounds):
+    """Freeze the existing selected-merchant display rule, not the full OD."""
+    columns = ["from_lat", "from_lng", "to_lat", "to_lng", "annual_sales"]
+    missing = set(columns).difference(od_df.columns)
+    if missing:
+        raise ValueError(f"Merchant OD overlay is missing columns: {sorted(missing)}")
+    frame = od_df[columns].apply(pd.to_numeric, errors="coerce").dropna()
+    selected = (
+        (frame["from_lat"] - merchant_lat).abs().le(MERCHANT_MAP_ORIGIN_TOLERANCE_DEG)
+        & (frame["from_lng"] - merchant_lng).abs().le(MERCHANT_MAP_ORIGIN_TOLERANCE_DEG)
+    )
+    for endpoint in ("from", "to"):
+        selected &= frame[f"{endpoint}_lat"].between(bounds["min_lat"], bounds["max_lat"])
+        selected &= frame[f"{endpoint}_lng"].between(bounds["min_lng"], bounds["max_lng"])
+    return frame[selected].nlargest(MERCHANT_MAP_OD_LINE_COUNT, "annual_sales").copy()
+
+
+@prepared_plot(omit=('road_graph', 'od_df'))
 def plot_building_height_merchant_map(
     buildings_gdf,
     stores_df,
@@ -167,13 +192,13 @@ def plot_building_height_merchant_map(
     ax.set_aspect(aspect_ratio)
     ax.set_xlim(boundaries_dict["min_lng"], boundaries_dict["max_lng"])
     ax.set_ylim(boundaries_dict["min_lat"], boundaries_dict["max_lat"])
-    ax.set_facecolor("#f7f7f5")
+    ax.set_facecolor(paper_color("buildings.f7f7f5"))
 
     road_edge_count = 0
     if road_graph is None:
         print("Building height merchant map roadnet background skipped - missing roadnet")
     else:
-        edge_coords = road_graph.get_local_edges(boundaries_dict, margin_deg=0.0)
+        edge_coords = local_road_edges(road_graph, boundaries_dict, margin_deg=0.0)
         road_edge_count = len(edge_coords)
         if road_edge_count == 0:
             print(
@@ -184,14 +209,14 @@ def plot_building_height_merchant_map(
             segments = [[(ec[1], ec[0]), (ec[3], ec[2])] for ec in edge_coords]
             roads = LineCollection(
                 segments,
-                colors="#aeb4b9",
+                colors=paper_color("buildings.aeb4b9"),
                 linewidths=0.45 if compact else 0.75,
                 alpha=0.6 if compact else 0.75,
                 zorder=2,
             )
             ax.add_collection(roads)
 
-    base_cmap = plt.get_cmap("Spectral_r")
+    base_cmap = paper_cmap("buildings.height")
     cmap = ListedColormap(
         base_cmap(np.linspace(0.12, 0.92, MERCHANT_MAP_HEIGHT_BINS))
     )
@@ -236,92 +261,46 @@ def plot_building_height_merchant_map(
     )
 
     od_line_count = 0
-    if od_df is None:
-        print("Building height merchant map OD overlay skipped - missing OD data")
-    else:
-        required_od_cols = {
-            "from_lat",
-            "from_lng",
-            "to_lat",
-            "to_lng",
-            "annual_sales",
-        }
-        missing_od_cols = required_od_cols - set(od_df.columns)
-        if missing_od_cols:
+    if od_df is not None:
+        top_od = _prepare_merchant_od_overlay(
+            od_df, merchant_lat, merchant_lng, boundaries_dict
+        )
+        if top_od.empty:
             print(
-                "Building height merchant map OD overlay skipped - OD data "
-                f"missing columns {sorted(missing_od_cols)}"
+                "Building height merchant map OD overlay skipped - no "
+                "selected-merchant OD pairs fully inside frame"
             )
         else:
-            od_plot = od_df[list(required_od_cols)].copy()
-            for col in required_od_cols:
-                od_plot[col] = pd.to_numeric(od_plot[col], errors="coerce")
-            od_plot = od_plot.dropna(subset=list(required_od_cols))
-            same_origin = (
-                (od_plot["from_lat"] - merchant_lat).abs()
-                <= MERCHANT_MAP_ORIGIN_TOLERANCE_DEG
-            ) & (
-                (od_plot["from_lng"] - merchant_lng).abs()
-                <= MERCHANT_MAP_ORIGIN_TOLERANCE_DEG
-            )
-            in_frame = (
-                od_plot["from_lng"].between(
-                    boundaries_dict["min_lng"],
-                    boundaries_dict["max_lng"],
-                )
-                & od_plot["from_lat"].between(
-                    boundaries_dict["min_lat"],
-                    boundaries_dict["max_lat"],
-                )
-                & od_plot["to_lng"].between(
-                    boundaries_dict["min_lng"],
-                    boundaries_dict["max_lng"],
-                )
-                & od_plot["to_lat"].between(
-                    boundaries_dict["min_lat"],
-                    boundaries_dict["max_lat"],
-                )
-            )
-            top_od = (
-                od_plot[same_origin & in_frame]
-                .nlargest(MERCHANT_MAP_OD_LINE_COUNT, "annual_sales")
-                .copy()
-            )
-            if top_od.empty:
-                print(
-                    "Building height merchant map OD overlay skipped - no "
-                    "selected-merchant OD pairs fully inside frame"
-                )
-            else:
-                sales_min = float(top_od["annual_sales"].min())
-                sales_max = float(top_od["annual_sales"].max())
-                for _, row in top_od.iterrows():
-                    if sales_max == sales_min:
-                        line_width = 3.25 if compact else 2.5
-                    else:
-                        fraction = (
-                            (float(row["annual_sales"]) - sales_min)
-                            / (sales_max - sales_min)
-                        )
-                        if compact:
-                            line_width = 2.5 + fraction * 1.5
-                        else:
-                            line_width = 4.0 + fraction * 6.0
-                    ax.plot(
-                        [row["from_lng"], row["to_lng"]],
-                        [row["from_lat"], row["to_lat"]],
-                        color="#005f9e",
-                        linewidth=line_width,
-                        alpha=0.8 if compact else 0.88,
-                        solid_capstyle="round",
-                        zorder=25,
+            sales_min = float(top_od["annual_sales"].min())
+            sales_max = float(top_od["annual_sales"].max())
+            for _, row in top_od.iterrows():
+                if sales_max == sales_min:
+                    line_width = 3.25 if compact else 2.5
+                else:
+                    fraction = (
+                        (float(row["annual_sales"]) - sales_min)
+                        / (sales_max - sales_min)
                     )
-                od_line_count = len(top_od)
+                    if compact:
+                        line_width = 2.5 + fraction * 1.5
+                    else:
+                        line_width = 4.0 + fraction * 6.0
+                ax.plot(
+                    [row["from_lng"], row["to_lng"]],
+                    [row["from_lat"], row["to_lat"]],
+                    color=paper_color("buildings.005f9e"),
+                    linewidth=line_width,
+                    alpha=0.8 if compact else 0.88,
+                    solid_capstyle="round",
+                    zorder=25,
+                )
+            od_line_count = len(top_od)
+
 
     ax.scatter(
         merchant_lng,
         merchant_lat,
-        c="#ffd400",
+        c=paper_color("buildings.ffd400"),
         s=95 if compact else 260,
         marker="*",
         edgecolors="black",
@@ -333,7 +312,7 @@ def plot_building_height_merchant_map(
         ax.plot(
             [],
             [],
-            color="#005f9e",
+            color=paper_color("buildings.005f9e"),
             linewidth=3.25 if compact else 5,
             label="OD demands",
         )
@@ -379,7 +358,7 @@ def plot_building_height_merchant_map(
             transform=ax.transAxes,
             fontsize=6.5 if compact else 10,
             verticalalignment="top",
-            bbox=dict(boxstyle="round", facecolor="white", alpha=0.85),
+            bbox=dict(boxstyle="round", facecolor=paper_color("ink.background"), alpha=0.85),
             zorder=100,
         )
 
@@ -490,6 +469,7 @@ def plot_building_height_merchant_map(
     plt.close(fig)
 
 
+@prepared_plot()
 def plot_building_footprint_heatmap(
     buildings_gdf,
     stores_df,
@@ -609,9 +589,9 @@ def plot_building_footprint_heatmap(
     ax.set_aspect(aspect_ratio)
     ax.set_xlim(boundaries_dict["min_lng"], boundaries_dict["max_lng"])
     ax.set_ylim(boundaries_dict["min_lat"], boundaries_dict["max_lat"])
-    ax.set_facecolor("#f7f7f5")
+    ax.set_facecolor(paper_color("buildings.f7f7f5"))
 
-    base_cmap = plt.get_cmap("Spectral_r")
+    base_cmap = paper_cmap("buildings.height")
     cmap = ListedColormap(
         base_cmap(np.linspace(0.12, 0.92, MERCHANT_MAP_HEIGHT_BINS))
     )
@@ -648,7 +628,7 @@ def plot_building_footprint_heatmap(
             transform=ax.transAxes,
             fontsize=10,
             verticalalignment="top",
-            bbox=dict(boxstyle="round", facecolor="white", alpha=0.85),
+            bbox=dict(boxstyle="round", facecolor=paper_color("ink.background"), alpha=0.85),
             zorder=100,
         )
 

@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+from .prepared_bundle import prepared_plot, prepared_data, evaluate_kde, fit_polynomial
+
+from .palette import color as paper_color, colormap as paper_cmap
+
 import json
 import os
 import sys
@@ -92,6 +96,7 @@ def _style_resilience_map_axis(ax) -> None:
         spine.set_visible(False)
 
 
+@prepared_plot()
 def plot_threshold_resilience_national_subfigures(
     summary: pd.DataFrame,
     save_path: str = None,
@@ -128,7 +133,7 @@ def plot_threshold_resilience_national_subfigures(
     if unresolved:
         raise ValueError(f"valid resilience cities unresolved for mapping: {unresolved}")
 
-    cmap = plt.get_cmap("viridis")
+    cmap = paper_cmap("threshold_resilience.probability")
     norm = plt.Normalize(vmin=0.0, vmax=1.0)
     scenarios = (
         ("independent", "Independent perturbations"),
@@ -164,7 +169,7 @@ def plot_threshold_resilience_national_subfigures(
             suffix = "independent" if scenario == "independent" else "stress"
             path = f"{output_stem}_{suffix}{extension}"
             os.makedirs(os.path.dirname(path), exist_ok=True)
-            fig.savefig(path, dpi=300, facecolor="white")
+            fig.savefig(path, dpi=300, facecolor=paper_color("ink.background"))
             output_paths[scenario] = path
         plt.close(fig)
 
@@ -190,7 +195,7 @@ def plot_threshold_resilience_national_subfigures(
     else:
         colorbar_path = f"{output_stem}_colorbar{extension}"
         os.makedirs(os.path.dirname(colorbar_path), exist_ok=True)
-        colorbar_fig.savefig(colorbar_path, dpi=300, facecolor="white")
+        colorbar_fig.savefig(colorbar_path, dpi=300, facecolor=paper_color("ink.background"))
         output_paths["colorbar"] = colorbar_path
     plt.close(colorbar_fig)
 
@@ -255,6 +260,7 @@ def plot_threshold_resilience_national_subfigures(
     return output_paths
 
 
+@prepared_plot()
 def plot_threshold_resilience_national_kdes(
     summary: pd.DataFrame,
     save_dir: str,
@@ -267,15 +273,15 @@ def plot_threshold_resilience_national_kdes(
     os.makedirs(save_dir, exist_ok=True)
     outputs = {}
     for scenario, color, suffix in (
-        ("independent", "#3B75AF", "independent"),
-        ("correlated_adverse_stress", "#C44E52", "stress"),
+        ("independent", paper_color("threshold_resilience.3b75af"), "independent"),
+        ("correlated_adverse_stress", paper_color("threshold_resilience.c44e52"), "stress"),
     ):
         values = wide[scenario].to_numpy(float)
-        kde = gaussian_kde(values)
         x = np.linspace(0, 1, 500)
+        density = evaluate_kde(values, x)
         fig, ax = plt.subplots(figsize=(88 / 25.4, 55 / 25.4))
-        ax.plot(x, kde(x), color=color, linewidth=1.4)
-        ax.fill_between(x, kde(x), color=color, alpha=0.18)
+        ax.plot(x, density, color=color, linewidth=1.4)
+        ax.fill_between(x, density, color=color, alpha=0.18)
         ax.set_xlim(0, 1)
         ax.xaxis.set_major_formatter(FuncFormatter(lambda v, _: f"{v:.0%}"))
         ax.set_xlabel("Probability of positive reduction")
@@ -287,7 +293,7 @@ def plot_threshold_resilience_national_kdes(
             save_dir,
             f"threshold_resilience_national_overview_{suffix}_kde.pdf",
         )
-        fig.savefig(path, dpi=300, facecolor="white")
+        fig.savefig(path, dpi=300, facecolor=paper_color("ink.background"))
         plt.close(fig)
         outputs[scenario] = {"path": path, "bandwidth_factor": float(kde.factor)}
     return outputs

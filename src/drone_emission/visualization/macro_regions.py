@@ -1,12 +1,14 @@
 """Shared China macro-region definitions for paper figures."""
 
+from .palette import color as paper_color
+
 CHINA_MACRO_REGION_SPECS = (
     {
         "key": "north_china",
         "label": "North China",
         "full_label": "North China",
         "cn_label": "华北",
-        "color": "#4E79A7",
+        "color": paper_color("macro_regions.4e79a7"),
         "provinces": ("北京", "天津", "河北", "山西", "内蒙古"),
     },
     {
@@ -14,7 +16,7 @@ CHINA_MACRO_REGION_SPECS = (
         "label": "Northeast",
         "full_label": "Northeast China",
         "cn_label": "东北",
-        "color": "#F28E2B",
+        "color": paper_color("macro_regions.f28e2b"),
         "provinces": ("辽宁", "吉林", "黑龙江"),
     },
     {
@@ -22,7 +24,7 @@ CHINA_MACRO_REGION_SPECS = (
         "label": "East China",
         "full_label": "East China",
         "cn_label": "华东",
-        "color": "#59A14F",
+        "color": paper_color("macro_regions.59a14f"),
         "provinces": ("上海", "江苏", "浙江", "安徽", "福建", "江西", "山东", "台湾"),
     },
     {
@@ -30,7 +32,7 @@ CHINA_MACRO_REGION_SPECS = (
         "label": "Central China",
         "full_label": "Central China",
         "cn_label": "华中",
-        "color": "#E15759",
+        "color": paper_color("macro_regions.e15759"),
         "provinces": ("河南", "湖北", "湖南"),
     },
     {
@@ -38,7 +40,7 @@ CHINA_MACRO_REGION_SPECS = (
         "label": "South China",
         "full_label": "South China",
         "cn_label": "华南",
-        "color": "#76B7B2",
+        "color": paper_color("macro_regions.76b7b2"),
         "provinces": ("广东", "广西", "海南", "香港", "澳门"),
     },
     {
@@ -46,7 +48,7 @@ CHINA_MACRO_REGION_SPECS = (
         "label": "Southwest",
         "full_label": "Southwest China",
         "cn_label": "西南",
-        "color": "#B07AA1",
+        "color": paper_color("macro_regions.b07aa1"),
         "provinces": ("重庆", "四川", "贵州", "云南", "西藏"),
     },
     {
@@ -54,7 +56,7 @@ CHINA_MACRO_REGION_SPECS = (
         "label": "Northwest",
         "full_label": "Northwest China",
         "cn_label": "西北",
-        "color": "#EDC948",
+        "color": paper_color("macro_regions.edc948"),
         "provinces": ("陕西", "甘肃", "青海", "宁夏", "新疆"),
     },
 )

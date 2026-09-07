@@ -1,5 +1,9 @@
 """Formal city gef detour renderers used only by the manifest registry."""
 
+from .prepared_bundle import prepared_plot, prepared_data, evaluate_kde, fit_polynomial, kde_with_factor
+
+from .palette import color as paper_color
+
 import json
 import os
 import pickle
@@ -124,31 +128,31 @@ POWER_GENERATION_2022_100M_KWH = {
     },
 }
 POWER_MIX_COLORS = {
-    "Hydro": "#4c78a8",
-    "Thermal": "#8c564b",
-    "Wind": "#59a14f",
-    "Solar": "#f2cf5b",
-    "Other": "#9e9e9e",
+    "Hydro": paper_color("city_gef_detour.4c78a8"),
+    "Thermal": paper_color("city_gef_detour.8c564b"),
+    "Wind": paper_color("city_gef_detour.59a14f"),
+    "Solar": paper_color("city_gef_detour.f2cf5b"),
+    "Other": paper_color("city_gef_detour.9e9e9e"),
 }
 POWER_MIX_GRAYSCALE_COLORS = {
-    "Hydro": "#2B2B2B",
-    "Thermal": "#606060",
-    "Wind": "#969696",
-    "Solar": "#C7C7C7",
-    "Other": "#E6E6E6",
+    "Hydro": paper_color("city_gef_detour.2b2b2b"),
+    "Thermal": paper_color("city_gef_detour.606060"),
+    "Wind": paper_color("city_gef_detour.969696"),
+    "Solar": paper_color("city_gef_detour.c7c7c7"),
+    "Other": paper_color("city_gef_detour.e6e6e6"),
 }
 CITY_GEF_GRAYSCALE_VEHICLE_COLORS = {
-    "E-bike": "#BDBDBD",
-    "Drone": "#636363",
+    "E-bike": paper_color("city_gef_detour.bdbdbd"),
+    "Drone": paper_color("city_gef_detour.636363"),
 }
 CITY_GEF_GRAYSCALE_BIN_COLORS = (
-    "#D9D9D9",
-    "#BDBDBD",
-    "#A1A1A1",
-    "#858585",
-    "#696969",
-    "#4D4D4D",
-    "#313131",
+    paper_color("scale.gef.bin0"),
+    paper_color("scale.gef.bin1"),
+    paper_color("scale.gef.bin2"),
+    paper_color("scale.gef.bin3"),
+    paper_color("scale.gef.bin4"),
+    paper_color("scale.gef.bin5"),
+    paper_color("scale.gef.bin6"),
 )
 CITY_GEF_GRAYSCALE_BOTTOM_SCATTER_ALPHA = 0.78
 
@@ -734,7 +738,7 @@ def _plot_compact_city_context_summary_panels(
     power_mix_handles = [
         Patch(
             facecolor=power_mix_colors[name],
-            edgecolor="#777777" if grayscale else "none",
+            edgecolor=paper_color("city_gef_detour.777777") if grayscale else "none",
             linewidth=0.4 if grayscale else 0.0,
             label=name,
         )
@@ -794,7 +798,7 @@ def _plot_compact_city_context_summary_panels(
         visible_by_city[region_key] = (centres, reduction_abs, visible, x_min, x_max)
         absolute_values.extend(reduction_abs[visible].tolist())
         if visible.sum() >= 2:
-            slope, intercept = np.polyfit(
+            slope, intercept = fit_polynomial(
                 centres[visible], reduction_abs[visible], deg=1
             )
             absolute_values.extend(
@@ -848,7 +852,7 @@ def _plot_compact_city_context_summary_panels(
                 left=[left],
                 height=0.52,
                 color=power_mix_colors[name],
-                edgecolor="white",
+                edgecolor=paper_color("ink.background"),
                 linewidth=0.6 if grayscale else 0.45,
                 zorder=3,
             )
@@ -860,7 +864,7 @@ def _plot_compact_city_context_summary_panels(
                     ha="center",
                     va="center",
                     fontsize=7,
-                    color="white" if name in {"Hydro", "Thermal"} else "#222222",
+                    color="white" if name in {"Hydro", "Thermal"} else paper_color("city_gef_detour.222222"),
                     fontweight="bold",
                     zorder=4,
                 )
@@ -902,8 +906,8 @@ def _plot_compact_city_context_summary_panels(
             centres[bar_visible],
             drone_share[bar_visible],
             width=0.156,
-            color="#C7C7C7" if grayscale else "#9ecae1",
-            edgecolor="white",
+            color=paper_color("city_gef_detour.c7c7c7") if grayscale else paper_color("city_gef_detour.9ecae1"),
+            edgecolor=paper_color("ink.background"),
             linewidth=0.25,
             zorder=2,
         )
@@ -925,30 +929,30 @@ def _plot_compact_city_context_summary_panels(
             centres[visible],
             reduction_abs[visible],
             s=7,
-            color="#555555",
+            color=paper_color("city_gef_detour.555555"),
             alpha=0.72,
             linewidth=0,
             zorder=5,
         )
         if visible.sum() >= 2:
-            slope, intercept = np.polyfit(
+            slope, intercept = fit_polynomial(
                 centres[visible], reduction_abs[visible], deg=1
             )
             x_fit = np.array([x_min, x_max], dtype=float)
             ax_absolute.plot(
                 x_fit,
                 slope * x_fit + intercept,
-                color="#111111",
+                color=paper_color("city_gef_detour.111111"),
                 linewidth=0.9,
                 alpha=0.82,
                 zorder=6,
             )
-        ax_absolute.axhline(0, color="#555555", linewidth=0.4, alpha=0.3)
+        ax_absolute.axhline(0, color=paper_color("city_gef_detour.555555"), linewidth=0.4, alpha=0.3)
         ax_absolute.set_ylim(*shared_absolute_ylim)
         ax_absolute.tick_params(
             axis="y",
             labelsize=7,
-            labelcolor="#555555",
+            labelcolor=paper_color("city_gef_detour.555555"),
             length=2.5,
             pad=1.5,
         )
@@ -997,7 +1001,7 @@ def _plot_compact_city_context_summary_panels(
         fontsize=7.5,
         ha="center",
         va="center",
-        color="#555555",
+        color=paper_color("city_gef_detour.555555"),
     )
     fig.text(
         middle_pos.x1 + right_label_offset,
@@ -1007,7 +1011,7 @@ def _plot_compact_city_context_summary_panels(
         fontsize=7.5,
         ha="center",
         va="center",
-        color="#444444" if grayscale else "#3182bd",
+        color=paper_color("city_gef_detour.444444") if grayscale else paper_color("city_gef_detour.3182bd"),
     )
     fig.text(
         (middle_pos.x0 + middle_pos.x1) / 2.0,
@@ -1049,48 +1053,48 @@ def _create_city_gef_summary_legend_rail(
         vehicle_handles = [
             Patch(
                 facecolor=CITY_GEF_GRAYSCALE_VEHICLE_COLORS["E-bike"],
-                edgecolor="#222222",
+                edgecolor=paper_color("city_gef_detour.222222"),
                 linewidth=0.45,
                 label="E-bike",
             ),
             Patch(
                 facecolor=CITY_GEF_GRAYSCALE_VEHICLE_COLORS["Drone"],
-                edgecolor="#222222",
+                edgecolor=paper_color("city_gef_detour.222222"),
                 linewidth=0.45,
                 label="Drone",
             ),
         ]
         component_handles = [
             Patch(
-                facecolor="#BDBDBD",
-                edgecolor="#222222",
+                facecolor=paper_color("city_gef_detour.bdbdbd"),
+                edgecolor=paper_color("city_gef_detour.222222"),
                 linewidth=0.45,
                 hatch="////",
                 label="Production + EOL",
             ),
             Patch(
-                facecolor="#BDBDBD",
-                edgecolor="#222222",
+                facecolor=paper_color("city_gef_detour.bdbdbd"),
+                edgecolor=paper_color("city_gef_detour.222222"),
                 linewidth=0.45,
                 label="Use phase",
             ),
         ]
     else:
         vehicle_handles = [
-            Patch(facecolor="#4C8CBF", edgecolor="none", label="E-bike"),
-            Patch(facecolor="#E05C2B", edgecolor="none", label="Drone"),
+            Patch(facecolor=paper_color("city_gef_detour.4c8cbf"), edgecolor="none", label="E-bike"),
+            Patch(facecolor=paper_color("city_gef_detour.e05c2b"), edgecolor="none", label="Drone"),
         ]
         component_handles = [
             Patch(
-                facecolor="#777777",
+                facecolor=paper_color("city_gef_detour.777777"),
                 alpha=0.35,
-                edgecolor="#555555",
+                edgecolor=paper_color("city_gef_detour.555555"),
                 label="Production + EOL",
             ),
             Patch(
-                facecolor="#777777",
+                facecolor=paper_color("city_gef_detour.777777"),
                 alpha=0.90,
-                edgecolor="#555555",
+                edgecolor=paper_color("city_gef_detour.555555"),
                 label="Use phase",
             ),
         ]
@@ -1140,7 +1144,7 @@ def _create_city_gef_summary_legend_rail(
             marker=entry["marker"],
             markersize=4.8,
             markerfacecolor="none",
-            markeredgecolor="#111111",
+            markeredgecolor=paper_color("city_gef_detour.111111"),
             markeredgewidth=0.9,
             linestyle="None",
             label=entry["display_name"],
@@ -1297,7 +1301,7 @@ def _city_gef_components_report(df, axes, grayscale=False):
                 "top": _report_number(bar["production_eol"]),
                 "alpha": 1.0 if grayscale else 0.38,
                 "hatch": "////" if grayscale else None,
-                "edgecolor": "#222222" if grayscale else "white",
+                "edgecolor": paper_color("city_gef_detour.222222") if grayscale else "white",
             },
             "use_phase_segment": {
                 "bottom": _report_number(bar["production_eol"]),
@@ -1307,7 +1311,7 @@ def _city_gef_components_report(df, axes, grayscale=False):
                 "top": _report_number(bar["total"]),
                 "alpha": 1.0 if grayscale else 0.88,
                 "hatch": None,
-                "edgecolor": "#222222" if grayscale else "white",
+                "edgecolor": paper_color("city_gef_detour.222222") if grayscale else "white",
             },
             "total_label": {
                 "x": _report_number(bar["x_center"]),
@@ -1389,7 +1393,7 @@ def _city_context_summary_report(
         )
         if bar_metric == "oracle_drone_share_pct":
             bar_values = oracle_drone_share_pct
-            bar_color = "#C7C7C7" if grayscale else "#9ecae1"
+            bar_color = paper_color("city_gef_detour.c7c7c7") if grayscale else paper_color("city_gef_detour.9ecae1")
             bar_label = "oracle_drone_share_pct"
         else:
             bar_values = reduction_pct
@@ -1407,7 +1411,7 @@ def _city_context_summary_report(
 
         linear_fit = None
         if x_abs.size >= 2:
-            slope, intercept = np.polyfit(x_abs, y_abs, deg=1)
+            slope, intercept = fit_polynomial(x_abs, y_abs, deg=1)
             x_fit = np.array([x_min, x_max], dtype=float)
             linear_fit = {
                 "slope": _report_number(slope),
@@ -1577,9 +1581,9 @@ def _city_context_summary_report(
                             bar_color
                             if bar_color is not None
                             else (
-                                "#2ca02c"
+                                paper_color("city_gef_detour.2ca02c")
                                 if (np.isfinite(pct) and pct >= 0)
-                                else "#d62728"
+                                else paper_color("city_gef_detour.d62728")
                             )
                         ),
                         "oracle_drone_share_pct": _report_number(oracle_share),
@@ -1587,9 +1591,9 @@ def _city_context_summary_report(
                         "reduction_bar_bottom": 0.0,
                         "reduction_bar_top": _report_number(pct),
                         "reduction_bar_color": (
-                            "#2ca02c"
+                            paper_color("city_gef_detour.2ca02c")
                             if (np.isfinite(pct) and pct >= 0)
-                            else "#d62728"
+                            else paper_color("city_gef_detour.d62728")
                         ),
                         "absolute_scatter_y_g_co2e_per_order": _report_number(abs_value),
                         "visible_in_panel": bool(is_visible),
@@ -1654,7 +1658,7 @@ def _add_city_gef_xaxis_markers(fig, axes, selected, contexts):
             s=22,
             marker=marker,
             facecolors="none",
-            edgecolors="#111111",
+            edgecolors=paper_color("city_gef_detour.111111"),
             linewidths=1.0,
             zorder=8,
             clip_on=False,
@@ -1679,6 +1683,7 @@ def _add_city_gef_xaxis_markers(fig, axes, selected, contexts):
     return marker_records
 
 
+@prepared_plot()
 def plot_city_gef_distribution(
     df: pd.DataFrame,
     save_path: str = None,
@@ -1776,9 +1781,8 @@ def plot_city_gef_distribution(
     density_values = plot_df[gef_col].to_numpy(dtype=float)
     if np.unique(density_values).size < 2:
         raise ValueError("City GEF distribution requires at least two unique values")
-    kde = gaussian_kde(density_values, bw_method="scott")
     curve_x = np.linspace(x_min, x_max, 240)
-    curve_y = kde(curve_x)
+    curve_y, kde_factor = kde_with_factor(density_values, curve_x, bw_method="scott")
 
     indexed = plot_df.set_index("region_key", drop=False)
     marker_rows = []
@@ -1830,12 +1834,12 @@ def plot_city_gef_distribution(
         curve_x,
         0.0,
         curve_y,
-        color="#AFAFAF",
+        color=paper_color("city_gef_detour.afafaf"),
         alpha=0.35,
         linewidth=0,
         zorder=1,
     )
-    ax.plot(curve_x, curve_y, color="#4F4F4F", linewidth=1.0, zorder=2)
+    ax.plot(curve_x, curve_y, color=paper_color("city_gef_detour.4f4f4f"), linewidth=1.0, zorder=2)
     for marker_row in marker_rows:
         ax.scatter(
             [marker_row["gef"]],
@@ -1843,7 +1847,7 @@ def plot_city_gef_distribution(
             s=24,
             marker=marker_row["marker"],
             facecolors="white",
-            edgecolors="#111111",
+            edgecolors=paper_color("city_gef_detour.111111"),
             linewidths=0.9,
             zorder=4,
             clip_on=False,
@@ -1917,7 +1921,7 @@ def plot_city_gef_distribution(
             s=power_mix_style["marker_size"],
             marker=marker_row["marker"],
             facecolors="white",
-            edgecolors="#111111",
+            edgecolors=paper_color("city_gef_detour.111111"),
             linewidths=power_mix_style["marker_linewidth"],
             clip_on=False,
         )
@@ -1942,7 +1946,7 @@ def plot_city_gef_distribution(
                 left=[left],
                 height=power_mix_style["bar_height"],
                 color=POWER_MIX_COLORS[name],
-                edgecolor="white",
+                edgecolor=paper_color("ink.background"),
                 linewidth=0.45,
                 zorder=2,
             )
@@ -1959,7 +1963,7 @@ def plot_city_gef_distribution(
                     color=(
                         "white"
                         if name in {"Hydro", "Thermal"}
-                        else "#222222"
+                        else paper_color("city_gef_detour.222222")
                     ),
                     ha="center",
                     va="center",
@@ -2087,7 +2091,7 @@ def plot_city_gef_distribution(
             "kde": {
                 "implementation": "scipy.stats.gaussian_kde",
                 "bandwidth_rule": "scott",
-                "covariance_factor": float(kde.factor),
+                "covariance_factor": kde_factor,
                 "curve": [
                     {"gef": float(x), "density": float(y)}
                     for x, y in zip(curve_x, curve_y)
@@ -2190,6 +2194,7 @@ def plot_city_gef_distribution(
     return output_path
 
 
+@prepared_plot()
 def plot_city_gef_lifecycle_components(
     df: pd.DataFrame,
     save_path: str = None,
@@ -2299,7 +2304,7 @@ def plot_city_gef_lifecycle_components(
             x,
             0.0,
             delta,
-            color="#666666",
+            color=paper_color("city_gef_detour.666666"),
             linewidth=style["delta_linewidth"],
             zorder=2,
         )
@@ -2308,7 +2313,7 @@ def plot_city_gef_lifecycle_components(
             [delta],
             s=style["delta_point_size"],
             facecolors="white",
-            edgecolors="#222222",
+            edgecolors=paper_color("city_gef_detour.222222"),
             linewidths=style["delta_point_edge_width"],
             zorder=3,
         )
@@ -2320,7 +2325,7 @@ def plot_city_gef_lifecycle_components(
             ha="center",
             va="bottom" if delta >= 0 else "top",
             fontsize=style["delta_label_fontsize"],
-            color="#333333",
+            color=paper_color("city_gef_detour.333333"),
             zorder=4,
         )
         delta_records.append(
@@ -2338,7 +2343,7 @@ def plot_city_gef_lifecycle_components(
 
     delta_ax.axhline(
         0.0,
-        color="#999999",
+        color=paper_color("city_gef_detour.999999"),
         linewidth=0.65,
         zorder=1,
     )
@@ -2362,7 +2367,7 @@ def plot_city_gef_lifecycle_components(
         fontsize=style["delta_label_fontsize"],
         ha="right",
         va="top",
-        color="#333333",
+        color=paper_color("city_gef_detour.333333"),
     )
 
     max_total = max(bar["total"] for bar in component_data["bars"])
@@ -2385,7 +2390,7 @@ def plot_city_gef_lifecycle_components(
             width=style["bar_width_gef"],
             color=spec["color"],
             alpha=0.38,
-            edgecolor="white",
+            edgecolor=paper_color("ink.background"),
             linewidth=0.6,
             zorder=3,
         )
@@ -2396,7 +2401,7 @@ def plot_city_gef_lifecycle_components(
             bottom=production_eol,
             color=spec["color"],
             alpha=0.88,
-            edgecolor="white",
+            edgecolor=paper_color("ink.background"),
             linewidth=0.6,
             zorder=3,
         )
@@ -2408,7 +2413,7 @@ def plot_city_gef_lifecycle_components(
                 ha="center",
                 va="bottom",
                 fontsize=style["total_label_fontsize"],
-                color="0.25",
+                color=paper_color("ink.0_25"),
                 rotation=style["total_label_rotation"],
                 zorder=5,
             )
@@ -2463,7 +2468,7 @@ def plot_city_gef_lifecycle_components(
                     8.0,
                     8.0,
                     facecolor=facecolor,
-                    edgecolor="#555555",
+                    edgecolor=paper_color("city_gef_detour.555555"),
                     linewidth=0.45,
                     alpha=alpha,
                 )
@@ -2524,13 +2529,13 @@ def plot_city_gef_lifecycle_components(
                 _legend_cell(
                     "Production + EOL",
                     column_widths[1],
-                    facecolor="#777777",
+                    facecolor=paper_color("city_gef_detour.777777"),
                     alpha=0.38,
                 ),
                 _legend_cell(
                     "Use phase",
                     column_widths[2],
-                    facecolor="#777777",
+                    facecolor=paper_color("city_gef_detour.777777"),
                     alpha=0.88,
                 ),
             ],
@@ -2668,10 +2673,10 @@ def plot_city_gef_lifecycle_components(
                 "values": delta_records,
                 "encoding": {
                     "type": "neutral_lollipop",
-                    "zero_line_color": "#999999",
-                    "stem_color": "#666666",
-                    "point_face_color": "#FFFFFF",
-                    "point_edge_color": "#222222",
+                    "zero_line_color": paper_color("city_gef_detour.999999"),
+                    "stem_color": paper_color("city_gef_detour.666666"),
+                    "point_face_color": paper_color("city_gef_detour.ffffff"),
+                    "point_edge_color": paper_color("city_gef_detour.222222"),
                     "point_edge_width": style[
                         "delta_point_edge_width"
                     ],
@@ -2701,6 +2706,7 @@ def plot_city_gef_lifecycle_components(
     return output_path
 
 
+@prepared_plot()
 def plot_city_distance_drone_share_emission_fit(
     binned_by_city,
     contexts,
@@ -2751,14 +2757,14 @@ def plot_city_distance_drone_share_emission_fit(
         "bar_ylim_pct": [0.0, 105.0],
         "bar_yticks_pct": [0.0, 50.0, 100.0],
         "bar_width_km": 0.156,
-        "bar_color": "#9ecae1",
-        "scatter_color": "#555555",
+        "bar_color": paper_color("city_gef_detour.9ecae1"),
+        "scatter_color": paper_color("city_gef_detour.555555"),
         "scatter_size": 14.0,
         "scatter_alpha": 0.72,
-        "fit_color": "#111111",
+        "fit_color": paper_color("city_gef_detour.111111"),
         "fit_linewidth": 1.0,
         "fit_alpha": 0.82,
-        "zero_line_color": "#555555",
+        "zero_line_color": paper_color("city_gef_detour.555555"),
         "zero_linewidth": 0.45,
         "tick_fontsize": 8.0,
         "axis_label_fontsize": 8.0,
@@ -2806,7 +2812,7 @@ def plot_city_distance_drone_share_emission_fit(
             )
         fit_x_data = centres[visible]
         fit_y_data = reduction_abs[visible]
-        slope, intercept = np.polyfit(fit_x_data, fit_y_data, deg=1)
+        slope, intercept = fit_polynomial(fit_x_data, fit_y_data, deg=1)
         fit_x = np.array(
             [float(fit_x_data.min()), float(fit_x_data.max())],
             dtype=float,
@@ -2864,7 +2870,7 @@ def plot_city_distance_drone_share_emission_fit(
             item["drone_share"][item["bar_visible"]],
             width=style["bar_width_km"],
             color=style["bar_color"],
-            edgecolor="white",
+            edgecolor=paper_color("ink.background"),
             linewidth=0.25,
             zorder=2,
         )
@@ -2904,7 +2910,7 @@ def plot_city_distance_drone_share_emission_fit(
             length=2.5,
             pad=1.5,
         )
-        ax_share.tick_params(axis="y", labelcolor="#3182bd")
+        ax_share.tick_params(axis="y", labelcolor=paper_color("city_gef_detour.3182bd"))
         ax_share.grid(
             True,
             axis="y",
@@ -2967,7 +2973,7 @@ def plot_city_distance_drone_share_emission_fit(
         fontsize=style["axis_label_fontsize"],
         ha="center",
         va="center",
-        color="#3182bd",
+        color=paper_color("city_gef_detour.3182bd"),
     )
     fig.text(
         0.5,
@@ -3248,7 +3254,7 @@ def _add_city_detour_reduction_markers(
             s=marker_size,
             marker=marker,
             facecolors="none",
-            edgecolors="#111111",
+            edgecolors=paper_color("city_gef_detour.111111"),
             linewidths=1.1,
             zorder=35,
             clip_on=False,
@@ -3299,9 +3305,9 @@ def _detour_reduction_scatter_report(
     masks = [low_mask, ~low_mask]
     labels = (f"Low GEF ($\\leq$ {threshold})", f"High GEF (> {threshold})")
     line_colors = (
-        ["#4D4D4D", "#4D4D4D"]
+        [paper_color("city_gef_detour.4d4d4d"), paper_color("city_gef_detour.4d4d4d")]
         if grayscale
-        else ["#006837", "#A50F15"]
+        else [paper_color("city_gef_detour.006837"), paper_color("city_gef_detour.a50f15")]
     )
     axis_names = ["low_gef", "high_gef"]
     axis_objs = [ax_low, ax_high]
@@ -3426,6 +3432,7 @@ def _detour_reduction_scatter_report(
     }
 
 
+@prepared_plot()
 def plot_city_detour_reduction_by_gef(
     df: pd.DataFrame,
     contexts=CITY_GEF_CONTEXT_DETOUR_CONTEXTS,
@@ -3667,7 +3674,7 @@ def plot_city_detour_reduction_by_gef(
                 "ordinary_scatter_alpha": 0.45,
                 "selected_city_marker_size_pt2": 34.0,
                 "selected_city_marker_face": "none",
-                "selected_city_marker_edge": "#111111",
+                "selected_city_marker_edge": paper_color("city_gef_detour.111111"),
                 "selected_city_marker_edge_width_pt": 1.1,
                 "fit_linewidth_pt": 1.5,
                 "confidence_level": 0.95,

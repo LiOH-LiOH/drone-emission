@@ -2,6 +2,10 @@
 排放分析可视化模块
 """
 
+from .prepared_bundle import prepared_plot, prepared_data
+
+from .palette import color as paper_color, colormap as paper_cmap
+
 import json
 import os
 import time
@@ -33,25 +37,25 @@ CONTRIBUTION_COMPONENT_SPECS = (
         "key": "embodied_balance",
         "label": "Embodied lifecycle balance",
         "short_label": "Embodied balance",
-        "color": "#4C78A8",
+        "color": paper_color("contribution_break_even.4c78a8"),
     },
     {
         "key": "avoided_ebike_road_use",
         "label": "Avoided e-bike road operation",
         "short_label": "Avoided road operation",
-        "color": "#72B7B2",
+        "color": paper_color("contribution_break_even.72b7b2"),
     },
     {
         "key": "drone_fixed_flight_penalty",
         "label": "Drone take-off / landing / hover",
         "short_label": "Fixed flight",
-        "color": "#F2A65A",
+        "color": paper_color("contribution_break_even.f2a65a"),
     },
     {
         "key": "drone_cruise_penalty",
         "label": "Drone cruise",
         "short_label": "Cruise",
-        "color": "#E45756",
+        "color": paper_color("contribution_break_even.e45756"),
     },
 )
 CONTRIBUTION_COMPONENT_KEYS = tuple(
@@ -591,7 +595,7 @@ def _selected_city_component_rows(
                         macro_region_key,
                     ),
                     "macro_region_label_cn": macro_region.get("cn_label", ""),
-                    "macro_region_color": macro_region.get("color", "#777777"),
+                    "macro_region_color": macro_region.get("color", paper_color("contribution_break_even.777777")),
                     "baseline_ebike_lifecycle_kg": city_baseline_kg,
                     "population_10k": float(city.get("population_10k", 0.0)),
                     "population_million": float(
@@ -1117,7 +1121,7 @@ def _plot_selected_city_contribution_bars(ax, rows: list[dict]):
             ha="center",
             va="center",
             fontsize=10,
-            color="#777777",
+            color=paper_color("contribution_break_even.777777"),
         )
         ax.tick_params(left=False, bottom=False, labelleft=False, labelbottom=False)
         return np.array([], dtype=float)
@@ -1138,7 +1142,7 @@ def _plot_selected_city_contribution_bars(ax, rows: list[dict]):
                 left=positive_acc,
                 height=0.62,
                 color=spec["color"],
-                edgecolor="white",
+                edgecolor=paper_color("ink.background"),
                 linewidth=0.8,
             )
         if np.any(penalties):
@@ -1148,7 +1152,7 @@ def _plot_selected_city_contribution_bars(ax, rows: list[dict]):
                 left=negative_acc + penalties,
                 height=0.62,
                 color=spec["color"],
-                edgecolor="white",
+                edgecolor=paper_color("ink.background"),
                 linewidth=0.8,
             )
         positive_acc += benefits
@@ -1162,20 +1166,20 @@ def _plot_selected_city_contribution_bars(ax, rows: list[dict]):
         total_pp,
         y,
         s=26,
-        color="#111111",
-        edgecolor="white",
+        color=paper_color("contribution_break_even.111111"),
+        edgecolor=paper_color("ink.background"),
         linewidth=0.5,
         zorder=5,
         label="Net reduction",
     )
 
-    ax.axvline(0, color="#555555", linewidth=0.8)
+    ax.axvline(0, color=paper_color("contribution_break_even.555555"), linewidth=0.8)
     ax.set_yticks(y, [row["label"] for row in rows])
     _set_selected_city_y_limits(ax, y)
     tick_labels = ax.get_yticklabels()
     if tick_labels and rows[0].get("row_type") == "overall":
         tick_labels[0].set_fontweight("bold")
-        tick_labels[0].set_color("#222222")
+        tick_labels[0].set_color(paper_color("contribution_break_even.222222"))
     ax.set_xlabel(
         "Contribution to all-e-bike baseline (pp)",
         fontsize=9.5,
@@ -1220,7 +1224,7 @@ def _annotate_selected_city_macro_regions(ax, rows: list[dict], y: np.ndarray):
         separator_y = (float(y[0]) + float(y[city_indices[0]])) / 2.0
         ax.axhline(
             separator_y,
-            color="#C9C9C9",
+            color=paper_color("contribution_break_even.c9c9c9"),
             linewidth=0.9,
             zorder=1,
         )
@@ -1230,7 +1234,7 @@ def _annotate_selected_city_macro_regions(ax, rows: list[dict], y: np.ndarray):
     label_x = -0.320
     for group_idx, (start, end) in enumerate(groups):
         row = rows[start]
-        color = row.get("macro_region_color", "#777777")
+        color = row.get("macro_region_color", paper_color("contribution_break_even.777777"))
         label = row.get("macro_region_label", row.get("macro_region_key", ""))
         y_top = float(y[start] - 0.38)
         y_bottom = float(y[end] + 0.38)
@@ -1258,7 +1262,7 @@ def _annotate_selected_city_macro_regions(ax, rows: list[dict], y: np.ndarray):
         if group_idx:
             ax.axhline(
                 y_top - 0.32,
-                color="#DDDDDD",
+                color=paper_color("contribution_break_even.dddddd"),
                 linewidth=0.7,
                 zorder=1,
             )
@@ -1298,8 +1302,8 @@ def _plot_selected_city_absolute_reduction_points(
         reductions_kt,
         y[city_indices],
         s=42,
-        facecolor="white",
-        edgecolor="#1B5E20",
+        facecolor=paper_color("ink.background"),
+        edgecolor=paper_color("contribution_break_even.1b5e20"),
         linewidth=1.1,
         zorder=6,
         label="Absolute net reduction",
@@ -1312,10 +1316,10 @@ def _plot_selected_city_absolute_reduction_points(
         bottom=False,
         labelbottom=False,
         labelsize=8.2,
-        colors="#1B5E20",
+        colors=paper_color("contribution_break_even.1b5e20"),
     )
-    ax.xaxis.label.set_color("#1B5E20")
-    ax.spines["top"].set_color("#1B5E20")
+    ax.xaxis.label.set_color(paper_color("contribution_break_even.1b5e20"))
+    ax.spines["top"].set_color(paper_color("contribution_break_even.1b5e20"))
     ax.spines["bottom"].set_visible(False)
     ax.tick_params(axis="y", left=False, labelleft=False)
 
@@ -1468,11 +1472,11 @@ def _write_contribution_decomposition_city_b_report(
                 "Absolute reduction",
             ],
         },
-        "net_marker": {"label": "Net reduction", "color": "#111111"},
+        "net_marker": {"label": "Net reduction", "color": paper_color("contribution_break_even.111111")},
         "absolute_marker": {
             "label": "Absolute net reduction",
             "facecolor": "white",
-            "edgecolor": "#1B5E20",
+            "edgecolor": paper_color("contribution_break_even.1b5e20"),
             "scope": "Representative city rows only",
         },
         "export": {
@@ -1494,6 +1498,7 @@ def _write_contribution_decomposition_city_b_report(
 
 
 @_with_contribution_city_typography
+@prepared_plot()
 def plot_contribution_decomposition_city_b(
     prepared: Dict,
     save_path: str = None,
@@ -1538,7 +1543,7 @@ def plot_contribution_decomposition_city_b(
             1,
             1,
             facecolor=spec["color"],
-            edgecolor="white",
+            edgecolor=paper_color("ink.background"),
             label={
                 "embodied_balance": "Embodied",
                 "avoided_ebike_road_use": "Avoided road",
@@ -1554,8 +1559,8 @@ def plot_contribution_decomposition_city_b(
             [0],
             marker="o",
             color="none",
-            markerfacecolor="#111111",
-            markeredgecolor="#111111",
+            markerfacecolor=paper_color("contribution_break_even.111111"),
+            markeredgecolor=paper_color("contribution_break_even.111111"),
             markersize=5,
             label="Net reduction",
         )
@@ -1566,8 +1571,8 @@ def plot_contribution_decomposition_city_b(
             [0],
             marker="o",
             color="none",
-            markerfacecolor="white",
-            markeredgecolor="#1B5E20",
+            markerfacecolor=paper_color("ink.background"),
+            markeredgecolor=paper_color("contribution_break_even.1b5e20"),
             markeredgewidth=1.1,
             markersize=6,
             label="Absolute reduction",
@@ -1674,7 +1679,7 @@ def _write_contribution_city_population_report(
             "city_names_repeated": False,
         },
         "lollipop_design": {
-            "color": "#D4A017",
+            "color": paper_color("contribution_break_even.d4a017"),
             "city_connection": "none",
             "overall_row": "min-max range across all locked study cities",
         },
@@ -1703,6 +1708,7 @@ def _write_contribution_city_population_report(
 
 
 @_with_contribution_city_typography
+@prepared_plot()
 def plot_contribution_decomposition_city_population(
     prepared: Dict,
     save_path: str = None,
@@ -1731,7 +1737,7 @@ def plot_contribution_decomposition_city_population(
         left=0.10,
         right=0.96,
     )
-    gold = "#D4A017"
+    gold = paper_color("contribution_break_even.d4a017")
     city_population = np.array(
         [float(row["population_million"]) for row in city_rows], dtype=float
     )
@@ -1742,7 +1748,7 @@ def plot_contribution_decomposition_city_population(
         city_y,
         s=24,
         color=gold,
-        edgecolor="white",
+        edgecolor=paper_color("ink.background"),
         linewidth=0.45,
         zorder=4,
     )
@@ -1758,7 +1764,7 @@ def plot_contribution_decomposition_city_population(
         [y[0], y[0]],
         s=28,
         color=gold,
-        edgecolor="white",
+        edgecolor=paper_color("ink.background"),
         linewidth=0.5,
         zorder=4,
     )
@@ -2216,6 +2222,7 @@ def _select_break_even_gef_levels(
     ]
 
 
+@prepared_data
 def _build_break_even_zero_lines(
     air_distance_grid_km: np.ndarray,
     detour_ratios: np.ndarray,
@@ -2305,6 +2312,7 @@ def _build_break_even_zero_lines(
     return lines
 
 
+@prepared_data
 def _build_break_even_marching_cubes_surface(
     air_distance_grid_km: np.ndarray,
     detour_ratios: np.ndarray,
@@ -2525,7 +2533,7 @@ def _break_even_heatmap_encoding(prepared: Dict) -> Dict:
     max_abs = max(max_abs, 10.0)
 
     delta_bounds = np.linspace(-max_abs, max_abs, 9)
-    delta_cmap = plt.get_cmap("RdBu_r", len(delta_bounds) - 1)
+    delta_cmap = paper_cmap("contribution_break_even.delta", len(delta_bounds) - 1)
     delta_norm = BoundaryNorm(delta_bounds, ncolors=delta_cmap.N, clip=False)
     return {
         "bounds": delta_bounds,
@@ -2553,7 +2561,7 @@ def _plot_break_even_surface_panel(
     detour_limits = prepared["axes"]["detour_limits"]
     gef_limits = prepared["axes"]["gef_limits"]
     break_even_lines = panel_a.get("break_even_lines", [])
-    line_cmap = plt.get_cmap("viridis")
+    line_cmap = paper_cmap("contribution_break_even.gef")
     line_norm = plt.Normalize(vmin=gef_limits[0], vmax=gef_limits[1])
     surface_colorbar_mappable = None
     surface_mesh = None
@@ -2614,20 +2622,20 @@ def _plot_break_even_surface_panel(
     if show_annotations:
         if panel_mode == "marching_cubes":
             annotation_specs = (
-                (0.90, "Break-even surface from marching cubes", 9.5, "#444444"),
+                (0.90, "Break-even surface from marching cubes", 9.5, paper_color("contribution_break_even.444444")),
                 (
                     0.82,
                     "Sparse fixed-GEF curves over a complete Delta g = 0 surface",
                     8.8,
-                    "#555555",
+                    paper_color("contribution_break_even.555555"),
                 ),
-                (0.05, "Surface marks Delta g = 0", 8.4, "#555555"),
+                (0.05, "Surface marks Delta g = 0", 8.4, paper_color("contribution_break_even.555555")),
             )
         else:
             annotation_specs = (
-                (0.90, "Break-even curves at fixed GEF", 9.5, "#444444"),
-                (0.82, "GEF spacing = 0.05 kg CO2e/kWh", 8.8, "#555555"),
-                (0.05, "Each line marks Delta g = 0", 8.4, "#555555"),
+                (0.90, "Break-even curves at fixed GEF", 9.5, paper_color("contribution_break_even.444444")),
+                (0.82, "GEF spacing = 0.05 kg CO2e/kWh", 8.8, paper_color("contribution_break_even.555555")),
+                (0.05, "Each line marks Delta g = 0", 8.4, paper_color("contribution_break_even.555555")),
             )
         for y, text, fontsize, color in annotation_specs:
             ax.text2D(
@@ -2734,7 +2742,7 @@ def _plot_break_even_heatmap_panel(
             Y,
             delta_g,
             levels=[0.0],
-            colors="black",
+            colors=paper_color("ink.black"),
             linewidths=1.3,
             zorder=6,
         )
@@ -2780,6 +2788,7 @@ def _plot_break_even_heatmap_panel(
     return im
 
 
+@prepared_plot()
 def plot_break_even_contribution_decomposition_marching_cubes_subfigures(
     break_even_prepared: Dict,
     save_dir: str = None,
@@ -2829,7 +2838,7 @@ def plot_break_even_contribution_decomposition_marching_cubes_subfigures(
     for panel in requested_panels:
         fig = plt.figure(
             figsize=(width_mm[panel] / 25.4, height_mm[panel] / 25.4),
-            facecolor="white",
+            facecolor=paper_color("ink.background"),
         )
         output_path = None
         if save_dir:
@@ -2940,7 +2949,7 @@ def plot_break_even_contribution_decomposition_marching_cubes_subfigures(
             }
 
         if output_path:
-            fig.savefig(output_path, dpi=300, facecolor="white")
+            fig.savefig(output_path, dpi=300, facecolor=paper_color("ink.background"))
             output_paths[panel] = output_path
             plt.close(fig)
             print(

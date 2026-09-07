@@ -1,5 +1,9 @@
 """Formal Beijing delivery-distance distribution plotting."""
 
+from .prepared_bundle import prepared_plot, prepared_data, histogram
+
+from .palette import color as paper_color
+
 import os
 
 import matplotlib.pyplot as plt
@@ -11,6 +15,7 @@ from drone_emission.visualization._utils import (
 )
 
 
+@prepared_plot()
 def plot_beijing_order_distance_distribution(
     observed_histogram,
     model_distribution,
@@ -71,12 +76,12 @@ def plot_beijing_order_distance_distribution(
     model_edges = np.arange(0.0, threshold_km + bin_width / 2, bin_width)
     display_centers = (display_edges[:-1] + display_edges[1:]) / 2
     model_centers = (model_edges[:-1] + model_edges[1:]) / 2
-    observed_counts, _ = np.histogram(
+    observed_counts, _ = histogram(
         observed_distance,
         bins=display_edges,
         weights=observed_weight,
     )
-    predicted_counts, _ = np.histogram(
+    predicted_counts, _ = histogram(
         model_distance,
         bins=model_edges,
         weights=model_weight,
@@ -91,30 +96,30 @@ def plot_beijing_order_distance_distribution(
     model_scale = within_five_count / predicted_counts.sum()
     predicted_counts = predicted_counts * model_scale
 
-    fig = plt.figure(figsize=figsize, facecolor="white")
+    fig = plt.figure(figsize=figsize, facecolor=paper_color("ink.background"))
     ax = fig.add_axes([0.10, 0.22, 0.88, 0.72])
     bar_width = 0.085
     ax.bar(
         display_centers - bar_width / 2,
         observed_counts,
         width=bar_width,
-        color="0.2",
+        color=paper_color("ink.0_2"),
         label="Observed",
     )
     ax.bar(
         model_centers + bar_width / 2,
         predicted_counts,
         width=bar_width,
-        color="#c9785d",
+        color=paper_color("observed_distance_plot.c9785d"),
         label="Joint gravity model",
     )
-    ax.axvline(threshold_km, color="0.35", linestyle="--", linewidth=0.9)
+    ax.axvline(threshold_km, color=paper_color("ink.0_35"), linestyle="--", linewidth=0.9)
     ax.text(
         threshold_km - 0.12,
         0.96,
         f"{coverage_pct:.2f}% of observed orders\n$\\leq$ 5 km",
         transform=ax.get_xaxis_transform(),
-        color="0.25",
+        color=paper_color("ink.0_25"),
         fontsize=7.5,
         ha="right",
         va="top",
@@ -126,7 +131,7 @@ def plot_beijing_order_distance_distribution(
     ax.set_xticks(np.arange(0, display_max_km + 1, 1))
     ax.tick_params(axis="both", labelsize=7.5, length=2.5, pad=1.5)
     ax.spines[["top", "right"]].set_visible(False)
-    ax.grid(axis="y", color="0.9", linewidth=0.5)
+    ax.grid(axis="y", color=paper_color("ink.0_9"), linewidth=0.5)
     ax.legend(loc="upper right", frameon=False, fontsize=7.5, ncol=1)
     if plot_title:
         ax.set_title("Beijing delivery-distance distribution", fontsize=9, loc="left")
@@ -137,7 +142,7 @@ def plot_beijing_order_distance_distribution(
             save_path = save_path.rsplit(".", 1)[0] + ".pdf"
         if plot_title:
             save_path = _add_title_suffix(save_path)
-        fig.savefig(save_path, dpi=300, facecolor="white")
+        fig.savefig(save_path, dpi=300, facecolor=paper_color("ink.background"))
         report_path = save_path.rsplit(".", 1)[0] + "_report.json"
         report = {
             "schema_version": 1,

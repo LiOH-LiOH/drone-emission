@@ -1,5 +1,9 @@
 """Visualization functions for cross-region correlation and emission analysis."""
 
+from .prepared_bundle import evaluate_kde, fit_polynomial, linear_fit_interval, prepared_data
+
+from .palette import color as paper_color
+
 import json
 import os
 import pickle
@@ -125,19 +129,19 @@ def _plot_grouped_scatter_split_panels_axes(
     from matplotlib.cm import ScalarMappable
 
     grayscale_colors = (
-        "#D9D9D9",
-        "#BDBDBD",
-        "#A1A1A1",
-        "#858585",
-        "#696969",
-        "#4D4D4D",
-        "#313131",
+        paper_color("scale.gef.bin0"),
+        paper_color("scale.gef.bin1"),
+        paper_color("scale.gef.bin2"),
+        paper_color("scale.gef.bin3"),
+        paper_color("scale.gef.bin4"),
+        paper_color("scale.gef.bin5"),
+        paper_color("scale.gef.bin6"),
     )
     base_cmap = LinearSegmentedColormap.from_list(
         "gef_grayscale" if grayscale else "gef",
         grayscale_colors
         if grayscale
-        else ["#006837", "#31A354", "#D95F0E", "#A50F15"],
+        else [paper_color("scale.gef.low"), paper_color("scale.gef.mid"), paper_color("scale.gef.high")],
     )
     gef_vals = plot_df[group_var].values
     if colorbar_boundaries is not None:
@@ -191,9 +195,9 @@ def _plot_grouped_scatter_split_panels_axes(
     axes = [ax_low, ax_high]
     masks = [low_mask, high_mask]
     line_colors = (
-        ["#4D4D4D", "#4D4D4D"]
+        [paper_color("city_gef_support.4d4d4d"), paper_color("city_gef_support.4d4d4d")]
         if grayscale
-        else ["#006837", "#A50F15"]
+        else [paper_color("city_gef_support.006837"), paper_color("city_gef_support.a50f15")]
     )
 
     for ax, mask, line_color, label, panel_letter in zip(
@@ -219,9 +223,7 @@ def _plot_grouped_scatter_split_panels_axes(
         x = panel_df[feature_var].values
         y = panel_df[result_var].values
         if len(x) >= 3 and np.sum((x - np.mean(x)) ** 2) > 0:
-            slope, intercept, _, _, _ = stats.linregress(x, y)
-            x_line = np.linspace(x_global_min, x_global_max, 100)
-            y_line = slope * x_line + intercept
+            x_line, y_line, ci = linear_fit_interval(x, y, x_global_min, x_global_max)
             ax.plot(
                 x_line,
                 y_line,
@@ -233,13 +235,6 @@ def _plot_grouped_scatter_split_panels_axes(
                 ),
                 alpha=0.42,
                 zorder=15,
-            )
-            n = len(x)
-            se = np.sqrt(np.sum((y - (slope * x + intercept)) ** 2) / (n - 2))
-            t_val = stats.t.ppf(0.975, n - 2)
-            x_mean = np.mean(x)
-            ci = t_val * se * np.sqrt(
-                1.0 / n + (x_line - x_mean) ** 2 / np.sum((x - x_mean) ** 2)
             )
             ax.fill_between(
                 x_line,
@@ -275,8 +270,8 @@ def _plot_grouped_scatter_split_panels_axes(
             ha="left",
             bbox=dict(
                 boxstyle="round,pad=0.14" if compact else "round,pad=0.22",
-                facecolor="white",
-                edgecolor="0.7",
+                facecolor=paper_color("ink.background"),
+                edgecolor=paper_color("ink.0_7"),
                 alpha=0.9,
             ),
         )
@@ -385,6 +380,7 @@ def _plot_grouped_scatter_split_panels_axes(
     return ax_low, cbar_ax, ax_high
 
 
+@prepared_data
 def _prepare_city_gef_component_data(
     df: pd.DataFrame,
     grayscale: bool = False,
@@ -407,7 +403,7 @@ def _prepare_city_gef_component_data(
     vehicle_specs = [
         {
             "label": "E-bike",
-            "color": "#BDBDBD" if grayscale else "#4C8CBF",
+            "color": paper_color("mode.pedelec_ebike"),
             "offset": -0.18,
             "use_col": "total_ebike_use_phase_emission_kg",
             "production_col": "total_ebike_production_emission_kg",
@@ -415,7 +411,7 @@ def _prepare_city_gef_component_data(
         },
         {
             "label": "Drone",
-            "color": "#636363" if grayscale else "#E05C2B",
+            "color": paper_color("mode.drone"),
             "offset": 0.18,
             "use_col": "total_drone_use_phase_emission_kg",
             "production_col": "total_drone_production_emission_kg",
@@ -527,7 +523,7 @@ def _prepare_city_gef_component_data(
     density_x = plot_df[gef_col].to_numpy(dtype=float)
     if len(density_x) > 5 and np.unique(density_x).size > 1:
         x_density = np.linspace(bin_edges[0], bin_edges[-1], 240)
-        density = stats.gaussian_kde(density_x)(x_density)
+        density = evaluate_kde(density_x, x_density)
     else:
         x_density = x_all
         density = np.array(
@@ -601,18 +597,18 @@ def _plot_city_gef_scatter_components_axes(
             (0, 0),
             1,
             1,
-            facecolor="#777777",
+            facecolor=paper_color("city_gef_support.777777"),
             alpha=0.35,
-            edgecolor="#555555",
+            edgecolor=paper_color("city_gef_support.555555"),
             label="Production + EOL",
         ),
         plt.Rectangle(
             (0, 0),
             1,
             1,
-            facecolor="#777777",
+            facecolor=paper_color("city_gef_support.777777"),
             alpha=0.9,
-            edgecolor="#555555",
+            edgecolor=paper_color("city_gef_support.555555"),
             label="Use phase",
         ),
     ]
@@ -642,7 +638,7 @@ def _plot_city_gef_scatter_components_axes(
             width=width,
             color=spec["color"],
             alpha=1.0 if grayscale else 0.38,
-            edgecolor="#222222" if grayscale else "white",
+            edgecolor=paper_color("city_gef_support.222222") if grayscale else "white",
             linewidth=0.45 if grayscale else 0.6,
             hatch="////" if grayscale else None,
             zorder=3,
@@ -654,7 +650,7 @@ def _plot_city_gef_scatter_components_axes(
             bottom=fixed_values,
             color=spec["color"],
             alpha=1.0 if grayscale else 0.88,
-            edgecolor="#222222" if grayscale else "white",
+            edgecolor=paper_color("city_gef_support.222222") if grayscale else "white",
             linewidth=0.45 if grayscale else 0.6,
             zorder=3,
             label=spec["label"],
@@ -669,7 +665,7 @@ def _plot_city_gef_scatter_components_axes(
                 ha="center",
                 va="bottom",
                 fontsize=7,
-                color="0.25",
+                color=paper_color("ink.0_25"),
                 rotation=90,
                 zorder=5,
             )
@@ -701,7 +697,7 @@ def _plot_city_gef_scatter_components_axes(
             1,
             facecolor=spec["color"],
             alpha=1.0 if grayscale else 0.88,
-            edgecolor="#222222" if grayscale else "white",
+            edgecolor=paper_color("city_gef_support.222222") if grayscale else "white",
             label=spec["label"],
         )
         for spec in vehicle_specs
@@ -712,8 +708,8 @@ def _plot_city_gef_scatter_components_axes(
                 (0, 0),
                 1,
                 1,
-                facecolor="#BDBDBD",
-                edgecolor="#222222",
+                facecolor=paper_color("city_gef_support.bdbdbd"),
+                edgecolor=paper_color("city_gef_support.222222"),
                 linewidth=0.45,
                 hatch="////",
                 label="Production + EOL",
@@ -722,8 +718,8 @@ def _plot_city_gef_scatter_components_axes(
                 (0, 0),
                 1,
                 1,
-                facecolor="#BDBDBD",
-                edgecolor="#222222",
+                facecolor=paper_color("city_gef_support.bdbdbd"),
+                edgecolor=paper_color("city_gef_support.222222"),
                 linewidth=0.45,
                 label="Use phase",
             ),
@@ -753,23 +749,23 @@ def _plot_city_gef_scatter_components_axes(
         x_violin,
         0,
         density,
-        color="#7A7A7A",
+        color=paper_color("city_gef_support.7a7a7a"),
         alpha=0.35,
         linewidth=0,
         zorder=1,
     )
-    ax_dist.plot(x_violin, density, color="#555555", linewidth=0.8, zorder=2)
+    ax_dist.plot(x_violin, density, color=paper_color("city_gef_support.555555"), linewidth=0.8, zorder=2)
     ax_dist.scatter(
         density_x,
         np.zeros_like(density_x),
         marker="|",
         s=16,
-        color="#333333",
+        color=paper_color("city_gef_support.333333"),
         alpha=0.35,
         linewidths=0.6,
         zorder=3,
     )
-    ax_dist.axhline(0, color="#555555", linewidth=0.8, zorder=2)
+    ax_dist.axhline(0, color=paper_color("city_gef_support.555555"), linewidth=0.8, zorder=2)
     ax_dist.set_ylim(-0.12, 1.15)
     ax_dist.set_yticks([])
     ax_dist.set_ylabel("Cities", fontsize=7 if compact else 10)

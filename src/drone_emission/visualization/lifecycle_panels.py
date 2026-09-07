@@ -2,6 +2,9 @@
 排放分析可视化模块
 """
 
+from .palette import color as paper_color
+from .prepared_bundle import prepared_data
+
 import json
 import os
 import time
@@ -34,6 +37,7 @@ def _draw_selected_trip_emission_process(
     drone_use_cycle_total = float(sample["drone_emission_kg"]) * 1000.0
     ebike_use_cycle_total = float(sample["ebike_emission_kg"]) * 1000.0
 
+    @prepared_data
     def _drone_delivery_leg_profile(distance_km, use_cycle_total_g):
         """Scale modeled drone use-phase shares to the cached OD total."""
         try:
@@ -76,6 +80,7 @@ def _draw_selected_trip_emission_process(
                 {"takeoff_g": 0.0, "landing_g": 0.0},
             )
 
+    @prepared_data
     def _ebike_delivery_leg_profile(distance_km, use_cycle_total_g):
         """Scale modeled e-bike outbound use-phase share to the cached OD total."""
         try:
@@ -106,9 +111,9 @@ def _draw_selected_trip_emission_process(
     max_x = max(air_km, road_km)
     max_y = max(drone_y.max(), ebike_y.max(), 1e-6)
 
-    drone_color = "#2b78b8"
-    ebike_color = "#d95f35"
-    gap_color = "#8a8f98"
+    drone_color = paper_color("lifecycle_panels.2b78b8")
+    ebike_color = paper_color("lifecycle_panels.d95f35")
+    gap_color = paper_color("lifecycle_panels.8a8f98")
 
     ax.plot(
         drone_x,
@@ -223,7 +228,7 @@ def _draw_selected_trip_emission_process(
         ha="right",
         va="bottom",
         fontsize=9,
-        color="#555555",
+        color=paper_color("lifecycle_panels.555555"),
     )
 
     if plot_title:

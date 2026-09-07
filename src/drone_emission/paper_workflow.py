@@ -9,6 +9,9 @@ import shutil
 import subprocess
 import time
 import traceback
+import tempfile
+import hashlib
+from dataclasses import replace
 from importlib.resources import files
 from pathlib import Path
 from urllib.parse import unquote, urlparse
@@ -526,7 +529,17 @@ def _file_signature(path: Path) -> dict:
 
 
 def _request_signature(request: dict, config: dict) -> dict:
+    from .visualization.prepared_bundle import drawing_code_hash, file_hash
+
+    styling = {
+        "palette_sha256": config["palette_sha256"],
+        "drawing_code_sha256": drawing_code_hash(),
+    }
+    if config.get("from_bundle"):
+        path = Path(config["from_bundle"]) / request["id"] / "prepared.json"
+        return dict(styling, prepared_sha256=file_hash(path))
     return {
+        **styling,
         "cache_version": request["cache_version"],
         "paper_cohort_sha256": cohort_hash(),
         "analysis_input_manifest_sha256": config.get(
@@ -592,11 +605,92 @@ def _render_request_worker(config: dict, request_id: str) -> None:
     """Run exactly one renderer in a short-lived process."""
     try:
         from drone_emission.utils.config import configure_cache
-        from drone_emission.visualization.formal_registry import render_request
         from drone_emission.visualization.render_context import RenderContext
+        from drone_emission.visualization.prepared_bundle import (
+            SCHEMA_VERSION, Codec, capture, drawing_code_hash, file_hash,
+            replay, validate_bundle, write_document,
+        )
 
         configure_cache(config)
-        render_request(RenderContext.from_config(config), request_id)
+        context = RenderContext.from_config(config)
+        # Import module-level colour tables only after selecting the palette.
+        from drone_emission.visualization.formal_registry import render_request
+
+        request = request_index()[request_id]
+        bundle_root = Path(config["bundle_dir"])
+        roots = dict(data=context.data_root, figures=context.figures_root,
+                     cache=context.cache_root, work=context.work_root,
+                     project=PROJECT_ROOT, package=Path(__file__).parent)
+        if config.get("from_bundle"):
+            document = validate_bundle(bundle_root, request, cohort_hash())
+            replay(bundle_root / request_id, document, roots)
+            return
+        source_signature = _request_signature(request, config)
+        source_signature.pop("palette_sha256")
+        source_signature = Codec(bundle_root / request_id, roots).encode(source_signature)
+        try:
+            document = validate_bundle(bundle_root, request, cohort_hash())
+        except (OSError, ValueError, KeyError):
+            document = None
+        if document and document.get("source_signature") == source_signature:
+            if not config.get("prepare_only"):
+                replay(bundle_root / request_id, document, roots)
+            return
+        bundle_root.mkdir(parents=True, exist_ok=True)
+        with tempfile.TemporaryDirectory(prefix=f".{request_id}-", dir=bundle_root) as temporary:
+            temporary = Path(temporary)
+            capture_roots = roots
+            render_context = context
+            if config.get("prepare_only"):
+                render_context = replace(context, figures_root=temporary / "preparation")
+                render_context.subfigure_dir.mkdir(parents=True)
+                capture_roots = dict(roots, figures=render_context.figures_root)
+            from matplotlib.figure import Figure
+            original_savefig = Figure.savefig
+            saved = set()
+
+            def prepare_savefig(figure, filename, *args, **kwargs):
+                saved.add(Path(filename).name)
+                if not config.get("prepare_only"):
+                    return original_savefig(figure, filename, *args, **kwargs)
+
+            Figure.savefig = prepare_savefig
+            try:
+                with capture(temporary, capture_roots) as session:
+                    render_request(render_context, request_id)
+            finally:
+                Figure.savefig = original_savefig
+            if not session.entries or not set(request["outputs"]).issubset(saved):
+                raise RuntimeError(f"Incomplete prepared request {request_id}: saved={sorted(saved)}")
+            document = {
+                "schema_version": SCHEMA_VERSION,
+                "request_id": request_id,
+                "request_version": request["cache_version"],
+                "cohort_sha256": cohort_hash(),
+                "drawing_code_sha256": drawing_code_hash(),
+                "analysis_input_manifest_sha256": config.get("analysis_input_manifest_sha256"),
+                "source_signature": source_signature,
+                "source_commit": subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=PROJECT_ROOT, text=True).strip(),
+                "outputs": request["outputs"],
+                "entries": session.entries,
+                "files": {str(p.relative_to(temporary)): file_hash(p) for p in sorted((temporary / "assets").glob("*"))},
+            }
+            document["payload_sha256"] = hashlib.sha256(
+                json.dumps(document, ensure_ascii=False, sort_keys=True, allow_nan=False).encode()
+            ).hexdigest()
+            # Immutable content-addressed assets first; atomically publish the
+            # document last so an interrupted refresh preserves the old bundle.
+            destination = bundle_root / request_id
+            destination.mkdir(exist_ok=True)
+            if (temporary / "assets").exists():
+                (destination / "assets").mkdir(exist_ok=True)
+                for source in (temporary / "assets").glob("*"):
+                    target = destination / "assets" / source.name
+                    if not target.exists():
+                        staged = target.with_suffix(".tmp")
+                        shutil.copy2(source, staged)
+                        staged.replace(target)
+            write_document(destination / "prepared.json", document)
     except Exception:
         traceback.print_exc()
         raise
@@ -607,11 +701,12 @@ def _execute_request(request: dict, config: dict, *, force: bool) -> dict:
     request_id = request["id"]
     try:
         signature = _request_signature(request, config)
-        if not force and _request_is_fresh(request, config, signature):
+        if not config.get("prepare_only") and not force and _request_is_fresh(request, config, signature):
             print(f"[render:{request_id}] cache-hit", flush=True)
             return {"id": request_id, "status": "cached", "elapsed": 0.0}
         receipt = _receipt_path(request, config)
-        receipt.unlink(missing_ok=True)
+        if not config.get("prepare_only"):
+            receipt.unlink(missing_ok=True)
         print(f"[render:{request_id}] start", flush=True)
         process = multiprocessing.get_context("spawn").Process(
             target=_render_request_worker,
@@ -621,6 +716,10 @@ def _execute_request(request: dict, config: dict, *, force: bool) -> dict:
         process.join()
         if process.exitcode != 0:
             raise RuntimeError(f"renderer process exited with status {process.exitcode}")
+        if config.get("prepare_only"):
+            elapsed = time.monotonic() - started
+            print(f"[prepare:{request_id}] success {elapsed:.1f}s", flush=True)
+            return {"id": request_id, "status": "prepared", "elapsed": elapsed}
         invalid = [str(path) for path in _request_outputs(request, config) if not _valid_pdf(path)]
         if invalid:
             raise RuntimeError("renderer did not produce valid PDF(s): " + ", ".join(invalid))
@@ -691,6 +790,10 @@ def render(
     requests: list[str] | None = None,
     *,
     force: bool = False,
+    prepare_only: bool = False,
+    bundle_dir: Path | None = None,
+    from_bundle: Path | None = None,
+    palette: Path | None = None,
 ) -> list[Path]:
     """Render selected request bundles for later formal composition."""
     if only and requests:
@@ -714,7 +817,27 @@ def render(
         selected_requests = [
             request for request in manifest["requests"] if request["id"] in selected_ids
         ]
-    config = _bind_render_analysis(config, selected_requests)
+    if prepare_only and from_bundle:
+        raise ValueError("--prepare-only and --from-bundle are mutually exclusive")
+    if from_bundle and bundle_dir:
+        raise ValueError("--bundle-dir cannot be combined with --from-bundle")
+    from .visualization.palette import configure_palette, DEFAULT_PALETTE
+    from .visualization.prepared_bundle import validate_bundle, write_document
+
+    chosen_palette = configure_palette(palette)
+    config = dict(config, palette_path=str(Path(palette or DEFAULT_PALETTE).resolve()),
+                  palette_sha256=chosen_palette.digest, prepare_only=prepare_only,
+                  bundle_dir=str(Path(from_bundle or bundle_dir or (Path(config["cache_dir"]) / "visualization" / "prepared_paper")).resolve()))
+    if from_bundle:
+        config["from_bundle"] = config["bundle_dir"]
+        documents = [validate_bundle(Path(config["bundle_dir"]), request, cohort_hash()) for request in selected_requests]
+        hashes = {doc["analysis_input_manifest_sha256"] for doc in documents if doc.get("analysis_input_manifest_sha256")}
+        if len(hashes) > 1:
+            raise ValueError("Prepared requests belong to different analysis inputs")
+        config["analysis_input_manifest_sha256"] = next(iter(hashes), None)
+        config["data_dir"] = str(Path(config["bundle_dir"]) / ".unavailable-source-data")
+    else:
+        config = _bind_render_analysis(config, selected_requests)
 
     figures_root = Path(config["figures_dir"])
     paper_dir = figures_root / "paper"
@@ -736,6 +859,15 @@ def render(
         )
     }
     staged: list[Path] = []
+    write_document(paper_dir / "report" / "render_timings.json", {
+        "from_bundle": bool(from_bundle), "prepare_only": prepare_only,
+        "palette_sha256": chosen_palette.digest, "requests": list(results.values()),
+    })
+    if prepare_only:
+        failures = [result for result in results.values() if result["status"] == "failed"]
+        if failures:
+            raise RuntimeError(f"Prepared input failures: {failures}")
+        return []
     request_specs = request_index(manifest)
     for figure in selected_figures:
         contracts = [request_specs[name] for name in figure["render_requests"]]

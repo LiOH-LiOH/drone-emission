@@ -1,3 +1,7 @@
+
+from .prepared_bundle import prepared_plot, prepared_data, read_plot_csv
+
+from .palette import color as paper_color
 import json
 import os
 
@@ -15,6 +19,7 @@ WEIGHTED_REDUCTION_COLUMNS = (
     "lifecycle_all_drone_reduction_pct",
 )
 
+@prepared_data
 def _batch_city_to_adcode(city_names: list) -> dict:
     """Resolve Chinese city names to 6-digit adcodes using cpca (batched)."""
     adcode_map = {}
@@ -28,6 +33,7 @@ def _batch_city_to_adcode(city_names: list) -> dict:
     return adcode_map
 
 
+@prepared_data
 def _fetch_city_boundaries(adcode: str):
     """Fetch city boundary GeoJSON from cache or DataV API."""
     from drone_emission.utils.config import get_cache_dir
@@ -68,6 +74,7 @@ def _resolve_color_by(df: pd.DataFrame, color_by: str) -> str:
     return color_by
 
 
+@prepared_data
 def _fetch_china_boundaries():
     """Fetch China provincial boundaries from DataV API."""
     # China adcode is 100000
@@ -124,7 +131,7 @@ def _plot_china_boundaries(ax, geojson_data):
                     plot_polygon(ring)
                 else:
                     xs, ys = zip(*[(pt[0], pt[1]) for pt in ring])
-                    ax.plot(xs, ys, color="gray", linewidth=0.5, alpha=0.8, zorder=1)
+                    ax.plot(xs, ys, color=paper_color("ink.gray"), linewidth=0.5, alpha=0.8, zorder=1)
 
         if geom_type == "Polygon":
             plot_polygon(coords)
@@ -197,7 +204,7 @@ def _normalize_province_feature_name(name: str) -> str:
     return name
 
 
-def _plot_geometry_outline(ax, geometry, color="#666666", linewidth=0.5, alpha=1.0, zorder=4):
+def _plot_geometry_outline(ax, geometry, color=paper_color("regions.666666"), linewidth=0.5, alpha=1.0, zorder=4):
     """Plot GeoJSON polygon rings as outlines."""
     if not geometry:
         return
@@ -285,6 +292,7 @@ def _province_gef_report(
     print(f"Province GEF China map report saved to {report_path}")
 
 
+@prepared_plot()
 def plot_province_gef_china_map(
     gef_path: str,
     save_path: str = None,
@@ -308,11 +316,7 @@ def plot_province_gef_china_map(
             (min_lng, max_lng, min_lat, max_lat).
         compact: If True, use a qualitative layout for a small composite panel.
     """
-    if not gef_path or not os.path.exists(gef_path):
-        print(f"Province GEF China map skipped — missing {gef_path}")
-        return
-
-    gef_df = pd.read_csv(gef_path, encoding="gbk")
+    gef_df = read_plot_csv(gef_path, encoding="gbk")
     needed = {"城市", "因子"}
     missing_cols = needed - set(gef_df.columns)
     if missing_cols:
@@ -356,11 +360,11 @@ def plot_province_gef_china_map(
     values = np.array(list(gef_by_province.values()), dtype=float)
     cmap = LinearSegmentedColormap.from_list(
         "gef_colorblind_cool_to_warm",
-        ["#3b6fb6", "#f1d18a", "#d55e00"],
+        [paper_color("regions.3b6fb6"), paper_color("regions.f1d18a"), paper_color("regions.d55e00")],
     )
     norm = Normalize(vmin=float(np.nanmin(values)), vmax=float(np.nanmax(values)))
-    no_data_color = "#d9d9d9"
-    outline_color = "#6f6f6f"
+    no_data_color = paper_color("regions.d9d9d9")
+    outline_color = paper_color("regions.6f6f6f")
 
     fig, ax = plt.subplots(figsize=figsize)
 
@@ -376,7 +380,7 @@ def plot_province_gef_china_map(
         for province, display_name, geometry in provinces:
             gef = gef_by_province.get(province)
             if simplified:
-                facecolor = "#f4f4f4"
+                facecolor = paper_color("regions.f4f4f4")
             elif gef is None or np.isnan(gef):
                 facecolor = no_data_color
                 if province not in missing_provinces:
@@ -389,7 +393,7 @@ def plot_province_gef_china_map(
             _plot_geometry_outline(
                 target_ax,
                 geometry,
-                color="#888888" if simplified else outline_color,
+                color=paper_color("regions.888888") if simplified else outline_color,
                 linewidth=0.14 if simplified else (0.18 if compact else 0.35),
                 alpha=0.7 if simplified else 0.8,
                 zorder=3,
@@ -397,11 +401,11 @@ def plot_province_gef_china_map(
 
         jd_drawn = False
         if draw_nine_dash and nine_dash_feature is not None:
-            _fill_geometry(target_ax, nine_dash_feature.get("geometry"), "#f7f7f7")
+            _fill_geometry(target_ax, nine_dash_feature.get("geometry"), paper_color("regions.f7f7f7"))
             _plot_geometry_outline(
                 target_ax,
                 nine_dash_feature.get("geometry"),
-                color="#666666" if compact else "#4d4d4d",
+                color=paper_color("regions.666666") if compact else paper_color("regions.4d4d4d"),
                 linewidth=0.28 if compact else 0.55,
                 alpha=0.85 if compact else 0.95,
                 zorder=5,
@@ -454,11 +458,11 @@ def plot_province_gef_china_map(
     inset_ax.set_aspect(1.0 / np.cos(np.radians(inset_avg_lat)), adjustable="box")
     inset_ax.set_xticks([])
     inset_ax.set_yticks([])
-    inset_ax.set_facecolor("white")
+    inset_ax.set_facepaper_color("white")
     for spine in inset_ax.spines.values():
         spine.set_linestyle("-" if compact else "--")
         spine.set_linewidth(0.25 if compact else 0.7)
-        spine.set_edgecolor("#999999" if compact else "#777777")
+        spine.set_edgecolor(paper_color("regions.999999") if compact else paper_color("regions.777777"))
 
     sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
     sm.set_array([])
@@ -523,6 +527,7 @@ def plot_province_gef_china_map(
     return fig, ax
 
 
+@prepared_data
 def _ensure_all_china_city_areas():
     """Return list of (adcode, name, geometry_dict) for every city-level area in China.
 
@@ -633,7 +638,7 @@ def plot_regions_on_china_map(
         region_names_cn = df["region_name_cn"].values
         color_values = df[color_by].values if color_by in df.columns else None
     elif csv_path is not None:
-        df = pd.read_csv(csv_path)
+        df = read_plot_csv(csv_path)
         if region_keys is not None:
             df = df[df["region_key"].isin(region_keys)]
         color_by = _resolve_color_by(df, color_by)
@@ -675,11 +680,11 @@ def plot_regions_on_china_map(
 
     if cmap is None:
         cmap = LinearSegmentedColormap.from_list("green_diverging", [
-            "#d7191c",
-            "#fdae61",
-            "#ffffbf",
-            "#a6d96a",
-            "#1a9641",
+            paper_color("regions.d7191c"),
+            paper_color("regions.fdae61"),
+            paper_color("regions.ffffbf"),
+            paper_color("regions.a6d96a"),
+            paper_color("regions.1a9641"),
         ])
 
     valid_values = [v for v in study_adcode_to_val.values() if not np.isnan(v)]
@@ -688,7 +693,7 @@ def plot_regions_on_china_map(
             max_abs = max(abs(min(valid_values)), abs(max(valid_values)))
             norm = TwoSlopeNorm(vmin=-max_abs, vcenter=0, vmax=max_abs)
 
-    GRAY_FILL = "#cccccc"
+    GRAY_FILL = paper_color("regions.cccccc")
 
     # --- Plot -------------------------------------------------------------------
     _external_ax = ax is not None
@@ -777,7 +782,7 @@ def plot_regions_on_china_map(
     for spine in inset_ax.spines.values():
         spine.set_linestyle("--")
         spine.set_linewidth(1.0)
-        spine.set_edgecolor("gray")
+        spine.set_edgepaper_color("gray")
 
     if not _external_ax:
         plt.tight_layout()

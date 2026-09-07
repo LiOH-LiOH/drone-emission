@@ -527,7 +527,14 @@ def command_render(args: argparse.Namespace) -> None:
         only=_split_ids(getattr(args, "only", None)),
         requests=_split_ids(getattr(args, "request", None)),
         force=bool(getattr(args, "force", False)),
+        prepare_only=bool(getattr(args, "prepare_only", False)),
+        bundle_dir=getattr(args, "bundle_dir", None),
+        from_bundle=getattr(args, "from_bundle", None),
+        palette=getattr(args, "palette", None),
     )
+    if getattr(args, "prepare_only", False):
+        print("Prepared plot inputs are ready for render --from-bundle.")
+        return
     if staged:
         print("Staged direct figures:")
         for path in staged:
@@ -776,6 +783,10 @@ def build_parser() -> argparse.ArgumentParser:
         help="ignore fresh render-request receipts",
     )
     render_parser.set_defaults(func=command_render)
+    render_parser.add_argument("--prepare-only", action="store_true", help="save portable plot inputs without exporting figures")
+    render_parser.add_argument("--bundle-dir", type=Path, help="destination for prepared plot inputs")
+    render_parser.add_argument("--from-bundle", type=Path, help="strictly redraw from portable prepared inputs")
+    render_parser.add_argument("--palette", type=Path, help="current paper palette TOML")
 
     compose_parser = subparsers.add_parser(
         "compose",

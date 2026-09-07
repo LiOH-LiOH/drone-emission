@@ -1,5 +1,9 @@
 """Visualization functions for cross-region correlation and emission analysis."""
 
+from .prepared_bundle import prepared_plot, prepared_data, box_statistics
+
+from .palette import color as paper_color
+
 import json
 import os
 
@@ -57,9 +61,9 @@ def _build_reduction_cmap(v_max: float):
     top = max(int(np.ceil(v_max / step) * step), step * 5)
     reduction_edges = np.arange(0, top + step, step, dtype=float)
     bin_edges = np.concatenate([[-step], reduction_edges])
-    palette = ["#ffffe0", "#f7fcb9", "#d9f0a3", "#addd8e",
-               "#78c679", "#41ab5d", "#238443", "#005a32"]
-    cmap_colors = ["#cccccc"] + palette[:len(reduction_edges) - 1]
+    palette = [paper_color("national_scenarios.ffffe0"), paper_color("national_scenarios.f7fcb9"), paper_color("national_scenarios.d9f0a3"), paper_color("national_scenarios.addd8e"),
+               paper_color("national_scenarios.78c679"), paper_color("national_scenarios.41ab5d"), paper_color("national_scenarios.238443"), paper_color("national_scenarios.005a32")]
+    cmap_colors = [paper_color("national_scenarios.cccccc")] + palette[:len(reduction_edges) - 1]
     cmap = ListedColormap(cmap_colors)
     norm = BoundaryNorm(bin_edges, ncolors=cmap.N, clip=True)
     return cmap, norm, bin_edges, reduction_edges
@@ -127,6 +131,7 @@ def _pathway_scenario_definitions(baseline_kappa: float) -> list[tuple]:
     ]
 
 
+@prepared_data
 def _prepare_pathway_scenario_data(
     stats_csv_path: str,
     scenario_csv_path: str,
@@ -267,12 +272,12 @@ def _plot_pathway_curve_panel(
 
     if orientation == "vertical":
         if saved_as_bar:
-            ax.barh(x, saved, height=bar_width, left=0.0, color="#1b7837", alpha=0.75)
+            ax.barh(x, saved, height=bar_width, left=0.0, color=paper_color("national_scenarios.1b7837"), alpha=0.75)
         else:
-            ax.plot(saved, x, color="#1b7837", marker="o", linewidth=1.8, markersize=4)
-        ax.set_xlabel(r"CO$_2$ saved (kt/yr)", fontsize=10, color="#1b7837")
+            ax.plot(saved, x, color=paper_color("national_scenarios.1b7837"), marker="o", linewidth=1.8, markersize=4)
+        ax.set_xlabel(r"CO$_2$ saved (kt/yr)", fontsize=10, color=paper_color("national_scenarios.1b7837"))
         ax.set_ylabel(axis_label, fontsize=10)
-        ax.tick_params(axis="x", labelcolor="#1b7837", labelsize=8)
+        ax.tick_params(axis="x", labelcolor=paper_color("national_scenarios.1b7837"), labelsize=8)
         ax.tick_params(axis="y", labelsize=8)
         ax.grid(True, linestyle=":", alpha=0.35)
         if saved_limits is not None:
@@ -282,19 +287,19 @@ def _plot_pathway_curve_panel(
             ax.set_xlim(left=0.0)
 
         ax_share = ax.twiny()
-        ax_share.plot(share, x, color="#2166ac", marker="s", linewidth=1.6, markersize=3.5)
-        ax_share.set_xlabel("Drone share (%)", fontsize=10, color="#2166ac")
-        ax_share.tick_params(axis="x", labelcolor="#2166ac", labelsize=8)
+        ax_share.plot(share, x, color=paper_color("national_scenarios.2166ac"), marker="s", linewidth=1.6, markersize=3.5)
+        ax_share.set_xlabel("Drone share (%)", fontsize=10, color=paper_color("national_scenarios.2166ac"))
+        ax_share.tick_params(axis="x", labelcolor=paper_color("national_scenarios.2166ac"), labelsize=8)
         if share_limits is not None:
             ax_share.set_xlim(*share_limits)
     else:
         if saved_as_bar:
-            ax.bar(x, saved, width=bar_width, bottom=0.0, color="#1b7837", alpha=0.75)
+            ax.bar(x, saved, width=bar_width, bottom=0.0, color=paper_color("national_scenarios.1b7837"), alpha=0.75)
         else:
-            ax.plot(x, saved, color="#1b7837", marker="o", linewidth=1.8, markersize=4)
+            ax.plot(x, saved, color=paper_color("national_scenarios.1b7837"), marker="o", linewidth=1.8, markersize=4)
         ax.set_xlabel(axis_label, fontsize=10)
-        ax.set_ylabel(r"CO$_2$ saved (kt/yr)", fontsize=10, color="#1b7837")
-        ax.tick_params(axis="y", labelcolor="#1b7837", labelsize=8)
+        ax.set_ylabel(r"CO$_2$ saved (kt/yr)", fontsize=10, color=paper_color("national_scenarios.1b7837"))
+        ax.tick_params(axis="y", labelcolor=paper_color("national_scenarios.1b7837"), labelsize=8)
         ax.tick_params(axis="x", labelsize=8)
         ax.grid(True, linestyle=":", alpha=0.35)
         if x[0] > x[-1]:
@@ -307,9 +312,9 @@ def _plot_pathway_curve_panel(
             ax.spines["bottom"].set_position(("data", 0.0))
 
         ax_share = ax.twinx()
-        ax_share.plot(x, share, color="#2166ac", marker="s", linewidth=1.6, markersize=3.5)
-        ax_share.set_ylabel("Drone share (%)", fontsize=10, color="#2166ac")
-        ax_share.tick_params(axis="y", labelcolor="#2166ac", labelsize=8)
+        ax_share.plot(x, share, color=paper_color("national_scenarios.2166ac"), marker="s", linewidth=1.6, markersize=3.5)
+        ax_share.set_ylabel("Drone share (%)", fontsize=10, color=paper_color("national_scenarios.2166ac"))
+        ax_share.tick_params(axis="y", labelcolor=paper_color("national_scenarios.2166ac"), labelsize=8)
         if share_limits is not None:
             ax_share.set_ylim(*share_limits)
         if mirror_x:
@@ -389,7 +394,7 @@ def _add_map_parameter_bars(
     """Add axis-free GEF-multiplier and kappa bars inside a map panel."""
     inset = ax_map.inset_axes([0.035, 0.06, 0.25, 0.20], zorder=10)
     values = [gef_mult, kappa]
-    colors = ["#2166ac", "#e08214"]
+    colors = [paper_color("national_scenarios.2166ac"), paper_color("national_scenarios.e08214")]
     value_labels = [f"{gef_mult:.1f}", _format_kappa_value(kappa)]
 
     inset.patch.set_alpha(0.0)
@@ -446,9 +451,9 @@ def _pathway_curve_report(
         "orientation": orientation,
         "co2_saved_mark": co2_saved_mark,
         "co2_saved_baseline": _json_safe_scalar(co2_saved_baseline),
-        "co2_saved_color": "#1b7837",
+        "co2_saved_color": paper_color("national_scenarios.1b7837"),
         "drone_share_mark": "line",
-        "drone_share_color": "#2166ac",
+        "drone_share_color": paper_color("national_scenarios.2166ac"),
         "points": points,
     }
 
@@ -527,13 +532,13 @@ def _pathway_scenario_panel_report(
                     "label": "GEF multiplier",
                     "value": _json_safe_scalar(gef_mult),
                     "unit": "multiplier",
-                    "color": "#2166ac",
+                    "color": paper_color("national_scenarios.2166ac"),
                 },
                 {
                     "label": "E-bike bundling factor kappa",
                     "value": _json_safe_scalar(kappa),
                     "unit": "dimensionless",
-                    "color": "#e08214",
+                    "color": paper_color("national_scenarios.e08214"),
                 },
             ],
         }
@@ -643,8 +648,8 @@ def _write_regions_map_pathway_scenarios_report(
                 shared_cmap,
             ),
             "scenario_parameter_bar_colors": {
-                "gef_multiplier": "#2166ac",
-                "kappa": "#e08214",
+                "gef_multiplier": paper_color("national_scenarios.2166ac"),
+                "kappa": paper_color("national_scenarios.e08214"),
             },
         },
         "panels": scenario_reports,
@@ -690,8 +695,8 @@ def _write_regions_map_pathway_scenario_maps_report(
         },
         "global_encodings": {
             "curve_colors": {
-                "co2_saved": "#1b7837",
-                "drone_share": "#2166ac",
+                "co2_saved": paper_color("national_scenarios.1b7837"),
+                "drone_share": paper_color("national_scenarios.2166ac"),
             },
             "curve_marks": {
                 "co2_saved": "bar",
@@ -735,6 +740,7 @@ def _write_regions_map_pathway_scenario_maps_report(
     print(f"Regions map pathway scenario maps report saved to {report_path}")
 
 
+@prepared_plot()
 def plot_regions_map_pathway_scenario_maps(
     stats_csv_path: str,
     scenario_csv_path: str,
@@ -884,6 +890,7 @@ def plot_regions_map_pathway_scenario_maps(
         plt.close(fig)
 
 
+@prepared_plot()
 def plot_regions_map_pathway_scenarios(
     stats_csv_path: str,
     scenario_csv_path: str,
@@ -1035,13 +1042,13 @@ def plot_regions_map_pathway_scenarios(
         rows = panel_named[label]
         share_col = _scenario_drone_share_column(rows) if not rows.empty else "drone_ratio_pct"
         data = [rows.loc[rows["province_en"] == p, share_col].values for p in province_order]
-        ax_box.boxplot(
-            data, positions=range(len(province_order)), widths=0.65,
+        ax_box.bxp(
+            box_statistics(data), positions=range(len(province_order)), widths=0.65,
             patch_artist=True, showfliers=False,
-            medianprops=dict(color="black", linewidth=0.8),
-            boxprops=dict(facecolor="#a6d96a", edgecolor="#1a9641", linewidth=0.45),
-            whiskerprops=dict(color="#1a9641", linewidth=0.45),
-            capprops=dict(color="#1a9641", linewidth=0.45),
+            medianprops=dict(color=paper_color("ink.black"), linewidth=0.8),
+            boxprops=dict(facecolor=paper_color("national_scenarios.a6d96a"), edgecolor=paper_color("national_scenarios.1a9641"), linewidth=0.45),
+            whiskerprops=dict(color=paper_color("national_scenarios.1a9641"), linewidth=0.45),
+            capprops=dict(color=paper_color("national_scenarios.1a9641"), linewidth=0.45),
         )
         ax_box.set_ylim(0, 102)
         ax_box.set_xlim(-0.7, len(province_order) - 0.3)
@@ -1050,7 +1057,7 @@ def plot_regions_map_pathway_scenarios(
         ax_box.set_ylabel("Drone share (%)", fontsize=6.5)
         ax_box.tick_params(axis="y", labelsize=5.8, length=2)
         ax_box.grid(axis="y", linestyle=":", alpha=0.4)
-        ax_box.axhline(drone_share_median[label], color="#1a9641", linestyle="--", linewidth=0.55, alpha=0.8)
+        ax_box.axhline(drone_share_median[label], color=paper_color("national_scenarios.1a9641"), linestyle="--", linewidth=0.55, alpha=0.8)
 
         # Overlay: total annual lifecycle emission per province (gray line, right axis).
         emission_series = panel_province_emission_kt[label]
@@ -1237,7 +1244,7 @@ def _colorbar_report(ax, bin_edges, tick_edges, label_text, cmap):
         "colors": [to_hex(cmap(i)) for i in range(cmap.N)],
         "unstudied_band": {
             "label": "No data",
-            "color": "#cccccc",
+            "color": paper_color("national_scenarios.cccccc"),
             "bin_index": 0,
         },
     }

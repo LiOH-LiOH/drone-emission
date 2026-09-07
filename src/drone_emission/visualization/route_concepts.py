@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+from .prepared_bundle import prepared_plot, prepared_data
+
+from .palette import color as paper_color
+
 import math
 import os
 from typing import Iterable, Sequence
@@ -27,24 +31,24 @@ Point = tuple[float, float]
 # ---------------------------------------------------------------------------
 
 _COLORS = {
-    "background": "#f8f7f3",
-    "ground": "#e9ece8",
-    "ground_edge": "#c5cbc6",
-    "grid": "#d7dcd8",
-    "road": "#b9c0bb",
-    "road_dark": "#8f9792",
-    "bike": "#d95f35",
-    "bike_shadow": "#8f3f2b",
-    "drone": "#1f77b4",
-    "drone_shadow": "#2f4f62",
-    "origin": "#2f6f4e",
-    "destination": "#3f4b64",
-    "building_top": "#d9dde1",
-    "building_left": "#b9c0c8",
-    "building_right": "#c9cfd5",
-    "text": "#25302d",
-    "muted": "#65706b",
-    "white": "#ffffff",
+    "background": paper_color("route_concepts.f8f7f3"),
+    "ground": paper_color("route_concepts.e9ece8"),
+    "ground_edge": paper_color("route_concepts.c5cbc6"),
+    "grid": paper_color("route_concepts.d7dcd8"),
+    "road": paper_color("route_concepts.b9c0bb"),
+    "road_dark": paper_color("route_concepts.8f9792"),
+    "bike": paper_color("route_concepts.d95f35"),
+    "bike_shadow": paper_color("route_concepts.8f3f2b"),
+    "drone": paper_color("route_concepts.1f77b4"),
+    "drone_shadow": paper_color("route_concepts.2f4f62"),
+    "origin": paper_color("route_concepts.2f6f4e"),
+    "destination": paper_color("route_concepts.3f4b64"),
+    "building_top": paper_color("route_concepts.d9dde1"),
+    "building_left": paper_color("route_concepts.b9c0c8"),
+    "building_right": paper_color("route_concepts.c9cfd5"),
+    "text": paper_color("route_concepts.25302d"),
+    "muted": paper_color("route_concepts.65706b"),
+    "white": paper_color("route_concepts.ffffff"),
 }
 
 _GRID_X = [1.0, 3.5, 6.0, 8.5]   # vertical road x-positions
@@ -197,7 +201,7 @@ def _add_building(ax: plt.Axes, x: float, y: float, w: float, d: float, h: float
     depth_zorder = 15 - (y + d / 2)
     for coords, color in faces:
         ax.add_patch(Polygon(coords, closed=True, facecolor=color,
-                             edgecolor="#aab2ba", linewidth=0.45, zorder=depth_zorder))
+                             edgecolor=paper_color("route_concepts.aab2ba"), linewidth=0.45, zorder=depth_zorder))
 
 
 def _add_buildings(
@@ -373,8 +377,8 @@ def _add_scale_annotation(ax: plt.Axes, road_distance: float, straight_distance:
     )
     ax.text(8.15, 6.62, text, fontsize=10.2, color=_COLORS["text"], ha="left", va="top",
             linespacing=1.25,
-            bbox=dict(boxstyle="round,pad=0.45,rounding_size=0.08", facecolor="#ffffff",
-                      edgecolor="#d3d8d5", alpha=0.94),
+            bbox=dict(boxstyle="round,pad=0.45,rounding_size=0.08", facecolor=paper_color("route_concepts.ffffff"),
+                      edgecolor=paper_color("route_concepts.d3d8d5"), alpha=0.94),
             zorder=70)
 
 # ---------------------------------------------------------------------------
@@ -557,6 +561,7 @@ def _draw_detour_ratio_concept(
     ax.axis("off")
 
 
+@prepared_plot()
 def plot_detour_ratio_concept(
     save_path: str = None,
     figsize: tuple = (60.0 / 25.4, (60.0 / 25.4) / (9.2 / 4.7)),

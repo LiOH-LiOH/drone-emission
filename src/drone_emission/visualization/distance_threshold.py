@@ -1,5 +1,9 @@
 """Visualization functions for cross-region correlation and emission analysis."""
 
+from .prepared_bundle import prepared_plot, prepared_data
+
+from .palette import color as paper_color
+
 import json
 import os
 import pickle
@@ -111,7 +115,7 @@ def _save_distance_threshold_figure(
         save_path = _add_title_suffix(save_path)
     os.makedirs(os.path.dirname(save_path), exist_ok=True)
     save_kwargs = {"bbox_inches": "tight"} if save_tight else {}
-    fig.savefig(save_path, dpi=300, facecolor="white", **save_kwargs)
+    fig.savefig(save_path, dpi=300, facecolor=paper_color("ink.background"), **save_kwargs)
     report_payload = {
         "figure_path": os.path.relpath(save_path, start=os.getcwd()),
         **report_payload,
@@ -127,11 +131,12 @@ def _save_distance_threshold_figure(
 
 def _style_distance_threshold_axis(ax):
     """Apply restrained exploratory-analysis styling."""
-    ax.grid(color="#D9D9D9", linewidth=0.55, alpha=0.65)
+    ax.grid(color=paper_color("distance_threshold.d9d9d9"), linewidth=0.55, alpha=0.65)
     ax.spines[["top", "right"]].set_visible(False)
     ax.tick_params(labelsize=8)
 
 
+@prepared_data
 def _prepare_distance_threshold_all_city_data(
     summary_df: pd.DataFrame,
     oracle_df: pd.DataFrame,
@@ -313,7 +318,7 @@ def _plot_distance_threshold_all_city_scatter(
         color=wide.loc[~highlight, "macro_region_color"],
         s=DISTANCE_THRESHOLD_POINT_SIZE,
         alpha=DISTANCE_THRESHOLD_POINT_ALPHA,
-        edgecolor="white",
+        edgecolor=paper_color("ink.background"),
         linewidth=0.3,
     )
     ax.scatter(
@@ -322,7 +327,7 @@ def _plot_distance_threshold_all_city_scatter(
         color=wide.loc[highlight, "macro_region_color"],
         s=DISTANCE_THRESHOLD_POINT_SIZE,
         alpha=DISTANCE_THRESHOLD_POINT_ALPHA,
-        edgecolor="#151515",
+        edgecolor=paper_color("distance_threshold.151515"),
         linewidth=0.8,
         zorder=4,
     )
@@ -335,7 +340,7 @@ def _plot_distance_threshold_all_city_scatter(
         ax.plot(
             [lower, upper],
             [lower, upper],
-            color="#666666",
+            color=paper_color("distance_threshold.666666"),
             linewidth=0.9,
             linestyle="--",
             zorder=0,
@@ -348,7 +353,7 @@ def _plot_distance_threshold_all_city_scatter(
         y_lower = min(float(wide[y_col].min()) * 1.08, 0.0)
         ax.axhline(
             0.0,
-            color="#8A8A8A",
+            color=paper_color("distance_threshold.8a8a8a"),
             linewidth=0.8,
             linestyle="--",
             zorder=0,
@@ -369,7 +374,7 @@ def _plot_distance_threshold_all_city_scatter(
             textcoords="offset points",
             fontsize=6.5,
             fontweight="semibold",
-            color="#222222",
+            color=paper_color("distance_threshold.222222"),
             ha="right" if offset[0] < 0 else "left",
             bbox={
                 "boxstyle": "square,pad=0.15",
@@ -379,7 +384,7 @@ def _plot_distance_threshold_all_city_scatter(
             },
             arrowprops={
                 "arrowstyle": "-",
-                "color": "#777777",
+                "color": paper_color("distance_threshold.777777"),
                 "linewidth": 0.5,
             },
             zorder=5,
@@ -489,6 +494,7 @@ def _add_distance_threshold_macro_region_legend(fig, wide: pd.DataFrame):
     )
 
 
+@prepared_data
 def _prepare_distance_threshold_representative_city_data(
     wide: pd.DataFrame,
 ) -> pd.DataFrame:
@@ -543,7 +549,7 @@ def _draw_distance_threshold_representative_city_panels(
 
     for ax in axes:
         for separator in y[:-1] + 0.5:
-            ax.axhline(separator, color="#D5DADF", linewidth=0.65, zorder=0)
+            ax.axhline(separator, color=paper_color("distance_threshold.d5dadf"), linewidth=0.65, zorder=0)
         ax.set_ylim(len(representative) - 0.5, -0.5)
         ax.spines[["top", "right", "left"]].set_visible(False)
         ax.tick_params(axis="both", labelsize=7)
@@ -553,14 +559,14 @@ def _draw_distance_threshold_representative_city_panels(
     road = representative["road_full_domain_reduction_pct"].to_numpy(dtype=float)
     oracle = representative["oracle_annual_reduction_pct"].to_numpy(dtype=float)
     reduction_ax, retention_ax, threshold_ax = axes
-    reduction_ax.hlines(y, road, oracle, color="#9AA3AA", linewidth=0.8, zorder=1)
+    reduction_ax.hlines(y, road, oracle, color=paper_color("distance_threshold.9aa3aa"), linewidth=0.8, zorder=1)
     reduction_ax.scatter(
         road,
         y,
         color=city_colors,
         marker="o",
         s=30,
-        edgecolor="white",
+        edgecolor=paper_color("ink.background"),
         linewidth=0.45,
         zorder=3,
     )
@@ -570,7 +576,7 @@ def _draw_distance_threshold_representative_city_panels(
         color=city_colors,
         marker="D",
         s=28,
-        edgecolor="#303030",
+        edgecolor=paper_color("distance_threshold.303030"),
         linewidth=0.55,
         zorder=4,
     )
@@ -584,11 +590,11 @@ def _draw_distance_threshold_representative_city_panels(
     reduction_ax.legend(
         handles=[
             Line2D(
-                [], [], marker="o", linestyle="none", color="#777777",
+                [], [], marker="o", linestyle="none", color=paper_color("distance_threshold.777777"),
                 markersize=5.5, label="Road policy",
             ),
             Line2D(
-                [], [], marker="D", linestyle="none", color="#777777",
+                [], [], marker="D", linestyle="none", color=paper_color("distance_threshold.777777"),
                 markersize=5.5, label="Trip-level optimum",
             ),
         ],
@@ -639,7 +645,7 @@ def _draw_distance_threshold_representative_city_panels(
             textcoords="offset points",
             va="center",
             ha="right",
-            color="white",
+            color=paper_color("ink.background"),
             fontsize=7,
         )
 
@@ -661,11 +667,12 @@ def _draw_distance_threshold_representative_city_panels(
             textcoords="offset points",
             va="center",
             ha="left",
-            color="#303030",
+            color=paper_color("distance_threshold.303030"),
             fontsize=7,
         )
 
 
+@prepared_plot()
 def plot_distance_threshold_representative_city_summary(
     summary_df: pd.DataFrame,
     oracle_df: pd.DataFrame,
@@ -733,6 +740,7 @@ def plot_distance_threshold_representative_city_summary(
     )
 
 
+@prepared_plot()
 def plot_distance_threshold_city_landscape(
     summary_df: pd.DataFrame,
     oracle_df: pd.DataFrame,
@@ -795,6 +803,7 @@ def plot_distance_threshold_city_landscape(
     )
 
 
+@prepared_plot()
 def plot_distance_threshold_oracle_performance(
     summary_df: pd.DataFrame,
     oracle_df: pd.DataFrame,

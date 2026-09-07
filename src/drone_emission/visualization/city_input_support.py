@@ -1,5 +1,9 @@
 """Visualization functions for cross-region correlation and emission analysis."""
 
+from .prepared_bundle import prepared_plot, prepared_data
+
+from .palette import color as paper_color
+
 import json
 import os
 import pickle
@@ -90,7 +94,7 @@ def _draw_trip_phase_barplot(
         else battery_color
         for vehicle in vehicles
     ]
-    edge_color = "#2f3437"
+    edge_color = paper_color("city_input_support.2f3437")
 
     ax.bar(
         x,
@@ -123,7 +127,7 @@ def _draw_trip_phase_barplot(
             ha="center",
             va="bottom",
             fontsize=9,
-            color="#222222",
+            color=paper_color("city_input_support.222222"),
         )
 
     ax.set_xticks(x)
@@ -273,6 +277,7 @@ def _normalize_p75_trip_subfigure_text(ax):
             legend_text.set_fontsize(8)
 
 
+@prepared_plot()
 def _save_beijing_p75_trip_lifecycle_subfigures(
     production_df,
     eol_df,
@@ -295,8 +300,8 @@ def _save_beijing_p75_trip_lifecycle_subfigures(
     extension = ".pdf" if for_latex else ".png"
     os.makedirs(save_dir, exist_ok=True)
 
-    phase_body_color = "#5f6368"
-    phase_battery_color = "#c7c9cc"
+    phase_body_color = paper_color("city_input_support.5f6368")
+    phase_battery_color = paper_color("city_input_support.c7c9cc")
     panel_specs = (
         (
             "beijing_p75_trip_production_emissions",
@@ -324,7 +329,7 @@ def _save_beijing_p75_trip_lifecycle_subfigures(
                 ha="center",
                 va="center",
                 fontsize=8,
-                color="#777777",
+                color=paper_color("city_input_support.777777"),
             )
             ax.tick_params(left=False, bottom=False, labelleft=False, labelbottom=False)
             for spine in ax.spines.values():
@@ -348,13 +353,13 @@ def _save_beijing_p75_trip_lifecycle_subfigures(
             legend_handles = [
                 Patch(
                     facecolor=phase_body_color,
-                    edgecolor="#2f3437",
+                    edgecolor=paper_color("city_input_support.2f3437"),
                     linewidth=0.8,
                     label="Body",
                 ),
                 Patch(
                     facecolor=phase_battery_color,
-                    edgecolor="#2f3437",
+                    edgecolor=paper_color("city_input_support.2f3437"),
                     linewidth=0.8,
                     hatch="///",
                     label="Battery",
@@ -383,7 +388,7 @@ def _save_beijing_p75_trip_lifecycle_subfigures(
         output_path = os.path.join(save_dir, figure_name + extension)
         if plot_title:
             output_path = _add_title_suffix(output_path)
-        fig.savefig(output_path, dpi=300, facecolor="white")
+        fig.savefig(output_path, dpi=300, facecolor=paper_color("ink.background"))
         phase_name = "production" if "production" in figure_name else "end_of_life"
         if phase_df is None:
             phase_facts = {
@@ -443,7 +448,7 @@ def _save_beijing_p75_trip_lifecycle_subfigures(
             ha="center",
             va="center",
             fontsize=8,
-            color="#777777",
+            color=paper_color("city_input_support.777777"),
         )
         ax.tick_params(left=False, bottom=False, labelleft=False, labelbottom=False)
         for spine in ax.spines.values():
@@ -480,7 +485,7 @@ def _save_beijing_p75_trip_lifecycle_subfigures(
     )
     if plot_title:
         output_path = _add_title_suffix(output_path)
-    fig.savefig(output_path, dpi=300, facecolor="white")
+    fig.savefig(output_path, dpi=300, facecolor=paper_color("ink.background"))
     if selected_trip is None or use_phase_result is None:
         use_phase_facts = {
             "status": "unavailable",

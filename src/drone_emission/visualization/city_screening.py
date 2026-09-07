@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+from .prepared_bundle import prepared_plot, prepared_data
+
+from .palette import color as paper_color
+
 import os
 
 import numpy as np
@@ -17,11 +21,11 @@ RELATIVE_REDUCTION_COL = "oracle_min_reduction_vs_ebike_pct"
 POPULATION_COL = "population_10k"
 POPULATION_THRESHOLDS = (50.0, 100.0, 500.0, 1000.0)
 POPULATION_LABELS = ("<0.5", "0.5–1", "1–5", "5–10", "≥10")
-POPULATION_COLORS = ("#0072B2", "#009E73", "#E69F00", "#D55E00", "#882255")
+POPULATION_COLORS = (paper_color("city_screening.0072b2"), paper_color("city_screening.009e73"), paper_color("city_screening.e69f00"), paper_color("city_screening.d55e00"), paper_color("city_screening.882255"))
 BACKGROUND_COLORS = {
-    "upper_left": "#EAF2F8",
-    "upper_right": "#FBEEDD",
-    "lower": "#F1F1F1",
+    "upper_left": paper_color("city_screening.eaf2f8"),
+    "upper_right": paper_color("city_screening.fbeedd"),
+    "lower": paper_color("city_screening.f1f1f1"),
 }
 
 
@@ -80,6 +84,7 @@ def _population_classes(values) -> np.ndarray:
     return np.searchsorted(POPULATION_THRESHOLDS, values, side="right")
 
 
+@prepared_plot()
 def plot_city_reduction_potential_scatter(
     df: pd.DataFrame,
     save_path: str = None,
@@ -129,20 +134,20 @@ def plot_city_reduction_potential_scatter(
         c=population_classes,
         cmap=color_map,
         norm=color_norm,
-        edgecolor="white",
+        edgecolor=paper_color("ink.background"),
         linewidth=0.3,
         zorder=3,
     )
     ax.axhline(
         relative_median,
-        color="#666666",
+        color=paper_color("city_screening.666666"),
         linestyle="--",
         linewidth=0.75,
         zorder=2,
     )
     ax.axvline(
         absolute_median,
-        color="#666666",
+        color=paper_color("city_screening.666666"),
         linestyle="--",
         linewidth=0.75,
         zorder=2,

@@ -1,3 +1,5 @@
+from .palette import color as paper_color
+from .palette import colormap as paper_cmap
 import json
 import os
 
@@ -63,7 +65,7 @@ def plot_geojson_boundaries(
     ax,
     geojson_data,
     zorder=15,
-    color="gray",
+    color=paper_color("ink.gray"),
     linewidth=2,
     alpha=0.8,
 ):
@@ -122,7 +124,7 @@ def configure_contextily_cache():
 def plot_boundary_box(
     ax,
     boundaries_dict,
-    color="orange",
+    color=paper_color("ink.orange"),
     linestyle="--",
     linewidth=2,
     label="Original Boundary",
@@ -168,7 +170,7 @@ def add_basemap_and_boundaries(
     boundaries_dict=None,
     zoom=14,
     alpha=0.6,
-    boundary_color="gray",
+    boundary_color=paper_color("ink.gray"),
     boundary_linewidth=2,
     boundary_alpha=0.8,
     attribution_size=8,
@@ -227,7 +229,7 @@ def add_basemap_and_boundaries(
                 ha="left",
                 wrap=False,
                 path_effects=[
-                    patheffects.withStroke(linewidth=0.6, foreground="white")
+                    patheffects.withStroke(linewidth=0.6, foreground=paper_color("ink.background"))
                 ],
                 zorder=100,
             )
@@ -398,7 +400,7 @@ def finalize_plot(
 
     # Add grid
     if show_grid:
-        ax.grid(True, alpha=0.3, linestyle="--", color="white")
+        ax.grid(True, alpha=0.3, linestyle="--", color=paper_color("ink.background"))
     else:
         ax.grid(False)
 
@@ -418,7 +420,7 @@ def finalize_plot(
             transform=ax.transAxes,
             fontsize=10,
             verticalalignment="top",
-            bbox=dict(boxstyle="round", facecolor="wheat", alpha=0.8),
+            bbox=dict(boxstyle="round", facecolor=paper_color("ink.wheat"), alpha=0.8),
             zorder=100,  # Ensure text is on top of all plot elements
         )
 
@@ -515,7 +517,7 @@ def get_custom_cmap(threshold):
     Alpha gradient: rapid rise from 0 to 1.0 at the low end.
     """
     ncolors = 256
-    color_array = plt.cm.Spectral_r(np.linspace(0, 1, ncolors))
+    color_array = paper_cmap("_utils.density")(np.linspace(0, 1, ncolors))
 
     # Create alpha gradient
     if threshold > 0:

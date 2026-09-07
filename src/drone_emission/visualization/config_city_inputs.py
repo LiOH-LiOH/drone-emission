@@ -1,5 +1,7 @@
 """Formal config city inputs renderers used only by the manifest registry."""
 
+from .palette import color as paper_color
+
 import hashlib
 import json
 import os
@@ -486,8 +488,8 @@ def _render_beijing_p75_trip_phase_emissions(
         ),
         selection_report=representative.selection,
         distance_label="",
-        phase_body_colors={"E-bike": "#d95f35", "Drone": "#1f77b4"},
-        phase_battery_colors={"E-bike": "#f2a07f", "Drone": "#9ecae1"},
+        phase_body_colors={"E-bike": paper_color("config_city_inputs.d95f35"), "Drone": paper_color("config_city_inputs.1f77b4")},
+        phase_battery_colors={"E-bike": paper_color("config_city_inputs.f2a07f"), "Drone": paper_color("config_city_inputs.9ecae1")},
         save_dir=out,
         for_latex=for_latex,
         plot_title=plot_title,

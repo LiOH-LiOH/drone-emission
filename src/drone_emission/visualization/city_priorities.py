@@ -1,5 +1,9 @@
 """Visualization functions for cross-region correlation and emission analysis."""
 
+from .prepared_bundle import prepared_plot, prepared_data, read_plot_csv, box_statistics
+
+from .palette import color as paper_color, colormap as paper_cmap
+
 import json
 import os
 import pickle
@@ -97,6 +101,7 @@ def _first_available_column(df: pd.DataFrame, candidates: tuple[str, ...], purpo
     raise KeyError(f"No {purpose} column found; tried {', '.join(candidates)}")
 
 
+@prepared_data
 def load_oracle_reduction_label_layout(
     layout_path: str = None,
 ) -> dict[str, tuple[float, float]]:
@@ -172,22 +177,22 @@ def _build_bubble_reduction_cmap(v_max: float):
     reduction_edges = np.arange(0, top + step, step, dtype=float)
     bin_edges = np.concatenate([[-step], reduction_edges])
     base_colors = [
-        "#9BD3E6",
-        "#66B7D2",
-        "#2F91B8",
-        "#126782",
-        "#064D6B",
-        "#023047",
+        paper_color("city_priorities.9bd3e6"),
+        paper_color("city_priorities.66b7d2"),
+        paper_color("city_priorities.2f91b8"),
+        paper_color("city_priorities.126782"),
+        paper_color("city_priorities.064d6b"),
+        paper_color("city_priorities.023047"),
     ]
     if len(reduction_edges) - 1 <= len(base_colors):
         value_colors = base_colors[:len(reduction_edges) - 1]
     else:
-        base = plt.get_cmap("PuBuGn")
+        base = paper_cmap("city_priorities.reduction")
         value_colors = [
             base(x)
             for x in np.linspace(0.38, 0.95, len(reduction_edges) - 1)
         ]
-    cmap = ListedColormap(["#cccccc", *value_colors])
+    cmap = ListedColormap([paper_color("city_priorities.cccccc"), *value_colors])
     norm = BoundaryNorm(bin_edges, ncolors=cmap.N, clip=True)
     return cmap, norm, bin_edges, reduction_edges
 
@@ -388,8 +393,8 @@ def _draw_bubble_size_legend(
                 [],
                 [],
                 s=marker_size,
-                facecolor="#BDBDBD",
-                edgecolor="#FFFFFF",
+                facecolor=paper_color("city_priorities.bdbdbd"),
+                edgecolor=paper_color("city_priorities.ffffff"),
                 linewidth=0.65,
                 alpha=0.82,
             )
@@ -437,7 +442,7 @@ def _draw_bubble_color_legend(
     handles = []
     labels = []
     if include_unstudied:
-        handles.append(Patch(facecolor="#cccccc", edgecolor="none", label="Unstudied"))
+        handles.append(Patch(facecolor=paper_color("city_priorities.cccccc"), edgecolor="none", label="Unstudied"))
         labels.append("Unstudied")
     value_edges = list(reduction_edges)
     for i in range(len(value_edges) - 1):
@@ -446,7 +451,7 @@ def _draw_bubble_color_legend(
         handles.append(
             Patch(
                 facecolor=cmap(i + 1),
-                edgecolor="0.65",
+                edgecolor=paper_color("ink.0_65"),
                 linewidth=0.4,
             )
         )
@@ -472,6 +477,7 @@ def _draw_bubble_color_legend(
     )
 
 
+@prepared_plot()
 def plot_province_total_ebike_lifecycle(
     df: pd.DataFrame,
     save_path: str = None,
@@ -561,9 +567,9 @@ def plot_province_total_ebike_lifecycle(
     ]
 
     x = np.arange(len(ordered))
-    bar_color = "#B0B0B0"
-    bar_axis_color = "#4A4A4A"
-    box_color = "#1F6E2D"
+    bar_color = paper_color("city_priorities.b0b0b0")
+    bar_axis_color = paper_color("city_priorities.4a4a4a")
+    box_color = paper_color("city_priorities.1f6e2d")
 
     _external_ax = ax is not None
     if _external_ax:
@@ -602,8 +608,8 @@ def plot_province_total_ebike_lifecycle(
     ax1.set_axisbelow(True)
 
     ax2 = ax1.twinx()
-    bp = ax2.boxplot(
-        reduction_data,
+    bp = ax2.bxp(
+        box_statistics(reduction_data),
         positions=x,
         widths=0.5,
         patch_artist=True,
@@ -874,7 +880,7 @@ def plot_regions_map_oracle_reduction_rank(
     """
     from drone_emission.visualization.regions import plot_regions_on_china_map
 
-    map_df = pd.read_csv(stats_csv_path)
+    map_df = read_plot_csv(stats_csv_path)
     for col in ("oracle_min_lifecycle_kg",):
         if (
             col not in map_df.columns
@@ -975,7 +981,7 @@ def plot_regions_map_oracle_reduction_rank(
         cmap=cmap,
         norm=norm,
         alpha=0.82,
-        edgecolor="#FFFFFF",
+        edgecolor=paper_color("city_priorities.ffffff"),
         linewidth=0.65,
         zorder=8,
     )
@@ -1037,7 +1043,7 @@ def plot_regions_map_oracle_reduction_rank(
     )
     if size_legend is not None:
         if is_map_only_figure:
-            size_legend.get_frame().set_edgecolor("none")
+            size_legend.get_frame().set_edgepaper_color("none")
             size_legend.get_frame().set_linewidth(0.0)
         ax_map.add_artist(size_legend)
     if color_scale_style == "legend":
@@ -1087,11 +1093,11 @@ def plot_regions_map_oracle_reduction_rank(
             invert_vertical=True,
             compact=True,
         )
-        inset_ax.set_facecolor("none")
+        inset_ax.set_facepaper_color("none")
         inset_ax.patch.set_alpha(0.0)
         for name, spine in inset_ax.spines.items():
             spine.set_visible(name in {"left", "bottom"})
-            spine.set_edgecolor("#666666")
+            spine.set_edgecolor(paper_color("city_priorities.666666"))
             spine.set_linewidth(0.6)
 
     if plot_title:
@@ -1193,6 +1199,7 @@ def plot_regions_map_oracle_reduction_rank(
     return None
 
 
+@prepared_plot()
 def plot_regions_map_oracle_reduction_rank_map_only(
     df_stats: "pd.DataFrame",
     stats_csv_path: str,
@@ -1278,7 +1285,7 @@ def _color_for_value(value, cmap, norm):
 
     value = _json_safe_scalar(value)
     if value is None:
-        return "#cccccc"
+        return paper_color("city_priorities.cccccc")
     return to_hex(cmap(norm(value)))
 
 
@@ -1305,7 +1312,7 @@ def _colorbar_report(ax, bin_edges, tick_edges, label_text, cmap):
         "colors": [to_hex(cmap(i)) for i in range(cmap.N)],
         "unstudied_band": {
             "label": "Unstudied",
-            "color": "#cccccc",
+            "color": paper_color("city_priorities.cccccc"),
             "bin_index": 0,
         },
     }
@@ -1386,7 +1393,7 @@ def _add_regions_oracle_city_highlights(
             s=highlight_size,
             marker="o",
             facecolors="none",
-            edgecolors="#111111",
+            edgecolors=paper_color("city_priorities.111111"),
             linewidths=0.7,
             zorder=18,
             clip_on=False,
@@ -1396,7 +1403,7 @@ def _add_regions_oracle_city_highlights(
         label_offset = offset
         leader_shrink_points = 0.0
         arrowprops = (
-            dict(arrowstyle="-", color="0.25", lw=0.75)
+            dict(arrowstyle="-", color=paper_color("ink.0_25"), lw=0.75)
             if draw_label_leaders
             else None
         )
@@ -1415,7 +1422,7 @@ def _add_regions_oracle_city_highlights(
                 if draw_label_leaders:
                     arrowprops = dict(
                         arrowstyle="-",
-                        color="0.25",
+                        color=paper_color("ink.0_25"),
                         lw=0.75,
                         shrinkA=1.5,
                         shrinkB=leader_shrink_points,
@@ -1427,12 +1434,12 @@ def _add_regions_oracle_city_highlights(
             textcoords="offset points",
             fontsize=7.5,
             fontweight="bold",
-            color="#111111",
+            color=paper_color("city_priorities.111111"),
             arrowprops=arrowprops,
             bbox=dict(
                 boxstyle="round,pad=0.18",
-                facecolor="white",
-                edgecolor="0.55",
+                facecolor=paper_color("ink.background"),
+                edgecolor=paper_color("ink.0_55"),
                 alpha=0.9,
             ),
             zorder=20,
@@ -1523,7 +1530,7 @@ def _add_regions_oracle_inset_bubbles(
         cmap=cmap,
         norm=norm,
         alpha=0.82,
-        edgecolor="#FFFFFF",
+        edgecolor=paper_color("city_priorities.ffffff"),
         linewidth=0.35,
         zorder=8,
         clip_on=True,
@@ -1581,7 +1588,7 @@ def _city_oracle_rank_report(
                     if reduction_metric == "percentage"
                     else "width_t_co2e_per_year"
                 ): _json_safe_scalar(row[reduction_col]),
-                "color": "#1F6E2D",
+                "color": paper_color("city_priorities.1f6e2d"),
                 "alpha": 0.88,
             }
         )
@@ -1640,7 +1647,7 @@ def _plot_city_oracle_reduction_rank(
     cities = ranked["region_name_en"].tolist()
     reductions = ranked[reduction_col].to_numpy(dtype=float)
     y = np.arange(len(cities))
-    bar_color = "#1F6E2D"
+    bar_color = paper_color("city_priorities.1f6e2d")
 
     _external_ax = ax is not None
     if _external_ax:
@@ -1677,7 +1684,7 @@ def _plot_city_oracle_reduction_rank(
                 label = fmt.format(value)
             ax.text(
                 value + pad, i, label,
-                va="center", ha="left", fontsize=9, color="black", zorder=4,
+                va="center", ha="left", fontsize=9, color=paper_color("ink.black"), zorder=4,
             )
 
     if plot_title:
@@ -1710,6 +1717,7 @@ def _plot_city_oracle_reduction_rank(
     plt.close(fig)
 
 
+@prepared_plot()
 def plot_city_reduction_rank_all_macro_region(
     df: pd.DataFrame,
     save_path: str = None,
@@ -1862,7 +1870,7 @@ def plot_city_reduction_rank_all_macro_region(
                 va="bottom",
                 fontsize=6.5,
                 fontweight="bold",
-                color="#111111",
+                color=paper_color("city_priorities.111111"),
                 bbox=label_box_style,
                 zorder=6,
             )
@@ -1905,7 +1913,7 @@ def plot_city_reduction_rank_all_macro_region(
                 record["rank"],
                 record["bar_top"],
                 record["label_y"],
-                colors="0.25",
+                colors=paper_color("ink.0_25"),
                 linewidth=0.6,
                 zorder=4,
             )

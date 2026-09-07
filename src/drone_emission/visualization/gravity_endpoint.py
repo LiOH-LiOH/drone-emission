@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+from .palette import color as paper_color, colormap as paper_cmap
+
+from .prepared_bundle import prepared_plot, prepared_data
+
 import hashlib
 import json
 from pathlib import Path
@@ -9,7 +13,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from drone_emission.calibration.coordinate_restore import _add_basemap
+from .prepared_bundle import add_prepared_basemap as _add_basemap
 from drone_emission.visualization._utils import _add_title_suffix, write_figure_report
 
 
@@ -20,6 +24,7 @@ BASEMAP_ATTRIBUTION = "© OpenStreetMap contributors"
 DEFAULT_FIGSIZE = (180.0 / 25.4, 83.0 / 25.4)
 
 
+@prepared_data
 def _sha256(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as handle:
@@ -28,6 +33,7 @@ def _sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+@prepared_data
 def _prepare_endpoint_grid(source: pd.DataFrame) -> dict:
     required = {
         "grid_x",
@@ -100,6 +106,7 @@ def _prepare_endpoint_grid(source: pd.DataFrame) -> dict:
     }
 
 
+@prepared_plot()
 def plot_beijing_endpoint_grid_heatmap(
     source: pd.DataFrame,
     save_path: str | None = None,
@@ -119,7 +126,7 @@ def plot_beijing_endpoint_grid_heatmap(
     prepared = _prepare_endpoint_grid(source)
     norm = LogNorm(vmin=1.0, vmax=max(1.000001, prepared["vmax"]))
 
-    fig = plt.figure(figsize=figsize, facecolor="white")
+    fig = plt.figure(figsize=figsize, facecolor=paper_color("ink.background"))
     layout = fig.add_gridspec(
         1,
         3,
@@ -146,7 +153,7 @@ def plot_beijing_endpoint_grid_heatmap(
             prepared["x_edges"],
             prepared["y_edges"],
             np.ma.masked_less(values, norm.vmin),
-            cmap="magma",
+            cmap=paper_cmap("gravity_endpoint.orders"),
             norm=norm,
             alpha=0.82,
             shading="flat",
@@ -159,10 +166,10 @@ def plot_beijing_endpoint_grid_heatmap(
             BASEMAP_ATTRIBUTION,
             transform=axis.transAxes,
             fontsize=4.5,
-            color="0.25",
+            color=paper_color("ink.0_25"),
             ha="left",
             va="bottom",
-            path_effects=[withStroke(linewidth=1.0, foreground="white")],
+            path_effects=[withStroke(linewidth=1.0, foreground=paper_color("ink.background"))],
             zorder=10,
         )
         axis.set_aspect("equal", adjustable="box")
@@ -185,7 +192,7 @@ def plot_beijing_endpoint_grid_heatmap(
         if plot_title:
             output_path = Path(_add_title_suffix(str(output_path)))
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        fig.savefig(output_path, dpi=300, facecolor="white")
+        fig.savefig(output_path, dpi=300, facecolor=paper_color("ink.background"))
 
         grid = prepared["grid"]
         locked_source = Path(source_path) if source_path is not None else None
@@ -225,7 +232,7 @@ def plot_beijing_endpoint_grid_heatmap(
                 "expected_order_total": float(grid["expected_orders"].sum()),
             },
             "encoding": {
-                "colormap": "magma",
+                "colormap": "paper_size",
                 "normalization": "shared_logarithmic",
                 "vmin_orders": 1.0,
                 "vmax_orders": float(prepared["vmax"]),

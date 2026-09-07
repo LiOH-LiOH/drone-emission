@@ -6,6 +6,7 @@ from dataclasses import dataclass
 import json
 import os
 from pathlib import Path
+from .palette import Palette, configure_palette
 
 
 @dataclass(frozen=True)
@@ -17,6 +18,7 @@ class RenderContext:
     cache_root: Path
     work_root: Path
     experiment: dict
+    palette: Palette | None = None
 
     @classmethod
     def from_config(cls, config: dict) -> "RenderContext":
@@ -26,9 +28,10 @@ class RenderContext:
             cache_root=Path(config["cache_dir"]).resolve(),
             work_root=Path(config["work_dir"]).resolve(),
             experiment=dict(config),
+            palette=configure_palette(config.get("palette_path")),
         )
         analysis_hash = config.get("analysis_input_manifest_sha256")
-        if analysis_hash:
+        if analysis_hash and not config.get("from_bundle"):
             from drone_emission.paper_cohort import cohort_hash, locked_region_keys
 
             cohort_view = context.data_root / "paper_cohort_view.json"

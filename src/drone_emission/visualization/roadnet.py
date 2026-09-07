@@ -1,3 +1,7 @@
+
+from .prepared_bundle import prepared_plot, prepared_data, local_road_edges, shortest_path
+
+from .palette import color as paper_color
 import ast
 from collections import Counter
 from typing import Any, Dict, List, Optional, Tuple
@@ -23,7 +27,7 @@ from ._utils import (
 )
 
 
-ROAD_NETWORK_CONTEXT_BACKGROUND = "#eef0eb"
+ROAD_NETWORK_CONTEXT_BACKGROUND = paper_color("roadnet.eef0eb")
 def get_road_network_subfigure_frame(
     center_lng,
     center_lat,
@@ -84,7 +88,7 @@ def _add_context_road_lines(ax, edge_coords, compact):
         ax.add_collection(
             LineCollection(
                 segments,
-                colors="white",
+                colors=paper_color("ink.background"),
                 linewidths=1.05,
                 alpha=0.92,
                 zorder=15,
@@ -92,7 +96,7 @@ def _add_context_road_lines(ax, edge_coords, compact):
         )
         roads = LineCollection(
             segments,
-            colors="#3f4852",
+            colors=paper_color("roadnet.3f4852"),
             linewidths=0.5,
             alpha=0.98,
             zorder=20,
@@ -100,7 +104,7 @@ def _add_context_road_lines(ax, edge_coords, compact):
     else:
         roads = LineCollection(
             segments,
-            colors="#4f5963",
+            colors=paper_color("roadnet.4f5963"),
             linewidths=0.55,
             alpha=0.95,
             zorder=10,
@@ -108,6 +112,7 @@ def _add_context_road_lines(ax, edge_coords, compact):
     ax.add_collection(roads)
 
 
+@prepared_plot(omit=('graph',))
 def plot_road_network_subfigure(
     graph,
     region_name,
@@ -150,7 +155,7 @@ def plot_road_network_subfigure(
     boundaries_dict = frame["bounds"]
     avg_lat = frame["center_lat"]
 
-    edge_coords = graph.get_local_edges(boundaries_dict, margin_deg=0.0)
+    edge_coords = local_road_edges(graph, boundaries_dict, margin_deg=0.0)
     if len(edge_coords) == 0:
         print("Road network subfigure skipped - no road edges in frame")
         return
@@ -165,12 +170,12 @@ def plot_road_network_subfigure(
     ax.set_xlim(boundaries_dict["min_lng"], boundaries_dict["max_lng"])
     ax.set_ylim(boundaries_dict["min_lat"], boundaries_dict["max_lat"])
     background_color = (
-        ROAD_NETWORK_CONTEXT_BACKGROUND if compact else "#f7f7f5"
+        ROAD_NETWORK_CONTEXT_BACKGROUND if compact else paper_color("roadnet.f7f7f5")
     )
     fig.patch.set_facecolor(background_color)
     ax.set_facecolor(background_color)
 
-    building_color = "#c8c1b3"
+    building_color = paper_color("roadnet.c8c1b3")
     building_alpha = 0.65
     building_count = 0
     building_context_available = buildings_gdf is not None
@@ -231,7 +236,7 @@ def plot_road_network_subfigure(
             transform=ax.transAxes,
             fontsize=10,
             verticalalignment="top",
-            bbox=dict(boxstyle="round", facecolor="white", alpha=0.85),
+            bbox=dict(boxstyle="round", facecolor=paper_color("ink.background"), alpha=0.85),
             zorder=100,
         )
 
@@ -473,7 +478,7 @@ def _draw_distance_panel(
             except Exception as e:
                 print(f"Could not add rotated basemap: {e}")
 
-        edge_coords = graph.get_local_edges(query_bounds)
+        edge_coords = local_road_edges(graph, query_bounds)
         if len(edge_coords) > 0:
             segments = [
                 [
@@ -482,7 +487,7 @@ def _draw_distance_panel(
                 ]
                 for ec in edge_coords
             ]
-            network_color = "#cfd4d1" if compact else "#ddd"
+            network_color = paper_color("roadnet.cfd4d1") if compact else paper_color("ink.hex_ddd")
             network_width = 0.35 if compact else 0.3
             lc = LineCollection(
                 segments,
@@ -498,7 +503,7 @@ def _draw_distance_panel(
                 for lat, lng in path_result["path_coordinates"]
             ])
             road_width = 1.5 if compact else 2.5
-            ax.plot(path_xy[:, 0], path_xy[:, 1], color="#d95f35", linewidth=road_width,
+            ax.plot(path_xy[:, 0], path_xy[:, 1], color=paper_color("roadnet.d95f35"), linewidth=road_width,
                     alpha=0.9, zorder=10, label="E-bike (road)")
 
         origin_rot = _transform(origin[0], origin[1])
@@ -508,19 +513,19 @@ def _draw_distance_panel(
         marker_edge_width = 0.7 if compact else 1.5
         ax.plot(
             [origin_rot[0], dest_rot[0]], [origin_rot[1], dest_rot[1]],
-            color="#1f77b4", linewidth=drone_width, linestyle="--", alpha=0.9, zorder=20,
+            color=paper_color("roadnet.1f77b4"), linewidth=drone_width, linestyle="--", alpha=0.9, zorder=20,
             label="Drone (straight)",
         )
-        ax.scatter(origin_rot[0], origin_rot[1], c="#2f6f4e", s=marker_size, marker="o",
+        ax.scatter(origin_rot[0], origin_rot[1], c=paper_color("roadnet.2f6f4e"), s=marker_size, marker="o",
                    zorder=25, edgecolors="white", linewidth=marker_edge_width, label="Merchant")
-        ax.scatter(dest_rot[0], dest_rot[1], c="#3f4b64", s=marker_size, marker="s",
+        ax.scatter(dest_rot[0], dest_rot[1], c=paper_color("roadnet.3f4b64"), s=marker_size, marker="s",
                    zorder=25, edgecolors="white", linewidth=marker_edge_width, label="Customer")
 
         if show_endpoint_labels:
             from matplotlib import patheffects
 
             label_effects = [
-                patheffects.withStroke(linewidth=1.5, foreground="white")
+                patheffects.withStroke(linewidth=1.5, foreground=paper_color("ink.background"))
             ]
             ax.annotate(
                 "Merchant",
@@ -549,7 +554,7 @@ def _draw_distance_panel(
         ax.set_ylim(y_min, y_max)
         ax.set_aspect("equal", adjustable="box")
         if show_basemap:
-            ax.set_facecolor("#f7f7f7")
+            ax.set_facecolor(paper_color("roadnet.f7f7f7"))
         ax.set_xlabel("")
         ax.set_ylabel("")
         ax.tick_params(left=False, bottom=False, labelleft=False, labelbottom=False)
@@ -559,7 +564,7 @@ def _draw_distance_panel(
                 0.97, 0.03,
                 f"Straight: {straight_dist:.0f} m\nRoad: {road_dist:.0f} m\nDetour: {detour:.2f}",
                 transform=ax.transAxes, fontsize=9, va="bottom", ha="right", zorder=80,
-                bbox=dict(boxstyle="round,pad=0.4", facecolor="white", edgecolor="#d3d8d5", alpha=0.92),
+                bbox=dict(boxstyle="round,pad=0.4", facecolor=paper_color("ink.background"), edgecolor=paper_color("roadnet.d3d8d5"), alpha=0.92),
             )
         if show_legend:
             handles, labels = ax.get_legend_handles_labels()
@@ -603,26 +608,26 @@ def _draw_distance_panel(
         local_bounds["min_lat"] -= extra
         local_bounds["max_lat"] += extra
 
-    edge_coords = graph.get_local_edges(local_bounds)
+    edge_coords = local_road_edges(graph, local_bounds)
     if len(edge_coords) > 0:
         segments = [[(ec[1], ec[0]), (ec[3], ec[2])] for ec in edge_coords]
-        lc = LineCollection(segments, colors="#ddd", linewidths=0.3, zorder=1)
+        lc = LineCollection(segments, colors=paper_color("ink.hex_ddd"), linewidths=0.3, zorder=1)
         ax.add_collection(lc)
 
     if path_result["success"] and len(path_result["path_coordinates"]) > 1:
         path_lngs = [c[1] for c in path_result["path_coordinates"]]
         path_lats = [c[0] for c in path_result["path_coordinates"]]
-        ax.plot(path_lngs, path_lats, color="#d95f35", linewidth=2.5, alpha=0.9, zorder=10,
+        ax.plot(path_lngs, path_lats, color=paper_color("roadnet.d95f35"), linewidth=2.5, alpha=0.9, zorder=10,
                 label="E-bike (road)")
 
     ax.plot(
         [origin[1], destination[1]], [origin[0], destination[0]],
-        color="#1f77b4", linewidth=2, linestyle="--", alpha=0.9, zorder=20,
+        color=paper_color("roadnet.1f77b4"), linewidth=2, linestyle="--", alpha=0.9, zorder=20,
         label="Drone (straight)",
     )
-    ax.scatter(origin[1], origin[0], c="#2f6f4e", s=90, marker="o",
+    ax.scatter(origin[1], origin[0], c=paper_color("roadnet.2f6f4e"), s=90, marker="o",
                zorder=25, edgecolors="white", linewidth=1.5, label="Merchant")
-    ax.scatter(destination[1], destination[0], c="#3f4b64", s=90, marker="s",
+    ax.scatter(destination[1], destination[0], c=paper_color("roadnet.3f4b64"), s=90, marker="s",
                zorder=25, edgecolors="white", linewidth=1.5, label="Customer")
 
     ax.set_xlim(local_bounds["min_lng"], local_bounds["max_lng"])
@@ -651,12 +656,13 @@ def _draw_distance_panel(
             0.97, 0.03,
             f"Straight: {straight_dist:.0f} m\nRoad: {road_dist:.0f} m\nDetour: {detour:.2f}",
             transform=ax.transAxes, fontsize=9, va="bottom", ha="right", zorder=80,
-            bbox=dict(boxstyle="round,pad=0.4", facecolor="white", edgecolor="#d3d8d5", alpha=0.92),
+            bbox=dict(boxstyle="round,pad=0.4", facecolor=paper_color("ink.background"), edgecolor=paper_color("roadnet.d3d8d5"), alpha=0.92),
         )
     if show_legend:
         ax.legend(loc="upper left", fontsize=9, framealpha=0.9)
 
 
+@prepared_plot(omit=('graph', 'router'))
 def plot_beijing_p75_trip_route_comparison(
     selected_trip,
     selection_report,
@@ -681,7 +687,7 @@ def plot_beijing_p75_trip_route_comparison(
     """
     origin = (float(selected_trip["from_lat"]), float(selected_trip["from_lng"]))
     destination = (float(selected_trip["to_lat"]), float(selected_trip["to_lng"]))
-    path_result = router.find_shortest_path(origin, destination)
+    path_result = shortest_path(router, origin, destination)
     if not path_result.get("success"):
         raise RuntimeError(
             "Beijing P75 representative trip could not be reconstructed on the "
@@ -731,7 +737,7 @@ def plot_beijing_p75_trip_route_comparison(
         if save_path.endswith(".pdf"):
             ax.set_rasterization_zorder(2)
         os.makedirs(os.path.dirname(save_path), exist_ok=True)
-        fig.savefig(save_path, dpi=300, facecolor="white")
+        fig.savefig(save_path, dpi=300, facecolor=paper_color("ink.background"))
         straight_distance = float(sample["straight_distance"])
         road_distance = float(sample["road_distance"])
         path_result = sample.get("path_result", {})

@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+from .prepared_bundle import prepared_plot, prepared_data, source_file_metadata
+
+from .palette import color as paper_color
+
 import json
 from collections.abc import Sequence
 from pathlib import Path
@@ -33,13 +37,13 @@ MODE_LABELS = {
 }
 COMPARISON_MODE_LABELS = {**MODE_LABELS, "pedelec_ebike": "E-bike"}
 MODE_COLORS = {
-    "pedal_bicycle": "#4f8f62",
-    "pedelec_ebike": "#76a96d",
-    "electric_moped": "#5f9fbd",
-    "fuel_moped": "#c58a52",
-    "battery_electric_car": "#4678a8",
-    "fuel_car": "#a95f43",
-    "drone": "#7b6aa8",
+    "pedal_bicycle": paper_color("delivery_modes.4f8f62"),
+    "pedelec_ebike": paper_color("delivery_modes.76a96d"),
+    "electric_moped": paper_color("delivery_modes.5f9fbd"),
+    "fuel_moped": paper_color("delivery_modes.c58a52"),
+    "battery_electric_car": paper_color("delivery_modes.4678a8"),
+    "fuel_car": paper_color("delivery_modes.a95f43"),
+    "drone": paper_color("delivery_modes.7b6aa8"),
 }
 COMPARISON_EXCLUDED_MODES = ("walking", "electric_moped", "pedal_bicycle")
 COMPARISON_DISPLAY_MODES = tuple(
@@ -127,6 +131,7 @@ def _set_plot_style() -> None:
     )
 
 
+@prepared_data
 def build_comparison(
     *,
     od_csv: str | Path,
@@ -172,7 +177,7 @@ def build_delivery_mode_figure_report(
     od_csv: str | Path,
 ) -> dict:
     source = Path(od_csv)
-    stat = source.stat()
+    source_metadata = source_file_metadata(source)
     return {
         "schema_version": 3,
         "figure_name": "delivery_mode_lifecycle_comparison",
@@ -190,8 +195,7 @@ def build_delivery_mode_figure_report(
         ],
         "input_signature": {
             "source": source.name,
-            "size_bytes": stat.st_size,
-            "mtime_ns": stat.st_mtime_ns,
+            **source_metadata,
         },
         "distance": {
             "definition": "common one-way travelled distance; round trip is 2d",
@@ -238,6 +242,7 @@ def build_delivery_mode_figure_report(
     }
 
 
+@prepared_plot()
 def plot_delivery_mode_lifecycle_comparison(
     *,
     od_csv: str | Path,
@@ -266,7 +271,7 @@ def plot_delivery_mode_lifecycle_comparison(
     labels = [COMPARISON_MODE_LABELS[mode] for mode, _ in rows]
     values = [value for _, value in rows]
     colors = [MODE_COLORS[mode] for mode, _ in rows]
-    fig, ax = plt.subplots(figsize=figsize, facecolor="white")
+    fig, ax = plt.subplots(figsize=figsize, facecolor=paper_color("ink.background"))
     bars = ax.barh(labels, values, color=colors, height=0.62)
     max_value = max(values)
     label_offset = max(max_value * 0.012, 0.8)
@@ -278,7 +283,7 @@ def plot_delivery_mode_lifecycle_comparison(
             va="center",
             ha="left",
             fontsize=STANDARD_FONTSIZE,
-            color="0.2",
+            color=paper_color("ink.0_2"),
         )
     ax.set_xlim(0, max_value * 1.15 + label_offset)
     ax.xaxis.set_major_locator(MaxNLocator(nbins=4))
@@ -288,7 +293,7 @@ def plot_delivery_mode_lifecycle_comparison(
     )
     ax.tick_params(axis="both", labelsize=STANDARD_FONTSIZE, length=2.5)
     ax.spines[["top", "right", "left"]].set_visible(False)
-    ax.grid(axis="x", color="0.9", linewidth=0.5)
+    ax.grid(axis="x", color=paper_color("ink.0_9"), linewidth=0.5)
     ax.set_axisbelow(True)
     if plot_title:
         ax.set_title(
@@ -297,7 +302,7 @@ def plot_delivery_mode_lifecycle_comparison(
             loc="left",
         )
     fig.tight_layout(pad=0.8)
-    fig.savefig(output, dpi=300, facecolor="white")
+    fig.savefig(output, dpi=300, facecolor=paper_color("ink.background"))
     plt.close(fig)
     write_figure_report(
         output.with_name(f"{output.stem}_report.json"),
@@ -413,7 +418,7 @@ def plot_beijing_all_mode_lifecycle(
     labels = [MODE_LABELS[mode] for mode in frame["mode"]]
     values = frame["annual_lifecycle_kt"].to_numpy(dtype=float)
     colors = [MODE_COLORS[mode] for mode in frame["mode"]]
-    fig, ax = plt.subplots(figsize=figsize, facecolor="white")
+    fig, ax = plt.subplots(figsize=figsize, facecolor=paper_color("ink.background"))
     bars = ax.barh(labels, values, color=colors, height=0.68)
     max_value = float(values.max())
     label_offset = max(max_value * 0.012, 0.05)
@@ -425,7 +430,7 @@ def plot_beijing_all_mode_lifecycle(
             va="center",
             ha="left",
             fontsize=STANDARD_FONTSIZE,
-            color="0.2",
+            color=paper_color("ink.0_2"),
         )
     ax.set_xlim(0, max_value * 1.15 + label_offset)
     ax.xaxis.set_major_locator(MaxNLocator(nbins=4))
@@ -435,7 +440,7 @@ def plot_beijing_all_mode_lifecycle(
     )
     ax.tick_params(axis="both", labelsize=STANDARD_FONTSIZE, length=2.5)
     ax.spines[["top", "right", "left"]].set_visible(False)
-    ax.grid(axis="x", color="0.9", linewidth=0.5)
+    ax.grid(axis="x", color=paper_color("ink.0_9"), linewidth=0.5)
     ax.set_axisbelow(True)
     if plot_title:
         ax.set_title(
@@ -444,7 +449,7 @@ def plot_beijing_all_mode_lifecycle(
             loc="left",
         )
     fig.tight_layout(pad=0.8)
-    fig.savefig(output, dpi=300, facecolor="white")
+    fig.savefig(output, dpi=300, facecolor=paper_color("ink.background"))
     plt.close(fig)
     write_figure_report(
         output.with_name(f"{output.stem}_report.json"),
@@ -567,7 +572,7 @@ def _four_city_figure_report(
                 "absolute_reduction_marker": (
                     {
                         "shape": "filled_circle",
-                        "facecolor": "#3f3f3f",
+                        "facecolor": paper_color("delivery_modes.3f3f3f"),
                         "edgecolor": "white",
                         "connected": False,
                         "labels": False,
@@ -630,7 +635,7 @@ def _plot_four_city_grouped_bars(
     )
     group_centers = group_starts + (bars_per_group - 1) * bar_width / 2
     x_labels = [city_names[city] for city in FOUR_CITY_ORDER]
-    fig, ax = plt.subplots(figsize=figsize, facecolor="white")
+    fig, ax = plt.subplots(figsize=figsize, facecolor=paper_color("ink.background"))
     plotted_absolute = []
     absolute_ceiling = None
     if metric == "relative_reduction_pct":
@@ -666,7 +671,7 @@ def _plot_four_city_grouped_bars(
                 ha="center",
                 rotation=90,
                 fontsize=FOUR_CITY_VALUE_FONTSIZE,
-                color="0.2",
+                color=paper_color("ink.0_2"),
             )
         plotted_absolute.extend(
             float(rows.loc[mode, "absolute_reduction_kt"])
@@ -679,7 +684,7 @@ def _plot_four_city_grouped_bars(
             + right_start
             - 0.5 * bar_width
         ) / 2
-        ax.axvline(separator, color="0.88", linewidth=0.5, zorder=0)
+        ax.axvline(separator, color=paper_color("ink.0_88"), linewidth=0.5, zorder=0)
     ax.set_xticks(group_centers, x_labels, rotation=0)
     ax.set_xlim(
         x_positions[0] - 0.65 * bar_width,
@@ -704,8 +709,8 @@ def _plot_four_city_grouped_bars(
             x_positions,
             plotted_absolute,
             s=16,
-            facecolor="#3f3f3f",
-            edgecolor="white",
+            facecolor=paper_color("delivery_modes.3f3f3f"),
+            edgecolor=paper_color("ink.background"),
             linewidth=0.5,
             zorder=4,
         )
@@ -724,7 +729,7 @@ def _plot_four_city_grouped_bars(
         title = "Lifecycle-emissions reduction from optimal drone substitution"
     ax.tick_params(axis="both", labelsize=FOUR_CITY_TICK_FONTSIZE, length=2.5)
     ax.spines[["top", "right"]].set_visible(False)
-    ax.grid(axis="y", color="0.9", linewidth=0.5)
+    ax.grid(axis="y", color=paper_color("ink.0_9"), linewidth=0.5)
     ax.set_axisbelow(True)
     if plot_title:
         ax.set_title(title, fontsize=FOUR_CITY_AXIS_LABEL_FONTSIZE, loc="left")
@@ -734,7 +739,7 @@ def _plot_four_city_grouped_bars(
         bottom=0.21,
         top=0.90 if plot_title else 0.98,
     )
-    fig.savefig(output, dpi=300, facecolor="white")
+    fig.savefig(output, dpi=300, facecolor=paper_color("ink.background"))
     plt.close(fig)
     write_figure_report(
         output.with_name(f"{output.stem}_report.json"),
@@ -749,6 +754,7 @@ def _plot_four_city_grouped_bars(
     return output
 
 
+@prepared_plot()
 def plot_four_city_mode_replacement_rate(
     frame: pd.DataFrame,
     analysis_report: dict,
@@ -773,6 +779,7 @@ def plot_four_city_mode_replacement_rate(
     )
 
 
+@prepared_plot()
 def plot_four_city_mode_relative_reduction(
     frame: pd.DataFrame,
     analysis_report: dict,
@@ -797,6 +804,7 @@ def plot_four_city_mode_relative_reduction(
     )
 
 
+@prepared_plot()
 def plot_four_city_mode_shared_legend(
     frame: pd.DataFrame,
     analysis_report: dict,
@@ -825,13 +833,13 @@ def plot_four_city_mode_shared_legend(
             linestyle="none",
             marker="o",
             markersize=6.0,
-            markerfacecolor="#3f3f3f",
-            markeredgecolor="white",
+            markerfacecolor=paper_color("delivery_modes.3f3f3f"),
+            markeredgecolor=paper_color("ink.background"),
             markeredgewidth=0.5,
             label="Absolute reduction",
         )
     )
-    fig = plt.figure(figsize=figsize, facecolor="white")
+    fig = plt.figure(figsize=figsize, facecolor=paper_color("ink.background"))
     fig.legend(
         handles=handles,
         loc="center",
@@ -843,7 +851,7 @@ def plot_four_city_mode_shared_legend(
         columnspacing=1.7,
         borderaxespad=0,
     )
-    fig.savefig(output, dpi=300, facecolor="white")
+    fig.savefig(output, dpi=300, facecolor=paper_color("ink.background"))
     plt.close(fig)
     write_figure_report(
         output.with_name(f"{output.stem}_report.json"),
