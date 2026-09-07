@@ -3207,8 +3207,18 @@ def _render_city_distance_drone_share_emission_fit(
             f"{figure_name} missing binned city data: "
             + ", ".join(missing_binned)
         )
+    # The shared bin cache also holds individual detour observations for other
+    # panels. This figure needs only bin summaries and its audit metadata.
+    drawing_fields = {
+        "centres", "reduction_abs", "oracle_drone_share_pct", "max_km",
+        "valid_path_count", "invalid_path_count", "merchant_filter",
+    }
+    drawing_bins = {
+        key: {name: value for name, value in values.items() if name in drawing_fields}
+        for key, values in binned_by_city.items()
+    }
     return plot_city_distance_drone_share_emission_fit(
-        binned_by_city=binned_by_city,
+        binned_by_city=drawing_bins,
         contexts=contexts,
         save_path=save_path,
         for_latex=for_latex,
