@@ -1,0 +1,10 @@
+{
+  "panels": [
+    {"output": "figure6.svg", "panel": "regions_map_pathway_scenarios_halved_gef.svg", "dx_mm": 8.0},
+    {"output": "figure6.svg", "panel": "regions_map_pathway_scenarios_halved_gef_bundling.svg", "dx_mm": 8.0},
+    {"output": "figure6.svg", "panel": "regions_map_pathway_scenarios_colorbar.svg", "dx_mm": 14.0}
+  ],
+  "texts": [
+    {"output": "figure6.svg", "text_regex": "^[bd]$", "dx_mm": 8.0}
+  ]
+}

@@ -138,3 +138,8 @@ Existing Arial warnings for Unicode subscript two and superscript minus remain
 in the province lifecycle figure. Fonts and layout were kept within the agreed
 colour-only scope. Inkscape also reports PDF font-import warnings;
 the assembled figures were rasterized and visually checked.
+
+The subsequent [typography and overview workflow](figure_typography.md)
+standardizes font sizes, fixes the unit glyphs and automatically builds a
+12-figure palette overview after full composition. Its separate review batch
+retains the same scientific data assets.

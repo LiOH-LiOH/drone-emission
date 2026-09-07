@@ -399,8 +399,7 @@ def _export_inkscape_figure(
             str(inkscape),
             str(source),
             "--export-type=pdf",
-            "--export-area-drawing",
-            "--export-margin=1",
+            "--export-area-page",
             f"--export-filename={temporary}",
         ],
         check=True,
@@ -506,7 +505,8 @@ def compose(
             for name in figure_required_outputs(figure, manifest)
         ] + [linked_dir / name for name in sorted(extra_names)]
         from .visualization.typography import DEFAULT_TYPOGRAPHY
-        dependencies.extend([DEFAULT_TYPOGRAPHY, Path(__file__), Path(__file__).with_name("paper_svg_style.py")])
+        from .paper_svg_style import COMPOSITION_STYLE
+        dependencies.extend([DEFAULT_TYPOGRAPHY, COMPOSITION_STYLE, Path(__file__), Path(__file__).with_name("paper_svg_style.py")])
         if force or not _valid_pdf(target) or any(
             _is_newer(dependency, target) for dependency in dependencies
         ):

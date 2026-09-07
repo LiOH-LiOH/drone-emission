@@ -77,28 +77,28 @@ position = [0.70, 0.22, 0.04, 0.72]
 [[exceptions]]
 output = "regions_map_pathway_scenarios_today.pdf"
 role = "tick"
-text_regex = "^[A-Za-z]"
+text_regex = "^(?!GEF$)[A-Za-z]"
 size = 6.0
 reason = "All provincial names share the compact scenario inset; 6 pt keeps every vertical label distinct."
 
 [[exceptions]]
 output = "regions_map_pathway_scenarios_halved_gef.pdf"
 role = "tick"
-text_regex = "^[A-Za-z]"
+text_regex = "^(?!GEF$)[A-Za-z]"
 size = 6.0
 reason = "All provincial names share the compact scenario inset; 6 pt keeps every vertical label distinct."
 
 [[exceptions]]
 output = "regions_map_pathway_scenarios_operator_bundling.pdf"
 role = "tick"
-text_regex = "^[A-Za-z]"
+text_regex = "^(?!GEF$)[A-Za-z]"
 size = 6.0
 reason = "All provincial names share the compact scenario inset; 6 pt keeps every vertical label distinct."
 
 [[exceptions]]
 output = "regions_map_pathway_scenarios_halved_gef_bundling.pdf"
 role = "tick"
-text_regex = "^[A-Za-z]"
+text_regex = "^(?!GEF$)[A-Za-z]"
 size = 6.0
 reason = "All provincial names share the compact scenario inset; 6 pt keeps every vertical label distinct."
 

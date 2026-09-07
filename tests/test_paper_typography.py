@@ -50,12 +50,14 @@ def test_dense_exception_is_explicit_and_reported():
 def test_svg_uses_physical_font_sizes_and_unscaled_panels(tmp_path):
     (tmp_path / "panel.svg").write_text('<svg width="72pt" height="36pt" viewBox="0 0 72 36"/>')
     root = ElementTree.fromstring('<svg width="100mm" height="100mm" viewBox="0 0 100 100"><g transform="translate(2,3)"><text style="font-size:5px"><tspan>a</tspan></text><image href="panel.svg" x="0" y="0" width="10" height="10"/></g></svg>')
+    ElementTree.SubElement(root, "path", {"d": "M 0 0 L 100000 100000", "opacity": "0"})
     report = style_master(root, tmp_path, {"panel.svg"})
     image = root.find(".//image")
     assert float(image.get("width")) == pytest.approx(25.4)
     assert float(image.get("height")) == pytest.approx(12.7)
     assert report["texts"][0]["size_pt"] == 11
     assert report["panels"][0]["export_scale"] == 1
+    assert report["page_size_pt"] == pytest.approx([102 * 72 / 25.4] * 2)
 
 
 def test_preview_failure_keeps_old_overview_marked_stale(tmp_path):
@@ -68,6 +70,16 @@ def test_preview_failure_keeps_old_overview_marked_stale(tmp_path):
     with pytest.raises(FileNotFoundError):
         refresh_previews(tmp_path, [{"id": "missing", "staging": "missing.pdf"}], rasterizer="pdftoppm")
     assert json.loads((preview / "status.json").read_text())["status"] == "stale"
+
+
+def test_scenario_column_gap_moves_panel_and_letter_without_scaling(tmp_path):
+    name = "regions_map_pathway_scenarios_halved_gef.svg"
+    (tmp_path / name).write_text('<svg width="72pt" height="36pt" viewBox="0 0 72 36"/>')
+    root = ElementTree.fromstring(f'<svg width="100mm" height="100mm" viewBox="0 0 100 100"><text x="10"><tspan x="10">b</tspan></text><image href="{name}" x="0" y="0" width="25.4" height="12.7"/></svg>')
+    report = style_master(root, tmp_path, {name}, output="figure6.svg")
+    assert float(root.find("image").get("x")) == pytest.approx(8)
+    assert float(root.find("text/tspan").get("x")) == pytest.approx(18)
+    assert report["panels"][0]["export_scale"] == 1
 
 
 def test_typography_configuration_is_not_part_of_data_code_hash(tmp_path, monkeypatch):
