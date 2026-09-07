@@ -395,7 +395,7 @@ def _add_map_parameter_bars(
     """Add axis-free GEF-multiplier and kappa bars inside a map panel."""
     inset = ax_map.inset_axes([0.035, 0.06, 0.25, 0.20], zorder=10)
     values = [gef_mult, kappa]
-    colors = [paper_color("national_scenarios.2166ac"), paper_color("national_scenarios.e08214")]
+    colors = [paper_color("scale.gef.high"), paper_color("national_scenarios.e08214")]
     value_labels = [f"{gef_mult:.1f}", _format_kappa_value(kappa)]
 
     inset.patch.set_alpha(paper_alpha("national_scenarios.alpha_0_0"))
@@ -533,7 +533,7 @@ def _pathway_scenario_panel_report(
                     "label": "GEF multiplier",
                     "value": _json_safe_scalar(gef_mult),
                     "unit": "multiplier",
-                    "color": paper_color("national_scenarios.2166ac"),
+                    "color": paper_color("scale.gef.high"),
                 },
                 {
                     "label": "E-bike bundling factor kappa",
@@ -649,7 +649,7 @@ def _write_regions_map_pathway_scenarios_report(
                 shared_cmap,
             ),
             "scenario_parameter_bar_colors": {
-                "gef_multiplier": paper_color("national_scenarios.2166ac"),
+                "gef_multiplier": paper_color("scale.gef.high"),
                 "kappa": paper_color("national_scenarios.e08214"),
             },
         },
