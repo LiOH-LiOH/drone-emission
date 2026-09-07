@@ -36,8 +36,9 @@ def typography_signature():
 
 
 def _roles(figure):
+    from matplotlib.axes import Axes
     roles = {}
-    for axes in figure.axes:
+    for axes in figure.findobj(Axes):
         for axis in (axes.xaxis, axes.yaxis, getattr(axes, "zaxis", None)):
             if axis is None:
                 continue
@@ -68,7 +69,7 @@ def apply_typography(figure, output, config=None):
     roles = _roles(figure)
     records = []
     for text in figure.findobj(Text):
-        label = text.get_text()
+        label = getattr(text, "_paper_original_text", text.get_text())
         if not text.get_visible() or not label.strip():
             continue
         original = getattr(text, "_paper_original_size", text.get_fontsize())
@@ -79,6 +80,7 @@ def apply_typography(figure, output, config=None):
             elif original < 7 or "©" in label or "OpenStreetMap" in label:
                 role = "secondary"
         text._paper_original_size = original
+        text._paper_original_text = label
         size = config["sizes"][role]
         reason = None
         for rule in config.get("exceptions", []):
@@ -89,6 +91,11 @@ def apply_typography(figure, output, config=None):
         text.set_fontsize(size)
         for adjustment in config.get("text_adjustments", []):
             if adjustment["output"] == Path(output).name and re.search(adjustment["text_regex"], label):
+                if "wrapped_text" in adjustment:
+                    wrapped = adjustment["wrapped_text"]
+                    if re.sub(r"\s+", "", wrapped) != re.sub(r"\s+", "", label):
+                        raise ValueError("Typography wrapping must preserve label content")
+                    text.set_text(wrapped)
                 if "position" in adjustment:
                     text.set_position(adjustment["position"])
                 if "rotation" in adjustment:

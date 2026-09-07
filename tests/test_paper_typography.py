@@ -21,10 +21,13 @@ def test_roles_cover_explicit_fonts_legends_and_insets():
     legend = ax.legend(fontsize=4)
     inset = fig.add_axes([.6, .6, .2, .2])
     inset.set_ylabel("Inset", fontsize=5)
+    child = ax.inset_axes([.1, .1, .1, .1])
+    child.set_xlabel("Child inset", fontsize=4)
     annotation = ax.text(.2, .3, "Important", fontsize=6)
     report = typography.apply_typography(fig, "test.pdf")
     assert ax.xaxis.label.get_fontsize() == 9
     assert inset.yaxis.label.get_fontsize() == 9
+    assert child.xaxis.label.get_fontsize() == 9
     assert legend.get_texts()[0].get_fontsize() == 8
     assert annotation.get_fontsize() == 7
     assert all(record["size_pt"] >= 7 for record in report["texts"])
@@ -77,3 +80,17 @@ def test_typography_configuration_is_not_part_of_data_code_hash(tmp_path, monkey
     config.write_text(config.read_text().replace("tick = 8.0", "tick = 8.5"))
     assert typography.typography_signature() != first
     assert drawing_code_hash() == before
+
+
+def test_wrap_preserves_content_and_is_repeatable():
+    fig = Figure()
+    ax = fig.subplots()
+    ax.set_xlabel("Long axis label")
+    config = copy.deepcopy(typography.load_typography())
+    config["text_adjustments"] = [{"output": "test.pdf", "text_regex": "^Long axis label$", "wrapped_text": "Long axis\nlabel"}]
+    for _ in range(2):
+        typography.apply_typography(fig, "test.pdf", config)
+        assert ax.get_xlabel() == "Long axis\nlabel"
+    config["text_adjustments"][0]["wrapped_text"] = "Different meaning"
+    with pytest.raises(ValueError, match="preserve label content"):
+        typography.apply_typography(fig, "test.pdf", config)

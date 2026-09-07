@@ -22,6 +22,10 @@ def write_typography_summary(figures_root):
             if text["size_pt"] < 7 or text.get("exception_reason"):
                 exceptions.append({"output": document["output"], **text})
     masters = {path.stem: json.loads(path.read_text()) for path in sorted((root / "inkscape" / "typography").glob("*.json"))}
+    for name, master in masters.items():
+        for text in master["texts"]:
+            if text["size_pt"] < 7 or text.get("exception_reason"):
+                exceptions.append({"output": name + ".svg", **text})
     document = {"typography_sha256": typography_signature(), "config": load_typography(),
                 "subfigures": records, "exceptions": exceptions, "stale_reports": stale, "masters": masters}
     report_root.mkdir(parents=True, exist_ok=True)

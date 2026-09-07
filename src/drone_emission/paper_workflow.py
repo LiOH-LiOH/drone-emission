@@ -325,7 +325,7 @@ def _vector_export_source(source: Path, managed_names: set[str], *, linked_dir: 
     """Inline linked SVG images in a temporary vector export document."""
     tree = ElementTree.parse(source)
     from .paper_svg_style import style_master
-    master_report = style_master(tree.getroot(), linked_dir or LINKED_SUBFIGURE_DIR, managed_names)
+    master_report = style_master(tree.getroot(), linked_dir or LINKED_SUBFIGURE_DIR, managed_names, output=source.name)
     report_path = source.parent / "typography" / (source.stem + ".json")
     report_path.parent.mkdir(parents=True, exist_ok=True)
     report_path.write_text(json.dumps(master_report, ensure_ascii=False, indent=2) + "\n")
@@ -399,6 +399,8 @@ def _export_inkscape_figure(
             str(inkscape),
             str(source),
             "--export-type=pdf",
+            "--export-area-drawing",
+            "--export-margin=1",
             f"--export-filename={temporary}",
         ],
         check=True,

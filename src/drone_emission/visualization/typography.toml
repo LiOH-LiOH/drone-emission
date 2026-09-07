@@ -1,6 +1,5 @@
 # Physical points in the exported PDF, before any preview thumbnail scaling.
 family = "Arial"
-exceptions = []
 
 [sizes]
 axis_label = 9.0
@@ -13,3 +12,119 @@ title = 11.0
 
 # Explicit dense-label exceptions are added only after visual review.
 # Each exception specifies output, role, text_regex, size and reason.
+
+[[text_adjustments]]
+output = "detour_ratio_concept.pdf"
+text_regex = "^Customer$"
+ha = "right"
+
+[[text_adjustments]]
+output = "city_reduction_rank_all_macro_region.pdf"
+text_regex = '^Optimal reduction vs e-bike \(pp\)$'
+wrapped_text = "Optimal reduction\nvs e-bike (pp)"
+
+[[text_adjustments]]
+output = "city_reduction_potential_scatter.pdf"
+text_regex = "^Annual absolute reduction"
+wrapped_text = "Annual absolute\nreduction\n(t CO$_2$e yr$^{-1}$)"
+
+[[text_adjustments]]
+output = "city_reduction_potential_scatter.pdf"
+text_regex = "^Relative lifecycle reduction"
+wrapped_text = "Relative lifecycle\nreduction (%)"
+
+[[layouts]]
+output = "city_reduction_potential_scatter.pdf"
+axes = 0
+position = [0.29, 0.44, 0.68, 0.54]
+
+[[layouts]]
+output = "city_reduction_potential_scatter.pdf"
+axes = 1
+position = [0.15, 0.18, 0.82, 0.018]
+
+[[exceptions]]
+output = "city_reduction_potential_scatter.pdf"
+role = "tick"
+text_regex = '^(<0\.5|0\.5–1|1–5|5–10|≥10)$'
+size = 6.5
+reason = "Five population-bin labels share a narrow colour bar; retain every bin label without overlap."
+
+[[exceptions]]
+output = "city_reduction_potential_scatter.pdf"
+role = "legend"
+text_regex = "^(Highest|Pilot|Lower)"
+size = 6.5
+reason = "Three two-line priority labels must fit beneath the colour bar in the 49.8 mm panel."
+
+[[exceptions]]
+output = "city_reduction_potential_scatter.pdf"
+role = "axis_label"
+text_regex = '^Population \(million\)$'
+size = 7.0
+reason = "Supporting colour-bar label uses the secondary-text size to separate it from the priority legend."
+
+[[layouts]]
+output = "delivery_mode_lifecycle_comparison.pdf"
+axes = 0
+position = [0.19, 0.17, 0.80, 0.80]
+
+[[layouts]]
+output = "break_even_contribution_decomposition_marching_cubes_c.pdf"
+axes = 1
+position = [0.70, 0.22, 0.04, 0.72]
+
+[[exceptions]]
+output = "regions_map_pathway_scenarios_today.pdf"
+role = "tick"
+text_regex = "^[A-Za-z]"
+size = 6.0
+reason = "All provincial names share the compact scenario inset; 6 pt keeps every vertical label distinct."
+
+[[exceptions]]
+output = "regions_map_pathway_scenarios_halved_gef.pdf"
+role = "tick"
+text_regex = "^[A-Za-z]"
+size = 6.0
+reason = "All provincial names share the compact scenario inset; 6 pt keeps every vertical label distinct."
+
+[[exceptions]]
+output = "regions_map_pathway_scenarios_operator_bundling.pdf"
+role = "tick"
+text_regex = "^[A-Za-z]"
+size = 6.0
+reason = "All provincial names share the compact scenario inset; 6 pt keeps every vertical label distinct."
+
+[[exceptions]]
+output = "regions_map_pathway_scenarios_halved_gef_bundling.pdf"
+role = "tick"
+text_regex = "^[A-Za-z]"
+size = 6.0
+reason = "All provincial names share the compact scenario inset; 6 pt keeps every vertical label distinct."
+
+[[text_adjustments]]
+output = "regions_map_pathway_scenarios_today.pdf"
+text_regex = "^Annual lifecycle"
+wrapped_text = "Annual lifecycle\n(kt CO$_2$)"
+
+[[text_adjustments]]
+output = "regions_map_pathway_scenarios_halved_gef.pdf"
+text_regex = "^Annual lifecycle"
+wrapped_text = "Annual lifecycle\n(kt CO$_2$)"
+
+[[text_adjustments]]
+output = "regions_map_pathway_scenarios_operator_bundling.pdf"
+text_regex = "^Annual lifecycle"
+wrapped_text = "Annual lifecycle\n(kt CO$_2$)"
+
+[[text_adjustments]]
+output = "regions_map_pathway_scenarios_halved_gef_bundling.pdf"
+text_regex = "^Annual lifecycle"
+wrapped_text = "Annual lifecycle\n(kt CO$_2$)"
+
+[[exceptions]]
+output = "figure7.svg"
+role = "annotation"
+text_regex = "^(Merchant sales records|Residential building footprints|Provincial grid carbon intensity|Urban road networks)$"
+size = 7.0
+reason = "Keep the four input-map captions at a common secondary size within the two-column header."

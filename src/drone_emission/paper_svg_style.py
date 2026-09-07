@@ -15,7 +15,7 @@ def length_pt(value):
     return float(match[1]) * {"mm": 72 / 25.4, "cm": 72 / 2.54, "in": 72, "pt": 1, "px": .75, None: .75}[match[2]]
 
 
-def style_master(root, linked_dir, names):
+def style_master(root, linked_dir, names, *, output=""):
     if not root.get("viewBox") or not root.get("width"):
         return {"texts": [], "panels": []}  # Minimal test fixtures.
     config = load_typography()
@@ -38,13 +38,18 @@ def style_master(root, linked_dir, names):
             if label:
                 role = "panel" if re.fullmatch(r"\(?[a-z]\)?", label) else "annotation"
                 size = config["sizes"][role]
+                reason = None
+                for rule in config.get("exceptions", []):
+                    if rule["output"] == output and rule["role"] == role and re.search(rule["text_regex"], label):
+                        size, reason = rule["size"], rule["reason"]
+                        break
                 for item in element.iter():
                     if item.tag.rsplit("}", 1)[-1] not in ("text", "tspan"):
                         continue
                     style = dict(part.split(":", 1) for part in item.get("style", "").split(";") if ":" in part)
                     style.update({"font-size": f"{size / (unit_pt * scale):.8f}px", "font-family": config["family"]})
                     item.set("style", ";".join(f"{key}:{value}" for key, value in style.items()))
-                report["texts"].append({"text": label, "role": role, "size_pt": size})
+                report["texts"].append({"text": label, "role": role, "size_pt": size, "exception_reason": reason})
         if kind == "image":
             href = next((v for k, v in element.attrib.items() if k == "href" or k.endswith("}href")), "")
             name = Path(unquote(urlparse(href).path)).name
