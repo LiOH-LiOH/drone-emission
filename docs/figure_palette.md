@@ -41,6 +41,23 @@ root. It preserves the original templates and their layout.
 
 ## Prepare once, redraw locally
 
+The accepted `typography-final_20260907` review was promoted on 2026-09-08.
+Current outputs are in `figures/paper/`, editable templates and linked panels in
+`figures/inkscape/`, and manuscript PDFs in `docs/paper/figures/`. The current
+overview is `figures/preview/palette_overview.png`. Its portable drawing bundle
+is retained at `cache/visualization/prepared_paper/`; local redraws can use
+`render --from-bundle cache/visualization/prepared_paper` followed by `compose`
+through the package CLI, outside the sandbox.
+
+Future remote review transfers contain preview PNGs only, with lightweight
+batch provenance. After explicit adoption, retrieve only the corresponding
+final PDFs, editable SVGs and necessary reports that are missing locally, then
+replace formal outputs with a backup of the previous version. Keep the accepted
+batch identity throughout; do not publish whatever happens to be the latest
+remote run. Reuse prepared inputs for colour/font iterations instead of
+re-fetching data bundles. Changed scientific inputs or an incompatible bundle
+contract require a new preparation only when local replay is needed.
+
 Run preparation where the audited city and analysis inputs exist:
 
 ```bash

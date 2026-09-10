@@ -46,3 +46,20 @@ Prefer `rsync` over a separate connection for remote file transfers, with
 retrieved figures to a new `figures/review/<purpose>_YYYYMMDD/` batch by default,
 using the local `Asia/Shanghai` date and a short English kebab-case purpose. Do
 not overwrite or mix with an existing batch; append `_02`, `_03`, and so on.
+
+For figure review, fetch only the current preview PNGs (the overview and any
+requested individual figures), plus lightweight provenance needed to identify
+the exact batch. Do not fetch PDFs, SVGs, raw data, or drawing bundles by default.
+Reuse the local prepared drawing bundle; transfer new prepared inputs only when
+scientific inputs or the bundle schema/code contract change and local replay is
+needed. Palette and typography changes alone do not justify a data transfer.
+
+When the user says to adopt/promote a review as formal, that authorizes fetching
+the corresponding final PDFs, editable SVGs and necessary reports, and replacing
+their formal counterparts under `figures/paper/`, `figures/inkscape/`,
+`figures/preview/` and manifest publish paths under `docs/paper/figures/`.
+Use the exact accepted batch, verify its provenance, and reuse files already
+available locally. Preserve overwritten artifacts in a separate ignored backup
+batch. Keep prepared inputs at `cache/visualization/prepared_paper/` and update
+the formal bundle reference after relocation. Do not fetch a whole data bundle
+again merely to promote figures. Local Matplotlib must run outside the sandbox.
