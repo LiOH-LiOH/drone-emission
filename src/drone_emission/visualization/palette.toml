@@ -13,11 +13,16 @@
 "neutral.secondary" = "#777777"
 "neutral.light" = "#DDDDDD"
 "derived.yellow_light" = "#f6dea0"
-"mode.drone" = "@base.blue"
-"mode.pedelec_ebike" = "@base.yellow"
+"derived.blue_medium" = "#1D65C4"
+"derived.blue_light" = "#8EB2E2"
+"derived.orange_light" = "#F6BC9E"
+"derived.orange_dark" = "#C46A3C"
+"derived.blue_dark" = "#205EAE"
+"mode.drone" = "@derived.blue_medium"
+"mode.pedelec_ebike" = "@base.coral"
 "mode.pedal_bicycle" = "@base.green"
 "mode.electric_moped" = "@base.cyan"
-"mode.fuel_moped" = "@base.coral"
+"mode.fuel_moped" = "@base.yellow"
 "mode.battery_electric_car" = "@base.purple"
 "mode.fuel_car" = "@base.gray"
 "ink.text" = "@base.charcoal"
@@ -263,10 +268,10 @@
 "sales.d7d9dc" = "@neutral.light"
 "threshold_resilience.3b75af" = "@base.blue"
 "threshold_resilience.c44e52" = "@base.coral"
-"mode.drone.light" = "@base.cyan"
-"mode.pedelec_ebike.light" = "@derived.yellow_light"
-"mode.drone.dark" = "@scale.sequential.high"
-"mode.pedelec_ebike.dark" = "@base.charcoal"
+"mode.drone.light" = "@derived.blue_light"
+"mode.pedelec_ebike.light" = "@derived.orange_light"
+"mode.drone.dark" = "@derived.blue_dark"
+"mode.pedelec_ebike.dark" = "@derived.orange_dark"
 "scale.gef.bin0" = "@scale.diverging.sample_000"
 "scale.gef.bin1" = "@scale.diverging.sample_042"
 "scale.gef.bin2" = "@scale.diverging.sample_085"
@@ -344,6 +349,7 @@ diverging = [[0.07058823529411765, 0.24705882352941178, 0.47843137254901963], [0
 gef = [0.05, 0.3, 0.8]
 
 [alpha]
+"city_gef_detour.distance_bar" = 0.35
 "_utils.alpha_0_3" = 0.3
 "_utils.alpha_0_6" = 0.6
 "_utils.alpha_0_8" = 0.8

@@ -24,7 +24,7 @@ def test_approved_endpoints_and_exact_zero_colour():
     assert [to_hex(seq(v)) for v in (0., 1.)] == ["#4ccfb5", "#123f7a"]
     assert [to_hex(signed(v)) for v in (0., .5, 1.)] == ["#123f7a", "#edbe42", "#d64f4f"]
     for mode in ("mode.drone", "mode.pedelec_ebike", "mode.fuel_car"):
-        assert palette.values[mode].startswith("@base.")
+        assert palette.values[mode].startswith(("@base.", "@derived."))
 
 
 def test_lookup_table_edits_invalidate_render_signature():
