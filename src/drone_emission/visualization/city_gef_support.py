@@ -3,7 +3,7 @@ from .palette import opacity as paper_alpha
 
 from .prepared_bundle import evaluate_kde, fit_polynomial, linear_fit_interval, prepared_data
 
-from .palette import color as paper_color
+from .palette import color as paper_color, colormap as paper_cmap, gef_norm, gef_fit_color, linearize_colorbar
 
 import json
 import os
@@ -129,34 +129,11 @@ def _plot_grouped_scatter_split_panels_axes(
     )
     from matplotlib.cm import ScalarMappable
 
-    grayscale_colors = (
-        paper_color("scale.gef.bin0"),
-        paper_color("scale.gef.bin1"),
-        paper_color("scale.gef.bin2"),
-        paper_color("scale.gef.bin3"),
-        paper_color("scale.gef.bin4"),
-        paper_color("scale.gef.bin5"),
-        paper_color("scale.gef.bin6"),
-    )
-    base_cmap = LinearSegmentedColormap.from_list(
-        "gef_grayscale" if grayscale else "gef",
-        grayscale_colors
-        if grayscale
-        else [paper_color("scale.gef.low"), paper_color("scale.gef.mid"), paper_color("scale.gef.high")],
-    )
-    gef_vals = plot_df[group_var].values
-    if colorbar_boundaries is not None:
-        boundaries = np.asarray(colorbar_boundaries, dtype=float)
-        if grayscale and len(boundaries) - 1 == len(grayscale_colors):
-            colors = grayscale_colors
-        else:
-            colors = base_cmap(np.linspace(0.0, 1.0, len(boundaries) - 1))
-        cmap = ListedColormap(colors, name="gef_discrete")
-        norm = BoundaryNorm(boundaries, cmap.N, clip=True)
-    else:
-        boundaries = None
-        cmap = base_cmap
-        norm = Normalize(vmin=gef_vals.min(), vmax=gef_vals.max())
+    # A continuous shared mapping makes equal GEF values identical across panels.
+    # Keep the legacy boundary argument for prepared-call compatibility only.
+    boundaries = None
+    cmap = paper_cmap("city_gef_support.gef")
+    norm = gef_norm()
 
     if external_colorbar_ax is not None:
         panels_grid = subplot_spec.subgridspec(1, 2, wspace=0.20)
@@ -195,11 +172,7 @@ def _plot_grouped_scatter_split_panels_axes(
         ax_high = fig.add_subplot(gs[0, 2], sharex=ax_low, sharey=ax_low)
     axes = [ax_low, ax_high]
     masks = [low_mask, high_mask]
-    line_colors = (
-        [paper_color("city_gef_support.4d4d4d"), paper_color("city_gef_support.4d4d4d")]
-        if grayscale
-        else [paper_color("city_gef_support.006837"), paper_color("city_gef_support.a50f15")]
-    )
+    line_colors = [gef_fit_color(plot_df.loc[mask, group_var]) for mask in masks]
 
     for ax, mask, line_color, label, panel_letter in zip(
         axes, masks, line_colors, group_labels, panel_letters
@@ -229,6 +202,7 @@ def _plot_grouped_scatter_split_panels_axes(
                 x_line,
                 y_line,
                 color=line_color,
+                linestyle=(0, (3, 2)),
                 linewidth=(
                     fit_linewidth
                     if fit_linewidth is not None
@@ -324,9 +298,10 @@ def _plot_grouped_scatter_split_panels_axes(
             else "vertical"
         ),
         boundaries=boundaries,
-        ticks=boundaries,
+        ticks=[norm.vmin, norm.vcenter, 0.55, norm.vmax],
         spacing="uniform",
     )
+    linearize_colorbar(cbar)
     resolved_colorbar_label = (
         colorbar_label
         if colorbar_label is not None

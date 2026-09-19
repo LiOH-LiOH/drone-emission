@@ -1,0 +1,14 @@
+{
+  "base": {
+    "Deep sea": "#173B50", "Blue teal": "#327A88", "Lake teal": "#78BDB5",
+    "Warm sand": "#D8BC83", "Terracotta": "#C87955", "Brick red": "#873F3B",
+    "Gray": "#BBBBBB", "Charcoal": "#333333", "White": "#FFFFFF"
+  },
+  "sequential": ["Lake teal", "Blue teal", "Deep sea"],
+  "diverging": ["Deep sea", "Warm sand", "Brick red"],
+  "gef_center": 0.3,
+  "gef_range": "Pending audit of all GEF plot domains; do not infer from this proof",
+  "seed": 20260911,
+  "status": "Harmony direction accepted; exact rendered appearance under review",
+  "cvd_constraint": false
+}

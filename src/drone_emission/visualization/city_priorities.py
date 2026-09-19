@@ -177,22 +177,8 @@ def _build_bubble_reduction_cmap(v_max: float):
     top = max(int(np.ceil(v_max / step) * step), step * 5)
     reduction_edges = np.arange(0, top + step, step, dtype=float)
     bin_edges = np.concatenate([[-step], reduction_edges])
-    base_colors = [
-        paper_color("city_priorities.9bd3e6"),
-        paper_color("city_priorities.66b7d2"),
-        paper_color("city_priorities.2f91b8"),
-        paper_color("city_priorities.126782"),
-        paper_color("city_priorities.064d6b"),
-        paper_color("city_priorities.023047"),
-    ]
-    if len(reduction_edges) - 1 <= len(base_colors):
-        value_colors = base_colors[:len(reduction_edges) - 1]
-    else:
-        base = paper_cmap("city_priorities.reduction")
-        value_colors = [
-            base(x)
-            for x in np.linspace(0.38, 0.95, len(reduction_edges) - 1)
-        ]
+    base = paper_cmap("city_priorities.reduction")
+    value_colors = base(np.linspace(0, 1, len(reduction_edges) - 1))
     cmap = ListedColormap([paper_color("city_priorities.cccccc"), *value_colors])
     norm = BoundaryNorm(bin_edges, ncolors=cmap.N, clip=True)
     return cmap, norm, bin_edges, reduction_edges

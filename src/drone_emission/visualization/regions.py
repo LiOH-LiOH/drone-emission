@@ -2,7 +2,7 @@ from .palette import opacity as paper_alpha
 
 from .prepared_bundle import prepared_plot, prepared_data, read_plot_csv
 
-from .palette import color as paper_color
+from .palette import color as paper_color, colormap as paper_cmap, gef_norm, linearize_colorbar
 import json
 import os
 
@@ -270,7 +270,9 @@ def _province_gef_report(
         },
         "layout_mode": "compact" if compact else "full",
         "native_size_inches": [float(figsize[0]), float(figsize[1])],
-        "color_scale": "continuous colorblind-safe cool-to-warm",
+        "color_scale": "continuous deep sea / warm sand / brick red",
+        "color_normalization": [gef_norm().vmin, gef_norm().vcenter, gef_norm().vmax],
+        "colorbar_axis_scale": "linear",
         "colorbar": (
             "horizontal qualitative Low-High key"
             if compact
@@ -359,11 +361,8 @@ def plot_province_gef_china_map(
             provinces.append((province, name, geometry))
 
     values = np.array(list(gef_by_province.values()), dtype=float)
-    cmap = LinearSegmentedColormap.from_list(
-        "gef_colorblind_cool_to_warm",
-        [paper_color("regions.3b6fb6"), paper_color("regions.f1d18a"), paper_color("regions.d55e00")],
-    )
-    norm = Normalize(vmin=float(np.nanmin(values)), vmax=float(np.nanmax(values)))
+    cmap = paper_cmap("regions.gef")
+    norm = gef_norm()
     no_data_color = paper_color("regions.d9d9d9")
     outline_color = paper_color("regions.6f6f6f")
 
@@ -471,6 +470,7 @@ def plot_province_gef_china_map(
         fig.subplots_adjust(left=0.01, right=0.99, top=0.99, bottom=0.17)
         cbar_ax = fig.add_axes((0.31, 0.065, 0.42, 0.035))
         cbar = fig.colorbar(sm, cax=cbar_ax, orientation="horizontal")
+        linearize_colorbar(cbar)
         cbar.set_ticks([norm.vmin, norm.vmax])
         cbar.set_ticklabels(["Low", "High"])
         cbar.ax.tick_params(labelsize=5, length=0, pad=1)
@@ -486,6 +486,7 @@ def plot_province_gef_china_map(
         cbar.outline.set_linewidth(0.25)
     else:
         cbar = fig.colorbar(sm, ax=ax, shrink=0.66, pad=0.01, fraction=0.045)
+        linearize_colorbar(cbar)
         cbar.set_label("GEF (kg CO2e/kWh)", fontsize=7)
         cbar.ax.tick_params(labelsize=6.5, length=2)
         cbar.outline.set_linewidth(0.4)
@@ -680,13 +681,7 @@ def plot_regions_on_china_map(
     from drone_emission.analysis.constants import VARIABLE_LABELS
 
     if cmap is None:
-        cmap = LinearSegmentedColormap.from_list("green_diverging", [
-            paper_color("regions.d7191c"),
-            paper_color("regions.fdae61"),
-            paper_color("regions.ffffbf"),
-            paper_color("regions.a6d96a"),
-            paper_color("regions.1a9641"),
-        ])
+        cmap = paper_cmap("regions.signed")
 
     valid_values = [v for v in study_adcode_to_val.values() if not np.isnan(v)]
     if norm is None:

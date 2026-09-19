@@ -5,7 +5,7 @@ from .palette import opacity as paper_alpha
 
 from .prepared_bundle import prepared_plot, prepared_data
 
-from .palette import color as paper_color, colormap as paper_cmap
+from .palette import color as paper_color, colormap as paper_cmap, gef_norm, linearize_colorbar
 
 import json
 import os
@@ -2563,7 +2563,7 @@ def _plot_break_even_surface_panel(
     gef_limits = prepared["axes"]["gef_limits"]
     break_even_lines = panel_a.get("break_even_lines", [])
     line_cmap = paper_cmap("contribution_break_even.gef")
-    line_norm = plt.Normalize(vmin=gef_limits[0], vmax=gef_limits[1])
+    line_norm = gef_norm(sequential=True)
     surface_colorbar_mappable = None
     surface_mesh = None
 
@@ -2686,6 +2686,7 @@ def _plot_break_even_surface_panel(
                 cax=colorbar_ax,
                 ticks=colorbar_ticks,
             )
+        linearize_colorbar(surface_colorbar)
         surface_colorbar.ax.set_title(
             "GEF\n(kg CO2e/kWh)",
             fontsize=8.2 * font_scale,

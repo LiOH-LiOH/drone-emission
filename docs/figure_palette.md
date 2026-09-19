@@ -1,5 +1,9 @@
 # Paper colours and portable drawing inputs
 
+The authoritative colour requirements are in [图片配色标准](figure_color_standard.md).
+They supersede the historical initial choices and review notes below, including
+the former purple GEF ramp and optional accessibility wording.
+
 The formal manifest contains 31 requests and 46 subfigure PDFs, assembled into
 12 paper figures. The current palette is
 `src/drone_emission/visualization/palette.toml`. Edit this file to try colours;

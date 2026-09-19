@@ -1,0 +1,15 @@
+{
+  "title": "Vivid cool & warm | palette design preview",
+  "base": {
+    "Blue": "#123F7A", "Teal": "#008F9C", "Mint": "#4CCFB5",
+    "Gold": "#EDBE42", "Orange": "#ED793E", "Red": "#D64F4F",
+    "Gray": "#BBBBBB", "Charcoal": "#333333", "White": "#FFFFFF"
+  },
+  "sequential": ["Mint", "Teal", "Blue"],
+  "diverging": ["Blue", "Gold", "Red"],
+  "gef_center": 0.3,
+  "gef_range": [0.05, 0.8],
+  "seed": 20260911,
+  "status": "Vivid candidate for visual review; not a Nature official palette",
+  "cvd_constraint": false
+}

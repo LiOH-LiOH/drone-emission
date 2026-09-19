@@ -3,6 +3,7 @@
 import json
 import hashlib
 import ast
+import re
 from pathlib import Path
 import tempfile
 import unittest
@@ -16,6 +17,14 @@ from drone_emission.visualization.prepared_bundle import (
     PLOT_FUNCTIONS,
     SCHEMA_VERSION, drawing_code_hash, file_hash, validate_bundle, write_document,
 )
+
+
+def palette_with_override(key, value):
+    text, count = re.subn(r'^"' + re.escape(key) + r'" = .*$',
+                         f'"{key}" = "{value}"', DEFAULT_PALETTE.read_text(),
+                         flags=re.MULTILINE)
+    assert count == 1, f"Expected one palette definition for {key}"
+    return text
 
 
 class PreparedBundleTests(unittest.TestCase):
@@ -46,7 +55,7 @@ class PreparedBundleTests(unittest.TestCase):
         token = self.codec.encode(color("mode.drone"))
         self.assertEqual(token, {"type": "colour", "key": "mode.drone"})
         alternate = self.root / "palette.toml"
-        alternate.write_text(DEFAULT_PALETTE.read_text().replace('"mode.drone" = "#0072B2"', '"mode.drone" = "#123456"'))
+        alternate.write_text(palette_with_override("mode.drone", "#123456"))
         configure_palette(alternate)
         self.assertEqual(self.codec.decode(token), "#123456")
         self.assertEqual(self.codec.encode(color("mode.drone")), token)
@@ -168,9 +177,9 @@ class PreparedBundleTests(unittest.TestCase):
         usage = {"colors": ["roadnet.1f77b4"], "colormaps": []}
         signature = original.signature_for(usage)
         alternate = self.root / "palette.toml"
-        alternate.write_text(DEFAULT_PALETTE.read_text().replace('"mode.drone" = "#0072B2"', '"mode.drone" = "#123456"'))
+        alternate.write_text(palette_with_override("mode.drone", "#123456"))
         self.assertNotEqual(configure_palette(alternate).signature_for(usage), signature)
-        alternate.write_text(DEFAULT_PALETTE.read_text().replace('"mode.fuel_car" = "#4D4D4D"', '"mode.fuel_car" = "#123456"'))
+        alternate.write_text(palette_with_override("mode.fuel_car", "#123456"))
         self.assertEqual(configure_palette(alternate).signature_for(usage), signature)
 
 

@@ -16,6 +16,10 @@ Source code lives in `src/drone_emission/`. The package CLI is the active entry 
 - `bash scripts/log_summary.sh [logs/file.log]`: summarize a pipeline log.
 
 ## Coding Style & Naming Conventions
+For figure colour changes, read `docs/figure_color_standard.md` first and treat
+its confirmed user requirements and complete figure inventory as the acceptance
+criteria. Keep actual colour values in `visualization/palette.toml`.
+
 Use Python 3.10+ and follow PEP 8 conventions: four-space indentation, `snake_case` for modules, functions, and variables, and `PascalCase` for classes. Keep stage APIs small and explicit; prefer passing `region_info` and `exp_config` rather than reading globals in new code. Use `pathlib.Path` for project-root paths when practical, and keep comments focused on non-obvious pipeline behavior.
 
 ## Testing Guidelines

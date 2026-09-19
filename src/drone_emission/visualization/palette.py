@@ -39,6 +39,8 @@ class Palette:
     colormaps: MappingProxyType
     opacities: MappingProxyType
     digest: str
+    ramps: MappingProxyType
+    normalizations: MappingProxyType
 
     def colour(self, key: str) -> Colour:
         seen = set()
@@ -65,6 +67,8 @@ class Palette:
                 selected.add(value[1:])
                 pending.append(value[1:])
         payload = {
+            "normalizations": dict(self.normalizations),
+            "ramps": dict(self.ramps),
             "colors": {key: self.values[key] for key in sorted(selected)},
             "colormaps": {key: self.colormaps[key] for key in usage["colormaps"]},
             "alpha": {key: self.opacities[key] for key in usage.get("alpha", [])},
@@ -82,6 +86,8 @@ def load_palette(path: str | Path | None = None) -> Palette:
         MappingProxyType(document.get("colormaps", {})),
         MappingProxyType(document.get("alpha", {})),
         sha256(json.dumps(document, sort_keys=True).encode()).hexdigest(),
+        MappingProxyType(document.get("ramps", {})),
+        MappingProxyType(document.get("normalizations", {})),
     )
     from matplotlib.colors import is_color_like
 
@@ -91,6 +97,14 @@ def load_palette(path: str | Path | None = None) -> Palette:
     for key, value in palette.opacities.items():
         if not isinstance(value, (int, float)) or not 0 <= value <= 1:
             raise ValueError(f"Palette opacity must lie in [0, 1]: {key}")
+    for key, ramp in palette.ramps.items():
+        if len(ramp) < 2 or any(len(rgb) != 3 or any(
+            not isinstance(v, (int, float)) or not 0 <= v <= 1 for v in rgb
+        ) for rgb in ramp):
+            raise ValueError(f"Invalid RGB lookup table: {key}")
+    for key, limits in palette.normalizations.items():
+        if len(limits) != 3 or not limits[0] < limits[1] < limits[2]:
+            raise ValueError(f"Normalization must have ordered low, centre, high: {key}")
     return palette
 
 
@@ -134,7 +148,11 @@ def colors(*keys: str) -> list[Colour]:
 
 
 def sequential_cmap(kind: str = "size"):
-    from matplotlib.colors import LinearSegmentedColormap
+    from matplotlib.colors import LinearSegmentedColormap, ListedColormap
+
+    palette = _CURRENT.get() or configure_palette()
+    if kind in palette.ramps:
+        return ListedColormap(palette.ramps[kind], name=f"paper_{kind}")
 
     return LinearSegmentedColormap.from_list(
         f"paper_{kind}",
@@ -152,6 +170,41 @@ def colormap(key: str, lut: int | None = None):
         from matplotlib import colormaps
         result = colormaps[name]
     return result.resampled(lut) if lut is not None else result
+
+
+def gef_norm(sequential: bool = False):
+    """Shared absolute GEF scale, including the model domain and fixed reference."""
+    from matplotlib.colors import Normalize, TwoSlopeNorm
+
+    palette = _CURRENT.get() or configure_palette()
+    low, center, high = palette.normalizations["gef"]
+    if sequential:
+        return Normalize(vmin=low, vmax=high)
+    return TwoSlopeNorm(vmin=low, vcenter=center, vmax=high)
+
+
+def linearize_colorbar(colorbar):
+    """Keep distances proportional to values, independently of colour allocation."""
+    ticks = colorbar.get_ticks()
+    if colorbar.orientation == "horizontal":
+        colorbar.ax.set_xscale("linear")
+    else:
+        colorbar.ax.set_yscale("linear")
+    colorbar.set_ticks(ticks)
+
+
+def gef_fit_color(values):
+    """Darken the group's median GEF colour using the registered charcoal blend."""
+    import numpy as np
+    from matplotlib.colors import to_rgb
+
+    values = np.asarray(values, dtype=float)
+    values = values[np.isfinite(values)]
+    if not len(values):
+        return tuple(to_rgb(color("ink.text")))
+    rgb = np.asarray(colormap("city_gef_support.gef")(gef_norm()(np.median(values)))[:3])
+    amount = opacity("city_gef_support.fit_darkening")
+    return tuple((1 - amount) * rgb + amount * np.asarray(to_rgb(color("ink.text"))))
 
 
 def palette_usage() -> dict:

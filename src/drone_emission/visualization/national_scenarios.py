@@ -62,9 +62,10 @@ def _build_reduction_cmap(v_max: float):
     top = max(int(np.ceil(v_max / step) * step), step * 5)
     reduction_edges = np.arange(0, top + step, step, dtype=float)
     bin_edges = np.concatenate([[-step], reduction_edges])
-    palette = [paper_color("national_scenarios.ffffe0"), paper_color("national_scenarios.f7fcb9"), paper_color("national_scenarios.d9f0a3"), paper_color("national_scenarios.addd8e"),
-               paper_color("national_scenarios.78c679"), paper_color("national_scenarios.41ab5d"), paper_color("national_scenarios.238443"), paper_color("national_scenarios.005a32")]
-    cmap_colors = [paper_color("national_scenarios.cccccc")] + palette[:len(reduction_edges) - 1]
+    from .palette import colormap as paper_cmap
+    palette = paper_cmap("national_scenarios.reduction")(
+        np.linspace(0, 1, len(reduction_edges) - 1))
+    cmap_colors = [paper_color("national_scenarios.cccccc"), *palette]
     cmap = ListedColormap(cmap_colors)
     norm = BoundaryNorm(bin_edges, ncolors=cmap.N, clip=True)
     return cmap, norm, bin_edges, reduction_edges

@@ -3,7 +3,7 @@ from .palette import opacity as paper_alpha
 
 from .prepared_bundle import prepared_plot, prepared_data, evaluate_kde, fit_polynomial, kde_with_factor
 
-from .palette import color as paper_color
+from .palette import color as paper_color, gef_norm, gef_fit_color
 
 import json
 import os
@@ -3329,11 +3329,7 @@ def _detour_reduction_scatter_report(
     low_mask = plot_df[group_var] <= threshold
     masks = [low_mask, ~low_mask]
     labels = (f"Low GEF ($\\leq$ {threshold})", f"High GEF (> {threshold})")
-    line_colors = (
-        [paper_color("city_gef_detour.4d4d4d"), paper_color("city_gef_detour.4d4d4d")]
-        if grayscale
-        else [paper_color("city_gef_detour.006837"), paper_color("city_gef_detour.a50f15")]
-    )
+    line_colors = [gef_fit_color(plot_df.loc[mask, group_var]) for mask in masks]
     axis_names = ["low_gef", "high_gef"]
     axis_objs = [ax_low, ax_high]
 
@@ -3385,6 +3381,10 @@ def _detour_reduction_scatter_report(
                 "p_value": _report_number(p_value),
                 "stderr": _report_number(stderr),
                 "line_color": color,
+                "color_reference_gef_median": _report_number(panel_df[group_var].median()),
+                "line_style": "short dashed (3, 2)",
+                "line_alpha": paper_alpha("city_gef_support.alpha_0_42"),
+                "confidence_alpha": paper_alpha("city_gef_support.alpha_0_11"),
                 "line_points": [
                     {
                         "x": _report_number(xv),
@@ -3684,7 +3684,11 @@ def plot_city_detour_reduction_by_gef(
                 "orientation": "vertical",
                 "title": "GEF",
                 "side_label": "kg CO2e/kWh",
-                "boundaries": _report_array(CITY_GEF_COLOR_BIN_EDGES),
+                "boundaries": None,
+                "normalization": _report_array([gef_norm().vmin, gef_norm().vcenter, gef_norm().vmax]),
+                "scale": "continuous diverging",
+                "axis_scale": "linear",
+                "reference_fraction_from_low": 1.0 / 3.0,
                 "colors_low_to_high": [
                     to_hex(cmap(index)) for index in range(cmap.N)
                 ],
@@ -4248,7 +4252,8 @@ def _render_city_gef_context_detour_summary(
             "bottom_gef": _report_axis(legend_rail["bottom"]),
             "gef_colorbar": _report_axis(legend_rail["colorbar"]),
         },
-        "gef_bin_edges": _report_array(CITY_GEF_COLOR_BIN_EDGES),
+        "gef_bin_edges": None,
+        "gef_normalization": _report_array([gef_norm().vmin, gef_norm().vcenter, gef_norm().vmax]),
         "gef_bin_colors": [to_hex(gef_cmap(index)) for index in range(gef_cmap.N)],
         "city_markers": legend_rail["city_entries"],
         "render_style": "grayscale" if grayscale else "color",

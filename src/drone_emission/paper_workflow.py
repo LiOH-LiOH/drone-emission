@@ -600,6 +600,7 @@ def _request_signature(request: dict, config: dict) -> dict:
     from .visualization.prepared_bundle import drawing_code_hash, file_hash
     from .visualization.palette import load_palette
     from .visualization.typography import typography_signature
+    from .paper_display_style import display_signature
 
     usage = None
     if config.get("bundle_dir"):
@@ -607,6 +608,7 @@ def _request_signature(request: dict, config: dict) -> dict:
         if prepared_path.is_file():
             usage = json.loads(prepared_path.read_text()).get("palette_usage")
     styling = {
+        "display_sha256": display_signature(),
         "typography_sha256": typography_signature(),
         "palette_sha256": load_palette(config.get("palette_path")).signature_for(usage),
         "drawing_code_sha256": drawing_code_hash(),
@@ -679,9 +681,10 @@ def _write_receipt(request: dict, config: dict, signature: dict, elapsed: float)
 
 def _render_request_worker(config: dict, request_id: str) -> None:
     from .visualization.typography import paper_typography
+    from .paper_display_style import paper_display_style
 
     report_dir = Path(config["figures_dir"]) / "paper" / "report" / "typography"
-    with paper_typography(report_dir):
+    with paper_typography(report_dir), paper_display_style(report_dir.parent / "display"):
         _render_request_worker_impl(config, request_id)
 
 
@@ -713,6 +716,7 @@ def _render_request_worker_impl(config: dict, request_id: str) -> None:
         source_signature = _request_signature(request, config)
         source_signature.pop("palette_sha256")
         source_signature.pop("typography_sha256")
+        source_signature.pop("display_sha256")
         source_signature = Codec(bundle_root / request_id, roots).encode(source_signature)
         try:
             document = validate_bundle(bundle_root, request, cohort_hash())

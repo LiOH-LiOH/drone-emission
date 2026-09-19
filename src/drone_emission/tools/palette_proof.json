@@ -1,0 +1,21 @@
+{
+  "status": "candidate_for_visual_review",
+  "base_source": "Paul Tol Bright, plus charcoal and white",
+  "base": {
+    "blue": "#4477AA", "cyan": "#66CCEE", "green": "#228833",
+    "yellow": "#CCBB44", "coral": "#EE6677", "purple": "#AA3377",
+    "gray": "#BBBBBB", "charcoal": "#333333", "white": "#FFFFFF"
+  },
+  "sequential": {
+    "positions": [0.0, 1.0],
+    "parents": ["cyan", "blue"],
+    "lightness": [74.0, 34.0],
+    "chroma": [23.0, 23.0]
+  },
+  "diverging": {
+    "positions": [0.0, 0.5, 1.0],
+    "parents": ["blue", "yellow", "coral"],
+    "lightness": [38.0, 78.0, 38.0],
+    "chroma": [24.0, 6.0, 24.0]
+  }
+}
