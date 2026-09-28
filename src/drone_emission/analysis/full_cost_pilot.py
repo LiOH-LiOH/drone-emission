@@ -79,10 +79,11 @@ def annual_fixed_cost(system: ReferenceSystem, cost: CostParameters, deployment:
     }
 
 
-def build_profiles(od_path: Path, config: dict, system: ReferenceSystem, chunk_rows=250_000):
+def build_profiles(od_path: Path, config: dict, system: ReferenceSystem, chunk_rows=250_000,
+                   *, include_objectives=False):
     """Pool weighted OD metrics by 100 m distance classes; preserve their totals."""
     bike, drone = create_ebike_params(config), create_drone_params(config)
-    fields = [name for name in OD_COLUMNS if "lifecycle" not in name]
+    fields = list(OD_COLUMNS) if include_objectives else [name for name in OD_COLUMNS if "lifecycle" not in name]
     grouped = []
     rows = 0
     for chunk in pd.read_csv(od_path, usecols=fields, chunksize=chunk_rows):
@@ -109,14 +110,20 @@ def build_profiles(od_path: Path, config: dict, system: ReferenceSystem, chunk_r
             "ebike_time": chunk.ebike_time_min.to_numpy(),
             "drone_time": chunk.drone_time_min.to_numpy(),
         })
-        values = list(metrics.columns[3:])
+        group_keys = ["road_bin", "air_bin"]
+        if include_objectives:
+            metrics["emission_choice"] = (chunk.drone_lifecycle_g < chunk.ebike_lifecycle_g).to_numpy()
+            metrics["time_choice"] = (chunk.drone_time_min < chunk.ebike_time_min).to_numpy()
+            metrics["ebike_lifecycle_kg"] = chunk.ebike_lifecycle_g.to_numpy() / 1000
+            metrics["drone_lifecycle_kg"] = chunk.drone_lifecycle_g.to_numpy() / 1000
+            group_keys += ["emission_choice", "time_choice"]
+        values = [c for c in metrics if c not in group_keys + ["orders"]]
         metrics[values] = metrics[values].mul(q, axis=0)
-        grouped.append(metrics.groupby(["road_bin", "air_bin"]).sum())
+        grouped.append(metrics.groupby(group_keys).sum())
         rows += len(chunk)
     if not grouped:
         raise ValueError("Empty city OD input")
-    profile = pd.concat(grouped).groupby(level=[0, 1]).sum().reset_index()
-    values = list(profile.columns[3:])
+    profile = pd.concat(grouped).groupby(level=list(range(len(group_keys)))).sum().reset_index()
     profile[values] = profile[values].div(profile.orders, axis=0)
     profile["share"] = profile.orders / profile.orders.sum()
     return profile, {"od_rows": rows, "profiles": len(profile), "city_annual_orders": float(profile.orders.sum())}
@@ -146,7 +153,8 @@ def development_stages(config: dict, system: ReferenceSystem):
         )
 
 
-def solve_assignment(profile, annual_orders, config, system, rate=None):
+def solve_assignment(profile, annual_orders, config, system, rate=None, *,
+                     fixed_assignment=None, return_assignment=False):
     """Jointly choose OD assignments and integer citywide deployment modules.
 
     A module supplies 100 vehicles of a mode. Network modules are shared by
@@ -197,16 +205,26 @@ def solve_assignment(profile, annual_orders, config, system, rate=None):
         variable_upper[n + 1] = 0
     elif rate == 1:
         variable_upper[n] = 0
-    result = milp(
-        objective, integrality=np.r_[np.zeros(n), np.ones(3)],
-        bounds=Bounds(np.zeros(n + 3), variable_upper),
-        constraints=LinearConstraint(csc_matrix(matrix), lower, upper),
-        options={"mip_rel_gap": 1e-6, "time_limit": 60},
-    )
-    if not result.success:
-        raise RuntimeError(f"Citywide cost solve did not converge: {result.message}")
-    x = result.x[:n] / daily_orders
-    bike_blocks, drone_blocks, network_blocks = np.rint(result.x[n:]).astype(int)
+    if fixed_assignment is None:
+        result = milp(
+            objective, integrality=np.r_[np.zeros(n), np.ones(3)],
+            bounds=Bounds(np.zeros(n + 3), variable_upper),
+            constraints=LinearConstraint(csc_matrix(matrix), lower, upper),
+            options={"mip_rel_gap": 1e-6, "time_limit": 60},
+        )
+        if not result.success:
+            raise RuntimeError(f"Citywide cost solve did not converge: {result.message}")
+        x = np.clip(result.x[:n] / daily_orders, 0, share)
+        bike_blocks, drone_blocks, network_blocks = np.rint(result.x[n:]).astype(int)
+        solver_gap = float(result.mip_gap)
+    else:
+        x = np.asarray(fixed_assignment, dtype=float)
+        if x.shape != share.shape or not np.isfinite(x).all() or (x < 0).any() or (x > share + 1e-12).any():
+            raise ValueError("Fixed assignment must contain drone shares of total city orders")
+        bike_blocks = int(np.ceil(max(0, np.dot(share - x, ebike_cycle) * daily_orders / bike_capacity - 1e-9)))
+        drone_blocks = int(np.ceil(max(0, np.dot(x, drone_cycle) * daily_orders / drone_capacity - 1e-9)))
+        network_blocks = max(bike_blocks, drone_blocks)
+        solver_gap = 0.
     fixed = {}
     for key in base_bike:
         if key in {"annual_vehicle_cny", "annual_battery_cny", "annual_pilot_cny"}:
@@ -217,7 +235,7 @@ def solve_assignment(profile, annual_orders, config, system, rate=None):
     bike_work = float(np.dot(share - x, ebike_cycle) * daily_orders)
     drone_work = float(np.dot(x, drone_cycle) * daily_orders)
     total = sum(fixed.values()) + variable * annual_orders
-    return {
+    row = {
         "requested_drone_rate": rate,
         "drone_replacement_rate_pct": float(x.sum() * 100),
         "annual_orders": annual_orders, "daily_orders": daily_orders,
@@ -235,8 +253,9 @@ def solve_assignment(profile, annual_orders, config, system, rate=None):
         "drone_destination_cabinets": int(drone_blocks * system.destination_cabinets),
         "ebike_available_capacity_used_pct": bike_work / (bike_capacity * bike_blocks) * 100 if bike_blocks else 0,
         "drone_available_capacity_used_pct": drone_work / (drone_capacity * drone_blocks) * 100 if drone_blocks else 0,
-        "solver_relative_gap": float(result.mip_gap),
+        "solver_relative_gap": solver_gap,
     }
+    return (row, x) if return_assignment else row
 
 
 def run_full_cost_pilot(config: dict, region_key: str) -> tuple[Path, Path, Path]:

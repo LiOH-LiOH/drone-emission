@@ -460,7 +460,12 @@ def command_cost_pilot(args: argparse.Namespace) -> None:
     """Run an explicitly selected city's full-cost capacity pilot only."""
     from .analysis.full_cost_pilot import run_full_cost_pilot
 
-    paths = run_full_cost_pilot(_config(args.env), args.region)
+    if getattr(args, "objectives", False):
+        from .analysis.objective_tradeoffs import run_objective_tradeoffs
+
+        paths = run_objective_tradeoffs(_config(args.env), region_key=args.region)
+    else:
+        paths = run_full_cost_pilot(_config(args.env), args.region)
     print(json.dumps({"region": args.region, "outputs": [str(p) for p in paths]}, indent=2))
 
 
@@ -771,6 +776,7 @@ def build_parser() -> argparse.ArgumentParser:
         "cost-pilot", help="estimate citywide full costs for one explicit cohort city"
     )
     cost_pilot.add_argument("--region", required=True)
+    cost_pilot.add_argument("--objectives", action="store_true", help="cross-evaluate all objectives for this city")
     cost_pilot.set_defaults(func=command_cost_pilot)
 
     prepare_reuse = subparsers.add_parser(

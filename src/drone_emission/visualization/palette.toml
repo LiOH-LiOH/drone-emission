@@ -327,6 +327,8 @@
 "scale.diverging.sample_213" = "#df774f"
 
 [colormaps]
+"objective.sequential" = "@scale.sequential"
+"objective.diverging" = "@scale.diverging"
 "buildings.height" = "@scale.sequential"
 "buildings.footprint" = "@scale.sequential"
 "gravity_endpoint.orders" = "@scale.sequential"

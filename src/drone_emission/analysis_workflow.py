@@ -32,6 +32,7 @@ ANALYSIS_MODULES = (
     "beijing-delivery-modes",
     "four-city-delivery-modes",
     "cost-time-substitution",
+    "objective-tradeoffs",
 )
 DERIVED_GLOBAL_NAMES = {
     *AUTHORITATIVE_AGGREGATES,
@@ -431,10 +432,20 @@ def _run_cost_time_substitution(config: dict, *, force: bool) -> Path:
     return run_cost_time_analysis(config, force=force)[0]
 
 
+def _run_objective_tradeoffs(config: dict, *, force: bool) -> Path:
+    from .analysis.objective_tradeoffs import run_objective_tradeoffs
+
+    return run_objective_tradeoffs(config, force=force)[0]
+
+
 def _module_outputs(config: dict) -> dict[str, tuple[Path, ...]]:
     data = analysis_data_dir(config)
     work = analysis_root(config)
     return {
+        "objective-tradeoffs": tuple(
+            work / "objective_tradeoffs" / name
+            for name in ("city_strategies.csv", "cohort_strategies.csv", "report.json", "summary.md")
+        ),
         "cost-time-substitution": tuple(
             work / "cost_time_substitution" / name
             for name in ("city_strategies.csv", "cohort_strategies.csv", "report.json")
@@ -522,6 +533,7 @@ def analyze(
 ) -> dict:
     """Build or restore retained analyses with incrementally durable status."""
     runners = {
+        "objective-tradeoffs": lambda view: _run_objective_tradeoffs(view, force=force),
         "cost-time-substitution": lambda view: _run_cost_time_substitution(
             view, force=force
         ),
@@ -600,7 +612,7 @@ def analyze(
         # Compute it from the explicitly restored view, not legacy output paths.
         primary = (
             Path(runners[name](view))
-            if reuse_from is None or name == "cost-time-substitution"
+            if reuse_from is None or name in {"cost-time-substitution", "objective-tradeoffs"}
             else module_paths[name][0]
         )
         status["modules"][name] = {

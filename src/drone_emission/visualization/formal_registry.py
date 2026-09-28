@@ -474,7 +474,14 @@ def _render_four_city_mode_candidate(
         raise ValueError(f"unknown four-city delivery-mode metric: {metric}")
 
 
+def _render_objective_tradeoffs(context: RenderContext) -> None:
+    from .objective_tradeoffs import render
+
+    render(context)
+
+
 REQUEST_RENDERERS: dict[str, Renderer] = {
+    "objective_tradeoffs": _render_objective_tradeoffs,
     "shanghai_merchant_monthly_sales": lambda c: _render_config_input(c, "shanghai_merchant_monthly_sales"),
     "shanghai_building_footprint_heatmap": lambda c: _render_config_input(c, "shanghai_building_footprint_heatmap"),
     "province_gef_china_map": _render_province_gef,
