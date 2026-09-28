@@ -79,3 +79,14 @@ def test_candidate_manifest_and_registry_outputs_match():
     assert set(request["outputs"]) == {f"objective_{name}.pdf" for name in PANELS}
     candidate = next(f for f in manifest["figures"] if f["id"] == "candidate_objective_tradeoffs")
     assert not candidate["publish"].startswith("docs/paper/")
+
+
+def test_render_dependencies_distinguish_same_named_work_tables(tmp_path):
+    from drone_emission.paper_workflow import _analysis_modules_for_requests
+
+    config = {"work_dir": str(tmp_path / "work")}
+    for directory, module in (("objective_tradeoffs", "objective-tradeoffs"),
+                              ("cost_time_substitution", "cost-time-substitution")):
+        request = {"required_inputs": [f"work:analysis/{directory}/city_strategies.csv",
+                                       f"work:analysis/{directory}/report.json"]}
+        assert _analysis_modules_for_requests([request], config) == {module}

@@ -156,18 +156,19 @@ def _analysis_modules_for_requests(
 ) -> set[str]:
     from .analysis_workflow import _module_outputs
 
-    output_modules = {
-        path.name: module
-        for module, paths in _module_outputs(config).items()
-        for path in paths
-    }
+    outputs = _module_outputs(config)
     selected: set[str] = set()
     for request in requests:
         for declaration in request["required_inputs"]:
-            _, separator, relative = declaration.partition(":")
-            name = Path(relative if separator else declaration).name
-            if name in output_modules:
-                selected.add(output_modules[name])
+            prefix, separator, relative = declaration.partition(":")
+            if separator and prefix == "work":
+                target = (Path(config["work_dir"]) / relative).resolve()
+                selected.update(module for module, paths in outputs.items()
+                                if any(path.resolve() == target for path in paths))
+            elif not separator:
+                # Data declarations live in the cohort view once binding is done.
+                selected.update(module for module, paths in outputs.items()
+                                if any(path.name == Path(declaration).name for path in paths))
     return selected
 
 
