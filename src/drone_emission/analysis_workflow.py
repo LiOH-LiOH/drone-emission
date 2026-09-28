@@ -31,6 +31,7 @@ ANALYSIS_MODULES = (
     "contribution-decomposition",
     "beijing-delivery-modes",
     "four-city-delivery-modes",
+    "cost-time-substitution",
 )
 DERIVED_GLOBAL_NAMES = {
     *AUTHORITATIVE_AGGREGATES,
@@ -424,10 +425,20 @@ def _run_four_city_delivery_modes(config: dict, *, force: bool) -> Path:
     return output
 
 
+def _run_cost_time_substitution(config: dict, *, force: bool) -> Path:
+    from .analysis.cost_time_substitution import run_cost_time_analysis
+
+    return run_cost_time_analysis(config, force=force)[0]
+
+
 def _module_outputs(config: dict) -> dict[str, tuple[Path, ...]]:
     data = analysis_data_dir(config)
     work = analysis_root(config)
     return {
+        "cost-time-substitution": tuple(
+            work / "cost_time_substitution" / name
+            for name in ("city_strategies.csv", "cohort_strategies.csv", "report.json")
+        ),
         "named-scenarios": (data / "all_sensitivity_named.csv",),
         "pathway-scenarios": (
             data / "all_pathway_scenario_city.csv",
@@ -511,6 +522,9 @@ def analyze(
 ) -> dict:
     """Build or restore retained analyses with incrementally durable status."""
     runners = {
+        "cost-time-substitution": lambda view: _run_cost_time_substitution(
+            view, force=force
+        ),
         "named-scenarios": lambda view: _run_named_scenarios(view, force=force),
         "pathway-scenarios": lambda view: _run_pathway_scenarios(view, force=force),
         "distance-threshold": lambda view: _run_distance_threshold(view, force=force),
@@ -582,7 +596,13 @@ def analyze(
         status["modules"].pop(name, None)
         status["complete"] = False
         _atomic_json(status, status_path)
-        primary = Path(runners[name](view)) if reuse_from is None else module_paths[name][0]
+        # Existing audited reuse bundles predate the transport-cost module.
+        # Compute it from the explicitly restored view, not legacy output paths.
+        primary = (
+            Path(runners[name](view))
+            if reuse_from is None or name == "cost-time-substitution"
+            else module_paths[name][0]
+        )
         status["modules"][name] = {
             "status": "complete",
             "primary_output": str(primary),

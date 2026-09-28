@@ -143,7 +143,7 @@ def compute_ebike_per_order_parts_g(
     ebike_params: EbikeParams,
     scenario: EbikeScenario,
 ) -> dict[str, np.ndarray]:
-    """Vectorized e-bike lifecycle components per order (g CO2e)."""
+    """Lifecycle components (g CO2e) and battery-side energy (kWh) per order."""
     p = ebike_params
     s = scenario
     lifespan = s.lifespan_yr if s.lifespan_yr is not None else p.lifespan
@@ -190,6 +190,7 @@ def compute_ebike_per_order_parts_g(
     use_g = use_g / divisor
     eol_g = eol_g / divisor
     return {
+        "energy_kwh": energy_kwh / divisor,
         "production_g": prod_g,
         "use_g": use_g,
         "end_of_life_g": eol_g,
@@ -220,7 +221,7 @@ def compute_drone_per_order_parts_g(
     drone_params: DroneParams,
     scenario: DroneScenario,
 ) -> dict[str, np.ndarray]:
-    """Return embodied, fixed-flight, cruise and total emissions per order."""
+    """Return lifecycle components (g) and battery-side energy (kWh) per order."""
     p = drone_params
     s = scenario
     lifespan = s.lifespan_yr if s.lifespan_yr is not None else p.lifespan
@@ -288,6 +289,7 @@ def compute_drone_per_order_parts_g(
     use_g = fixed_use_g + cruise_use_g
     eol_g = eol_g / divisor
     return {
+        "energy_kwh": (fixed_energy_kwh + cruise_energy_kwh) / divisor,
         "production_g": prod_g,
         "fixed_use_g": fixed_use_g,
         "cruise_use_g": cruise_use_g,

@@ -73,6 +73,22 @@ velocity = 30             # Urban delivery speed (km/h)
 velocity = 30             # Urban delivery speed (km/h)
 engine_efficiency = 0.25  # Gasoline engine thermal efficiency
 
+# Transport operating costs: Li et al. (2025), doi:10.1016/j.scs.2025.106134.
+# S7 economic battery stock per vehicle (200/100 and 300/100), not LCA cells.
+[transport_cost]
+electricity_cny_per_kwh = 0.5
+charging_efficiency = 0.81
+rider_fee_share = 0.7
+base_delivery_fee_cny = 2.8
+base_delivery_distance_km = 3.0
+extra_delivery_fee_cny_per_km = 1.4
+battery_life_years = 2.0
+battery_salvage_fraction = 0.05
+ebike_battery_price_cny = 400.0
+drone_battery_price_cny = 1000.0
+ebike_battery_stock_per_vehicle = 2.0
+drone_battery_stock_per_vehicle = 3.0
+
 # ============ Local Environment ============
 [local]
 cache_dir = "cache"
