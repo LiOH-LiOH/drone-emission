@@ -95,22 +95,20 @@ drone_battery_stock_per_vehicle = 3.0
 replacement_rates = [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
 
 [[full_cost_pilot.cost_stages]]
-stage = "source_baseline"
+stage = "conservative"
 drone_price_cny = 60000.0
 drone_battery_price_cny = 1000.0
-basis = "Li 2025 Table 1 baseline"
+drone_hours_daily = 8.0
+pilots_per_drone = 1.0
+basis = "Li 2025 baseline prices; Baldisseri 2022 conservative automation; project 8 h shift"
 
 [[full_cost_pilot.cost_stages]]
-stage = "transition"
-drone_price_cny = 50000.0
-drone_battery_price_cny = 800.0
-basis = "Midpoint interpolation; project assumption"
-
-[[full_cost_pilot.cost_stages]]
-stage = "source_lower_cost"
+stage = "optimistic"
 drone_price_cny = 40000.0
 drone_battery_price_cny = 600.0
-basis = "Li 2025 Table 1 ideal price endpoints"
+drone_hours_daily = 12.0
+pilots_per_drone = 0.0
+basis = "Li 2025 ideal prices; Baldisseri 2022 future automation; project 12 h operation"
 
 [full_cost_pilot.system]
 fleet_per_mode = 100
@@ -119,6 +117,7 @@ destination_cabinets = 100
 common_dc_cabinets = 20
 staff_count = 10
 staff_daily_cny = 200.0
+pilot_daily_cny = 200.0
 working_days = 300
 cabinet_hours_daily = 24.0
 vehicle_life_years = 4.0

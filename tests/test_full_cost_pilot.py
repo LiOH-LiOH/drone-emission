@@ -57,10 +57,23 @@ def test_free_optimum_dominates_grid_and_cost_stages_reduce_equipment_costs():
         fixed.append(pilot.annual_fixed_cost(
             stage_system, CostParameters(**config["transport_cost"]), "drone"
         ))
-    assert sum(fixed[0].values()) - sum(fixed[2].values()) == pytest.approx(532000)
-    assert sum(fixed[1].values()) == pytest.approx((sum(fixed[0].values()) + sum(fixed[2].values())) / 2)
+    assert len(stages) == 2
+    assert sum(fixed[0].values()) - sum(fixed[1].values()) == pytest.approx(6532000)
+    assert fixed[0]["annual_pilot_cny"] == 6000000
+    assert fixed[1]["annual_pilot_cny"] == 0
     for key in ("annual_staff_cny", "annual_cabinet_capital_cny", "annual_cabinet_electricity_cny"):
-        assert fixed[0][key] == fixed[2][key]
+        assert fixed[0][key] == fixed[1][key]
+    for (_, config, scenario_system), count, hours in zip(stages, (200, 200), (8, 12)):
+        assert scenario_system.drone_hours_daily == hours
+        row = pilot.solve_assignment(profiles(), 3000000, config, scenario_system, 1)
+        assert row["drone_count"] == count
+        assert row["pilot_positions"] == count * scenario_system.pilots_per_drone
+        assert row["annual_pilot_cny"] == row["pilot_positions"] * 60000
+        assert row["drone_available_capacity_used_pct"] == pytest.approx(80000 / (count * hours * 60) * 100)
+        optimum = pilot.solve_assignment(profiles(), 3000000, config, scenario_system)
+        for rate in (0, 0.5, 1):
+            constrained = pilot.solve_assignment(profiles(), 3000000, config, scenario_system, rate)
+            assert optimum["annual_total_cny"] <= constrained["annual_total_cny"] + 10
     cheaper = pilot.solve_assignment(profiles(), 3000000, lower_cost[1], lower_cost[2])
     assert cheaper["annual_total_cny"] <= best["annual_total_cny"]
     # Real-city tiny OD weights must not create a phantom 100-bike fleet.
@@ -92,10 +105,10 @@ def test_single_city_pilot_preserves_total_demand_and_profiles(tmp_path, monkeyp
     monkeypatch.setattr(pilot, "cohort_hash", lambda: "test-cohort")
     paths = pilot.run_full_cost_pilot(config, "nanjing")
     result = pd.read_csv(paths[1])
-    assert len(result) == 3
+    assert len(result) == 2
     assert result.annual_orders.eq(100000).all()
     assert "demand_multiplier" not in result and "available_time_fraction" not in result
-    assert result.stage.tolist() == ["source_baseline", "transition", "source_lower_cost"]
+    assert result.stage.tolist() == ["conservative", "optimistic"]
     assert (result.mean_total_cost_cny.diff().dropna() <= 1e-6).all()
     endpoints = pd.read_csv(paths[0])
     ebike_only = endpoints.loc[endpoints.requested_drone_rate.eq(0), "annual_total_cny"]

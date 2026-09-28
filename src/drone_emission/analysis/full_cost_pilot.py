@@ -38,6 +38,9 @@ class ReferenceSystem:
     ordinary_cabinet_kw: float = 0.2
     drone_cabinet_kw: float = 0.4
     distance_bin_km: float = 0.1
+    drone_hours_daily: float = 12
+    pilots_per_drone: float = 0
+    pilot_daily_cny: float = 200
 
 
 def annual_fixed_cost(system: ReferenceSystem, cost: CostParameters, deployment: str) -> dict:
@@ -71,6 +74,7 @@ def annual_fixed_cost(system: ReferenceSystem, cost: CostParameters, deployment:
         "annual_battery_cny": battery,
         "annual_cabinet_capital_cny": cabinets,
         "annual_staff_cny": system.staff_count * system.staff_daily_cny * system.working_days,
+        "annual_pilot_cny": drone_on * n * system.pilots_per_drone * system.pilot_daily_cny * system.working_days,
         "annual_cabinet_electricity_cny": cabinet_electricity,
     }
 
@@ -119,14 +123,14 @@ def build_profiles(od_path: Path, config: dict, system: ReferenceSystem, chunk_r
 
 
 def development_stages(config: dict, system: ReferenceSystem):
-    """Source Table 1 cost endpoints and an explicitly interpolated midpoint."""
+    """Chinese price endpoints combined with supervised/autonomous operation."""
     stages = config.get("full_cost_pilot", {}).get("cost_stages", [
-        {"stage": "source_baseline", "drone_price_cny": 60000.,
-         "drone_battery_price_cny": 1000., "basis": "Li 2025 Table 1 baseline"},
-        {"stage": "transition", "drone_price_cny": 50000.,
-         "drone_battery_price_cny": 800., "basis": "Midpoint interpolation; project assumption"},
-        {"stage": "source_lower_cost", "drone_price_cny": 40000.,
-         "drone_battery_price_cny": 600., "basis": "Li 2025 Table 1 ideal price endpoints"},
+        {"stage": "conservative", "drone_price_cny": 60000.,
+         "drone_battery_price_cny": 1000., "drone_hours_daily": 8., "pilots_per_drone": 1.,
+         "basis": "Li 2025 baseline prices; Baldisseri 2022 conservative automation; project 8 h shift"},
+        {"stage": "optimistic", "drone_price_cny": 40000.,
+         "drone_battery_price_cny": 600., "drone_hours_daily": 12., "pilots_per_drone": 0.,
+         "basis": "Li 2025 ideal prices; Baldisseri 2022 future automation; project 12 h operation"},
     ])
     for stage in stages:
         stage_config = {
@@ -136,7 +140,10 @@ def development_stages(config: dict, system: ReferenceSystem):
                 "drone_battery_price_cny": stage["drone_battery_price_cny"],
             },
         }
-        yield stage, stage_config, replace(system, drone_price_cny=stage["drone_price_cny"])
+        yield stage, stage_config, replace(
+            system, drone_price_cny=stage["drone_price_cny"],
+            drone_hours_daily=stage["drone_hours_daily"], pilots_per_drone=stage["pilots_per_drone"],
+        )
 
 
 def solve_assignment(profile, annual_orders, config, system, rate=None):
@@ -150,7 +157,7 @@ def solve_assignment(profile, annual_orders, config, system, rate=None):
 
     if annual_orders <= 0:
         raise ValueError("Annual orders must be positive")
-    bike, drone = create_ebike_params(config), create_drone_params(config)
+    bike = create_ebike_params(config)
     cost = CostParameters(**config.get("transport_cost", {}))
     share = profile.share.to_numpy()
     ebike_cycle = profile.ebike_cycle.to_numpy()
@@ -162,11 +169,12 @@ def solve_assignment(profile, annual_orders, config, system, rate=None):
     base_bike = annual_fixed_cost(system, cost, "ebike")
     base_drone = annual_fixed_cost(system, cost, "drone")
     asset_bike = base_bike["annual_vehicle_cny"] + base_bike["annual_battery_cny"]
-    asset_drone = base_drone["annual_vehicle_cny"] + base_drone["annual_battery_cny"]
+    asset_drone = (base_drone["annual_vehicle_cny"] + base_drone["annual_battery_cny"]
+                   + base_drone["annual_pilot_cny"])
     network = sum(base_bike.values()) - asset_bike
     upgrade = sum(base_drone.values()) - asset_drone - network
     bike_capacity = system.fleet_per_mode * bike.working_hours_per_day * 60
-    drone_capacity = system.fleet_per_mode * drone.working_hours_per_day * 60
+    drone_capacity = system.fleet_per_mode * system.drone_hours_daily * 60
     # Use daily order counts, not tiny fractions: small OD-share upper bounds
     # otherwise disappear in MIP presolve and spuriously require a whole fleet.
     # Remaining variables are integer bike, drone and shared network modules.
@@ -201,7 +209,7 @@ def solve_assignment(profile, annual_orders, config, system, rate=None):
     bike_blocks, drone_blocks, network_blocks = np.rint(result.x[n:]).astype(int)
     fixed = {}
     for key in base_bike:
-        if key in {"annual_vehicle_cny", "annual_battery_cny"}:
+        if key in {"annual_vehicle_cny", "annual_battery_cny", "annual_pilot_cny"}:
             fixed[key] = base_bike[key] * bike_blocks + base_drone[key] * drone_blocks
         else:
             fixed[key] = base_bike[key] * network_blocks + (base_drone[key] - base_bike[key]) * drone_blocks
@@ -218,6 +226,7 @@ def solve_assignment(profile, annual_orders, config, system, rate=None):
         "mean_transport_time_min": float(np.dot(share - x, profile.ebike_time) + np.dot(x, profile.drone_time)),
         "ebike_count": int(bike_blocks * system.fleet_per_mode),
         "drone_count": int(drone_blocks * system.fleet_per_mode),
+        "pilot_positions": int(drone_blocks * system.fleet_per_mode * system.pilots_per_drone),
         "network_modules": int(network_blocks),
         "distribution_centers": int(network_blocks * system.distribution_centers),
         "ground_staff": int(network_blocks * system.staff_count),
@@ -268,30 +277,33 @@ def run_full_cost_pilot(config: dict, region_key: str) -> tuple[Path, Path, Path
     root = Path(config["work_dir"]) / "analysis" / "full_cost_pilot" / region_key
     paths = tuple(root / name for name in ("cost_curves.csv", "optimal_strategies.csv", "report.json"))
     report = {
-        "analysis_version": 2,
+        "analysis_version": 3,
         "region_key": region_key, "scope": "citywide_development_cost_stages",
         "cohort_sha256": cohort_hash(), "source_doi": "10.1016/j.scs.2025.106134",
+        "automation_source_doi": "10.1016/j.trd.2022.103296",
         "source_module": asdict(system), "transport_cost": asdict(CostParameters(**config.get("transport_cost", {}))),
         "emission_params": config.get("emission_params", {}),
         "cost_stages": [stage for stage, _, _ in stages],
         "capacity_basis": {
             "ebike_hours_per_day": create_ebike_params(config).working_hours_per_day,
-            "drone_hours_per_day": create_drone_params(config).working_hours_per_day,
+            "drone_hours_per_day_by_stage": {stage["stage"]: s.drone_hours_daily for stage, _, s in stages},
             "working_days": system.working_days,
         },
         "replacement_rates": rates, "input": {"path": str(od_path.resolve()),
         "size_bytes": od_path.stat().st_size, "mtime_ns": od_path.stat().st_mtime_ns},
         **audit,
         "interpretation": [
-            "All stages use identical actual city annual orders and configured daily vehicle hours; no demand or availability sweep.",
-            "Only drone purchase and battery unit prices vary. Endpoints follow Li 2025 Table 1; the transition stage is midpoint interpolation, not an observed stage or dated forecast.",
+            "Both scenarios use identical actual city annual orders; no demand or availability sweep.",
+            "Joint scenarios change drone/battery prices, automation and daily drone operating hours (8 conservative, 12 optimistic). Electric bikes retain configured 8 h capacity.",
+            "Automation follows Baldisseri 2022 conservative/future endpoints, not its partially automated optimistic scenario. Prices follow Li 2025 Table 1 endpoints.",
+            "Conservative pilots are paid for full configured shifts at 200 CNY/day, 300 days/year, one position per drone including idle capacity. Optimistic has no pilots; ground staff remain. Wage is a Li 2025 local proxy, not measured Nanjing pilot pay. Full-shift payment and 8/12 h operation are project assumptions; Baldisseri uses 7.5 h shifts.",
             "Cabinet prices/power, staff wages, energy prices, speeds and lifetimes remain fixed. The source ideal cabinet price includes solar equipment and is not adopted in this isolated equipment-cost experiment.",
             "Jointly optimize assignments and integer 100-vehicle modules. Network modules equal the larger mode-module count; mixed modes can share each network.",
             "Per network module: 10 distribution centers, 20 common DC drone cabinets, 100 destination cabinets and 10 staff. Drone modules upgrade that many destination modules; other destination modules use ordinary cabinets.",
             "Facility counts are a source-ratio capacity estimate, not a spatial siting or actual facility inventory. Source ratios and modular expansion are project assumptions.",
-            "All capital and batteries annualized with 5% salvage; fleet batteries are not charged again per order. No solar, separate supervision or repair.",
+            "All capital and batteries annualized with 5% salvage; fleet batteries are not charged again per order. No solar or separate repair cost.",
             "Capacity uses project speeds/workday lengths and round-trip tasks. Drone cycle includes both legs' vertical flight, one loaded hover and existing loading allowance.",
-            "Fleet and facility quantities are reoptimized for each cost stage under the same capacity and modular sizing rules; daily hours are a common planning assumption, not measured utilization or a queue simulation.",
+            "Fleet and facility quantities are reoptimized for each scenario with its operating hours; daily hours are planning assumptions, not measured utilization or a queue simulation.",
             "OD metrics are averaged in 100 m road/air classes; fractional within-class assignment is approximate. Weighted baseline totals are preserved.",
             "A free-rate mixed-integer solve determines the optimum; the rate grid only displays the curve. Optimality is within the modular cost and aggregated-hour capacity model.",
             "Cost includes facilities; reported time remains transport-only. No full-system lifecycle-emissions claim is made.",
