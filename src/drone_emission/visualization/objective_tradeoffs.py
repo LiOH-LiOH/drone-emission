@@ -123,7 +123,7 @@ def plot_objective_tradeoffs(cities, cohort, names, save_path=None, figsize=(5.4
     bars = ax.bar(range(6), whole.annual_lifecycle_kg / 1e6, color=[colors[s] for s in STRATEGIES])
     ax.bar_label(bars, labels=[f"{v:.1f}%" for v in whole.emission_reduction_pct], padding=4, fontsize=8)
     ax.set_xticks(range(6), [LABELS[s] for s in STRATEGIES], rotation=25, ha="right", fontsize=8)
-    ax.set_ylabel("Annual transport lifecycle emissions (kt CO₂e)")
+    ax.set_ylabel("Annual transport lifecycle emissions (kt CO$_2$e)")
     ax.margins(y=.15)
     finish(fig, "cohort_emissions", "Labels: emission reduction relative to all e-bike")
 
@@ -184,7 +184,7 @@ def plot_objective_tradeoffs(cities, cohort, names, save_path=None, figsize=(5.4
         ax.set_yticks(range(6), [LABELS[s] for s in STRATEGIES], fontsize=8)
         raw = [frame.drone_replacement_rate_pct, frame.annual_lifecycle_kg / frame.annual_orders * 1000,
                frame.mean_total_cost_cny, frame.mean_transport_time_min]
-        units = ["% orders", "g CO₂e/order", "CNY/order", "min/order"]
+        units = ["% orders", "g CO$_2$e/order", "CNY/order", "min/order"]
         for i in range(6):
             for j in range(4):
                 ax.text(j, i, f"{values[i,j]:.1f}%\n{raw[j].iloc[i]:.2f} {units[j]}",
