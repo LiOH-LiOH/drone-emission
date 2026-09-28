@@ -82,6 +82,7 @@ def plot_objective_tradeoffs(cities, cohort, names, save_path=None, figsize=(5.4
         ax.set_ylabel(y_label)
         if name == "cost_premium_distribution":
             ax.set_yscale("symlog", linthresh=1)
+            ax.set_ylim(bottom=0)
             ax.set_ylabel(y_label + "\n(symlog; linear within 1 CNY)")
         elif name == "retention_distribution":
             ax.set_yscale("symlog", linthresh=100)
@@ -148,6 +149,7 @@ def plot_objective_tradeoffs(cities, cohort, names, save_path=None, figsize=(5.4
         ax.axhline(100, color=color("neutral.secondary"), lw=.8, ls="--")
         ax.axhline(0, color=color("neutral.secondary"), lw=.8, ls=":")
         ax.set_xscale("symlog", linthresh=1)
+        ax.set_xlim(left=0)
         ax.set_yscale("symlog", linthresh=100)
         ax.set(xlabel=f"Extra cost of climate optimum (CNY/order)\n{scenario.capitalize()} conditions; symlog, linear within 1 CNY",
                ylabel="Cost-optimal mitigation retained (%)\nSymlog; linear within +/-100%")
