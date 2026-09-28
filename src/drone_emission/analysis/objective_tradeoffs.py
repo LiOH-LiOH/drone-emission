@@ -180,7 +180,14 @@ def write_summary(cities, cohort, path):
              "|经济情景|配置策略|无人机替代率 (%)|减排率 (%)|每单成本 (元)|运输时间 (分钟)|", "|---|---|---:|---:|---:|---:|"]
     for row in cohort.itertuples():
         lines.append(f"|{row.scenario}|{row.strategy}|{row.drone_replacement_rate_pct:.1f}|{row.emission_reduction_pct:.1f}|{row.mean_total_cost_cny:.3f}|{row.mean_transport_time_min:.2f}|")
-    lines += ["", "## 城市差异", ""]
+    lines += ["", "## 研究样本整体权衡（按订单加权）", ""]
+    for scenario in ("conservative", "optimistic"):
+        rows = cohort.loc[cohort.scenario.eq(scenario)].set_index("strategy")
+        economic, climate = rows.loc[f"cost_{scenario}"], rows.loc["emission_optimal"]
+        lines.append(f"- {scenario}：经济最优保留碳最优减排潜力的 {economic.mitigation_retained_pct:.1f}%；选择碳最优需额外 {climate.cost_premium_cny:.3f} 元/单（{climate.cost_premium_pct:.1f}%）。碳最优相对全电动车的成本变化为 {climate.cost_change_vs_ebike_pct:.1f}%。")
+    rows = cohort.loc[cohort.scenario.eq("conservative")].set_index("strategy")
+    climate, fastest = rows.loc["emission_optimal"], rows.loc["time_optimal"]
+    lines += [f"- 时间最优保留碳最优减排潜力的 {fastest.mitigation_retained_pct:.1f}%；选择碳最优需额外 {climate.time_penalty_min:.3f} 分钟/单（{climate.time_penalty_pct:.1f}%）。碳最优相对全电动车的运输时间变化为 {climate.time_change_vs_ebike_pct:.1f}%。", "", "## 城市差异", ""]
     for scenario in ("conservative", "optimistic"):
         frame = cities.loc[cities.scenario.eq(scenario)]
         climate = frame.loc[frame.strategy.eq("emission_optimal")]
