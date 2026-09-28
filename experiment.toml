@@ -89,6 +89,32 @@ drone_battery_price_cny = 1000.0
 ebike_battery_stock_per_vehicle = 2.0
 drone_battery_stock_per_vehicle = 3.0
 
+# Opt-in single-city full-cost pilot. Source ratios size integer citywide modules;
+# availability and demand multipliers are sensitivity assumptions, not source data.
+[full_cost_pilot]
+demand_multipliers = [0.5, 1.0, 2.0]
+available_time_fractions = [0.25, 0.5, 1.0]
+replacement_rates = [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
+
+[full_cost_pilot.system]
+fleet_per_mode = 100
+distribution_centers = 10
+destination_cabinets = 100
+common_dc_cabinets = 20
+staff_count = 10
+staff_daily_cny = 200.0
+working_days = 300
+cabinet_hours_daily = 24.0
+vehicle_life_years = 4.0
+cabinet_life_years = 5.0
+ebike_price_cny = 4000.0
+drone_price_cny = 60000.0
+ordinary_cabinet_price_cny = 10000.0
+drone_cabinet_price_cny = 30000.0
+ordinary_cabinet_kw = 0.2
+drone_cabinet_kw = 0.4
+distance_bin_km = 0.1
+
 # ============ Local Environment ============
 [local]
 cache_dir = "cache"

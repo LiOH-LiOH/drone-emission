@@ -1,5 +1,7 @@
 # Li 2025 运输运营成本与三目标替代分析
 
+2026-09-29：本页保留为运输运营成本对照模型。新增的全成本扩展先按南京全城需求配置车队和设施，见[南京全成本试验](full_cost_nanjing_pilot.md)；未覆盖或重跑原313城结果。
+
 ## 已确认边界
 
 统一来源：Li et al. (2025), *Beyond the last-mile: Environmental and economic assessment of the upcoming drone takeaway delivery system*, Sustainable Cities and Society 120, 106134，DOI: [10.1016/j.scs.2025.106134](https://doi.org/10.1016/j.scs.2025.106134)。

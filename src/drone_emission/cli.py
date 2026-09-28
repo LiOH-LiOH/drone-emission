@@ -456,6 +456,14 @@ def command_cohort(args: argparse.Namespace) -> None:
         raise SystemExit(2)
 
 
+def command_cost_pilot(args: argparse.Namespace) -> None:
+    """Run an explicitly selected city's full-cost capacity pilot only."""
+    from .analysis.full_cost_pilot import run_full_cost_pilot
+
+    paths = run_full_cost_pilot(_config(args.env), args.region)
+    print(json.dumps({"region": args.region, "outputs": [str(p) for p in paths]}, indent=2))
+
+
 def command_analyze(args: argparse.Namespace) -> None:
     """Build or restore all retained non-plot paper analyses."""
     config = _config(args.env)
@@ -758,6 +766,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="OD rows per contribution-decomposition chunk",
     )
     analyze.set_defaults(func=command_analyze)
+
+    cost_pilot = subparsers.add_parser(
+        "cost-pilot", help="estimate citywide full costs for one explicit cohort city"
+    )
+    cost_pilot.add_argument("--region", required=True)
+    cost_pilot.set_defaults(func=command_cost_pilot)
 
     prepare_reuse = subparsers.add_parser(
         "prepare-reuse", help="build one audited paper-analysis reuse directory"
