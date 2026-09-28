@@ -54,6 +54,12 @@ def test_free_optimum_dominates_grid_and_availability_costs_capacity():
     high = pilot.solve_assignment(profiles(), 3000000, 1, {}, system, 1)
     assert low["drone_count"] > high["drone_count"]
     assert low["mean_total_cost_cny"] > high["mean_total_cost_cny"]
+    # Real-city tiny OD weights must not create a phantom 100-bike fleet.
+    tiny = profiles().copy()
+    tiny.loc[0, "share"], tiny.loc[1, "share"] = 1e-8, 1 - 1e-8
+    free = pilot.solve_assignment(tiny, 84779304, 1, {}, system)
+    endpoint = pilot.solve_assignment(tiny, 84779304, 1, {}, system, 1)
+    assert free["annual_total_cny"] <= endpoint["annual_total_cny"] + 10
 
 
 def test_single_city_pilot_preserves_total_demand_and_profiles(tmp_path, monkeypatch):

@@ -146,21 +146,23 @@ def solve_assignment(profile, annual_orders, availability, config, system, rate=
     upgrade = sum(base_drone.values()) - asset_drone - network
     bike_capacity = system.fleet_per_mode * bike.working_hours_per_day * 60 * availability
     drone_capacity = system.fleet_per_mode * drone.working_hours_per_day * 60 * availability
-    # Variables: drone order shares by profile, bike modules, drone modules,
-    # shared network modules. Hour constraints size the fleets to actual demand.
+    # Use daily order counts, not tiny fractions: small OD-share upper bounds
+    # otherwise disappear in MIP presolve and spuriously require a whole fleet.
+    # Remaining variables are integer bike, drone and shared network modules.
     objective = np.r_[drone_variable - ebike_variable,
-                      np.array([asset_bike, asset_drone + upgrade, network]) / annual_orders]
+                      np.array([asset_bike, asset_drone + upgrade, network]) / system.working_days]
     matrix = np.zeros((4 + (rate is not None), n + 3))
-    matrix[0, :n], matrix[0, n + 1] = drone_cycle, -drone_capacity / daily_orders
-    matrix[1, :n], matrix[1, n] = -ebike_cycle, -bike_capacity / daily_orders
+    matrix[0, :n], matrix[0, n + 1] = drone_cycle, -drone_capacity
+    matrix[1, :n], matrix[1, n] = -ebike_cycle, -bike_capacity
     matrix[2, n], matrix[2, n + 2] = 1, -1
     matrix[3, n + 1], matrix[3, n + 2] = 1, -1
     lower = np.full(len(matrix), -np.inf)
-    upper = np.array([0., -np.dot(share, ebike_cycle), 0., 0.] + ([] if rate is None else [rate]))
+    upper = np.array([0., -np.dot(share, ebike_cycle) * daily_orders, 0., 0.]
+                     + ([] if rate is None else [rate * daily_orders]))
     if rate is not None:
         matrix[4, :n] = 1
-        lower[4] = rate
-    variable_upper = np.r_[share, [np.inf] * 3]
+        lower[4] = rate * daily_orders
+    variable_upper = np.r_[share * daily_orders, [np.inf] * 3]
     if rate == 0:
         variable_upper[:n] = 0
         variable_upper[n + 1] = 0
@@ -174,7 +176,7 @@ def solve_assignment(profile, annual_orders, availability, config, system, rate=
     )
     if not result.success:
         raise RuntimeError(f"Citywide cost solve did not converge: {result.message}")
-    x = result.x[:n]
+    x = result.x[:n] / daily_orders
     bike_blocks, drone_blocks, network_blocks = np.rint(result.x[n:]).astype(int)
     fixed = {}
     for key in base_bike:
@@ -237,9 +239,14 @@ def run_full_cost_pilot(config: dict, region_key: str) -> tuple[Path, Path, Path
         for available in availability_values:
             best = solve_assignment(profile, annual_orders, available, config, system)
             optima.append({"demand_multiplier": demand, **best})
+            scenario_curve = []
             for rate in rates:
                 row = solve_assignment(profile, annual_orders, available, config, system, rate=rate)
+                scenario_curve.append(row)
                 curves.append({"demand_multiplier": demand, **row})
+            curve_minimum = min(row["annual_total_cny"] for row in scenario_curve)
+            if best["annual_total_cny"] > curve_minimum + max(1., curve_minimum * 2e-6):
+                raise RuntimeError("Free-rate optimum is worse than a fixed-rate solution")
             print(f"Full-cost pilot {region_key}: demand={demand}, availability={available}", flush=True)
     root = Path(config["work_dir"]) / "analysis" / "full_cost_pilot" / region_key
     paths = tuple(root / name for name in ("cost_curves.csv", "optimal_strategies.csv", "report.json"))
