@@ -538,6 +538,8 @@ def _prepare_composition_bundle(root: Path, figures: list[dict]) -> None:
         if previous.get("cohort_sha256") == cohort_hash():
             index = previous
     for figure in figures:
+        if figure["mode"] != "inkscape":
+            continue
         source = PROJECT_ROOT / figure["inkscape_source"]
         if not source.is_file():
             raise FileNotFoundError(f"Missing formal composition template: {source}")

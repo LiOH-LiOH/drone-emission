@@ -38,7 +38,13 @@ def test_default_compose_selection_contains_only_inkscape_figures():
     assert all(figure["mode"] == "inkscape" for figure in selected)
     assert {figure["id"] for figure in selected} == {
         figure["id"] for figure in paper_workflow.load_manifest()["figures"]
+        if figure["mode"] == "inkscape"
     }
+
+
+def test_direct_candidate_needs_no_composition_template(tmp_path):
+    paper_workflow._prepare_composition_bundle(tmp_path, [{"id": "candidate", "mode": "direct"}])
+    assert (tmp_path / "bundle.json").is_file()
 
 
 def test_linked_subfigure_names_reads_external_links_only(tmp_path):
