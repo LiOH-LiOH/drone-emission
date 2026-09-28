@@ -90,11 +90,27 @@ ebike_battery_stock_per_vehicle = 2.0
 drone_battery_stock_per_vehicle = 3.0
 
 # Opt-in single-city full-cost pilot. Source ratios size integer citywide modules;
-# availability and demand multipliers are sensitivity assumptions, not source data.
+# cost stages use Li 2025 Table 1 endpoints with an interpolated middle stage.
 [full_cost_pilot]
-demand_multipliers = [0.5, 1.0, 2.0]
-available_time_fractions = [0.25, 0.5, 1.0]
 replacement_rates = [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
+
+[[full_cost_pilot.cost_stages]]
+stage = "source_baseline"
+drone_price_cny = 60000.0
+drone_battery_price_cny = 1000.0
+basis = "Li 2025 Table 1 baseline"
+
+[[full_cost_pilot.cost_stages]]
+stage = "transition"
+drone_price_cny = 50000.0
+drone_battery_price_cny = 800.0
+basis = "Midpoint interpolation; project assumption"
+
+[[full_cost_pilot.cost_stages]]
+stage = "source_lower_cost"
+drone_price_cny = 40000.0
+drone_battery_price_cny = 600.0
+basis = "Li 2025 Table 1 ideal price endpoints"
 
 [full_cost_pilot.system]
 fleet_per_mode = 100

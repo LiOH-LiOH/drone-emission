@@ -4,7 +4,7 @@ Fleet and facility counts are capacity estimates, not spatial siting results.
 """
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 import json
 from pathlib import Path
 
@@ -118,7 +118,28 @@ def build_profiles(od_path: Path, config: dict, system: ReferenceSystem, chunk_r
     return profile, {"od_rows": rows, "profiles": len(profile), "city_annual_orders": float(profile.orders.sum())}
 
 
-def solve_assignment(profile, annual_orders, availability, config, system, rate=None):
+def development_stages(config: dict, system: ReferenceSystem):
+    """Source Table 1 cost endpoints and an explicitly interpolated midpoint."""
+    stages = config.get("full_cost_pilot", {}).get("cost_stages", [
+        {"stage": "source_baseline", "drone_price_cny": 60000.,
+         "drone_battery_price_cny": 1000., "basis": "Li 2025 Table 1 baseline"},
+        {"stage": "transition", "drone_price_cny": 50000.,
+         "drone_battery_price_cny": 800., "basis": "Midpoint interpolation; project assumption"},
+        {"stage": "source_lower_cost", "drone_price_cny": 40000.,
+         "drone_battery_price_cny": 600., "basis": "Li 2025 Table 1 ideal price endpoints"},
+    ])
+    for stage in stages:
+        stage_config = {
+            **config,
+            "transport_cost": {
+                **config.get("transport_cost", {}),
+                "drone_battery_price_cny": stage["drone_battery_price_cny"],
+            },
+        }
+        yield stage, stage_config, replace(system, drone_price_cny=stage["drone_price_cny"])
+
+
+def solve_assignment(profile, annual_orders, config, system, rate=None):
     """Jointly choose OD assignments and integer citywide deployment modules.
 
     A module supplies 100 vehicles of a mode. Network modules are shared by
@@ -127,8 +148,8 @@ def solve_assignment(profile, annual_orders, availability, config, system, rate=
     from scipy.optimize import Bounds, LinearConstraint, milp
     from scipy.sparse import csc_matrix
 
-    if annual_orders <= 0 or not 0 < availability <= 1:
-        raise ValueError("Annual orders must be positive; availability must be in (0, 1]")
+    if annual_orders <= 0:
+        raise ValueError("Annual orders must be positive")
     bike, drone = create_ebike_params(config), create_drone_params(config)
     cost = CostParameters(**config.get("transport_cost", {}))
     share = profile.share.to_numpy()
@@ -144,8 +165,8 @@ def solve_assignment(profile, annual_orders, availability, config, system, rate=
     asset_drone = base_drone["annual_vehicle_cny"] + base_drone["annual_battery_cny"]
     network = sum(base_bike.values()) - asset_bike
     upgrade = sum(base_drone.values()) - asset_drone - network
-    bike_capacity = system.fleet_per_mode * bike.working_hours_per_day * 60 * availability
-    drone_capacity = system.fleet_per_mode * drone.working_hours_per_day * 60 * availability
+    bike_capacity = system.fleet_per_mode * bike.working_hours_per_day * 60
+    drone_capacity = system.fleet_per_mode * drone.working_hours_per_day * 60
     # Use daily order counts, not tiny fractions: small OD-share upper bounds
     # otherwise disappear in MIP presolve and spuriously require a whole fleet.
     # Remaining variables are integer bike, drone and shared network modules.
@@ -189,7 +210,7 @@ def solve_assignment(profile, annual_orders, availability, config, system, rate=
     drone_work = float(np.dot(x, drone_cycle) * daily_orders)
     total = sum(fixed.values()) + variable * annual_orders
     return {
-        "available_time_fraction": availability, "requested_drone_rate": rate,
+        "requested_drone_rate": rate,
         "drone_replacement_rate_pct": float(x.sum() * 100),
         "annual_orders": annual_orders, "daily_orders": daily_orders,
         **fixed, "annual_variable_cny": variable * annual_orders,
@@ -215,11 +236,7 @@ def run_full_cost_pilot(config: dict, region_key: str) -> tuple[Path, Path, Path
         raise ValueError("Pilot city must belong to the locked paper cohort")
     settings = config.get("full_cost_pilot", {})
     system = ReferenceSystem(**settings.get("system", {}))
-    demand_values = settings.get("demand_multipliers", [0.5, 1.0, 2.0])
-    availability_values = settings.get("available_time_fractions", [0.25, 0.5, 1.0])
     rates = settings.get("replacement_rates", [i / 10 for i in range(11)])
-    if any(q <= 0 for q in demand_values) or any(not 0 < u <= 1 for u in availability_values):
-        raise ValueError("Demand multiplier must be positive; availability must be in (0, 1]")
     if any(not 0 <= r <= 1 for r in rates) or system.distance_bin_km <= 0:
         raise ValueError("Replacement rates must be in [0, 1]; bin width must be positive")
     data = Path(config["data_dir"])
@@ -234,39 +251,47 @@ def run_full_cost_pilot(config: dict, region_key: str) -> tuple[Path, Path, Path
     if not np.isclose(audit["city_annual_orders"], expected_orders, rtol=1e-10):
         raise ValueError("Pilot OD annual demand differs from the city aggregate")
     curves, optima = [], []
-    for demand in demand_values:
-        annual_orders = audit["city_annual_orders"] * demand
-        for available in availability_values:
-            best = solve_assignment(profile, annual_orders, available, config, system)
-            optima.append({"demand_multiplier": demand, **best})
-            scenario_curve = []
-            for rate in rates:
-                row = solve_assignment(profile, annual_orders, available, config, system, rate=rate)
-                scenario_curve.append(row)
-                curves.append({"demand_multiplier": demand, **row})
-            curve_minimum = min(row["annual_total_cny"] for row in scenario_curve)
-            if best["annual_total_cny"] > curve_minimum + max(1., curve_minimum * 2e-6):
-                raise RuntimeError("Free-rate optimum is worse than a fixed-rate solution")
-            print(f"Full-cost pilot {region_key}: demand={demand}, availability={available}", flush=True)
+    stages = list(development_stages(config, system))
+    annual_orders = audit["city_annual_orders"]
+    for stage, stage_config, stage_system in stages:
+        best = solve_assignment(profile, annual_orders, stage_config, stage_system)
+        optima.append({**stage, **best})
+        scenario_curve = []
+        for rate in rates:
+            row = solve_assignment(profile, annual_orders, stage_config, stage_system, rate=rate)
+            scenario_curve.append(row)
+            curves.append({**stage, **row})
+        curve_minimum = min(row["annual_total_cny"] for row in scenario_curve)
+        if best["annual_total_cny"] > curve_minimum + max(1., curve_minimum * 2e-6):
+            raise RuntimeError("Free-rate optimum is worse than a fixed-rate solution")
+        print(f"Full-cost pilot {region_key}: stage={stage['stage']}", flush=True)
     root = Path(config["work_dir"]) / "analysis" / "full_cost_pilot" / region_key
     paths = tuple(root / name for name in ("cost_curves.csv", "optimal_strategies.csv", "report.json"))
     report = {
-        "region_key": region_key, "scope": "citywide_demand_sized_modular_system_estimate",
+        "analysis_version": 2,
+        "region_key": region_key, "scope": "citywide_development_cost_stages",
         "cohort_sha256": cohort_hash(), "source_doi": "10.1016/j.scs.2025.106134",
         "source_module": asdict(system), "transport_cost": asdict(CostParameters(**config.get("transport_cost", {}))),
         "emission_params": config.get("emission_params", {}),
-        "demand_multipliers": demand_values, "available_time_fractions": availability_values,
+        "cost_stages": [stage for stage, _, _ in stages],
+        "capacity_basis": {
+            "ebike_hours_per_day": create_ebike_params(config).working_hours_per_day,
+            "drone_hours_per_day": create_drone_params(config).working_hours_per_day,
+            "working_days": system.working_days,
+        },
         "replacement_rates": rates, "input": {"path": str(od_path.resolve()),
         "size_bytes": od_path.stat().st_size, "mtime_ns": od_path.stat().st_mtime_ns},
         **audit,
         "interpretation": [
-            "Baseline uses all city annual orders; 0.5x and 2x retain their OD distribution. No normalization to a small reference area.",
+            "All stages use identical actual city annual orders and configured daily vehicle hours; no demand or availability sweep.",
+            "Only drone purchase and battery unit prices vary. Endpoints follow Li 2025 Table 1; the transition stage is midpoint interpolation, not an observed stage or dated forecast.",
+            "Cabinet prices/power, staff wages, energy prices, speeds and lifetimes remain fixed. The source ideal cabinet price includes solar equipment and is not adopted in this isolated equipment-cost experiment.",
             "Jointly optimize assignments and integer 100-vehicle modules. Network modules equal the larger mode-module count; mixed modes can share each network.",
             "Per network module: 10 distribution centers, 20 common DC drone cabinets, 100 destination cabinets and 10 staff. Drone modules upgrade that many destination modules; other destination modules use ordinary cabinets.",
             "Facility counts are a source-ratio capacity estimate, not a spatial siting or actual facility inventory. Source ratios and modular expansion are project assumptions.",
             "All capital and batteries annualized with 5% salvage; fleet batteries are not charged again per order. No solar, separate supervision or repair.",
             "Capacity uses project speeds/workday lengths and round-trip tasks. Drone cycle includes both legs' vertical flight, one loaded hover and existing loading allowance.",
-            "Availability is an assumed fraction of nominal vehicle hours, not measured utilization or a queue simulation. Fleet and facility counts are reoptimized in each demand scenario; this is capacity planning, not short-run demand fluctuation with sunk assets.",
+            "Fleet and facility quantities are reoptimized for each cost stage under the same capacity and modular sizing rules; daily hours are a common planning assumption, not measured utilization or a queue simulation.",
             "OD metrics are averaged in 100 m road/air classes; fractional within-class assignment is approximate. Weighted baseline totals are preserved.",
             "A free-rate mixed-integer solve determines the optimum; the rate grid only displays the curve. Optimality is within the modular cost and aggregated-hour capacity model.",
             "Cost includes facilities; reported time remains transport-only. No full-system lifecycle-emissions claim is made.",
