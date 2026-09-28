@@ -100,9 +100,9 @@ def plot_objective_tradeoffs(cities, cohort, names, save_path=None, figsize=(5.4
     reduction_norm = TwoSlopeNorm(0, vmin=min(-1., reduction_values.min()), vmax=max(1., reduction_values.max()))
     for s in FOUR:
         map_panel(by_strategy[s], "drone_replacement_rate_pct", f"share_map_{s}",
-                  "Drone order share (%)", Normalize(0, 100))
+                  LABELS[s].replace("\n", " ") + "\nDrone order share (%)", Normalize(0, 100))
         map_panel(by_strategy[s], "emission_reduction_pct", f"reduction_map_{s}",
-                  "Emission reduction vs all e-bike (%)", reduction_norm)
+                  LABELS[s].replace("\n", " ") + "\nEmission reduction vs all e-bike (%)", reduction_norm)
     distribution([by_strategy[s].drone_replacement_rate_pct for s in FOUR], [LABELS[s] for s in FOUR],
                  "Drone order share (%)", "share_distribution")
     distribution([by_strategy[s].emission_reduction_pct for s in FOUR], [LABELS[s] for s in FOUR],
@@ -132,7 +132,7 @@ def plot_objective_tradeoffs(cities, cohort, names, save_path=None, figsize=(5.4
     premium_max = max(1e-6, *(f.cost_premium_cny.max() for f in climates.values()))
     for scenario, frame in climates.items():
         map_panel(frame, "cost_premium_cny", f"cost_premium_map_{scenario}",
-                  "Extra cost of climate optimum (CNY/order)", Normalize(0, premium_max))
+                  f"{scenario.capitalize()} conditions\nExtra cost of climate optimum (CNY/order)", Normalize(0, premium_max))
         economic = by_strategy[f"cost_{scenario}"]
         joined = frame[["cost_premium_cny"]].join(economic[["mitigation_retained_pct"]])
         fig, ax = plt.subplots(figsize=figsize, layout="constrained")
@@ -140,7 +140,8 @@ def plot_objective_tradeoffs(cities, cohort, names, save_path=None, figsize=(5.4
                    color=colors[f"cost_{scenario}"], linewidths=0)
         ax.axhline(100, color=color("neutral.secondary"), lw=.8, ls="--")
         ax.axhline(0, color=color("neutral.secondary"), lw=.8, ls=":")
-        ax.set(xlabel="Extra cost of climate optimum (CNY/order)", ylabel="Cost-optimal mitigation retained (%)")
+        ax.set(xlabel=f"Extra cost of climate optimum (CNY/order)\n{scenario.capitalize()} conditions",
+               ylabel="Cost-optimal mitigation retained (%)")
         finish(fig, f"cost_retention_{scenario}", "Cost of climate priority and mitigation retained by cost priority")
     distribution([f.cost_premium_cny for f in climates.values()], ["Conservative", "Optimistic"],
                  "Extra cost of climate optimum (CNY/order)", "cost_premium_distribution", [0])
@@ -172,14 +173,15 @@ def plot_objective_tradeoffs(cities, cohort, names, save_path=None, figsize=(5.4
             bottom += values
         ax.set_yticks(range(6), [LABELS[s] for s in STRATEGIES], fontsize=8)
         ax.invert_yaxis()
-        ax.set_xlabel("Total cost (CNY/order)")
+        ax.set_xlabel(f"Total cost under {scenario} conditions (CNY/order)")
         ax.legend(loc="upper center", bbox_to_anchor=(.5, -.16), ncol=2, fontsize=8, frameon=False)
         finish(fig, f"cost_components_{scenario}", "Sources of economic differences")
         columns = ["drone_replacement_rate_pct", "emission_reduction_pct", "cost_change_vs_ebike_pct", "time_change_vs_ebike_pct"]
         values = frame[columns].to_numpy()
         fig, ax = plt.subplots(figsize=(7.2, 4.2), layout="constrained")
         ax.set(xlim=(-.5, 3.5), ylim=(5.5, -.5))
-        ax.set_xticks(range(4), ["Drone share (%)", "Emission reduction (%)", "Cost change (%)", "Time change (%)"], fontsize=8)
+        ax.set_xticks(range(4), ["Drone share (%)", "Emission reduction (%)",
+                               f"Cost change (%)\n{scenario.capitalize()} conditions", "Time change (%)"], fontsize=8)
         ax.xaxis.tick_top()
         ax.set_yticks(range(6), [LABELS[s] for s in STRATEGIES], fontsize=8)
         raw = [frame.drone_replacement_rate_pct, frame.annual_lifecycle_kg / frame.annual_orders * 1000,
