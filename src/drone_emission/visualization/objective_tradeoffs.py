@@ -3,7 +3,7 @@ from pathlib import Path
 import json
 
 import matplotlib.pyplot as plt
-from matplotlib.colors import Normalize, TwoSlopeNorm
+from matplotlib.colors import Normalize, TwoSlopeNorm, SymLogNorm
 import numpy as np
 import pandas as pd
 
@@ -80,6 +80,12 @@ def plot_objective_tradeoffs(cities, cohort, names, save_path=None, figsize=(5.4
             ax.scatter(i + 1 + jitter, vals, s=7, alpha=.4, color=color("base.blue"), linewidths=0)
         ax.set_xticks(range(1, len(labels) + 1), labels, fontsize=8)
         ax.set_ylabel(y_label)
+        if name == "cost_premium_distribution":
+            ax.set_yscale("symlog", linthresh=1)
+            ax.set_ylabel(y_label + "\n(symlog; linear within 1 CNY)")
+        elif name == "retention_distribution":
+            ax.set_yscale("symlog", linthresh=100)
+            ax.set_ylabel(y_label + "\n(symlog; linear within +/-100%)")
         if reference is not None:
             for value in reference:
                 ax.axhline(value, color=color("neutral.secondary"), lw=.8, ls="--")
@@ -132,7 +138,8 @@ def plot_objective_tradeoffs(cities, cohort, names, save_path=None, figsize=(5.4
     premium_max = max(1e-6, *(f.cost_premium_cny.max() for f in climates.values()))
     for scenario, frame in climates.items():
         map_panel(frame, "cost_premium_cny", f"cost_premium_map_{scenario}",
-                  f"{scenario.capitalize()} conditions\nExtra cost of climate optimum (CNY/order)", Normalize(0, premium_max))
+                  f"{scenario.capitalize()} conditions: extra cost (CNY/order)\nLinear to 1 CNY; logarithmic above",
+                  SymLogNorm(linthresh=1, vmin=0, vmax=premium_max))
         economic = by_strategy[f"cost_{scenario}"]
         joined = frame[["cost_premium_cny"]].join(economic[["mitigation_retained_pct"]])
         fig, ax = plt.subplots(figsize=figsize, layout="constrained")
@@ -140,8 +147,10 @@ def plot_objective_tradeoffs(cities, cohort, names, save_path=None, figsize=(5.4
                    color=colors[f"cost_{scenario}"], linewidths=0)
         ax.axhline(100, color=color("neutral.secondary"), lw=.8, ls="--")
         ax.axhline(0, color=color("neutral.secondary"), lw=.8, ls=":")
-        ax.set(xlabel=f"Extra cost of climate optimum (CNY/order)\n{scenario.capitalize()} conditions",
-               ylabel="Cost-optimal mitigation retained (%)")
+        ax.set_xscale("symlog", linthresh=1)
+        ax.set_yscale("symlog", linthresh=100)
+        ax.set(xlabel=f"Extra cost of climate optimum (CNY/order)\n{scenario.capitalize()} conditions; symlog, linear within 1 CNY",
+               ylabel="Cost-optimal mitigation retained (%)\nSymlog; linear within +/-100%")
         finish(fig, f"cost_retention_{scenario}", "Cost of climate priority and mitigation retained by cost priority")
     distribution([f.cost_premium_cny for f in climates.values()], ["Conservative", "Optimistic"],
                  "Extra cost of climate optimum (CNY/order)", "cost_premium_distribution", [0])
@@ -156,7 +165,9 @@ def plot_objective_tradeoffs(cities, cohort, names, save_path=None, figsize=(5.4
                color=colors["time_optimal"], linewidths=0)
     ax.axhline(100, color=color("neutral.secondary"), ls="--", lw=.8)
     ax.axhline(0, color=color("neutral.secondary"), ls=":", lw=.8)
-    ax.set(xlabel="Extra time of climate optimum (min/order)", ylabel="Time-optimal mitigation retained (%)")
+    ax.set_yscale("symlog", linthresh=100)
+    ax.set(xlabel="Extra time of climate optimum (min/order)",
+           ylabel="Time-optimal mitigation retained (%)\nSymlog; linear within +/-100%")
     finish(fig, "time_retention", "Time cost of climate priority and mitigation retained by speed priority")
 
     components = {"annual_vehicle_cny": "Vehicles", "annual_battery_cny": "Batteries",
