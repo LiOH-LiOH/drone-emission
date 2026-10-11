@@ -69,19 +69,23 @@ def test_fixed_validation_preserves_locations_and_never_refits(tmp_path, monkeyp
         return evaluate(*args, **kwargs)
     monkeypatch.setattr(external_validation, "evaluate_model", interrupted_evaluation)
     with pytest.raises(RuntimeError, match="simulated interruption"):
-        run_external_validation(bundle, buildings, parameters, tmp_path / "result")
+        run_external_validation(bundle, buildings, parameters, tmp_path / "result", by_date=True)
     resumed_calls = []
     def resumed_evaluation(*args, **kwargs):
         resumed_calls.append(1)
         return evaluate(*args, **kwargs)
     monkeypatch.setattr(external_validation, "evaluate_model", resumed_evaluation)
-    result = run_external_validation(bundle, buildings, parameters, tmp_path / "result")
+    result = run_external_validation(bundle, buildings, parameters, tmp_path / "result", by_date=True)
     assert len(resumed_calls) == 16  # two completed models are restored, never rerun
     assert result["status"] == "external_validation_only"
     assert result["locked_parameters"] == locked["parameters"]
     assert result["prepared"]["exclusion_flow"]["retained_valid_orders"] == 8
     assert len(result["metrics"]) == 18  # aggregate + eight dates, two locked models
     assert parameters.read_bytes() == previous
+    overall = run_external_validation(bundle, buildings, parameters, tmp_path / "result")
+    assert overall["evaluation_scopes"] == ["all_external_orders"]
+    assert len(overall["metrics"]) == 2
+    assert len(resumed_calls) == 16  # overall rerun reuses both checkpoints as well
     source.write_bytes(source.read_bytes() + b"tampered")
     with pytest.raises(ValueError, match="locked bundle hash"):
         load_meituan_orders(bundle)

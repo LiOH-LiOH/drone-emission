@@ -106,7 +106,8 @@ def load_meituan_orders(bundle: Path) -> tuple[pd.DataFrame, dict]:
 
 
 def run_external_validation(bundle: Path, buildings: Path, parameters: Path,
-                            output: Path, memory_limit_gb: float = 12.0) -> dict:
+                            output: Path, memory_limit_gb: float = 12.0,
+                            by_date: bool = False) -> dict:
     """Evaluate accepted Beijing parameters and uniform choice; no fitting/acceptance."""
     bundle, buildings, parameters, output = map(Path, (bundle, buildings, parameters, output))
     locked = json.loads(parameters.read_text(encoding="utf-8"))
@@ -165,7 +166,8 @@ def run_external_validation(bundle: Path, buildings: Path, parameters: Path,
     distribution_dir = output / "model_distributions"
     distribution_dir.mkdir(exist_ok=True)
     metrics_rows, distributions = [], []
-    for scope in ["all_external_orders", *order_audit["dates"]]:
+    scopes = ["all_external_orders", *(order_audit["dates"] if by_date else [])]
+    for scope in scopes:
         subset = observations if scope == "all_external_orders" else observations.loc[observations["split"] == scope]
         if subset.empty:
             continue
@@ -225,6 +227,7 @@ def run_external_validation(bundle: Path, buildings: Path, parameters: Path,
                    "estimated_evaluation_peak_gb": evaluation_peak,
                    "limit_gb": memory_limit_gb, "workers": 1},
         "metrics": metrics_rows, "pickup_location_spatial_fit": spatial_summary,
+        "evaluation_scopes": scopes,
         "limitations": [
             "Only retained orders matched within 50 m to positive-volume buildings and inside the 5 km choice set are evaluated; inspect exclusion flow.",
             "Spatial-fit merchants here are actual pickup locations, not necessarily unique poi_id merchants.",

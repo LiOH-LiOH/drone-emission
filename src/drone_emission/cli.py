@@ -111,7 +111,8 @@ def command_calibrate_external(args: argparse.Namespace) -> None:
     from drone_emission.calibration.external_validation import run_external_validation
 
     result = run_external_validation(
-        args.bundle, args.buildings, args.parameters, args.output, args.memory_limit_gb
+        args.bundle, args.buildings, args.parameters, args.output, args.memory_limit_gb,
+        by_date=args.by_date,
     )
     print(json.dumps({
         "result": str(Path(result["output_dir"]) / "external_validation.json"),
@@ -716,6 +717,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     external.add_argument("--output", type=Path, required=True)
     external.add_argument("--memory-limit-gb", type=float, default=12.0)
+    external.add_argument("--by-date", action="store_true", help="also evaluate each date separately")
     external.set_defaults(func=command_calibrate_external)
 
     external_buildings = subparsers.add_parser(
