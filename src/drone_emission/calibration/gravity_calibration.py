@@ -378,11 +378,13 @@ def prepare_calibration_data(
     cache_dir: Path,
     input_fingerprints: dict,
     workers: int = 1,
+    orders: pd.DataFrame | None = None,
 ) -> dict:
     """Match orders, build candidates, exclusions, splits, and sufficient statistics."""
     cache_dir = Path(cache_dir)
     cache_dir.mkdir(parents=True, exist_ok=True)
-    orders = _load_orders(orders_path, transform_path)
+    external_orders = orders is not None
+    orders = _load_orders(orders_path, transform_path) if orders is None else orders.copy()
     buildings, buildings_metric, building_quality = _load_buildings(buildings_path)
     buildings_metric[["building_index", "centroid_x", "centroid_y"]].to_csv(
         cache_dir / "building_centroids.csv.gz", index=False, compression="gzip"
@@ -456,7 +458,10 @@ def prepare_calibration_data(
             "candidate_radius_km": DELIVERY_RADIUS_KM,
             "distance": "WGS84 Haversine centroid distance",
             "volume": "finite_positive_raw_volume_m3_no_truncation",
-            "split": "sha256_shop_80_20_then_seen_last_5_of_29_days",
+            "split": (
+                "external_validation_only_no_training" if external_orders
+                else "sha256_shop_80_20_then_seen_last_5_of_29_days"
+            ),
         },
         "candidate_summary": candidate_summary,
         "exclusion_flow": exclusion,

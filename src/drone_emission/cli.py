@@ -107,6 +107,25 @@ def command_calibrate(args: argparse.Namespace) -> None:
     print(json.dumps(payload, indent=2, ensure_ascii=False))
 
 
+def command_calibrate_external(args: argparse.Namespace) -> None:
+    from drone_emission.calibration.external_validation import run_external_validation
+
+    result = run_external_validation(
+        args.bundle, args.buildings, args.parameters, args.output, args.memory_limit_gb
+    )
+    print(json.dumps({
+        "result": str(Path(result["output_dir"]) / "external_validation.json"),
+        "status": result["status"], "run_hash": result["run_hash"],
+        "retained_orders": result["prepared"]["exclusion_flow"]["retained_valid_orders"],
+    }, indent=2, ensure_ascii=False))
+
+
+def command_calibrate_external_buildings(args: argparse.Namespace) -> None:
+    from drone_emission.calibration.external_validation import prepare_external_buildings
+
+    print(json.dumps(prepare_external_buildings(args.bundle, args.gba_tiles, args.output), indent=2))
+
+
 def command_calibrate_spatial_fit(args: argparse.Namespace) -> None:
     from drone_emission.calibration.gravity_calibration import (
         refresh_spatial_fit_diagnostics,
@@ -685,6 +704,27 @@ def build_parser() -> argparse.ArgumentParser:
     calibrate.add_argument("--no-basemap", action="store_true")
     calibrate.add_argument("--accept-result", action="store_true")
     calibrate.set_defaults(func=command_calibrate)
+
+    external = subparsers.add_parser(
+        "calibrate-external", help="validate locked Beijing parameters on restored Meituan orders"
+    )
+    external.add_argument("--bundle", type=Path, required=True)
+    external.add_argument("--buildings", type=Path, required=True)
+    external.add_argument(
+        "--parameters", type=Path,
+        default=PROJECT_ROOT / "src/drone_emission/calibration/gravity_calibration_summary.json",
+    )
+    external.add_argument("--output", type=Path, required=True)
+    external.add_argument("--memory-limit-gb", type=float, default=12.0)
+    external.set_defaults(func=command_calibrate_external)
+
+    external_buildings = subparsers.add_parser(
+        "calibrate-external-buildings", help="prepare complete building choice sets for Meituan validation"
+    )
+    external_buildings.add_argument("--bundle", type=Path, required=True)
+    external_buildings.add_argument("--gba-tiles", type=Path, nargs="+", required=True)
+    external_buildings.add_argument("--output", type=Path, required=True)
+    external_buildings.set_defaults(func=command_calibrate_external_buildings)
 
     spatial_fit = subparsers.add_parser(
         "calibrate-spatial-fit",
