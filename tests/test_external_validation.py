@@ -8,6 +8,7 @@ import pytest
 from shapely.geometry import box
 
 from drone_emission.calibration.external_validation import load_meituan_orders, run_external_validation
+from drone_emission.calibration import external_validation
 from drone_emission.calibration.gravity_calibration import sha256_file
 
 
@@ -59,7 +60,23 @@ def test_fixed_validation_preserves_locations_and_never_refits(tmp_path, monkeyp
     def forbid_fit(*args, **kwargs):
         raise AssertionError("External validation must never fit parameters")
     monkeypatch.setattr("drone_emission.calibration.gravity_calibration.fit_parameters", forbid_fit)
+    evaluate = external_validation.evaluate_model
+    first_calls = []
+    def interrupted_evaluation(*args, **kwargs):
+        first_calls.append(1)
+        if len(first_calls) == 3:
+            raise RuntimeError("simulated interruption")
+        return evaluate(*args, **kwargs)
+    monkeypatch.setattr(external_validation, "evaluate_model", interrupted_evaluation)
+    with pytest.raises(RuntimeError, match="simulated interruption"):
+        run_external_validation(bundle, buildings, parameters, tmp_path / "result")
+    resumed_calls = []
+    def resumed_evaluation(*args, **kwargs):
+        resumed_calls.append(1)
+        return evaluate(*args, **kwargs)
+    monkeypatch.setattr(external_validation, "evaluate_model", resumed_evaluation)
     result = run_external_validation(bundle, buildings, parameters, tmp_path / "result")
+    assert len(resumed_calls) == 16  # two completed models are restored, never rerun
     assert result["status"] == "external_validation_only"
     assert result["locked_parameters"] == locked["parameters"]
     assert result["prepared"]["exclusion_flow"]["retained_valid_orders"] == 8

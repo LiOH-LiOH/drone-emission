@@ -50,6 +50,11 @@ PYTHONPATH=src .venv/bin/python -m drone_emission --env local calibrate-external
 结果写入以输入哈希命名的子目录：`external_validation.json`、
 `model_metrics.csv`、`distance_distribution_source.csv.gz`、
 `pickup_location_spatial_fit.csv.gz` 和准备缓存。没有参数接受或配置覆盖选项。
+每完成一个模型/日期范围就保存带输入哈希和分布文件哈希的检查点，
+并更新 `model_metrics.csv`。相同输入重跑可恢复已经完成的评分。
+只有生成 `external_validation.json` 才表示全部评估完成；中途 CSV 是部分结果。
+远端长任务应通过持久 SSH 会话以 `nohup` 后台运行，并记录 PID、日志和退出状态，
+使连接丢失不会终止计算。
 
 本机物理内存 24 GiB。准备阶段根据输入文件大小估计内存，候选缓存使用 mmap；
 准备完成后额外按每候选对 256 字节估计精确全局距离分布评估的峰值。

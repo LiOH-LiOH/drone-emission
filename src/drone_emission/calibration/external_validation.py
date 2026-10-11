@@ -156,6 +156,14 @@ def run_external_validation(bundle: Path, buildings: Path, parameters: Path,
     observations = pd.read_csv(cache / "observations.csv.gz")
     if observations.empty:
         raise ValueError("No orders survived building matching and candidate rules")
+    checkpoint_path = output / "evaluation_checkpoint.json"
+    checkpoint = {"input_fingerprints": fingerprints, "completed": {}}
+    if checkpoint_path.exists():
+        checkpoint = json.loads(checkpoint_path.read_text())
+        if checkpoint["input_fingerprints"] != fingerprints:
+            raise ValueError("Evaluation checkpoint belongs to different inputs")
+    distribution_dir = output / "model_distributions"
+    distribution_dir.mkdir(exist_ok=True)
     metrics_rows, distributions = [], []
     for scope in ["all_external_orders", *order_audit["dates"]]:
         subset = observations if scope == "all_external_orders" else observations.loc[observations["split"] == scope]
@@ -164,13 +172,45 @@ def run_external_validation(bundle: Path, buildings: Path, parameters: Path,
         subset = subset.groupby(["shop_index", "candidate_position"], as_index=False)["count"].sum()
         uniform_nll = None
         for model, vector in (("uniform_buildings", np.zeros(3)), ("locked_beijing", theta)):
-            metrics, distribution = evaluate_model(vector, candidates, subset)
+            key = f"{scope}/{model}"
+            saved = checkpoint["completed"].get(key)
+            if saved is not None:
+                distribution_path = output / saved["distribution_path"]
+                if sha256_file(distribution_path) != saved["distribution_sha256"]:
+                    raise ValueError(f"Corrupt evaluation checkpoint distribution: {key}")
+                row = saved["metrics"]
+                distribution = pd.read_csv(distribution_path)
+                print(f"Restored evaluation checkpoint: {key}", flush=True)
+            else:
+                print(f"Evaluating: {key}", flush=True)
+                metrics, distribution = evaluate_model(vector, candidates, subset)
+                if model == "uniform_buildings":
+                    uniform_nll = metrics["nll_per_order"]
+                row = {"scope": scope, "model": model, **metrics,
+                       "mcfadden_pseudo_r2": (
+                           1 - metrics["nll_per_order"] / uniform_nll if uniform_nll else None
+                       )}
+                distribution = distribution.assign(scope=scope, model=model)
+                distribution_path = distribution_dir / f"{scope}_{model}.csv.gz"
+                temporary = distribution_path.with_name(distribution_path.name + ".tmp")
+                distribution.to_csv(temporary, index=False, compression="gzip")
+                temporary.replace(distribution_path)
+                checkpoint["completed"][key] = {
+                    "metrics": row,
+                    "distribution_path": str(distribution_path.relative_to(output)),
+                    "distribution_sha256": sha256_file(distribution_path),
+                }
+                temporary_checkpoint = checkpoint_path.with_suffix(".tmp")
+                temporary_checkpoint.write_text(json.dumps(checkpoint, indent=2) + "\n")
+                temporary_checkpoint.replace(checkpoint_path)
+                print(f"Completed: {key}; NLL/order={metrics['nll_per_order']:.6f}", flush=True)
             if model == "uniform_buildings":
-                uniform_nll = metrics["nll_per_order"]
-            metrics_rows.append({"scope": scope, "model": model, **metrics,
-                                 "mcfadden_pseudo_r2": 1 - metrics["nll_per_order"] / uniform_nll})
-            distributions.append(distribution.assign(scope=scope, model=model))
-    pd.DataFrame(metrics_rows).to_csv(output / "model_metrics.csv", index=False)
+                uniform_nll = row["nll_per_order"]
+            metrics_rows.append(row)
+            distributions.append(distribution)
+            # Expose completed scores immediately; external_validation.json is
+            # written only after the entire evaluation and spatial audit finish.
+            pd.DataFrame(metrics_rows).to_csv(output / "model_metrics.csv", index=False)
     pd.concat(distributions).to_csv(output / "distance_distribution_source.csv.gz", index=False)
     full = observations.groupby(["shop_index", "candidate_position"], as_index=False)["count"].sum()
     spatial, spatial_summary = merchant_spatial_fit(theta, candidates, full, "all_external_orders")
