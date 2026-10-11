@@ -1,6 +1,5 @@
 \documentclass[9pt]{beamer}
-\usepackage[utf8]{inputenc}
-% \usepackage{enumitem}  % Conflicts with beamer's enumerate
+
 \usepackage{booktabs}
 \usepackage{pifont}  % For checkmark and cross symbols
 \usepackage{tikz}
@@ -8,7 +7,6 @@
 \usepackage{fontspec}
 \usepackage{unicode-math}
 
-% \setmainfont{Times New Roman}
 \setmathfont{Latin Modern Math}
 
 \usetheme{Madrid}
@@ -25,7 +23,9 @@
 ]{biblatex}
 
 \addbibresource{../shared/delivery_emission.bib}
+\addbibresource{slides_local.bib}
 
+\pdfstringdefDisableCommands{\def\dagger{*}\def\\{ }}
 \usepackage{caption}
 \setbeamertemplate{caption}[numbered]
 
@@ -37,42 +37,22 @@
 \newcommand{\kgCOtwoePerKg}{kg~\COtwoe~kg$^{-1}$}
 \newcommand{\ktCOtwoePerYr}{kt~\COtwoe~yr$^{-1}$}
 
-%------------------------------------------------------------
-%This block of code defines the information to appear in the
-%Title page
-\title[Urban form and electricity systems] %optional
-{Urban form and electricity systems govern the lifecycle climate benefits of drone food delivery}
+\title[Drone food delivery]{Road-network geometry and grid carbon intensity shape the climate mitigation benefits of drone food delivery across Chinese cities}
 
-% \subtitle{A short story}
 
-\author[Lin et al.] % (optional)
-{
-  \small
-  Jingxian Lin\inst{1,*},
-  Weiping Wang\inst{2,*},
-  Xinglu Liu\inst{1},
-  Hongzheng Shi\inst{1},
-  Jintao Ke\inst{1},
-  Klaus Hubacek\inst{3}
-}
+\author[Lin et al.]{\scriptsize Jingxian Lin\inst{1,*}, Jintao Ke\inst{1,*}, Xinglu Liu\inst{1}, Hongzheng Shi\inst{1},\\ Songhua Hu\inst{2}, Becky P. Y. Loo\inst{3}, Shuling Wang\inst{4},\\ Weiping Wang\inst{5,\dagger}, Klaus Hubacek\inst{6,\dagger}}
+\institute[HKU, CityU, Tongji, Groningen]{\tiny
+\inst{1} Department of Civil Engineering, The University of Hong Kong, Hong Kong, China\\
+\inst{2} Department of Architecture and Civil Engineering, City University of Hong Kong, Hong Kong, China\\
+\inst{3} Department of Geography, The University of Hong Kong, Hong Kong, China\\
+\inst{4} Department of Traffic Information and Control Engineering, College of Transportation Engineering, Tongji University, Shanghai, China\\
+\inst{5} Intelligent Robotic and Computational Perception Lab, Tongji University, Shanghai, China\\
+\inst{6} Faculty of Science and Engineering, University of Groningen, Groningen, The Netherlands\\
+\inst{*} Equal contribution. \inst{\dagger} Corresponding authors.}
+\setbeamerfont{title}{size=\large}
+\date[\today]{\today} % (optional)
 
-\institute[HKU, Tongji, Groningen] % (optional)
-{
-  \inst{1} Department of Civil Engineering, The University of Hong Kong\\
-  \inst{2} Tongji University\\
-  \inst{3} Faculty of Science and Engineering, University of Groningen\\
-  \inst{*} These authors contributed equally to this work.
-}
 
-\date[\today] % (optional)
-% {Seminar for Confirmation of PhD Candidature}
-
-%End of title page configuration block
-%------------------------------------------------------------
-
-%------------------------------------------------------------
-%The next block of commands puts the table of contents at the
-%beginning of each section and highlights the current section:
 
 \AtBeginSection[]
 {
@@ -81,19 +61,16 @@
     \tableofcontents[currentsection]
   \end{frame}
 }
-%------------------------------------------------------------
 
-% Flowchart left column (centered via [c] on columns environment)
 \newcommand{\FlowchartColumn}[1]{%
   \begin{column}{0.35\textwidth}
     \begin{minipage}[c][.78\textheight][c]{\linewidth}
       \centering
-      #1
+      \resizebox{\linewidth}{!}{#1}
     \end{minipage}
   \end{column}
 }
 
-% Reusable OD flowchart command
 \newcommand{\ODFlowchart}{%
   \begin{tikzpicture}[
       node distance=0.6cm and 1.2cm,
@@ -104,34 +81,27 @@
       arrow/.style={-{Stealth[scale=0.6]}, thick, draw=gray!70}
     ]
 
-    % Row 1: Data sources (top)
     \node[data] (sales) {Monthly Sales};
     \node[data, right=1.2cm of sales] (building) {Building\\Footprint};
 
-    % Row 2: Processed data
     \node[processed, below=0.8cm of sales] (merchant) {Merchant};
     \node[processed, below=0.8cm of building] (buildings) {Nearby\\Buildings};
 
-    % Row 3: Gravity model (centered)
     \path (merchant) -- (buildings) coordinate[midway] (mid);
     \node[model, below=0.8cm of mid] (gravity) {Gravity\\Model};
 
-    % Row 4: Output
     \node[output, below=0.8cm of gravity] (od) {OD Matrix};
 
-    % Arrows - vertical
     \draw[arrow] (sales) -- (merchant);
     \draw[arrow] (building) -- (buildings);
     \draw[arrow] (gravity) -- (od);
 
-    % Arrows - diagonal to gravity model
     \draw[arrow] (merchant.south) -- (gravity.north west);
     \draw[arrow] (buildings.south) -- (gravity.north east);
 
   \end{tikzpicture}%
 }
 
-% Reusable Road Distance flowchart command
 \newcommand{\RoadDistFlowchart}{%
   \begin{tikzpicture}[
       node distance=0.6cm and 1.2cm,
@@ -143,25 +113,19 @@
       arrow/.style={-{Stealth[scale=0.6]}, thick, draw=gray!70}
     ]
 
-    % Row 1: Data sources (top)
     \node[output] (od) {OD Matrix};
     \node[data, right=1.2cm of od] (roadnet) {Road\\Network};
 
-    % Row 2: Shortest path (centered)
     \path (od) -- (roadnet) coordinate[midway] (mid);
     \node[model, below=0.8cm of mid] (shortest) {Shortest\\Path};
 
-    % Row 3: OD Matrix output
     \node[output, below=0.8cm of shortest] (result) {OD Matrix};
 
-    % Row 4-5: Small boxes stacked vertically below OD Matrix
     \node[smallbox, below=0cm of result.south, anchor=north] (airdist) {Air Distance};
     \node[smallbox, below=0cm of airdist.south, anchor=north] (roaddist) {Road Distance};
 
-    % Arrows - vertical
     \draw[arrow] (shortest) -- (result);
 
-    % Arrows - diagonal to shortest path
     \draw[arrow] (od.south) -- (shortest.north west);
     \draw[arrow] (roadnet.south) -- (shortest.north east);
 
@@ -170,17 +134,12 @@
 
 \begin{document}
 
-%The next statement creates the title page.
 \frame{\titlepage}
 
-%---------------------------------------------------------
-%This block of code is for the table of contents after
-%the title page
 \begin{frame}
   \frametitle{Table of Contents}
   \tableofcontents
 \end{frame}
-%---------------------------------------------------------
 
 \section{Introduction}
 
@@ -208,7 +167,7 @@
     \begin{column}{0.37\textwidth}
       \begin{figure}
         \centering
-        \includegraphics[width=\linewidth,height=0.64\textheight,keepaspectratio]{../../figures/slides/Snipaste_2026-06-25_01-23-51.png}
+        \includegraphics[width=\linewidth,height=0.64\textheight,keepaspectratio]{assets/Snipaste_2026-06-25_01-23-51.png}
         \caption{Meituan drone food delivery in operation.}
       \end{figure}
     \end{column}
@@ -238,7 +197,7 @@
     \begin{column}{0.52\textwidth}
       \begin{figure}
         \centering
-        \includegraphics[width=\linewidth]{../../figures/misc/china_food_delivery_market_size.pdf}
+        \includegraphics[width=\linewidth]{assets/china_food_delivery_market_size.pdf}
         \caption{\textbf{China's online food delivery market size (2017--2027)} \parencite{statista2024chinafooddelivery}.}
         \label{fig:market_size}
       \end{figure}
@@ -268,9 +227,9 @@
   \footnotesize
   \centering
   \captionof{table}{Comparison of drone delivery emission studies}
-  \begin{tabular}{l l c c c c}
+  \resizebox{\linewidth}{!}{\begin{tabular}{l l c c c c}
     \toprule
-    \textbf{Study} & \textbf{Comparison} & \textbf{Greener?} & \textbf{OD Data} & \textbf{Scale} & \textbf{Method} \\
+    \textbf{Study} & \textbf{Comparison} & \textbf{Lower emissions?} & \textbf{OD Data} & \textbf{Scale} & \textbf{Method} \\
     \midrule
     \textcite{figliozzi_lifecycle_2017} & Van/Tricycle & Mixed & No & Analytical & LCA \\
     \textcite{park_comparative_2018} & Motorcycle & Yes & No & Two regions (Korea) & LCA \\
@@ -281,49 +240,44 @@
     \textcite{rodrigues_drone_2022} & Car/Van/Bike & Mixed & No & National (USA) & Use-phase \\
     \textcite{li_beyond_2025} & E-bike & Mixed & No & Single city (China) & LCA \\
     \midrule
-    \textbf{This work} & \textbf{E-bike} & \textbf{Yes} & \textbf{Yes} & \textbf{National (China)} & \textbf{LCA} \\
+    \textbf{This work} & \textbf{E-bike} & \textbf{Conditional} & \textbf{Modelled} & \textbf{313 cities (China)} & \textbf{LCA} \\
     \bottomrule
-  \end{tabular}
+  \end{tabular}}
 \end{frame}
 
 \begin{frame}{Research Gaps in Prior Studies}
-  \begin{itemize}
-    \item \textbf{Baseline mismatch:} Most studies compare drones against trucks, vans, or personal vehicles, while Asian food delivery is dominated by e-bikes
-    \item \textbf{Limited OD realism:} Existing studies typically rely on aggregate statistical metrics or hypothetical scenarios rather than real origin-destination order data
-    \item \textbf{Limited spatial generalization:} Few studies conduct multi-city comparisons across diverse urban contexts
-  \end{itemize}
-
-  \vspace{1em}
-  \begin{block}{Key Gap}
-    Route-level OD data and multi-city analysis are needed to identify when drone delivery achieves environmental advantages over e-bike delivery.
-  \end{block}
+\begin{itemize}
+  \item \textbf{Incumbent mode:} Asian food delivery relies heavily on e-bikes and bundled orders, creating an efficient ground baseline.
+  \item \textbf{Destination coverage:} Nationwide merchant volumes are available, but nationwide observed customer destinations are missing.
+  \item \textbf{Spatial variation:} Electricity supply and road detours jointly determine which trips favour drones.
+\end{itemize}
+\begin{block}{Research question}Under which city and trip conditions does selective drone substitution reduce lifecycle emissions?\end{block}
 \end{frame}
 
 \begin{frame}{Contributions}
-  \begin{itemize}
-    \item We develop a \textbf{gravity-based food delivery demand generation method} that produces \textbf{door-to-door order data}, enabling more precise analysis than conventional zone-based or aggregate approaches.
-
-    \item We present the \textbf{first comprehensive comparison} of carbon emissions between \textbf{e-bike and drone delivery systems} across multiple cities in China.
-
-    \item We identify \textbf{key urban features} (e.g., population density, terrain, delivery distance distribution) that determine when drone delivery achieves lower emissions, providing actionable insights for sustainable logistics planning.
-  \end{itemize}
+\begin{itemize}
+  \item We jointly calibrate a merchant-to-residential gravity model on observed Beijing orders, then reconstruct demand across \textbf{313 cities}.
+  \item We compare lifecycle emissions using mode-specific routes, loaded outbound and empty return trips, and e-bike bundling.
+  \item We quantify selective substitution, test city-specific road-distance thresholds, and examine grid, bundling and incumbent-mode scenarios.
+\end{itemize}
+\begin{block}{Data distinction}Merchant order volumes are observed. Nationwide destinations and OD flows are model generated.\end{block}
 \end{frame}
 
 \section{Method}
 
 \begin{frame}{OD Generation - Overview}
-
-  \begin{columns}[c]
-    \FlowchartColumn{\ODFlowchart}
-    \begin{column}{0.6\textwidth}
-      \textbf{Pipeline Overview}
-      \begin{itemize}
-        \item Process sales data to extract merchants
-        \item Identify nearby buildings from footprint data
-        \item Apply gravity model to generate OD pairs
-      \end{itemize}
-    \end{column}
-  \end{columns}
+\begin{columns}[c]
+\FlowchartColumn{\ODFlowchart}
+\begin{column}{0.60\textwidth}
+\begin{itemize}
+\item Observe merchant locations and August 2021 monthly order volumes.
+\item Identify residential buildings within \textbf{5 km} of each merchant.
+\item Jointly calibrate destination choice on observed Beijing OD orders.
+\item Transfer parameters to \textbf{313 cities}: \textbf{398,270,072 modelled OD pairs}, representing \textbf{6,173,120,124 annualized orders}.
+\item Annualization uses $P_i=12S_i$, assuming August represents an average month.
+\end{itemize}
+\end{column}
+\end{columns}
 
 \end{frame}
 
@@ -334,8 +288,8 @@
     \begin{column}{0.6\textwidth}
       \begin{figure}
         \centering
-        \includegraphics[width=0.6\linewidth]{../../figures/misc/screenshot.pdf}
-        \caption{\textbf{Screenshot of the Meituan Takeaway app showing merchant information.} The dataset includes latitude, longitude, and monthly sales data for 1,075,362 valid takeout merchants across China, collected in August 2021.}
+        \includegraphics[width=0.6\linewidth]{assets/screenshot.pdf}
+        \caption{\textbf{Screenshot of the Meituan Takeaway app showing merchant information.} The dataset includes latitude, longitude, and monthly sales data for 1,075,362 merchants in the source dataset across China, collected in August 2021.}
         \label{fig:meituan_app}
       \end{figure}
     \end{column}
@@ -350,7 +304,7 @@
     \begin{column}{0.6\textwidth}
       \begin{figure}
         \centering
-        \includegraphics[width=0.95\linewidth]{../../figures/remote/shenzhen/shenzhen_heatmap.pdf}
+        \includegraphics[width=0.95\linewidth]{assets/shenzhen_heatmap.pdf}
         \caption{\textbf{Heatmap of the monthly sales data for Shenzhen.} The heatmap is generated using the latitude and longitude of the merchants and the monthly sales data.}
         \label{fig:shenzhen_heatmap}
       \end{figure}
@@ -366,7 +320,7 @@
     \begin{column}{0.6\textwidth}
       \begin{figure}
         \centering
-        \includegraphics[width=0.8\linewidth]{../../figures/misc/global_building_atlas.png}
+        \includegraphics[width=0.8\linewidth]{assets/global_building_atlas.png}
         \caption{\textbf{Global Building Atlas}. The first open dataset providing global coverage of building polygons, heights, and LoD1 3D models, containing 2.75~billion buildings at 3~m resolution \parencite{zhu_globalbuildingatlas_2025}.}
         \label{fig:global_building_atlas}
       \end{figure}
@@ -382,8 +336,8 @@
     \begin{column}{0.6\textwidth}
       \begin{figure}
         \centering
-        \includegraphics[width=0.95\linewidth]{../../figures/remote/shenzhen/shenzhen_store_coverage.pdf}
-        \caption{\textbf{Building footprint data and store coverage for Shenzhen.} Nearby buildings are matched with takeout merchants as potential customers. The fetch area is enlarged by 5\,km beyond the city boundary to account for rider work radius \parencite{zhang_exploration_2023}.}
+        \includegraphics[width=0.95\linewidth]{assets/shenzhen_store_coverage.pdf}
+        \caption{\textbf{Building footprint data and store coverage for Shenzhen.} Nearby buildings are matched with takeout merchants as potential customers. Background illustration of the input geography. The current model considers residential destinations within 5 km of each merchant.}
         \label{fig:shenzhen_buildings}
       \end{figure}
     \end{column}
@@ -396,9 +350,9 @@
   \begin{columns}[c]
     \FlowchartColumn{\ODFlowchart}
     \begin{column}{0.6\textwidth}
-      Larger buildings attract more orders due to higher population density. The Tanner impedance function \parencite{tanner1961factors} captures the observed hump-shaped distance decay: few orders at very short distances, a peak, then decline.
+      Building volume is a proxy for destination attractiveness. The Tanner impedance function \parencite{tanner1961factors} represents the dependence of destination choice on merchant-to-building distance.
       \[
-        D_{ij} = P_{i} \cdot \frac{f(d_{ij}, v_{j})}{\sum_{j \in \mathcal{D}} f(d_{ij}, v_{j})}, \quad \forall i \in \mathcal{O}, j \in \mathcal{D}
+        D_{ij} = P_{i} \cdot \frac{f(d_{ij}, v_{j})}{\sum_{k \in \mathcal{D}_i} f(d_{ik}, v_{k})}, \quad \forall i \in \mathcal{O}, j \in \mathcal{D}_i
       \]
 
       where
@@ -418,7 +372,7 @@
         $\alpha$ & Building volume elasticity \\
         $\beta, \gamma$ & Tanner impedance parameters \\
         $\mathcal{O}$ & Set of origins \\
-        $\mathcal{D}$ & Set of destinations \\
+        $\mathcal{D}_i$ & Buildings within 5 km of merchant $i$ \\
         \bottomrule
       \end{tabular}
     \end{column}
@@ -426,45 +380,49 @@
 
 \end{frame}
 
-\begin{frame}{OD Generation - Model Calibration}
-
-  \begin{columns}[c]
-    \FlowchartColumn{\ODFlowchart}
-    \begin{column}{0.6\textwidth}
-      Larger buildings attract more orders due to higher population density. The Tanner impedance function \parencite{tanner1961factors} captures the observed hump-shaped distance decay: few orders at very short distances, a peak, then decline.
-      \[
-        D_{ij} = P_{i} \cdot \frac{f(d_{ij}, v_{j})}{\sum_{j \in \mathcal{D}} f(d_{ij}, v_{j})}, \quad \forall i \in \mathcal{O}, j \in \mathcal{D}
-      \]
-
-      where
-      \[f(d_{ij}, v_{j}) = v_{j}^\alpha \cdot d_{ij}^{\beta} \cdot e^{-\gamma \cdot d_{ij}}.\]
-
-      \textbf{Two-stage Calibration:}
-      \begin{enumerate}
-        \item \textbf{Distance impedance} ($\beta$, $\gamma$): fitted from approximately 278{,}000 Eleme orders (Beijing, 29~days)
-        \item \textbf{Volume exponent} ($\alpha$): calibrated by matching weighted mean OD distance to industry-reported 2.23~km \parencite{xie_environmental_2021}
-      \end{enumerate}
-    \end{column}
-  \end{columns}
+\begin{frame}{OD Generation - Joint Model Calibration}
+\[
+p_{ij}=\frac{v_j^\alpha d_{ij}^{\beta}e^{-\gamma d_{ij}}}{\sum_{k\in\mathcal D_i}v_k^\alpha d_{ik}^{\beta}e^{-\gamma d_{ik}}},\qquad D_{ij}=12S_i p_{ij}
+\]
+\begin{itemize}
+\item Jointly estimate $\alpha$, $\beta$ and $\gamma$ using observed Beijing OD orders and matched merchant/building distributions \parencite{tanner1961factors}.
+\item Accepted fit: \textbf{$\alpha=0.422$, $\beta=0.326$, $\gamma=1.650$}, with distances in km.
+\item Destination choice is conditional on each merchant's \textbf{5-km candidate set}.
+\item Transfer to other cities assumes common destination-choice relationships. Merchant volumes and residential geography remain city specific.
+\end{itemize}
+\begin{block}{Evidence boundary}Beijing distribution checks do not validate destination allocation outside Beijing.\end{block}
 
 \end{frame}
 
-\begin{frame}{OD Generation - Tanner Impedance Fit}
-  \begin{figure}
-    \centering
-    \includegraphics[width=0.95\linewidth]{../../figures/calibration/tanner_impedance_fit.png}
-    \caption{\textbf{Tanner impedance function fitted to Eleme delivery distance data.} Left: observed distance histogram with fitted curve $f(d) = C \cdot d^{1.113} \cdot e^{-1.412 \cdot d}$ ($R^2 = 0.985$). Right: CDF comparison. The function captures the hump-shaped decay with peak at $d_{\mathrm{peak}} = \beta/\gamma \approx 0.79$~km.}
-    \label{fig:tanner_fit}
-  \end{figure}
+\begin{frame}{OD Generation - Observed and Modelled Distances}
+\centering
+\includegraphics[width=0.95\linewidth,height=0.48\textheight,keepaspectratio,trim=0 251 0 0,clip]{../paper/figures/extended_data_fig6_delivery_distance_distribution.pdf}
+\vspace{0.3em}
+\begin{minipage}{0.94\linewidth}
+\footnotesize
+\begin{itemize}
+  \item \textbf{278,616 of 278,688} valid observed orders (99.97\%) are within 5 km.
+  \item Bars use 0.2-km bins. The model histogram is conditional on the calibrated candidate set.
+  \item Histogram weights are rescaled from 245,144 retained orders to 278,616 for visual comparison.
+\end{itemize}
+\end{minipage}
+\par\raggedright\scriptsize\color{gray} Extended Data Fig.~5a
+
 \end{frame}
 
-\begin{frame}{OD Generation - Volume Exponent Calibration}
-  \begin{figure}
-    \centering
-    \includegraphics[width=0.75\linewidth]{../../figures/calibration/alpha_calibration_5km.png}
-    \caption{\textbf{Calibration of $\alpha$ (building volume exponent).} Sweeping $\alpha$ with fixed $\beta = 1.113$, $\gamma = 1.412$ over Nanshan district (2{,}484 stores, 81{,}850 buildings, 5~km radius). Best fit $\alpha = 1.7$ yields weighted mean OD distance of 2.21~km, matching the industry-reported 2.23~km for first-tier city food delivery \parencite{xie_environmental_2021}.}
-    \label{fig:alpha_calibration}
-  \end{figure}
+\begin{frame}{OD Generation - Endpoint Distribution Check}
+\centering
+\includegraphics[width=0.95\linewidth,height=0.59\textheight,keepaspectratio,trim=0 0 0 160,clip]{../paper/figures/extended_data_fig6_delivery_distance_distribution.pdf}
+\vspace{0.3em}
+\begin{minipage}{0.94\linewidth}
+\footnotesize
+\begin{itemize}
+  \item Observed and expected endpoint counts use aligned 1-km Beijing grids and a shared logarithmic colour scale.
+  \item Each endpoint grid totals \textbf{245,144 orders}. This retained sample differs from the distance-coverage sample.
+\end{itemize}
+\end{minipage}
+\par\raggedright\scriptsize\color{gray} Extended Data Fig.~5b
+
 \end{frame}
 
 \begin{frame}{Road Distance Calculation - Road Network}
@@ -473,7 +431,7 @@
     \begin{column}{0.6\textwidth}
       \begin{figure}
         \centering
-        \includegraphics[width=0.7\linewidth]{../../figures/district/nanshan/nanshan_roadnet.pdf}
+        \includegraphics[width=0.7\linewidth]{assets/nanshan_roadnet.pdf}
         \caption{\textbf{Road network for the Nanshan district.} All road types except motorways are acquired from OpenStreetMap via the OSMnx library.}
         \label{fig:nanshan_roadnet}
       \end{figure}
@@ -482,154 +440,23 @@
 \end{frame}
 
 \begin{frame}{Road Distance Calculation - Distance Comparison}
-  \begin{columns}[c]
-    \FlowchartColumn{\RoadDistFlowchart}
-    \begin{column}{0.6\textwidth}
-      \begin{figure}
-        \centering
-        \includegraphics[width=0.7\linewidth]{../../figures/remote/shenzhen/shenzhen_distance_comparison.pdf}
-        \caption{\textbf{Air distance vs. road distance for OD pairs in Shenzhen.} Each OD pair now includes both the straight-line (air) distance and the road network distance computed via Dijkstra's algorithm.}
-        \label{fig:shenzhen_distance_comparison}
-      \end{figure}
-    \end{column}
-  \end{columns}
+\centering
+\includegraphics[width=0.95\linewidth,height=0.51\textheight,keepaspectratio,trim=395 385 0 0,clip]{../paper/figures/fig1_allocation_framework_national.pdf}
+\vspace{0.3em}
+\begin{minipage}{0.94\linewidth}
+\footnotesize
+\begin{itemize}
+  \item Drone distance is the Haversine great-circle distance. E-bike distance is the shortest traversable road-network path.
+  \item Trip detour: $\delta_n=d_n^{\mathrm{road}}/d_n^{\mathrm{air}}$. City detour: $\bar\delta_c=\sum q_n d_n^{\mathrm{road}}/\sum q_n d_n^{\mathrm{air}}$.
+  \item Direct flight excludes air corridors and geofencing. Invalid road routes are excluded from analyses requiring road distance.
+\end{itemize}
+\end{minipage}
+\par\raggedright\scriptsize\color{gray} Main Fig.~1a
+
 \end{frame}
 
-\iffalse
-\begin{frame}{Road Distance Calculation - Scaling Challenge}
-  \textbf{Challenge:} Extending from district to city level
 
-  \vspace{0.5em}
-  \small
-  \begin{center}
-    \begin{tabular}{l r r}
-      \toprule
-      & \textbf{District (Nanshan)} & \textbf{City (Shenzhen)} \\
-      \midrule
-      Nodes & 185{,}000 & 1.01~million \\
-      Edges & 350{,}000 & 1.90~million \\
-      OD pairs & 817{,}000 & 4.16~million \\
-      \bottomrule
-    \end{tabular}
-  \end{center}
-
-  \vspace{0.5em}
-  \normalsize
-  \textbf{Old approach:} NetworkX graph + Python Dijkstra
-  \begin{itemize}
-    \item Full graph in memory ($\sim$3--5\,GB at city scale)
-    \item Pure-Python shortest path per OD pair --- too slow
-  \end{itemize}
-
-  \vspace{0.3em}
-  \textbf{Key insight:} All OD pairs have air distance $< 5$\,km $\Rightarrow$ only \textbf{local routing} needed
-\end{frame}
-
-\begin{frame}{Road Distance Calculation - Tile-Based Sparse Routing}
-  \textbf{New approach:} scipy CSR sparse matrix + tile-based C-compiled Dijkstra
-
-  \begin{columns}
-    \begin{column}{0.48\textwidth}
-      \begin{enumerate}
-        \item Convert GraphML $\rightarrow$ \textbf{CSR sparse matrix} (float32 edge weights)
-        \item Divide network into \textbf{2\,km $\times$ 2\,km tiles}
-        \item For each OD pair, route within \textbf{3$\times$3 tile block} ($\sim$6\,km $\times$ 6\,km)
-        \item \textbf{Multi-source Dijkstra} per tile: batch all origins sharing a tile
-      \end{enumerate}
-    \end{column}
-    \begin{column}{0.48\textwidth}
-      \small
-      \begin{center}
-        \captionof{table}{Performance comparison}
-        \begin{tabular}{l c c}
-          \toprule
-          & \textbf{Old} & \textbf{New} \\
-          \midrule
-          Storage & NetworkX & CSR sparse \\
-          Algorithm & Python & C (scipy) \\
-          Scope & Full graph & Local tile \\
-          \midrule
-          Memory & $\sim$3\,GB & $\sim$500\,MB \\
-          817{,}000 pairs & hours & \textbf{36~s} \\
-          4.39~million pairs & -- & \textbf{511~s} \\
-          \bottomrule
-        \end{tabular}
-      \end{center}
-    \end{column}
-  \end{columns}
-\end{frame}
-
-\begin{frame}{Road Distance Calculation - Validation}
-  \textbf{Comparison:} old NetworkX distances vs.\ new tile-based distances
-
-  \vspace{0.5em}
-  \small
-  \begin{center}
-    \begin{tabular}{l r}
-      \toprule
-      \textbf{Metric} & \textbf{Value} \\
-      \midrule
-      Both valid & 801{,}952 / 816{,}774 (98.2\%) \\
-      Old valid, new invalid & 435 (0.05\%) \\
-      Mean absolute error & 0.30\,m \\
-      Median absolute error & 0.00\,m \\
-      Pairs within 1\,m tolerance & 801{,}239 (99.9\%) \\
-      Pearson correlation & 0.99987 \\
-      \bottomrule
-    \end{tabular}
-  \end{center}
-
-  \vspace{0.5em}
-  \normalsize
-  \begin{itemize}
-    \item \textbf{99.9\%} of pairs match within 1\,m --- differences from float32 precision
-    \item 435 pairs (0.05\%) lost due to tile boundary coverage --- negligible impact on statistics
-    \item Enables scaling to \textbf{city-level analysis}: Shenzhen 4{,}139{,}421 / 4{,}390{,}883 valid paths (94.3\%) in 511\,s
-  \end{itemize}
-\end{frame}
-\fi
-
-\begin{frame}{Use-phase Emission Model - E-bike}
-
-  The e-bike power model calculates the instantaneous mechanical power required to propel the vehicle at a given velocity \parencite{kirschstein_comparison_2020}.
-  \begin{equation}
-    P_E =
-    P_{\text{roll}} + P_{\text{air}} + P_{\text{grade}} + P_{\text{acc}}
-  \end{equation}
-
-  \small
-  \textbf{Rolling Resistance:}
-  \[ P_{\text{roll}} = m \cdot g \cdot C_{\text{rr}} \cdot v \]
-  \textbf{Aerodynamic Drag:}
-  \[ P_{\text{air}} = \frac{1}{2} \rho \cdot C_d \cdot A \cdot v^3 \]
-  \textbf{Grade Climbing:}
-  \[ P_{\text{grade}} = m \cdot g \cdot i \cdot v \]
-  \textbf{Acceleration:}
-  \[ P_{\text{acc}} = \frac{0.504 \cdot n_{\text{acc}}}{2 \cdot 3.6} \cdot m \cdot v_{\text{km/h}}^3 \]
-\end{frame}
-
-\begin{frame}{Use-phase Emission Model - Drone}
-
-  The drone power model calculates the power required for multi-rotor flight at various flight angles \parencite{kirschstein_comparison_2020}.
-  \begin{equation}
-    P_U
-    = P_{\text{ind}} + P_{\text{prof}} + P_{\text{drag}} + P_{\text{climb}} + P_{\text{aux}}
-  \end{equation}
-
-  \small
-  \textbf{Induced:}
-  \[ P_{\text{ind}} = k_{\text{lift}} \cdot W \cdot T \]
-  \textbf{Profile:}
-  \[ P_{\text{prof}} = \frac{\rho \cdot R \cdot U_{\text{tip}}^3 \cdot \sigma \cdot C_{d,\text{blade}}}{8} \left(1 + 3\left(\frac{v}{U_{\text{tip}}}\right)^2\right) \]
-  \textbf{Fuselage Drag:}
-  \[ P_{\text{drag}} = \frac{1}{2} \rho \cdot C_d \cdot A \cdot v^3 \]
-  \textbf{Climb:}
-  \[ P_{\text{climb}} = m \cdot g \cdot v \cdot \sin\gamma \]
-  \textbf{Auxiliary:}
-  \[ P_{\text{aux}} = \text{constant} \]
-\end{frame}
-
-\begin{frame}{Use-phase Emission Model - Power Breakdown}
+\begin{frame}{Power Consumption Components}
   \small
   \begin{center}
     \captionof{table}{Power consumption components represented in the use-phase model}
@@ -650,1031 +477,334 @@
       \bottomrule
     \end{tabular}
   \end{center}
+\par\footnotesize Models adapted from \parencite{kirschstein_comparison_2020,stolaroff_energy_2018}.
+\vspace{0.5em}
+\par\scriptsize\color{gray} Technical details: \hyperlink{app:emission:1}{Appendix A1} and \hyperlink{app:emission:2}{A2}
 \end{frame}
 
-\begin{frame}{Use-phase Emission Model - Emission Equations}
-
-  \textbf{E-bike Use-phase Emissions:}
-  \begin{equation}
-    \text{CO}_2\text{e}_{E,\text{use}} = \text{GEF} \times P_E \times \sum_{i=1}^{m_E} (d_{E_i} / v_E)_i
-  \end{equation}
-  \small
-  where GEF is the grid emission factor (\kgCOtwoePerKWh), $P_E$ is e-bike power (kW), and $\sum_{i=1}^{m_E} (d_{E_i} / v_E)_i$ is total travel time (h) to complete $m_E$ orders.
-
-  \vspace{0.3cm}
-  \normalsize
-  \textbf{Drone Use-phase Emissions:}
-  \begin{equation}
-    \text{CO}_2\text{e}_{U,\text{use}} = \text{GEF} \times \left[ P_{U,L} \times \sum_{i=1}^{m_U} (d_{L_i} / v_{U,L})_i + P_{U,T} \times \sum_{i=1}^{m_U} (h_{T_i} / v_{U,T})_i \right]
-  \end{equation}
-  \small
-  where $P_{U,L}$ is level-flight power (kW), $P_{U,T}$ is climb power (kW), $\sum (d_{L_i} / v_{U,L})_i$ is level-flight time (h), and $\sum (h_{T_i} / v_{U,T})_i$ is climb time (h).
-
+\begin{frame}{Round-trip Delivery Process}
+\small
+Both modes connect the same merchant and residential destination, with a loaded outbound journey and an empty return.
+\vspace{0.5em}
+\begin{center}
+\captionof{table}{Round-trip delivery stages}
+\renewcommand{\arraystretch}{1.35}
+\begin{tabular}{@{}p{0.18\linewidth}p{0.30\linewidth}p{0.42\linewidth}@{}}
+\toprule Stage & E-bike & Drone\\\midrule
+Departure & Pickup and road departure & Loaded take-off\\
+Outbound & Loaded road travel & Loaded aerial cruise\\
+Delivery & Customer drop-off & Loaded landing and unloading hover\\
+Return & Empty road travel & Empty take-off, return cruise and landing\\
+\bottomrule
+\end{tabular}
+\end{center}
+\begin{itemize}
+\item Baseline payload: \textbf{1 kg} for both modes.
+\item Drones serve one customer destination per flight. E-bike orders can share a bundled route.
+\end{itemize}
+\par\scriptsize\color{gray} Energy equations and operating parameters: \hyperlink{app:emission:3}{Appendix A3} and \hyperlink{app:emission:6}{A6}
 \end{frame}
 
-\begin{frame}{Lifecycle Emission Model - E-bike}
-  \textbf{Production and Disposal Phase}
-
-  E-bike lifecycle emissions include body production, battery production, and end-of-life disposal:
-  \begin{equation}
-    \text{CO}_2\text{e}_{E,\text{prod+disp}} = e_{E,m} \times w_{E,m} + e_{E,b} \times V_{E,b} \times n_{E,b} + e_{E,m,d} \times w_{E,m} + e_{E,b,d} \times V_{E,b} \times n_{E,b}
-  \end{equation}
-
-  \vspace{0.1cm}
-  \small
-
-  \begin{center}
-    \captionof{table}{Model parameters for e-bike production and disposal}
-    \begin{tabular}{c c c}
-      \toprule
-      Symbol & Description & Unit \\
-      \midrule
-      $e_{E,m}$ & GHG emission factor of e-bike components & \kgCOtwoePerKg \\
-      $w_{E,m}$ & Weight of e-bike components & kg \\
-      $e_{E,b}$ & GHG emission factor of batteries & \kgCOtwoePerKWh \\
-      $V_{E,b}$ & Battery capacity & kWh \\
-      $n_{E,b}$ & Number of batteries & -- \\
-      $e_{E,m,d}$ & Disposal emission factor for components & \kgCOtwoePerKg \\
-      $e_{E,b,d}$ & Disposal emission factor for batteries & \kgCOtwoePerKWh \\
-      \bottomrule
-    \end{tabular}
-  \end{center}
-
-  % \vspace{0.3cm}
-  % \normalsize
-  % \textbf{Per-order allocation:} Production emissions are allocated based on lifetime deliveries, accounting for vehicle lifespan and battery replacement cycles.
+\begin{frame}{Lifecycle Emission Boundary}
+\small
+The comparison includes vehicle and battery production, delivery operation and end-of-life treatment.
+\vspace{0.4em}
+\begin{center}
+\captionof{table}{Lifecycle components and per-order attribution}
+\renewcommand{\arraystretch}{1.35}
+\begin{tabular}{@{}p{0.18\linewidth}p{0.30\linewidth}p{0.42\linewidth}@{}}
+\toprule Component & Included burden & Attribution to each order\\\midrule
+Production & Vehicle body and batteries & Annualized inventory shared across modelled annual deliveries\\
+Use phase & Electricity for the round trip & Trip energy combined with the local grid emission factor\\
+End of life & Body and battery disposal & Annualized disposal burden shared across modelled annual deliveries\\
+\bottomrule
+\end{tabular}
+\end{center}
+\begin{itemize}
+\item Travel distance and utilization affect the number of orders sharing embodied emissions.
+\end{itemize}
+\par\footnotesize\textbf{Model boundary:} The simplified drone throughput denominator omits take-off, landing and hover time.
+\vspace{0.4em}
+\par\scriptsize\color{gray} Inventory, allocation and approximation: \hyperlink{app:emission:4}{Appendix A4} and \hyperlink{app:emission:5}{A5}
 \end{frame}
 
-\begin{frame}{Lifecycle Emission Model - Drone}
-  \textbf{Production and Disposal Phase}
-
-  Drone lifecycle emissions include body production, battery production, and end-of-life disposal:
-  \begin{equation}
-    \text{CO}_2\text{e}_{U,\text{prod+disp}} = e_{U,m} \times w_{U,m} + e_{U,b} \times V_{U,b} \times n_{U,b} + e_{U,m,d} \times w_{U,m} + e_{U,b,d} \times V_{U,b} \times n_{U,b}
-  \end{equation}
-
-  \vspace{0.1cm}
-  \small
-
-  \begin{center}
-    \captionof{table}{Model parameters for drone production and disposal}
-    \begin{tabular}{c c c}
-      \toprule
-      Symbol & Description & Unit \\
-      \midrule
-      $e_{U,m}$ & GHG emission factor of drone components & \kgCOtwoePerKg \\
-      $w_{U,m}$ & Weight of drone components & kg \\
-      $e_{U,b}$ & GHG emission factor of batteries & \kgCOtwoePerKWh \\
-      $V_{U,b}$ & Battery capacity & kWh \\
-      $n_{U,b}$ & Number of batteries & -- \\
-      $e_{U,m,d}$ & Disposal emission factor for components & \kgCOtwoePerKg \\
-      $e_{U,b,d}$ & Disposal emission factor for batteries & \kgCOtwoePerKWh \\
-      \bottomrule
-    \end{tabular}
-  \end{center}
-
-  % \vspace{0.3cm}
-  % \normalsize
-  % \textbf{Per-order allocation:} Production emissions are allocated based on lifetime deliveries, accounting for vehicle lifespan and battery replacement cycles.
+\begin{frame}{Bundling and Selective Assignment}
+\textbf{E-bike bundling}
+\begin{itemize}
+\item Shared routes reduce the road distance attributed to each order, affecting both operational emissions and embodied-emission allocation.
+\item Baseline coefficient: \textbf{$\kappa=0.769$}. It is a model-based conversion of observed Beijing bundle size, rather than a measured route-distance ratio \parencite{beardwood_shortest_1959}.
+\end{itemize}
+\vspace{0.4em}
+\textbf{Mode assignment and aggregation}
+\begin{itemize}
+\item Assign an OD pair to a drone only when its lifecycle emissions are lower. Ties remain with e-bikes.
+\item Weight each OD pair by its annualized order count to obtain city emissions, savings and drone share.
+\item Compare the mixed fleet with the all-e-bike baseline. The ideal allocation excludes fleet, infrastructure and airspace constraints.
+\end{itemize}
+\par\scriptsize\color{gray} Bundling assumptions and allocation equations: \hyperlink{app:emission:6}{Appendix A6} and \hyperlink{app:emission:7}{A7}
 \end{frame}
 
-\iffalse
 \section{Results}
 
-\iffalse
-\begin{frame}{Use-phase Emission Model Comparison}
-  \begin{itemize}
-    \item Use-phase emissions depend primarily on delivery distance, route factor, vehicle power, speed, and grid carbon intensity.
-    \item Drones use straight-line air distance, while e-bikes follow road-network distance and therefore absorb detour penalties.
-    \item Drone use-phase advantage expands when road detours are large or when the grid emission factor is low.
-    \item E-bike bundling can reduce per-order road distance and narrow the drone-favorable envelope.
-  \end{itemize}
+\begin{frame}{Selective Allocation Framework}
+\centering
+\includegraphics[width=0.95\linewidth,height=0.58\textheight,keepaspectratio,trim=0 375 0 0,clip]{../paper/figures/fig1_allocation_framework_national.pdf}
+\vspace{0.3em}
+\begin{minipage}{0.94\linewidth}
+\footnotesize
+\begin{itemize}
+  \item Observed merchant volumes and modelled residential destinations generate OD demand.
+  \item Mode-specific routes, round-trip energy and lifecycle amortization determine the lower-emission mode.
+\end{itemize}
+\end{minipage}
+\par\raggedright\scriptsize\color{gray} Main Fig.~1a
 \end{frame}
 
-\begin{frame}{Lifecycle Emission Model Comparison}
-  \begin{figure}
-    \centering
-    \includegraphics[width=0.7\linewidth]{../../figures/lifecycle/lifecycle_distance_route_factor.pdf}
-    \caption{\textbf{Two-dimensional sensitivity analysis of delivery distance and route factor on relative lifecycle emissions.} Lifecycle analysis shows greater drone emission reduction than use-phase only, as drones achieve higher lifetime deliveries (longer hours, faster speed), spreading production emissions across more orders.}
-    \label{fig:lifecycle_heatmap}
-  \end{figure}
+\begin{frame}{Selective Deployment Reduces National Emissions by 15.66\%}
+\centering
+\includegraphics[width=0.95\linewidth,height=0.65\textheight,keepaspectratio,trim=0 0 0 232,clip]{../paper/figures/fig1_allocation_framework_national.pdf}
+\vspace{0.3em}
+\begin{minipage}{0.94\linewidth}
+\footnotesize
+\begin{itemize}
+  \item \textbf{41.85 kt CO$_2$e/year} saved across 313 cities: \textbf{267.22 to 225.38 kt/year} relative to all-e-bike delivery.
+  \item The representative Beijing trip is at the annual-order-weighted 75th percentile of road distance.
+\end{itemize}
+\end{minipage}
+\par\raggedright\scriptsize\color{gray} Main Fig.~1b,c
 \end{frame}
 
-\begin{frame}{Delivery Distance Characteristics}
-  \begin{columns}
-    \begin{column}{0.5\textwidth}
-      \begin{figure}
-        \centering
-        \includegraphics[width=0.8\linewidth]{../../figures/remote/shenzhen/shenzhen_road_distance_distribution.pdf}
-        \caption{\textbf{Road distance distribution in Shenzhen.} Most deliveries occur within 1--3 km, with a long tail extending to longer distances.}
-        \label{fig:shenzhen_road_distance_distribution}
-      \end{figure}
-    \end{column}
-
-    \begin{column}{0.5\textwidth}
-      \begin{figure}
-        \centering
-        \includegraphics[width=0.8\linewidth]{../../figures/remote/shenzhen/shenzhen_distance_detour_scatter.pdf}
-        \caption{\textbf{Air vs. road distance relationship.} The detour ratio decreases and stabilizes as delivery distance increases.}
-        \label{fig:shenzhen_distance_detour_scatter}
-      \end{figure}
-    \end{column}
-  \end{columns}
+\begin{frame}{Absolute Mitigation Concentrates in Metropolitan Markets}
+\centering
+\includegraphics[width=0.95\linewidth,height=0.59\textheight,keepaspectratio,trim=0 175 175 0,clip]{../paper/figures/fig2_city_mitigation_priorities.pdf}
+\vspace{0.3em}
+\begin{minipage}{0.94\linewidth}
+\footnotesize
+\begin{itemize}
+  \item Annual savings: Beijing \textbf{2.50 kt}, Guangzhou 2.38, Chongqing 1.72, Shenzhen 1.56, Chengdu 1.41 and Shanghai 1.35.
+  \item Large delivery volumes create a larger pool of trips for selective substitution.
+\end{itemize}
+\end{minipage}
+\par\raggedright\scriptsize\color{gray} Main Fig.~2a
 \end{frame}
 
-\begin{frame}{Emission Reduction Potential}
-
-  \begin{columns}
-    \begin{column}{0.48\textwidth}
-      \textbf{Threshold-based Assignment:}
-      \begin{itemize}
-        \item For each threshold $d^*$:
-          \begin{itemize}
-            \item Distance $\geq d^*$ $\rightarrow$ Drone
-            \item Distance $< d^*$ $\rightarrow$ E-bike
-          \end{itemize}
-        \item Find optimal $d^*$ minimizing emissions
-      \end{itemize}
-
-      \vspace{0.3em}
-      \textbf{Bundle Delivery Scenarios:}
-      \begin{itemize}
-        \item E-bike riders can bundle multiple orders
-        \item Coefficient $\kappa$ = effective distance ratio
-        \item $\kappa \in \{0.9, 0.8, 0.7, 0.6\}$: bundled e-bike travels $\kappa \times$ original distance per order
-        \item Lower $\kappa$ $\rightarrow$ more efficient bundling
-      \end{itemize}
-    \end{column}
-    \begin{column}{0.48\textwidth}
-      \begin{figure}
-        \centering
-        \includegraphics[width=0.8\linewidth]{../../figures/remote/shenzhen/shenzhen_emission_reduction.pdf}
-        \caption{\textbf{Emission reduction under bundle scenarios.} Higher bundling efficiency reduces drone's emission advantage.}
-        \label{fig:shenzhen_emission_reduction}
-      \end{figure}
-    \end{column}
-  \end{columns}
-\end{frame}
-\fi
-
-% Equity frames hidden — not contributing to current narrative
-\iffalse
-\begin{frame}{Equity Analysis - Zone-Level Heatmaps}
-  \begin{columns}[T]
-    \begin{column}{0.48\textwidth}
-      \begin{figure}
-        \centering
-        \includegraphics[width=\linewidth]{../../figures/remote/shenzhen/shenzhen_zone_emission_reduction.pdf}
-        \caption{\textbf{Emission reduction by zone.} Spatial distribution of drone emission benefits across traffic zones.}
-        \label{fig:zone_emission_reduction}
-      \end{figure}
-    \end{column}
-    \begin{column}{0.48\textwidth}
-      \begin{figure}
-        \centering
-        \includegraphics[width=\linewidth]{../../figures/remote/shenzhen/shenzhen_zone_building_count.pdf}
-        \caption{\textbf{Building count by zone.} Urban density varies significantly across zones, affecting delivery patterns.}
-        \label{fig:zone_building_count}
-      \end{figure}
-    \end{column}
-  \end{columns}
+\begin{frame}{Relative Mitigation Is Largest in Southwestern Cities}
+\centering
+\includegraphics[width=0.95\linewidth,height=0.49\textheight,keepaspectratio,trim=0 0 0 258,clip]{../paper/figures/fig2_city_mitigation_priorities.pdf}
+\vspace{0.3em}
+\begin{minipage}{0.94\linewidth}
+\footnotesize
+\begin{itemize}
+  \item Zhaotong reaches \textbf{48.30\%}. The other top-nine cities are in Yunnan or Sichuan (37.74--42.74\%).
+  \item City median: \textbf{12.65\%}. Regional medians range from 8.49\% in the Northeast to 33.46\% in the Southwest.
+\end{itemize}
+\end{minipage}
+\par\raggedright\scriptsize\color{gray} Main Fig.~2c
 \end{frame}
 
-\begin{frame}{Equity Analysis - Time Saving vs Urban Features}
-  \begin{columns}[T]
-    \begin{column}{0.48\textwidth}
-      \begin{figure}
-        \centering
-        \includegraphics[width=\linewidth]{../../figures/remote/shenzhen/shenzhen_time_vs_buildings.pdf}
-        \caption{\textbf{Time saving vs building count.} Zones with more buildings show greater drone time savings due to complex last-mile navigation.}
-        \label{fig:time_vs_buildings}
-      \end{figure}
-    \end{column}
-    \begin{column}{0.48\textwidth}
-      \begin{figure}
-        \centering
-        \includegraphics[width=\linewidth]{../../figures/remote/shenzhen/shenzhen_time_vs_intersections.pdf}
-        \caption{\textbf{Time saving vs intersection count.} Higher road network complexity correlates with greater drone delivery advantages.}
-        \label{fig:time_vs_intersections}
-      \end{figure}
-    \end{column}
-  \end{columns}
+\begin{frame}{Absolute and Percentage Reductions Define City Priorities}
+\begin{columns}[c,totalwidth=\linewidth]
+\begin{column}{0.46\textwidth}\centering
+\includegraphics[width=\linewidth,height=0.72\textheight,keepaspectratio,trim=335 175 0 0,clip]{../paper/figures/fig2_city_mitigation_priorities.pdf}
+\end{column}
+\begin{column}{0.50\textwidth}\small
+\begin{itemize}
+  \item Median thresholds: \textbf{43.62 t CO$_2$e/year} and \textbf{12.65\%}.
+  \item \textbf{99} highest-priority cities exceed both, \textbf{58} pilot candidates have high relative but smaller absolute savings, and \textbf{156} have lower relative benefits.
+  \item These are exploratory climate priorities. Operational feasibility requires local assessment.
+\end{itemize}
+\end{column}
+\end{columns}
+\par\scriptsize\color{gray}Main Fig.~2b
 \end{frame}
 
-\begin{frame}{Equity Analysis - Zone Correlations}
-  \begin{figure}
-    \centering
-    \includegraphics[width=0.7\linewidth]{../../figures/remote/shenzhen/shenzhen_zone_correlations.pdf}
-    \caption{\textbf{Correlation matrix of zone-level features.} Shows relationships between urban characteristics (building count, intersection count) and drone delivery benefits (emission reduction, time saving).}
-    \label{fig:zone_correlations}
-  \end{figure}
-\end{frame}
-\fi
-
-\begin{frame}{National Reduction Under the Optimal Allocation}
-  \begin{figure}
-    \centering
-    \includegraphics[width=0.98\linewidth]{../../figures/slides/slide_city_reduction_map.pdf}
-    \caption{\textbf{National lifecycle reduction across 314 mapped cities.} \textbf{a}, annual lifecycle emission reduction relative to the all-e-bike baseline, with the inset ranking the largest city-level absolute reductions. \textbf{b}, percentage lifecycle-emission reduction relative to the all-e-bike baseline, with the inset showing the distribution across cities.}
-    \label{fig:slide_city_reduction_map}
-  \end{figure}
-\end{frame}
-
-\begin{frame}{City-Level Reduction Distribution}
-  \begin{figure}
-    \centering
-    \includegraphics[width=0.82\linewidth]{../../figures/slides/slide_reduction_distribution.pdf}
-    \caption{\textbf{Relative savings are positive but uneven.} The city-level distribution has a median reduction of 11.3\%, a mean of 14.4\%, and 250 of 314 cities between 5\% and 20\%. The strongest relative reductions are in Panzhihua (45.0\%), Zhaotong (42.2\%), Kunming (40.7\%), Xishuangbanna (40.4\%), and Qujing (40.1\%).}
-    \label{fig:slide_reduction_distribution}
-  \end{figure}
-\end{frame}
-
-\begin{frame}{Trip-Level Mechanism}
-  \begin{figure}
-    \centering
-    \includegraphics[width=0.98\linewidth,height=0.66\textheight,keepaspectratio]{../../figures/slides/slide_trip_level_mechanism.pdf}
-    \caption{\textbf{Trip-level lifecycle mechanism.} For the selected Beijing median trip, the drone flies 1.82~km while the e-bike travels 2.76~km on roads (detour ratio 1.52). The drone's lower production and end-of-life burdens outweigh its higher use-phase electricity demand, reducing lifecycle emissions from 47.8 to 40.7~\gCOtwoe{} per order.}
-    \label{fig:slide_trip_level_mechanism}
-  \end{figure}
+\begin{frame}{Population Correlates with Absolute Mitigation}
+\centering
+\includegraphics[width=0.95\linewidth,height=0.53\textheight,keepaspectratio,trim=0 0 0 0,clip]{../paper/figures/extended_data_fig1_population_reduction_contrast.pdf}
+\vspace{0.3em}
+\begin{minipage}{0.94\linewidth}
+\footnotesize
+\begin{itemize}
+  \item Across 313 cities, population correlates with absolute savings: $r=0.813$ (95\% CI 0.772--0.848).
+  \item Percentage savings show no clear association: $r=0.0496$ (95\% CI $-0.062$--0.160, $P=0.382$). This also does not establish equivalence.
+\end{itemize}
+\end{minipage}
+\par\raggedright\scriptsize\color{gray} Extended Data Fig.~1
 \end{frame}
 
 \begin{frame}{Grid Carbon Intensity Changes the Lifecycle Balance}
-  \begin{figure}
-    \centering
-    \includegraphics[width=0.88\linewidth]{../../figures/slides/slide_gef_component_bins.pdf}
-    \caption{\textbf{GEF reshapes the use-phase penalty.} In low-GEF bins, drones retain most of their embodied-emission advantage; in the 0.7--0.8~\kgCOtwoePerKWh{} bin, the drone and e-bike totals converge to 90.9 and 93.2~\gCOtwoe{} per order.}
-    \label{fig:slide_gef_component_bins}
-  \end{figure}
+\centering
+\includegraphics[width=0.95\linewidth,height=0.57\textheight,keepaspectratio,trim=0 375 0 0,clip]{../paper/figures/fig4_gef_distance_detour.pdf}
+\vspace{0.3em}
+\begin{minipage}{0.94\linewidth}
+\footnotesize
+\begin{itemize}
+  \item GEF 0.1--0.2 kg CO$_2$e/kWh: \textbf{18.8 g/order} for e-bikes and \textbf{12.1} for drones.
+  \item GEF 0.7--0.8: \textbf{56.9} versus \textbf{57.5 g/order}. Higher flight electricity use can reverse the advantage.
+\end{itemize}
+\end{minipage}
+\par\raggedright\scriptsize\color{gray} Main Fig.~3a,b
 \end{frame}
 
-\begin{frame}{Low-GEF City Contexts}
-  \begin{columns}[T,totalwidth=\linewidth]
-    \begin{column}{0.64\textwidth}
-      \begin{figure}
-        \centering
-        \includegraphics[width=\linewidth,height=0.68\textheight,keepaspectratio]{../../figures/slides/slide_low_gef_city_contexts.pdf}
-        \caption{\textbf{Low-GEF city contexts.}}
-        \label{fig:slide_low_gef_city_contexts}
-      \end{figure}
-    \end{column}
-    \begin{column}{0.32\textwidth}
-      \small
-      \begin{itemize}
-        \item Hydropower-rich Dali and Chengdu represent the low-GEF peak around 0.1--0.2~\kgCOtwoePerKWh{}.
-        \item Clean electricity compresses the drone use-phase penalty while preserving production and end-of-life advantages.
-        \item Drones are assigned to most visible short-distance orders: 98.7\% and 85.2\% drone share at 0.3~km in Dali and Chengdu.
-      \end{itemize}
-    \end{column}
-  \end{columns}
+\begin{frame}{Longer Trips Increasingly Favour Drones}
+\centering
+\includegraphics[width=0.95\linewidth,height=0.52\textheight,keepaspectratio,trim=0 201 0 270,clip]{../paper/figures/fig4_gef_distance_detour.pdf}
+\vspace{0.3em}
+\begin{minipage}{0.94\linewidth}
+\footnotesize
+\begin{itemize}
+  \item Across the four city fits, each additional aerial kilometre raises e-bike-minus-drone lifecycle emissions by \textbf{4.87--10.47 g/order}.
+  \item Longer trips dilute the fixed take-off and landing cost. Electricity and road geometry determine the city-specific advantage.
+\end{itemize}
+\end{minipage}
+\par\raggedright\scriptsize\color{gray} Main Fig.~3c
 \end{frame}
 
-\begin{frame}{High-GEF City Contexts}
-  \begin{columns}[T,totalwidth=\linewidth]
-    \begin{column}{0.64\textwidth}
-      \begin{figure}
-        \centering
-        \includegraphics[width=\linewidth,height=0.68\textheight,keepaspectratio]{../../figures/slides/slide_high_gef_city_contexts.pdf}
-        \caption{\textbf{High-GEF city contexts.}}
-        \label{fig:slide_high_gef_city_contexts}
-      \end{figure}
-    \end{column}
-    \begin{column}{0.32\textwidth}
-      \small
-      \begin{itemize}
-        \item Tianjin and thermal-heavy Guangdong for Guangzhou represent the higher-GEF peak around 0.4--0.7~\kgCOtwoePerKWh{}.
-        \item Under carbon-intensive grids, short trips are less favorable: at 0.3~km, Tianjin reaches 19.4\% drone share and $-24.8\%$ reduction.
-        \item Guangzhou rises from 33.0\% drone share and $-3.3\%$ reduction at 0.3~km to 96.7\% and 18.5\% at 4.9~km.
-      \end{itemize}
-    \end{column}
-  \end{columns}
+\begin{frame}{Road Detours Strengthen Benefits within Grid Groups}
+\centering
+\includegraphics[width=0.95\linewidth,height=0.52\textheight,keepaspectratio,trim=0 0 0 449,clip]{../paper/figures/fig4_gef_distance_detour.pdf}
+\vspace{0.3em}
+\begin{minipage}{0.94\linewidth}
+\footnotesize
+\begin{itemize}
+  \item GEF groups: $\leq0.3$ kg CO$_2$e/kWh ($n=42$, $r=0.7583$) and $>0.3$ ($n=271$, $r=0.8835$).
+  \item All 313 cities enter the analysis, including five with fallback GEFs. These descriptive associations do not isolate causal effects.
+\end{itemize}
+\end{minipage}
+\par\raggedright\scriptsize\color{gray} Main Fig.~3d
 \end{frame}
 
-\begin{frame}{Detour Ratio Matters Within Each Grid Regime}
-  \begin{figure}
-    \centering
-    \includegraphics[width=0.98\linewidth,height=0.58\textheight,keepaspectratio]{../../figures/slides/slide_detour_reduction_by_gef.pdf}
-    \caption{\textbf{Detour ratio matters within each grid regime.} Splitting cities at GEF = 0.3~\kgCOtwoePerKWh{} shows a positive detour--reduction relationship in both regimes: low-GEF cities ($n=41$) span 17.2--45.0\% reduction with $r=0.73$, while high-GEF cities ($n=235$) span 3.2--26.2\% with $r=0.94$.}
-    \label{fig:slide_detour_reduction_by_gef}
-  \end{figure}
+\begin{frame}{Electricity, Distance and Detour Define the Break-even Boundary}
+\centering
+\includegraphics[width=0.95\linewidth,height=0.65\textheight,keepaspectratio,trim=0 0 0 0,clip]{../paper/figures/extended_data_fig3_break_even_operating_envelope.pdf}
+\vspace{0.3em}
+\begin{minipage}{0.94\linewidth}
+\footnotesize
+\begin{itemize}
+  \item Negative drone-minus-e-bike emissions favour drones. Cleaner electricity expands the favourable region.
+  \item This idealized envelope explains model conditions. Local demand and flight constraints determine feasible use.
+\end{itemize}
+\end{minipage}
+\par\raggedright\scriptsize\color{gray} Extended Data Fig.~3
 \end{frame}
 
-\begin{frame}{Break-Even Operating Envelope}
-  \begin{figure}
-    \centering
-    \begin{columns}[T]
-      \begin{column}{0.34\textwidth}
-        \centering
-        \includegraphics[width=\linewidth]{../../figures/slides/slide_break_even_surface.pdf}
-      \end{column}
-      \begin{column}{0.31\textwidth}
-        \centering
-        \includegraphics[width=\linewidth]{../../figures/slides/slide_break_even_low_gef.pdf}
-      \end{column}
-      \begin{column}{0.31\textwidth}
-        \centering
-        \includegraphics[width=\linewidth]{../../figures/slides/slide_break_even_high_gef.pdf}
-      \end{column}
-    \end{columns}
-    \caption{\textbf{Break-even operating envelope.} The break-even surface turns the city pattern into a trip-level rule: cleaner grids, longer air distances, and larger road detours expand the drone-favorable region. At GEF = 0.1404~\kgCOtwoePerKWh{} the median $\Delta g$ is $-22.9$~\gCOtwoe{} per order; at GEF = 0.49~\kgCOtwoePerKWh{} the field widens and short, low-detour trips remain e-bike-favorable.}
-    \label{fig:slide_break_even_operating_envelope}
-  \end{figure}
+\begin{frame}{Avoided Road Operation Is the Largest Positive Contribution}
+\centering
+\includegraphics[width=0.92\linewidth,trim=0 366 145 28,clip]{../paper/figures/fig5_contribution_decomposition.pdf}
+\par\vspace{0.4em}
+\includegraphics[width=0.92\linewidth,trim=0 18 145 422,clip]{../paper/figures/fig5_contribution_decomposition.pdf}
+\vspace{0.3em}
+\begin{minipage}{0.94\linewidth}
+\footnotesize
+\begin{itemize}
+  \item Relative to all-e-bike emissions: \textbf{+45.40 pp} avoided road operation, \textbf{+11.42 pp} embodied balance, \textbf{$-15.06$ pp} fixed flight and \textbf{$-26.11$ pp} cruise.
+  \item Bundling is embedded in avoided road operation. Net national reduction: \textbf{15.66\%}.
+\end{itemize}
+\end{minipage}
+\par\raggedright\scriptsize\color{gray} Main Fig.~4a, national and North China excerpt with original axes and legend
 \end{frame}
 
-\begin{frame}{National Mechanism Decomposition}
-  \begin{figure}
-    \centering
-    \begin{columns}[T]
-      \begin{column}{0.43\textwidth}
-        \centering
-        \includegraphics[width=\linewidth]{../../figures/slides/slide_contribution_waterfall.pdf}
-      \end{column}
-      \begin{column}{0.55\textwidth}
-        \centering
-        \includegraphics[width=\linewidth]{../../figures/slides/slide_top_city_contributions.pdf}
-      \end{column}
-    \end{columns}
-    \caption{\textbf{National mechanism decomposition.} Relative to the all-e-bike lifecycle baseline, lower production plus end-of-life emissions add 9.55 percentage points and avoided road detours add 33.84 percentage points, partly offset by higher drone electricity use ($-9.16$ points) and e-bike bundling ($-20.02$ points), leaving a net 14.20-point national reduction.}
-    \label{fig:slide_national_mechanism_decomposition}
-  \end{figure}
+\begin{frame}{City-specific Road-distance Rules}
+\centering
+\includegraphics[width=0.95\linewidth,height=0.63\textheight,keepaspectratio,trim=0 0 0 0,clip]{../paper/figures/fig4_road_distance_rule.pdf}
+\vspace{0.3em}
+\begin{minipage}{0.94\linewidth}
+\footnotesize
+\begin{itemize}
+  \item Assign drones at $d_n^{\rm road}\geq d_c^*$. Thresholds range \textbf{0.03--2.37 km}, median \textbf{1.63 km}.
+  \item City median reduction: \textbf{10.05\%} under the distance rule versus \textbf{12.65\%} under trip-level allocation. Paired median gap: \textbf{2.25 pp}.
+  \item Retention: Chengdu 99.8\%, Guangzhou 93.6\%, Beijing 84.5\%, Shanghai 74.6\%. Independent dispatch validation remains necessary.
+\end{itemize}
+\end{minipage}
+\par\raggedright\scriptsize\color{gray} Main Fig.~5
+
 \end{frame}
 
-\begin{frame}{Clean-Grid Pathway}
-  \begin{columns}[T,totalwidth=\linewidth]
-    \begin{column}{0.55\textwidth}
-      \begin{figure}
-        \centering
-        \includegraphics[width=\linewidth,height=0.75\textheight,keepaspectratio]{../../figures/slides/slide_pathway_clean_grid_direction.pdf}
-        \caption{\textbf{Cleaner grid expands drone substitution.}}
-        \label{fig:slide_pathway_clean_grid_direction}
-      \end{figure}
-    \end{column}
-    \begin{column}{0.42\textwidth}
-      \small
-      \begin{itemize}
-        \item Current grid and bundling anchor: 49~\ktCOtwoe{} saved and 47\% median drone share.
-        \item Halving provincial GEF values raises savings to 185~\ktCOtwoe{}.
-        \item Cleaner electricity also expands the median drone share to 77\%.
-      \end{itemize}
-    \end{column}
-  \end{columns}
+\begin{frame}{Cleaner Electricity Expands Mitigation and Drone Share}
+\centering
+\includegraphics[width=0.84\linewidth,height=0.57\textheight,keepaspectratio,trim=0 329 52 0,clip]{../paper/figures/fig6_future_scenarios.pdf}
+\hspace{0.02\linewidth}\includegraphics[width=0.065\linewidth,height=0.57\textheight,keepaspectratio,trim=550 65 0 63,clip]{../paper/figures/fig6_future_scenarios.pdf}
+\vspace{0.3em}
+\begin{minipage}{0.94\linewidth}
+\footnotesize
+\begin{itemize}
+  \item Current selective allocation: \textbf{41.85 kt/year}, median city drone share \textbf{34.94\%}. Halved GEFs: \textbf{140.99 kt/year}, share \textbf{60.82\%}.
+  \item Savings use the fixed current-grid, $\kappa=0.769$, all-e-bike reference and include grid decarbonization itself.
+\end{itemize}
+\end{minipage}
+\par\raggedright\scriptsize\color{gray} Main Fig.~6a,b. Continuous 21-step pathway: Extended Data Fig.~4a. Shared colour scale: reduction relative to the fixed current anchor.
 \end{frame}
 
-\begin{frame}{Bundling Pathway}
-  \begin{columns}[T,totalwidth=\linewidth]
-    \begin{column}{0.55\textwidth}
-      \begin{figure}
-        \centering
-        \includegraphics[width=\linewidth,height=0.75\textheight,keepaspectratio]{../../figures/slides/slide_pathway_bundling_direction.pdf}
-        \caption{\textbf{Stronger bundling strengthens the e-bike counterfactual.}}
-        \label{fig:slide_pathway_bundling_direction}
-      \end{figure}
-    \end{column}
-    \begin{column}{0.42\textwidth}
-      \small
-      \begin{itemize}
-        \item Current grid and bundling anchor: 49~\ktCOtwoe{} saved and 47\% median drone share.
-        \item Stronger e-bike bundling raises savings to 72~\ktCOtwoe{}.
-        \item The stronger e-bike counterfactual lowers median drone share to 20\%.
-      \end{itemize}
-    \end{column}
-  \end{columns}
+\begin{frame}{Stronger Bundling Reduces the Role of Drones}
+\centering
+\includegraphics[width=0.84\linewidth,height=0.57\textheight,keepaspectratio,trim=0 0 52 318,clip]{../paper/figures/fig6_future_scenarios.pdf}
+\hspace{0.02\linewidth}\includegraphics[width=0.065\linewidth,height=0.57\textheight,keepaspectratio,trim=550 65 0 63,clip]{../paper/figures/fig6_future_scenarios.pdf}
+\vspace{0.3em}
+\begin{minipage}{0.94\linewidth}
+\footnotesize
+\begin{itemize}
+  \item $\kappa=0.65$: \textbf{60.70 kt/year} total savings and \textbf{19.41\%} median drone share. Combined with halved GEFs: \textbf{146.79 kt/year} and \textbf{38.22\%}.
+  \item All savings use the same fixed current all-e-bike anchor. They include bundling and grid benefits, rather than isolating drones.
+\end{itemize}
+\end{minipage}
+\par\raggedright\scriptsize\color{gray} Main Fig.~6c,d. Continuous 21-step pathway: Extended Data Fig.~4b. Shared colour scale: reduction relative to the fixed current anchor.
 \end{frame}
 
-\iffalse
-\section{Robustness}
-
-\begin{frame}{Robustness --- One-At-a-Time Sensitivity}
-  \begin{columns}
-    \begin{column}{0.55\textwidth}
-      \centering
-      \includegraphics[width=\linewidth]{../../figures/sensitivity/oat_tornado_t.pdf}
-    \end{column}
-    \begin{column}{0.45\textwidth}
-      \footnotesize
-      \textbf{6 features perturbed around the $\kappa{=}1$ anchor (n=313 cities):}
-      \begin{itemize}
-        \item Drone energy multiplier: median $|\Delta|$ \textbf{17.0} percentage points
-        \item Provincial GEF multiplier: median $|\Delta|$ \textbf{14.4} percentage points
-        \item $\kappa$ (e-bike bundling): \textbf{2.0} percentage points (small near anchor)
-        \item Payload, lifespans: $<\!1$ percentage point each
-      \end{itemize}
-      \vspace{0.4em}
-      \textbf{Anchor-baseline result:}
-      \begin{itemize}
-        \item Median reduction \textbf{27.2\%} (P25=23.6, P75=32.1)
-        \item Optimal threshold \textbf{0.99\,km}, drone share \textbf{85\%}
-        \item \textbf{100\%} of 313 cities benefit at no-bundling baseline
-      \end{itemize}
-    \end{column}
-  \end{columns}
+\begin{frame}{Lifecycle Comparison of Five Delivery Modes}
+\centering
+\includegraphics[width=0.95\linewidth,height=0.53\textheight,keepaspectratio,trim=0 280 0 0,clip]{../paper/figures/fig7_delivery_mode_lifecycle_comparison.pdf}
+\vspace{0.3em}
+\begin{minipage}{0.94\linewidth}
+\footnotesize
+\begin{itemize}
+  \item Beijing, common one-way travelled distance \textbf{2.2235 km}, GEF 0.558 kg CO$_2$e/kWh, one unbundled order per round trip.
+  \item Drone \textbf{84.0}, e-bike \textbf{83.5}, fuel moped \textbf{292.6}, electric car \textbf{750.2}, fuel car \textbf{1,060.6 g CO$_2$e/order}.
+  \item Holding travel distance equal removes the aerial-route advantage present in Main Fig.~1b.
+\end{itemize}
+\end{minipage}
+\par\raggedright\scriptsize\color{gray} Main Fig.~7a. Inventory source: \parencite{itf_good_to_go_2020}.
 \end{frame}
 
-\begin{frame}{Robustness --- E-bike Bundling ($\kappa$) Collapse}
-  \begin{columns}
-    \begin{column}{0.55\textwidth}
-      \centering
-      \includegraphics[width=\linewidth]{../../figures/sensitivity/oat_beneficial_share_t.pdf}
-    \end{column}
-    \begin{column}{0.45\textwidth}
-      \footnotesize
-      \textbf{Beneficial-city share by $\kappa$:}
-      \begin{tabular}{rrr}
-        \toprule
-        $\kappa$ & \% cities $>$0 & median red. \\
-        \midrule
-        1.0 & \textbf{100.0\%} & 27.2\% \\
-        0.9 & 100.0\% & 20.0\% \\
-        0.8 & 100.0\% & 11.7\% \\
-        0.7 & 99.4\% & 4.1\% \\
-        0.6 & \textbf{78.6\%} & 1.1\% \\
-        \bottomrule
-      \end{tabular}
-      \vspace{0.4em}
-      \begin{itemize}
-        \item Bundling consumes most of the median advantage by $\kappa{=}0.7$
-        \item Even at $\kappa{=}0.6$, $\sim$79\% of cities still benefit
-        \item Drone-mixing adds only \textbf{+4.1 percentage points} on top of bundled e-bike at today's grid
-      \end{itemize}
-    \end{column}
-  \end{columns}
-\end{frame}
-
-\begin{frame}{Mechanism Decomposition --- Shapley Values}
-  \begin{columns}
-    \begin{column}{0.5\textwidth}
-      \centering
-      \includegraphics[width=\linewidth]{../../figures/sensitivity/shapley_aggregate_stacked_t.pdf}
-    \end{column}
-    \begin{column}{0.5\textwidth}
-      \footnotesize
-      \textbf{4 binary mechanisms, full-permutation Shapley (n=313):}
-      \begin{tabular}{lr}
-        \toprule
-        Mechanism & median (percentage points) \\
-        \midrule
-        M3 Production amortization & \textbf{+25.0} \\
-        M1 Routing geometry & \textbf{+11.0} \\
-        M2 E-bike bundling & \textbf{$-$10.4} \\
-        M4 Grid carbon intensity & \textbf{$-$20.6} \\
-        Residual (use-phase asym.) & $\sim 0$ \\
-        \bottomrule
-      \end{tabular}
-      \vspace{0.4em}
-      \begin{itemize}
-        \item Drone advantage is built by \textbf{production scaling + straight-line routing}
-        \item Eroded by \textbf{bundling} and \textbf{dirty grids}
-        \item Drones do \emph{not} win on per-km energy efficiency
-      \end{itemize}
-    \end{column}
-  \end{columns}
-\end{frame}
-
-\begin{frame}{Future Grid --- 2030 and 2060 Scenarios}
-  \begin{columns}
-    \begin{column}{0.55\textwidth}
-      \centering
-      \includegraphics[width=\linewidth]{../../figures/sensitivity/named_boxplot_t.pdf}
-    \end{column}
-    \begin{column}{0.45\textwidth}
-      \footnotesize
-      \textbf{Optimal-mixed reduction vs anchor ($\kappa{=}0.7$):}
-      \begin{itemize}
-        \item Today's grid: \textbf{+31.7\%}
-        \item 2030 (GEF$\times$0.65): \textbf{+52.7\%}
-        \item 2060 (GEF$\times$0.10): \textbf{+89.5\%}
-      \end{itemize}
-      \vspace{0.4em}
-      \textbf{Even on top of bundled e-bike (same $\kappa$):}
-      \begin{itemize}
-        \item Today: $+4.1$ percentage points
-        \item 2030: $+33.7$ percentage points
-        \item 2060: \textbf{$+85.3$} percentage points
-      \end{itemize}
-      \vspace{0.4em}
-      \textbf{Conservative 2-km threshold} captures $\sim$90\% of optimal benefit (24.5\% vs 27.2\% at $\kappa{=}1$).
-      \vspace{0.4em}
-      \scriptsize\textit{2030/2060 GEF multipliers are placeholders pending IEA WEO 2024 / Tsinghua ICCSD.}
-    \end{column}
-  \end{columns}
-\end{frame}
-\fi
-
-\section{Discussion}
-
-\begin{frame}{Selective Substitution, Not Blanket Replacement}
-  \begin{columns}[T,totalwidth=\linewidth]
-    \begin{column}{0.48\textwidth}
-      \begin{block}{Main conclusion}
-        \small
-        Targeted drone assignment reduces lifecycle emissions, but only for
-        orders where route geometry, grid carbon intensity, and trip distance
-        overcome the strength of the incumbent e-bike system.
-      \end{block}
-
-      \vspace{0.4em}
-      \small
-      \begin{itemize}
-        \item Optimal allocation saves \textbf{49.1~\ktCOtwoePerYr{}}.
-        \item This equals \textbf{14.2\%} of the \textbf{346.6~\ktCOtwoePerYr{}} all-e-bike baseline.
-        \item Large markets dominate absolute savings: Beijing, Guangzhou, Shenzhen, Shanghai, and Chengdu.
-      \end{itemize}
-    \end{column}
-    \begin{column}{0.48\textwidth}
-      \small
-      \textbf{Why the benchmark is stringent}
-      \begin{itemize}
-        \item The reference case is all-e-bike delivery, not diesel vans, cars, or gasoline motorcycles.
-        \item Platform dispatch already makes e-bike delivery unusually efficient through short radii and bundled trips.
-        \item The result supports drones as a \textbf{targeted complement}, not a general replacement for electric ground delivery.
-      \end{itemize}
-    \end{column}
-  \end{columns}
-\end{frame}
-
-\begin{frame}{Why the Drone Advantage Is Conditional}
-  \small
-  \begin{columns}[T,totalwidth=\linewidth]
-    \begin{column}{0.48\textwidth}
-      \textbf{Positive mechanisms}
-      \begin{itemize}
-        \item \textbf{Production + end-of-life advantage:} +9.55 percentage points
-        \item \textbf{Avoided road detours:} +33.84 percentage points
-        \item Direct flight converts indirect road travel into shorter air routes when the road network imposes meaningful detours.
-      \end{itemize}
-    \end{column}
-    \begin{column}{0.48\textwidth}
-      \textbf{Offsetting mechanisms}
-      \begin{itemize}
-        \item \textbf{Drone electricity use:} $-$9.16 percentage points
-        \item \textbf{E-bike bundling penalty:} $-$20.02 percentage points
-        \item Takeoff, cruise, and landing are energy intensive, while bundled e-bike trips lower the counterfactual emissions per order.
-      \end{itemize}
-    \end{column}
-  \end{columns}
-
-  \vspace{0.8em}
-  \begin{block}{Interpretation}
-    \small
-    The net \textbf{14.20-point} national reduction is a lifecycle trade-off, not a mode-wide ranking between drones and e-bikes.
-  \end{block}
-\end{frame}
-
-\begin{frame}{Deployment Envelope and Policy Implications}
-  \begin{columns}[T,totalwidth=\linewidth]
-    \begin{column}{0.48\textwidth}
-      \small
-      \textbf{Drone-favorable operating envelope}
-      \begin{itemize}
-        \item \textbf{Clean grids:} low GEF weakens the drone use-phase penalty.
-        \item \textbf{Indirect roads:} high detour ratio increases the value of direct flight.
-        \item \textbf{Sufficient distance:} longer trips dilute fixed takeoff and landing energy.
-      \end{itemize}
-    \end{column}
-    \begin{column}{0.48\textwidth}
-      \small
-      \textbf{Pathway contrast}
-      \begin{itemize}
-        \item Halving provincial GEF raises annual savings from \textbf{49} to \textbf{185~\ktCOtwoe{}}.
-        \item Median drone share rises from \textbf{47\%} to \textbf{77\%} under the cleaner-grid pathway.
-        \item Stronger e-bike bundling raises savings to \textbf{72~\ktCOtwoe{}}, but lowers median drone share to \textbf{20\%}.
-      \end{itemize}
-    \end{column}
-  \end{columns}
-
-  \vspace{0.6em}
-  \begin{block}{Policy implication}
-    \small
-    Grid decarbonization expands both the carbon value and feasible scale of drone substitution, while stronger bundling improves the e-bike baseline and narrows the drone-favorable trip set.
-  \end{block}
-\end{frame}
-
-\begin{frame}{Transferability, Limits, and Future Work}
-  \footnotesize
-  \begin{columns}[T,totalwidth=\linewidth]
-    \begin{column}{0.32\textwidth}
-      \textbf{Transferability}
-      \begin{itemize}
-        \item Larger benefits are plausible where food delivery uses gasoline motorcycles, cars, or vans.
-        \item In e-bike-based systems, the Chinese result is the more relevant benchmark.
-        \item Coal-heavy or island grids need decarbonized charging before large \COtwoe{} gains are likely.
-      \end{itemize}
-    \end{column}
-    \begin{column}{0.32\textwidth}
-      \textbf{Current limits}
-      \begin{itemize}
-        \item Single 1~kg payload assumption.
-        \item Simplified weather, hover time, battery temperature, charging schedules, and airspace constraints.
-        \item Beijing-calibrated OD model transferred nationally.
-        \item Annual GEFs rather than marginal or time-of-day emissions.
-      \end{itemize}
-    \end{column}
-    \begin{column}{0.32\textwidth}
-      \textbf{Next steps}
-      \begin{itemize}
-        \item Use externally grounded provincial grid trajectories.
-        \item Add economics and service-quality constraints.
-        \item Model marginal electricity and charging timing.
-        \item Extend the benchmark to diesel/electric trucks, diesel/electric vans, and e-cargo bicycles.
-      \end{itemize}
-    \end{column}
-  \end{columns}
-
-  \vspace{0.5em}
-  \begin{block}{Boundary condition}
-    \footnotesize
-    The transferable claim is not that drones are cleaner everywhere; it is that their emissions case depends on grid carbon intensity, route geometry, trip distance, and incumbent logistics.
-  \end{block}
-\end{frame}
-
-\begin{frame}{To Be Done}
-  \begin{columns}[T,totalwidth=\linewidth]
-    \begin{column}{0.62\textwidth}
-      \begin{figure}
-        \centering
-        \includegraphics[width=\linewidth,height=0.68\textheight,keepaspectratio]{../../figures/slides/Snipaste_2026-06-25_05-26-31.png}
-        \caption{\textbf{Delivery-mode emission comparison.} The figure reports delivery emissions in \gCOtwoe{}~km$^{-1}$ for medium-duty diesel truck, medium-duty e-truck, small diesel van, small e-van, e-cargo bicycle, and drone delivery.}
-      \end{figure}
-    \end{column}
-    \begin{column}{0.34\textwidth}
-      \small
-      \begin{block}{Future extension}
-        Will apply other modes for food delivery to compare with drone; this part is to be done.
-      \end{block}
-
-      \vspace{0.5em}
-      \textbf{Modes to add}
-      \begin{itemize}
-        \item Medium-duty diesel truck
-        \item Medium-duty e-truck
-        \item Small diesel van
-        \item Small e-van
-        \item E-cargo bicycle
-      \end{itemize}
-    \end{column}
-  \end{columns}
-\end{frame}
-
-\fi
-
-\newcommand{\PanelGraphic}[3]{%
-  \begin{tikzpicture}[baseline=(panel.base)]
-    \node[inner sep=0] (panel) {\includegraphics[#2]{#3}};
-    \node[anchor=north west, font=\bfseries\scriptsize, fill=white,
-      inner sep=1pt] at (panel.north west) {#1};
-  \end{tikzpicture}%
-}
-
-\section{Results}
-
-\begin{frame}{Selective allocation links demand, routes, and lifecycle emissions}
-  \centering
-  \includegraphics[
-    width=0.94\linewidth,
-    height=0.52\textheight,
-    keepaspectratio,
-    trim=0 382 0 0,
-    clip
-  ]{../paper/figures/fig1_allocation_framework_national.pdf}
-
-  \vspace{0.3em}
-  \begin{minipage}{0.94\linewidth}
-    \footnotesize
-    \begin{itemize}
-      \item Merchant sales are allocated to nearby residential buildings to generate door-to-door OD demand.
-      \item Drones use direct air routes; e-bikes follow the pedestrian-accessible road network.
-      \item Provincial grid factors convert route energy into use-phase emissions before the lower-emission mode is selected.
-    \end{itemize}
-  \end{minipage}
-  \par\raggedright\scriptsize\color{gray} Main Fig.~1a
-\end{frame}
-
-\begin{frame}{Selective deployment cuts national lifecycle emissions by 14.18\%}
-  \begin{columns}[T,totalwidth=\linewidth]
-    \begin{column}{0.61\textwidth}
-      \raggedright\textbf{b}\par\vspace{-1.1em}
-      \centering
-      \includegraphics[width=0.23\linewidth]{../../figures/paper/subfigure/median_trip_production_emissions.pdf}
-      \includegraphics[width=0.46\linewidth]{../../figures/paper/subfigure/median_trip_use_phase_emissions.pdf}
-      \includegraphics[width=0.23\linewidth]{../../figures/paper/subfigure/median_trip_eol_emissions.pdf}
-
-      \vspace{0.5em}
-      \PanelGraphic{c}{width=0.96\linewidth}{../../figures/paper/subfigure/province_total_ebike_lifecycle.pdf}
-    \end{column}
-    \begin{column}{0.35\textwidth}
-      \footnotesize
-      \begin{itemize}
-        \item Across 314 cities, selective allocation avoids \textbf{49.14~\ktCOtwoePerYr{}} from a \textbf{346.58~\ktCOtwoePerYr{}} all-e-bike baseline.
-        \item For Beijing's weighted-median order, lower drone production and end-of-life burdens outweigh its higher use-phase emissions.
-        \item Guangdong and Zhejiang combine high provincial baselines with broad within-province variation; Beijing and Shanghai concentrate large savings in single metropolitan markets.
-      \end{itemize}
-    \end{column}
-  \end{columns}
-  \scriptsize\color{gray} Main Fig.~1b,c
-\end{frame}
-
-\begin{frame}{Absolute mitigation concentrates in major metropolitan markets}
-  \begin{columns}[T,totalwidth=\linewidth]
-    \begin{column}{0.61\textwidth}
-      \centering
-      \PanelGraphic{a}{width=0.96\linewidth}{../../figures/paper/subfigure/regions_map_oracle_reduction_rank_map_only.pdf}
-    \end{column}
-    \begin{column}{0.35\textwidth}
-      \footnotesize
-      \begin{itemize}
-        \item Beijing leads at \textbf{3.27~kt~\COtwoe{}~yr$^{-1}$}, followed by Guangzhou (2.52), Shenzhen (2.22), Shanghai (2.14), Chengdu (2.01), and Chongqing (1.58).
-        \item These are also China's six largest urban populations, although their population and mitigation rankings differ.
-        \item Market scale therefore strongly shapes absolute mitigation.
-      \end{itemize}
-    \end{column}
-  \end{columns}
-  \scriptsize\color{gray} Main Fig.~2a
-\end{frame}
-
-\begin{frame}{Mitigation efficiency follows a different geography}
-  \centering
-  \PanelGraphic{d}{width=0.92\linewidth,height=0.43\textheight,keepaspectratio}{../../figures/paper/subfigure/city_reduction_rank_all_macro_region.pdf}
-
-  \vspace{0.4em}
-  \begin{minipage}{0.92\linewidth}
-    \footnotesize
-    \begin{itemize}
-      \item Panzhihua reaches \textbf{45.05\%}; the other nine highest percentage reductions are all in Yunnan (36.33--42.20\%).
-      \item Large metropolitan markets dominate absolute savings, whereas the highest mitigation efficiencies concentrate in Southwest China.
-      \item Absolute mitigation and mitigation efficiency therefore identify different deployment priorities.
-    \end{itemize}
-  \end{minipage}
-  \par\raggedright\scriptsize\color{gray} Main Fig.~2d
-\end{frame}
-
-\begin{frame}{Climate opportunity and pilot capture define deployment candidates}
-  \centering
-  \PanelGraphic{a}{width=0.64\linewidth,height=0.48\textheight,keepaspectratio}{../../figures/paper/subfigure/city_reduction_potential_scatter.pdf}
-  \PanelGraphic{b}{width=0.22\linewidth,height=0.48\textheight,keepaspectratio}{../../figures/paper/subfigure/city_concentration_distribution.pdf}
-
-  \vspace{0.3em}
-  \begin{minipage}{0.94\linewidth}
-    \footnotesize
-    \begin{itemize}
-      \item Median thresholds identify \textbf{98} scale-deployment, \textbf{59} pilot-validation, and \textbf{156} defer-deployment candidates.
-      \item Among pilot-validation candidates, 36 have high MPCS, 15 medium MPCS, and only 8 low MPCS: most contain a spatially concentrated pilot opportunity.
-      \item Climate opportunity defines the candidate group; MPCS separately tests whether favourable orders fit within a bounded 2--5~km pilot area.
-    \end{itemize}
-  \end{minipage}
-  \par\raggedright\scriptsize\color{gray} Main Fig.~3
-\end{frame}
-
-\begin{frame}{Population explains mitigation scale, not relative efficiency}
-  \begin{columns}[T,totalwidth=\linewidth]
-    \begin{column}{0.61\textwidth}
-      \centering
-      \PanelGraphic{a}{width=0.48\linewidth}{../../figures/paper/subfigure/r2_population_absolute_reduction.pdf}
-      \PanelGraphic{b}{width=0.48\linewidth}{../../figures/paper/subfigure/r2_population_relative_reduction.pdf}
-    \end{column}
-    \begin{column}{0.35\textwidth}
-      \footnotesize
-      \begin{itemize}
-        \item Population strongly predicts absolute reduction ($r\approx0.80$) but shows no clear relationship with percentage reduction.
-        \item Chengdu combines 2.01~kt and 35.01\%; Guangzhou and Chongqing also perform strongly on both dimensions.
-        \item Beijing, Shenzhen, Shanghai, and Hangzhou have larger absolute savings but only 10.65--14.14\% reductions; Wuhan shows the reverse pattern.
-      \end{itemize}
-    \end{column}
-  \end{columns}
-  \scriptsize\color{gray} Extended Data Fig.~1
-\end{frame}
-
-\begin{frame}{Cleaner grids preserve the drone's embodied-emission advantage}
-  \centering
-  \includegraphics[
-    width=0.92\linewidth,
-    height=0.43\textheight,
-    keepaspectratio,
-    trim=0 415 0 0,
-    clip
-  ]{../paper/figures/fig4_gef_distance_detour.pdf}
-
-  \vspace{0.3em}
-  \begin{columns}[T,totalwidth=0.94\linewidth]
-    \begin{column}{0.47\linewidth}
-      \footnotesize
-      \begin{itemize}
-        \item At GEF 0.1--0.2~\kgCOtwoePerKWh{}, mean lifecycle emissions are \textbf{19.25~\gCOtwoe{}} for drones versus \textbf{28.94} for e-bikes.
-      \end{itemize}
-    \end{column}
-    \begin{column}{0.47\linewidth}
-      \footnotesize
-      \begin{itemize}
-        \item At GEF 0.7--0.8, totals converge to 90.92 and 93.17~\gCOtwoe{} per order.
-        \item Production and end-of-life remain near 3~\gCOtwoe{}; grid intensity changes the operational term.
-      \end{itemize}
-    \end{column}
-  \end{columns}
-  \par\raggedright\scriptsize\color{gray} Main Fig.~4a
-\end{frame}
-
-\begin{frame}{Longer trips increasingly favour drones}
-  \centering
-  \includegraphics[
-    width=0.92\linewidth,
-    height=0.46\textheight,
-    keepaspectratio,
-    trim=0 203 0 190,
-    clip
-  ]{../paper/figures/fig4_gef_distance_detour.pdf}
-
-  \vspace{0.2em}
-  \begin{columns}[T,totalwidth=0.94\linewidth]
-    \begin{column}{0.47\linewidth}
-      \footnotesize
-      \begin{itemize}
-        \item Savings rise \textbf{4.05--6.87~\gCOtwoe{}} for each additional air-km across Chengdu, Guangzhou, Beijing, and Shanghai.
-        \item Chengdu's 80.20\% hydropower mix keeps every displayed distance bin favourable.
-      \end{itemize}
-    \end{column}
-    \begin{column}{0.47\linewidth}
-      \footnotesize
-      \begin{itemize}
-        \item In Guangzhou, Beijing, and Shanghai, the shortest bins remain negative with only 21.53--28.50\% drone share.
-        \item Longer trips dilute fixed take-off and landing energy while retaining the direct-route advantage.
-      \end{itemize}
-    \end{column}
-  \end{columns}
-  \par\raggedright\scriptsize\color{gray} Main Fig.~4b--e
-\end{frame}
-
-\begin{frame}{Road detours strengthen benefits within both grid regimes}
-  \centering
-  \includegraphics[
-    width=0.92\linewidth,
-    height=0.46\textheight,
-    keepaspectratio,
-    trim=0 0 0 405,
-    clip
-  ]{../paper/figures/fig4_gef_distance_detour.pdf}
-
-  \vspace{0.2em}
-  \begin{columns}[T,totalwidth=0.94\linewidth]
-    \begin{column}{0.47\linewidth}
-      \footnotesize
-      \begin{itemize}
-        \item Detour ratio is positively associated with percentage reduction in both low-GEF cities ($n=42$, $r=0.729$) and high-GEF cities ($n=238$, $r=0.940$).
-        \item Chengdu combines low GEF (0.1404) with a 1.484 detour ratio and reaches 35.01\%.
-      \end{itemize}
-    \end{column}
-    \begin{column}{0.47\linewidth}
-      \footnotesize
-      \begin{itemize}
-        \item Guangzhou and Shenzhen share one provincial GEF, isolating the role of road geometry.
-        \item Guangzhou's higher detour ratio produces a larger reduction: 20.11\% versus 14.14\% in Shenzhen.
-      \end{itemize}
-    \end{column}
-  \end{columns}
-  \par\raggedright\scriptsize\color{gray} Main Fig.~4f,g
-\end{frame}
-
-\begin{frame}{Grid, distance, and detour jointly define the break-even envelope}
-  \begin{columns}[T,totalwidth=\linewidth]
-    \begin{column}{0.61\textwidth}
-      \centering
-      \includegraphics[height=0.70\textheight]{../paper/figures/extended_data_fig3_break_even_operating_envelope.pdf}
-    \end{column}
-    \begin{column}{0.35\textwidth}
-      \footnotesize
-      \begin{itemize}
-        \item At Chengdu's GEF (0.1404), most evaluated distance--detour combinations favour drones; the median drone-minus-e-bike difference is $-16.9$~\gCOtwoe{}.
-        \item At GEF 0.49, short and low-detour trips remain e-bike-favourable, reaching +19.1~\gCOtwoe{}.
-        \item This idealized envelope explains the modelled allocation boundary rather than replacing observed city and order distributions.
-      \end{itemize}
-    \end{column}
-  \end{columns}
-  \scriptsize\color{gray} Extended Data Fig.~3
-\end{frame}
-
-\begin{frame}{Avoided road detours are the largest positive contribution}
-  \begin{columns}[T,totalwidth=\linewidth]
-    \begin{column}{0.61\textwidth}
-      \centering
-      \includegraphics[width=\linewidth,height=0.72\textheight,keepaspectratio]{../paper/figures/fig5_contribution_decomposition.pdf}
-    \end{column}
-    \begin{column}{0.35\textwidth}
-      \footnotesize
-      \begin{itemize}
-        \item Nationally, avoided detours contribute \textbf{+33.70 points} and production plus end-of-life \textbf{+9.58}; bundling offsets \textbf{$-$19.96} and drone energy \textbf{$-$9.14}.
-        \item Beijing reaches only 13.19\% but leads absolute savings at 3.27~kt; Guangzhou reaches 20.11\% and 2.52~kt.
-        \item Kunming reaches 40.69\% yet saves only 0.62~kt: contribution structure shapes efficiency, while market scale shapes the total.
-      \end{itemize}
-    \end{column}
-  \end{columns}
-  \scriptsize\color{gray} Main Fig.~5
-\end{frame}
-
-\begin{frame}{Grid decarbonization expands mitigation and drone substitution}
-  \begin{columns}[T,totalwidth=\linewidth]
-    \begin{column}{0.61\textwidth}
-      \centering
-      \PanelGraphic{a}{width=0.48\linewidth}{../../figures/paper/subfigure/regions_map_pathway_scenarios_today.pdf}
-      \PanelGraphic{b}{width=0.48\linewidth}{../../figures/paper/subfigure/regions_map_pathway_scenarios_halved_gef.pdf}
-    \end{column}
-    \begin{column}{0.35\textwidth}
-      \footnotesize
-      \begin{itemize}
-        \item Current conditions save \textbf{49.14~kt~\COtwoe{}~yr$^{-1}$}; the median city assigns \textbf{47.11\%} of orders to drones.
-        \item Halving provincial GEFs raises savings to \textbf{184.96~kt} and median drone share to \textbf{76.69\%}.
-        \item Provincial median share rises from 16.80\% to 52.10\% in Ningxia and 57.03\% to 88.66\% in Guangdong; Sichuan is already near saturation.
-      \end{itemize}
-    \end{column}
-  \end{columns}
-  \scriptsize\color{gray} Main Fig.~6a,b
-\end{frame}
-
-\begin{frame}{Stronger bundling improves the system while reducing drone share}
-  \begin{columns}[T,totalwidth=\linewidth]
-    \begin{column}{0.61\textwidth}
-      \centering
-      \PanelGraphic{c}{width=0.48\linewidth}{../../figures/paper/subfigure/regions_map_pathway_scenarios_operator_bundling.pdf}
-      \PanelGraphic{d}{width=0.48\linewidth}{../../figures/paper/subfigure/regions_map_pathway_scenarios_halved_gef_bundling.pdf}
-    \end{column}
-    \begin{column}{0.35\textwidth}
-      \footnotesize
-      \begin{itemize}
-        \item Stronger bundling raises total savings to \textbf{72.21~kt} by improving e-bike operation, but median drone share falls to \textbf{20.24\%}.
-        \item Drone share falls to 4.10\% in Ningxia and 29.16\% in Guangdong, but remains 92.02\% in Sichuan.
-        \item Combining both levers saves \textbf{190.39~kt} with 46.58\% median drone share: mixed-fleet mitigation, not drone share, is the objective.
-      \end{itemize}
-    \end{column}
-  \end{columns}
-  \scriptsize\color{gray} Main Fig.~6c,d
+\begin{frame}{Four-city Mitigation Depends on the Incumbent Mode}
+\centering
+\includegraphics[width=0.95\linewidth,height=0.64\textheight,keepaspectratio,trim=0 0 0 188,clip]{../paper/figures/fig7_delivery_mode_lifecycle_comparison.pdf}
+\vspace{0.3em}
+\begin{minipage}{0.94\linewidth}
+\footnotesize
+\begin{itemize}
+  \item Mode-specific routes and $\kappa=0.769$: reductions of \textbf{10.2--34.5\%} against e-bikes, \textbf{67.8--91.9\%} against mopeds, \textbf{87.8--94.0\%} against electric cars and \textbf{91.1--97.8\%} against fuel cars.
+  \item Drone share: \textbf{31.4--95.0\%} against e-bikes, \textbf{96.8--99.7\%} against mopeds, and above \textbf{99.5\%} against either car baseline.
+\end{itemize}
+\end{minipage}
+\par\raggedright\scriptsize\color{gray} Main Fig.~7b,c. Each incumbent mode supplies its own lifecycle baseline.
 \end{frame}
 
 \section{Discussion}
 
-\begin{frame}{Modelled benefits remain positive under broad parameter uncertainty}
-  \begin{columns}[T,totalwidth=\linewidth]
-    \begin{column}{0.61\textwidth}
-      \centering
-      \PanelGraphic{a}{width=0.46\linewidth}{../../figures/paper/subfigure/threshold_resilience_national_overview_independent.pdf}
-      \PanelGraphic{b}{width=0.46\linewidth}{../../figures/paper/subfigure/threshold_resilience_national_overview_stress.pdf}
+\begin{frame}{Robustness of the Fixed Distance Strategy}
+\centering
+\includegraphics[width=0.95\linewidth,height=0.59\textheight,keepaspectratio,trim=0 0 0 0,clip]{../paper/figures/candidate_probability_positive_reduction_maps.pdf}
+\vspace{0.3em}
+\begin{minipage}{0.94\linewidth}
+\footnotesize
+\begin{itemize}
+  \item \textbf{17 parameters}, triangular distributions, \textbf{10,000 draws per city}. Baseline thresholds and mode assignments stay fixed.
+  \item Recalculate mixed-system and all-e-bike emissions in each draw. Median probability of positive mitigation: \textbf{0.8110 independent}, \textbf{0.6745 correlated adverse stress}.
+  \item These are parameter-robustness probabilities for the fixed policy, rather than observed deployment success rates.
+\end{itemize}
+\end{minipage}
+\par\raggedright\scriptsize\color{gray} Extended Data Fig.~2
 
-      \vspace{0.3em}
-      \PanelGraphic{c}{width=0.42\linewidth}{../../figures/paper/subfigure/threshold_resilience_national_overview_independent_kde.pdf}
-      \PanelGraphic{d}{width=0.42\linewidth}{../../figures/paper/subfigure/threshold_resilience_national_overview_stress_kde.pdf}
-    \end{column}
-    \begin{column}{0.35\textwidth}
-      \footnotesize
-      \begin{itemize}
-        \item Under independent perturbations, \textbf{257 cities (81.85\%)} exceed a 50\% probability of positive reduction.
-        \item Under correlated adverse stress, \textbf{271 cities (86.31\%)} exceed the same threshold.
-        \item Uncertainty does not erase the opportunity, but the probability of realizing it remains spatially heterogeneous.
-      \end{itemize}
-    \end{column}
-  \end{columns}
-  \scriptsize\color{gray} Extended Data Fig.~2
 \end{frame}
 
-\begin{frame}{City-specific road-distance rules retain most modelled mitigation}
-  \begin{columns}[T,totalwidth=\linewidth]
-    \begin{column}{0.61\textwidth}
-      \centering
-      \PanelGraphic{a}{width=0.48\linewidth}{../../figures/paper/subfigure/distance_threshold_city_landscape.pdf}
-      \PanelGraphic{b}{width=0.48\linewidth}{../../figures/paper/subfigure/distance_threshold_oracle_performance.pdf}
-    \end{column}
-    \begin{column}{0.35\textwidth}
-      \footnotesize
-      \begin{itemize}
-        \item The median city cutoff is \textbf{2.05~km}, spanning 0.03--4.26~km: a national uniform threshold cannot represent city heterogeneity.
-        \item The road rule achieves 9.28\% median city reduction versus 11.34\% under trip-level optimization.
-        \item Median mitigation retention is \textbf{82.65\%}, with a median gap of only 1.89 percentage points.
-      \end{itemize}
-    \end{column}
-  \end{columns}
-  \scriptsize\color{gray} Extended Data Fig.~4
-\end{frame}
-
-\begin{frame}{This is a lifecycle opportunity, not a deployment timetable}
-  \begin{columns}[T,totalwidth=\linewidth]
-    \begin{column}{0.48\textwidth}
-      \small
-      \textbf{Deployment logic}
-      \begin{itemize}
-        \item Screen cities by absolute mitigation and relative efficiency
-        \item Test whether favourable orders can be captured in bounded pilot areas
-        \item Calibrate assignment rules to local grids, roads, and demand
-      \end{itemize}
-    \end{column}
-    \begin{column}{0.48\textwidth}
-      \small
-      \textbf{Model boundaries}
-      \begin{itemize}
-        \item Fixed 1~kg payload and Beijing-calibrated demand transferred nationally
-        \item Weather, airspace, service time, fleet capacity, safety, noise, and infrastructure excluded
-        \item Annual provincial GEFs do not resolve marginal or time-of-day emissions
-      \end{itemize}
-    \end{column}
-  \end{columns}
-
-  \vspace{0.7em}
-  \begin{block}{Conclusion}
-    Selective drones can complement efficient e-bike delivery; they should not be treated as a blanket replacement.
-  \end{block}
+\begin{frame}{Selective Deployment and Model Boundaries}
+\begin{itemize}
+  \item Prioritize cities using absolute and percentage mitigation, then test local demand coverage and operational feasibility.
+  \item Beijing-calibrated demand and bundling transfer nationally. Payload is fixed at 1 kg.
+  \item Weather, airspace, fleet capacity, infrastructure, noise, safety and privacy can constrain deployment. Annual GEFs omit marginal and time-of-day emissions.
+  \item \textbf{Potential heat benefit:} Replacing rider-operated trips could reduce occupational heat exposure. This benefit is \textbf{not quantified} here.
+\end{itemize}
+\begin{block}{Implication}Drones can complement bundled e-bikes on suitable trips. Dispatch should minimize emissions from the complete delivery system.\end{block}
 \end{frame}
 
 \section{References}
@@ -1683,82 +813,170 @@
   \printbibliography
 \end{frame}
 
-\iffalse
-\section{Appendix}
 
-\begin{frame}{Use-phase Emission Model - E-bike Parameters}
-
-  % \footnotesize
-  \centering
-  \captionof{table}{Model parameters and default values for e-bike}
-  \begin{tabular}{c c c c}
-    \toprule
-    \textbf{Symbol} & \textbf{Description} & \textbf{Unit} & \textbf{Value} \\
-    \midrule
-    $m$ & Total mass & kg & $156$ \\
-    $v$ & Velocity & m~s$^{-1}$ & $8.33$ \\
-    $v_{\text{km/h}}$ & Velocity & km~h$^{-1}$ & $30$ \\
-    $\rho$ & Air density & kg~m$^{-3}$ & $1.225$ \\
-    $g$ & Gravitational acceleration & m~s$^{-2}$ & $9.81$ \\
-    $A$ & Frontal area & m$^2$ & $1.0$ \\
-    $\theta$ & Road grade (slope) & -- & $0.015$ \\
-    $n_{\text{acc}}$ & Acceleration frequency & km$^{-1}$ & $1$ \\
-    $C_{\text{rr}}$ & Rolling resistance coefficient & -- & $0.008$ \\
-    $C_d$ & Aerodynamic drag coefficient & -- & $0.65$ \\
-    \bottomrule
-  \end{tabular}
+\pdfstringdefDisableCommands{\def\translate#1{#1}}
+\appendix
+\AtBeginSection[]{}
+\section*{Appendix}
+\begin{frame}{Appendix: Emission Model Details}
+\begin{itemize}
+\item A1--A2: Mode-specific power models
+\item A3: Round-trip energy and grid factors
+\item A4--A5: Lifecycle inventory and throughput
+\item A6--A7: Vehicle parameters, bundling and allocation
+\end{itemize}
 \end{frame}
 
-\begin{frame}{Use-phase Emission Model - Drone Parameters}
+\begin{frame}{Appendix A1: E-bike Power Model}
+\label{app:emission:1}
+\small
+Rolling resistance, road grade, drag and acceleration enter the implemented power expression \parencite{kirschstein_comparison_2020}:
+\[
+P_E=m_tg(C_{\rm rr}+i)v+\frac{\rho C_dAv^3}{2000}
++\frac{n_{\rm acc}\,0.504\,v_h^3m_t}{2\times1000\times3.6}.
+\]
+\begin{itemize}
+\item $P_E$ in kW, $m_t=m/1000$ in tonnes, $v$ in m/s and $v_h=3.6v$ in km/h.
+\item Outbound mass includes body, batteries, rider and payload. Return mass excludes payload.
+\item The road-grade term applies to both directions as an aggregate resistance assumption.
+\item No separate auxiliary-power term enters the active e-bike expression.
+\end{itemize}
+\[
+E^E_n=(P_{E,\rm out}+P_{E,\rm ret})\kappa d_n^{\rm road}/v_h\quad\text{(kWh/order)}.
+\]
 
-  % \footnotesize
-
-  \begin{center}
-    \captionof{table}{Model parameters and default values for drone}
-    \begin{tabular}{cccc}
-      \toprule
-      Symbol & Description & Unit & Default Value \\
-      \midrule
-      $m$ & Total mass & kg & $14.1$ \\
-      $v$ & Flight velocity & m~s$^{-1}$ & $16.67$ \\
-      $W$ & Total weight & N & $m \cdot g$ \\
-      $T$ & Rotor thrust & N & -- \\
-      $U_{\text{tip}}$ & Blade tip speed & m~s$^{-1}$ & -- \\
-      $\rho$ & Air density & kg~m$^{-3}$ & $1.225$ \\
-      $g$ & Gravitational acceleration & m~s$^{-2}$ & $9.81$ \\
-      $A$ & Fuselage frontal area & m$^2$ & $0.15$ \\
-      $\gamma$ & Flight path angle & rad & -- \\
-      $k_{\text{lift}}$ & Lift margin factor & -- & $1.15$ \\
-      $C_d$ & Fuselage drag coefficient & -- & $0.65$ \\
-      $C_{d,\text{blade}}$ & Blade drag coefficient & -- & $0.075$ \\
-      $\sigma$ & Rotor solidity & -- & -- \\
-      $R$ & Total rotor disc area & m$^2$ & $n_{\text{rotors}}\pi r^2$ \\
-      $P_{\text{aux}}$ & Auxiliary power & kW & $0.01$ \\
-      \bottomrule
-    \end{tabular}
-  \end{center}
 \end{frame}
 
-\begin{frame}{Use-phase Emission Model - Drone Parameters (cont.)}
-  \begin{center}
-    \captionof{table}{Model parameters and default values for drone (continued)}
-    \begin{tabular}{cccc}
-      \toprule
-      Symbol & Description & Unit & Default Value \\
-      \midrule
-      $r$ & Rotor radius & m & $0.35$ \\
-      $\bar{c}$ & Mean blade chord & m & $0.1$ \\
-      $n_{\text{rotors}}$ & Number of rotors & -- & $8$ \\
-      $n_{\text{blades}}$ & Number of blades per rotor & -- & $5$ \\
-      $\sigma$ & Rotor solidity & -- & $n_{\text{blades}}\bar{c}/(\pi r)$ \\
-      $v_{\text{level}}$ & Horizontal flight velocity & km~h$^{-1}$ & $60$ \\
-      $v_{\text{vertical}}$ & Vertical flight velocity & km~h$^{-1}$ & $20$ \\
-      $h_{\text{takeoff}}$ & Takeoff/landing height & m & $100$ \\
-      $t_{\text{hover}}$ & Hover time per delivery & s & $10$ \\
-      \bottomrule
-    \end{tabular}
-  \end{center}
+\begin{frame}{Appendix A2: Drone Power Model}
+\label{app:emission:2}
+\small
+Induced, profile, drag, climb and auxiliary terms enter the multirotor power model \parencite{kirschstein_comparison_2020,stolaroff_energy_2018}:
+\[
+P_D=\frac{k_{\rm lift}Tw+Dv+mgv\sin\theta}{1000}
++\frac{\rho R U^3[1+3(v/U)^2]\sigma C_{d,\rm blade}}{8000}+P_{\rm aux}.
+\]
+\[
+T=\sqrt{(mg)^2+D^2+2Dmg\sin\theta},\quad
+w^4-2v\sin\phi\,w^3+v^2w^2-\left(\frac{T}{2\rho R}\right)^2=0.
+\]
+\begin{itemize}
+\item $w$ is the smallest positive real induced-velocity solution. At hover, $T=mg$ and $w=\sqrt{T/(2\rho R)}$.
+\item $R=N_r\pi r^2$, $\sigma=N_b\bar c/(\pi r)$, and $U=\sqrt{6m_0g/(\rho N_rN_b\bar c C_l r)}$.
+\item $\phi=\arctan[(-D-mg\sin\theta)/(mg\cos\theta)]$ for $v>0$.
+\item Headwind alters body drag, but does not alter ground travel time.
+\end{itemize}
+
 \end{frame}
-\fi
+
+\begin{frame}{Appendix A3: Round-trip Energy and Grid Factors}
+\label{app:emission:3}
+\small
+\[
+E^E_n=(P_{E,\rm out}+P_{E,\rm ret})\kappa d_n^{\rm road}/v_E
+\]
+\[
+\begin{aligned}
+E^D_n={}&P_{\rm to,out}t_{\rm to}+P_{\rm cruise,out}t_{\rm cruise,out}
++P_{\rm land,out}t_{\rm land}+P_{\rm hover}t_{\rm hover}\\
+&+P_{\rm to,ret}t_{\rm to}+P_{\rm cruise,ret}t_{\rm cruise,ret}
++P_{\rm land,ret}t_{\rm land}.
+\end{aligned}
+\]
+\begin{itemize}
+\item Drone: loaded take-off, outbound cruise, loaded landing and unloading hover, then empty take-off, return cruise and empty landing.
+\item Vertical-phase time: $h/(1000v_{\rm vertical})$ h. Cruise time: $d^{\rm air}/v_{\rm cruise}$ h. Hover: $t_{\rm hover}/3600$ h.
+\item Use-phase emissions are $E_n^m\mathrm{GEF}_c$ for each mode $m$.
+\item Provincial GEFs span 0.107--0.725 kg CO$_2$e/kWh. Five cities use the national fallback, 0.5366 \parencite{mee_gef_2024}.
+\end{itemize}
+
+\end{frame}
+
+\begin{frame}{Appendix A4: Lifecycle Inventory and Amortization}
+\label{app:emission:4}
+\small
+Body and battery emissions are annualized separately:
+\[
+A_m=\frac{m_b(e_{\rm body}+e_{\rm body,EOL})}{L_v}
++\frac{C_b(e_{\rm battery}+e_{\rm battery,EOL})}{L_b}.
+\]
+\[
+\ell_n^m=E_n^m\mathrm{GEF}_c+A_m/N_{m,n},\qquad N_{m,n}=60HD_yu/\tau_{m,n}.
+\]
+\centering
+\begin{tabular}{lrr}
+\toprule Assumption & E-bike & Drone\\\midrule
+Body mass (kg) & 55 & 10.1\\
+Installed battery capacity (kWh) & 1.20 & 1.556\\
+Vehicle / battery life (years) & 4 / 2 & 4 / 2\\
+Operating hours (h/day) & 8 & 12\\
+Operating days (days/year) & 300 & 300\\
+Loading time (min/order) & 3 & 0.5\\
+\bottomrule
+\end{tabular}
+\par\raggedright\footnotesize Continuous battery amortization avoids integer rounding of replacements. Production and end-of-life factors apply separately.
+
+\end{frame}
+
+\begin{frame}{Appendix A5: Distance-dependent Throughput}
+\label{app:emission:5}
+\[
+\tau_{E,n}=120\kappa d_n^{\rm road}/v_E+t_{E,\rm load},\qquad
+\tau_{D,n}=120d_n^{\rm air}/v_D+t_{D,\rm load}.
+\]
+\begin{itemize}
+\item Cycle times are in minutes, distances in km, and speeds in km/h.
+\item Embodied emissions per order depend on OD distance through annual throughput $N_{m,n}$.
+\item E-bike bundling affects both operational distance and amortization throughput. There is no additional division by mean bundle size.
+\item Drone vertical-flight and hover energy enter use-phase emissions, but their durations are excluded from the simplified throughput denominator.
+\end{itemize}
+\begin{block}{Model boundary}Omitting vertical and hover time from throughput increases assumed annual deliveries relative to a full flight-cycle denominator.\end{block}
+
+\end{frame}
+
+\begin{frame}{Appendix A6: Vehicle Parameters and Bundling}
+\label{app:emission:6}
+\small
+\begin{columns}[T]
+\begin{column}{0.48\textwidth}
+\begin{tabular}{lrr}
+\toprule Parameter & E-bike & Drone\\\midrule
+Loaded mass (kg) & 156 & 14.1\\
+Empty mass (kg) & 155 & 13.1\\
+Payload (kg) & 1 & 1\\
+Speed (km/h) & 30 & 60\\
+Vertical speed (km/h) & --- & 20\\
+Take-off height (m) & --- & 100\\
+Loaded hover (s) & --- & 10\\
+\bottomrule
+\end{tabular}
+\end{column}
+\begin{column}{0.48\textwidth}
+\begin{itemize}
+\item Beijing mean bundle size: $\bar B=1.69$.
+\item Approximation: $\kappa=1/\sqrt{\bar B}=0.769$ \parencite{beardwood_shortest_1959}.
+\item $\kappa$ converts bundle size to attributed distance. It is not a measured route-distance ratio.
+\item Transfer nationally assumes common mean bundling efficiency.
+\end{itemize}
+\end{column}
+\end{columns}
+\end{frame}
+
+\begin{frame}{Appendix A7: Assignment and City Aggregation}
+\label{app:emission:7}
+\[
+z_n=\begin{cases}1,&\ell_n^D<\ell_n^E,\\0,&\ell_n^D\geq\ell_n^E,\end{cases}
+\qquad G_c^{\rm mixed}=\sum_{n\in c}q_n[z_n\ell_n^D+(1-z_n)\ell_n^E].
+\]
+\[
+G_c^E=\sum_{n\in c}q_n\ell_n^E,\quad A_c=G_c^E-G_c^{\rm mixed},\quad
+R_c=100A_c/G_c^E.
+\]
+\begin{itemize}
+\item Assign drones only when their lifecycle emissions are lower. Ties remain with e-bikes.
+\item $q_n$ is the modelled annual order count. Drone share is $\sum q_nz_n/\sum q_n$.
+\item This ideal benchmark excludes fleet, infrastructure and airspace constraints.
+\end{itemize}
+\end{frame}
 
 \end{document}
+
