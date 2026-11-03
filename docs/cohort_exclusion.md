@@ -85,8 +85,8 @@ cohort reference; the accepted prepared scientific bundle is never rewritten.
   --output-root "$LOCAL_BATCH" --accepted-figures-root figures
 ```
 
-Set `DRONE_EMISSION_FIGURES_ROOT` to `$LOCAL_BATCH/figures`, then use the
-manifest-backed local `compose --only` for the ten affected composites. Run
+Use the manifest-backed local `compose --figures-root "$LOCAL_BATCH/figures"`
+with `--only` for the ten affected composites. Run
 local composition outside the sandbox. The copied linked SVGs for the other
 sixteen requests need no reconversion. The two unchanged finals are not
 recomposed. Use `compose_cohort_review --verify` to check the remote PDF hashes,

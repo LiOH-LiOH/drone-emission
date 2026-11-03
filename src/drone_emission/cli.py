@@ -592,6 +592,9 @@ def command_render(args: argparse.Namespace) -> None:
 
 
 def command_compose(args: argparse.Namespace) -> None:
+    config = _config(args.env)
+    if getattr(args, "figures_root", None) is not None:
+        config = dict(config, figures_dir=str(args.figures_root.resolve()))
     if getattr(args, "preview_only", False):
         if args.prepare_links or args.force:
             raise ValueError("--preview-only cannot prepare links or force composition")
@@ -599,13 +602,13 @@ def command_compose(args: argparse.Namespace) -> None:
         from .paper_workflow import _tool_path, select_figures
 
         refresh_previews(
-            _config(args.env)["figures_dir"],
+            config["figures_dir"],
             select_figures(_split_ids(getattr(args, "only", None))),
             rasterizer=_tool_path("pdftoppm"),
         )
         return
     paths = compose(
-        _config(args.env),
+        config,
         only=_split_ids(getattr(args, "only", None)),
         prepare_links=bool(getattr(args, "prepare_links", False)),
         force=bool(getattr(args, "force", False)),
@@ -898,6 +901,10 @@ def build_parser() -> argparse.ArgumentParser:
     compose_parser.add_argument(
         "--preview-only", action="store_true",
         help="refresh previews for selected staged figures without recomposing",
+    )
+    compose_parser.add_argument(
+        "--figures-root", type=Path,
+        help="compose an isolated local figure batch without replacing formal figures",
     )
 
     promote_parser = subparsers.add_parser("promote", help="publish all staged PDFs to docs/paper")
