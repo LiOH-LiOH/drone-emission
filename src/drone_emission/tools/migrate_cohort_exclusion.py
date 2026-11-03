@@ -154,7 +154,12 @@ def rebuild_curves(source: Path, target: Path, config: dict, expected: set[str])
                                "kappa_end": PATHWAY_KAPPA_END}:
         raise ValueError("pathway sampling contract changed")
     original = pd.read_csv(source / "all_region_stats.csv")
-    original = original.loc[original.region_level.eq("city")].copy()
+    # The authoritative aggregate can include the 15 pre-existing exclusions.
+    # Keep its original (possibly sparse) indices: they are the sampling seeds.
+    original = original.loc[
+        original.region_level.eq("city")
+        & original.region_key.astype(str).isin(expected | EXCLUDED_KEYS)
+    ].copy()
     named = pd.read_csv(source / "all_sensitivity_named.csv")
     baseline = _baseline_kappa(named, original)
     new_baseline = _baseline_kappa(pd.read_csv(target / "all_sensitivity_named.csv"), pd.read_csv(target / "all_region_stats.csv"))
@@ -237,10 +242,15 @@ def migrate(config: dict, source_work_root: Path, output: Path) -> dict:
     if len(expected) != 311 or experiment_excluded_region_keys() != EXCLUDED_KEYS:
         raise ValueError("migration requires the reviewed 311-city exclusion contract")
     status, manifest, source = audit_source(source_work_root)
-    source_stats = pd.read_csv(source / "all_region_stats.csv")
-    old_keys = set(source_stats.region_key.astype(str))
-    if region_keys_sha256(old_keys) != SOURCE_COHORT_SHA256 or old_keys != expected | EXCLUDED_KEYS:
+    source_aggregate = pd.read_csv(source / "all_region_stats.csv")
+    raw_keys = set(source_aggregate.region_key.astype(str))
+    old_keys = expected | EXCLUDED_KEYS
+    previous_excluded = set(load_cohort_contract()["excluded_regions"]) - EXCLUDED_KEYS
+    if (region_keys_sha256(old_keys) != SOURCE_COHORT_SHA256
+            or not old_keys <= raw_keys
+            or raw_keys - old_keys - previous_excluded):
         raise ValueError("migration must remove exactly Hong Kong and Macau")
+    source_stats = source_aggregate.loc[source_aggregate.region_key.astype(str).isin(old_keys)].copy()
     if output.exists():
         raise FileExistsError(f"refusing to mix with an existing migration batch: {output}")
     output.mkdir(parents=True)
@@ -255,11 +265,16 @@ def migrate(config: dict, source_work_root: Path, output: Path) -> dict:
             continue
         if name.endswith(".json"):
             payload = json.loads((source / name).read_text())
-            if set(payload) != old_keys:
+            if set(payload) != raw_keys:
                 raise ValueError(f"unexpected aggregate JSON city set: {name}")
             write_json(target / name, {k: v for k, v in payload.items() if k in expected})
         else:
             frame = pd.read_csv(source / name)
+            source_row_count = len(frame)
+            if name in AUTHORITATIVE_AGGREGATES:
+                if set(frame.region_key.astype(str)) != raw_keys:
+                    raise ValueError(f"authoritative aggregates disagree: {name}")
+                frame = frame.loc[frame.region_key.astype(str).isin(old_keys)].copy()
             filtered = subtract_rows(frame, expected)
             rebound = []
             for column in ("paper_cohort_sha256", "cohort_sha256"):
@@ -272,6 +287,7 @@ def migrate(config: dict, source_work_root: Path, output: Path) -> dict:
             pd.testing.assert_frame_equal(filtered.reset_index(drop=True), pd.read_csv(target / name),
                                           check_dtype=False, rtol=1e-13, atol=1e-10)
             table_audit[name] = {"old_rows": len(frame), "new_rows": len(filtered),
+                                 "source_aggregate_rows": source_row_count,
                                  "source_sha256": _sha256(source / name),
                                  "rebound_metadata_columns": rebound,
                                  "scientific_values_unchanged": True}

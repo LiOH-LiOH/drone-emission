@@ -52,6 +52,14 @@ def test_subtraction_preserves_repeated_city_rows_and_values():
         subtract_rows(source, {"beijing", "shanghai"})
 
 
+def test_original_curve_sample_indices_survive_existing_exclusions():
+    frame = pd.DataFrame({"region_key": ["already_excluded", "beijing", *sorted(EXCLUDED_KEYS), "shanghai"]})
+    original = frame.loc[frame.region_key.isin({"beijing", "shanghai"} | EXCLUDED_KEYS)]
+    assert original.index.tolist() == [1, 2, 3, 4]
+    retained = original.loc[~original.region_key.isin(EXCLUDED_KEYS)]
+    assert retained.index.tolist() == [1, 4]
+
+
 @pytest.mark.parametrize("count", [21, 1607])
 def test_streamed_samples_match_existing_pandas_rule(tmp_path, count):
     frame = pd.DataFrame({"road_distance_m": np.arange(count) * 2.,
