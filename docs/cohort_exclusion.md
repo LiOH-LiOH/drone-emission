@@ -68,22 +68,38 @@ local figures. The new objective-tradeoffs candidate is outside this migration.
 Use `render --request` for affected requests only; do not run a full render or
 reproduce. No colors, typography, layout or geographic base layers change.
 
-After rendering, `--stage-review SEED_ROOT --output-root BATCH` verifies the
-accepted request metadata, copies the unchanged PDFs and verifies/copies the
-composition templates into the batch bundle. It does not claim those PDFs were
-rendered on the new sample. Their dependencies are independent of the national
-cohort or restricted to unchanged fixed cities. Never rewrite old prepared
-scientific payloads to change their cohort hash.
+**Composition is local.** After the remote render, download only the 30 affected
+subfigure PDFs plus lightweight provenance into a new local review batch.
+Do not install Inkscape or compose figures on the remote server. Reuse the
+existing local 16 subfigure PDFs, their linked SVGs, the two unchanged final
+PDFs, and the accepted local composition templates.
 
-Compose only affected figures. Use `--finalize-review --output-root BATCH` to
-verify retained outputs and record current provenance for all twelve figures.
-`compose --preview-only --only FIGURE_IDS` refreshes previews of selected
-existing staging PDFs without rerendering or recomposing. It allows a complete
-12-figure overview without starting the unrelated candidate analysis.
+`drone_emission.tools.compose_cohort_review` stages this local assembly. It
+requires the new analysis manifest and a remote SHA-256/size inventory of the
+downloaded PDFs, copies only the unchanged local artifacts, and verifies all
+template hashes. It creates a separate composition-only bundle with the new
+cohort reference; the accepted prepared scientific bundle is never rewritten.
+
+```sh
+.venv/bin/python -m drone_emission.tools.compose_cohort_review \
+  --output-root "$LOCAL_BATCH" --accepted-figures-root figures
+```
+
+Set `DRONE_EMISSION_FIGURES_ROOT` to `$LOCAL_BATCH/figures`, then use the
+manifest-backed local `compose --only` for the ten affected composites. Run
+local composition outside the sandbox. The copied linked SVGs for the other
+sixteen requests need no reconversion. The two unchanged finals are not
+recomposed. Use `compose_cohort_review --verify` to check the remote PDF hashes,
+retained artifacts and the twelve final PDFs and write current source reports.
+
+`compose --preview-only --only FIGURE_IDS` then refreshes the twelve PNG
+previews and overview locally, without rerendering or recomposing. The unrelated
+objective-tradeoffs candidate is never started.
 
 The migration creates an audited schema-6 reuse manifest, numeric migration
 report, source input/status snapshots, figure reuse report and final review
-verification. Only PNG previews and lightweight provenance are fetched for
-review. Formal data, caches and manuscript PDFs are not replaced until the
+verification. The user explicitly requests remote subfigure PDF transfer for
+local assembly; this supersedes the default remote-preview-only transfer.
+Formal data, caches and manuscript PDFs are not replaced until the
 review batch is accepted. Historical reports and manuscript prose are not
 silently rewritten by this operation.
