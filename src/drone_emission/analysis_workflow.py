@@ -125,10 +125,12 @@ def build_input_manifest(config: dict) -> dict:
     """Fingerprint authoritative analysis inputs without writing any state."""
     data_root = Path(config["data_dir"]).resolve()
     for name in AUTHORITATIVE_AGGREGATES:
-        if not name.endswith(".csv"):
-            continue
-        keys = pd.read_csv(data_root / name, usecols=["region_key"])["region_key"]
-        forbidden = set(keys.astype(str)) & experiment_excluded_region_keys()
+        if name.endswith(".csv"):
+            column = pd.read_csv(data_root / name, usecols=["region_key"])["region_key"]
+            keys = set(column.astype(str))
+        else:
+            keys = set(json.loads((data_root / name).read_text()))
+        forbidden = keys & experiment_excluded_region_keys()
         if forbidden:
             raise ValueError(
                 f"{name} still contains excluded cities {sorted(forbidden)}; "

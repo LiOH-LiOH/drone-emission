@@ -84,3 +84,22 @@ def test_cohort_acceptance_cannot_reintroduce_policy_exclusion(tmp_path):
         paper_cohort.accept_candidate_cohort({"candidate_region_keys": list(EXCLUDED_KEYS)},
                                              target=tmp_path / "forbidden.json")
     assert not (tmp_path / "forbidden.json").exists()
+
+
+@pytest.mark.parametrize("contaminated", [None, "all_region_stats.json", "all_region_stats.csv", "all_region_stats_enriched.csv"])
+def test_aggregate_cache_checks_every_authoritative_file(tmp_path, monkeypatch, contaminated):
+    import json
+    from drone_emission.tools import consolidate_stats, enrich_stats
+
+    for name in ("all_region_stats.json", "all_region_stats.csv", "all_region_stats_enriched.csv"):
+        keys = ["beijing"] + (["aomentebiexingzhengqu"] if name == contaminated else [])
+        if name.endswith(".json"):
+            (tmp_path / name).write_text(json.dumps({key: {} for key in keys}))
+        else:
+            pd.DataFrame({"region_key": keys}).to_csv(tmp_path / name, index=False)
+    calls = []
+    monkeypatch.setattr(cli, "_config", lambda env: {"data_dir": str(tmp_path), "sales_path": "unused", "gef_path": "unused"})
+    monkeypatch.setattr(consolidate_stats, "consolidate", lambda *args: calls.append("consolidate"))
+    monkeypatch.setattr(enrich_stats, "enrich", lambda *args: calls.append("enrich"))
+    cli.command_aggregate(Namespace(env="local", force=False))
+    assert calls == (["consolidate", "enrich"] if contaminated else [])

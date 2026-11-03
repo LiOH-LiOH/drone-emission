@@ -437,8 +437,10 @@ def command_aggregate(args: argparse.Namespace) -> None:
         from .paper_cohort import experiment_excluded_region_keys
 
         excluded = experiment_excluded_region_keys()
-        with outputs[1].open(newline="") as handle:
-            old_keys = {row["region_key"] for row in csv.DictReader(handle)}
+        old_keys = set(json.loads(outputs[0].read_text()))
+        for path in outputs[1:]:
+            with path.open(newline="") as handle:
+                old_keys.update(row["region_key"] for row in csv.DictReader(handle))
         if not old_keys.intersection(excluded):
             print("Restored existing nationwide aggregates")
             return
