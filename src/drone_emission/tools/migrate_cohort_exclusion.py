@@ -395,7 +395,14 @@ def stage_review(seed: Path, output: Path) -> dict:
             report["cohort_migration"] = {
                 "source_report": str(source), "source_sha256": record["sha256"],
                 "source_cohort_sha256": SOURCE_COHORT_SHA256,
+                "source_aggregate_input": report.get("aggregate_input"),
                 "method": "reuse four unchanged cities; no numerical recomputation",
+            }
+            aggregate = output / "data/all_region_stats.csv"
+            report["aggregate_input"] = {
+                "path": "all_region_stats.csv",
+                "size_bytes": aggregate.stat().st_size,
+                "sha256": _sha256(aggregate),
             }
             write_json(target, report)
         fixed_inputs.append({"source": str(source), "source_sha256": record["sha256"],
