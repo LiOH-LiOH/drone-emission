@@ -369,6 +369,37 @@ def stage_review(seed: Path, output: Path) -> dict:
                  if key not in AFFECTED_REQUESTS and key != "objective_tradeoffs"}
     if len(figures) != 12 or len(unchanged) != 16:
         raise ValueError("review manifest scope changed")
+    # Keep the actual fixed-city inputs alongside the reused figure, so its
+    # source report does not point at absent files in the new work root.
+    source_status = json.loads((output / "source_status.json").read_text())
+    fixed = source_status["modules"]["four-city-delivery-modes"]
+    if fixed["status"] != "complete":
+        raise ValueError("fixed-city source analysis is incomplete")
+    fixed_inputs = []
+    for record in fixed["outputs"]:
+        source = Path(record["path"])
+        if source.stat().st_size != record["size_bytes"] or _sha256(source) != record["sha256"]:
+            raise ValueError(f"fixed-city source analysis changed: {source}")
+        target = output / "work/analysis/four_city_delivery_modes" / source.name
+        target.parent.mkdir(parents=True, exist_ok=True)
+        if source.suffix == ".csv":
+            keys = set(pd.read_csv(source, usecols=["region_key"]).region_key)
+            if keys != {"chengdu", "guangzhou", "beijing", "shanghai"}:
+                raise ValueError("fixed-city analysis scope changed")
+            shutil.copy2(source, target)
+        else:
+            report = json.loads(source.read_text())
+            if report["paper_cohort_sha256"] != SOURCE_COHORT_SHA256:
+                raise ValueError("fixed-city report has an unexpected source cohort")
+            report["paper_cohort_sha256"] = cohort_hash()
+            report["cohort_migration"] = {
+                "source_report": str(source), "source_sha256": record["sha256"],
+                "source_cohort_sha256": SOURCE_COHORT_SHA256,
+                "method": "reuse four unchanged cities; no numerical recomputation",
+            }
+            write_json(target, report)
+        fixed_inputs.append({"source": str(source), "source_sha256": record["sha256"],
+                             "target": str(target), "sha256": _sha256(target)})
     records = []
     for key, request in unchanged.items():
         prepared = json.loads((seed / "bundle" / key / "prepared.json").read_text())
@@ -421,7 +452,8 @@ def stage_review(seed: Path, output: Path) -> dict:
     write_json(index_path, index)
     write_json(output / "figures/paper/report/drawing_bundle.json", {"path": str(bundle)})
     report = {"source_seed": str(seed), "cohort_sha256": cohort_hash(),
-              "reused_requests": list(unchanged), "outputs": records}
+              "reused_requests": list(unchanged), "outputs": records,
+              "fixed_city_inputs": fixed_inputs}
     write_json(output / "figure_reuse_report.json", report)
     return report
 
