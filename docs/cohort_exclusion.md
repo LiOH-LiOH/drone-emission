@@ -21,6 +21,9 @@ stats hashes, OD metadata and the six needed analysis modules. It never
 searches other roots or runs a missing prerequisite. The old schema-1 reuse
 bundle is not used as a schema-6 bundle.
 
+The authoritative source aggregates can contain all 328 configured cities.
+Select the original locked 313 before subtraction; keep original aggregate row
+indices for curve sampling rather than resetting the selected frame's index.
 All independent city scientific results are preserved. Cohort metadata columns
 are rebound with the old source hash retained in the migration report. City
 attribution is refitted from the existing city feature table. Full-OD exact
@@ -49,6 +52,15 @@ restore only the six recorded modules using the package CLI:
 ```
 
 ## Review figures
+
+The existing break-even observed-context renderer uses only cities with an
+explicit provincial GEF. Its 308-city, 616,000-OD sample does not include either
+Hong Kong or Macau, so this observed sample is unchanged after subtraction.
+`--reuse-break-even-cache SOURCE_PKL` validates the cache's sampling contract,
+retained city keys, per-city counts, GEFs, input age, and analytic mesh, then
+stages it under the new input signature. It avoids a second national OD scan.
+The three remaining fallback cities are explicitly reported as omitted from
+this observed-context panel, preserving the previous scientific definition.
 
 Fifteen affected render requests cover ten existing composites. Sixteen
 requests and two wholly unchanged composites are reused from the accepted

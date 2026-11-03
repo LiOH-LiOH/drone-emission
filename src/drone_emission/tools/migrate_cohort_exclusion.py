@@ -60,6 +60,14 @@ def subtract_rows(frame: pd.DataFrame, expected: set[str]) -> pd.DataFrame:
     return result
 
 
+def original_city_rows(frame: pd.DataFrame, expected: set[str]) -> pd.DataFrame:
+    """Select the original lock without resetting its sampling row indices."""
+    return frame.loc[
+        frame.region_level.eq("city")
+        & frame.region_key.astype(str).isin(expected | EXCLUDED_KEYS)
+    ].copy()
+
+
 def audit_source(work_root: Path) -> tuple[dict, dict, Path]:
     status = json.loads((work_root / "analysis/status.json").read_text())
     if status.get("paper_cohort_sha256") != SOURCE_COHORT_SHA256:
@@ -156,10 +164,7 @@ def rebuild_curves(source: Path, target: Path, config: dict, expected: set[str])
     original = pd.read_csv(source / "all_region_stats.csv")
     # The authoritative aggregate can include the 15 pre-existing exclusions.
     # Keep its original (possibly sparse) indices: they are the sampling seeds.
-    original = original.loc[
-        original.region_level.eq("city")
-        & original.region_key.astype(str).isin(expected | EXCLUDED_KEYS)
-    ].copy()
+    original = original_city_rows(original, expected)
     named = pd.read_csv(source / "all_sensitivity_named.csv")
     baseline = _baseline_kappa(named, original)
     new_baseline = _baseline_kappa(pd.read_csv(target / "all_sensitivity_named.csv"), pd.read_csv(target / "all_region_stats.csv"))
@@ -421,6 +426,77 @@ def stage_review(seed: Path, output: Path) -> dict:
     return report
 
 
+def reuse_break_even_cache(config: dict, source_cache: Path, output: Path) -> dict:
+    """Retain the unchanged observed sample; never rescan 311 city OD files."""
+    import pickle
+    from drone_emission.analysis_workflow import analysis_data_dir
+    from drone_emission.visualization.contribution_renderers import (
+        BREAK_EVEN_PHASE_CACHE_VERSION, _file_cache_signature, _get_ebike_kappa,
+    )
+    from drone_emission.visualization.contribution_break_even import (
+        CONTRIBUTION_SAMPLE_LIMIT, CONTRIBUTION_SAMPLE_SEED,
+        _break_even_mesh_coefficients, _build_break_even_scenarios,
+    )
+
+    data = analysis_data_dir(config)
+    with source_cache.open("rb") as handle:
+        cache = pickle.load(handle)
+    meta, prepared = cache["meta"], cache["prepared"]
+    expected_meta = {"version": BREAK_EVEN_PHASE_CACHE_VERSION,
+                     "figure_name": "break_even_phase_diagram",
+                     "kappa": _get_ebike_kappa(config),
+                     "max_sample_rows": CONTRIBUTION_SAMPLE_LIMIT,
+                     "sample_seed": CONTRIBUTION_SAMPLE_SEED}
+    for key, value in expected_meta.items():
+        if meta[key] != value:
+            raise ValueError(f"break-even cache contract changed: {key}")
+    gef = data / "gef_china.csv"
+    if (_sha256(Path(meta["gef_file"]["path"])) != _sha256(gef)
+            or gef.stat().st_size != meta["gef_file"]["size"]
+            or gef.stat().st_mtime_ns != meta["gef_file"]["mtime_ns"]):
+        raise ValueError("break-even GEF input changed")
+    expected = set(locked_region_keys())
+    fallback = set(load_cohort_contract()["grid_emission_factor_fallback"]["affected_region_keys"])
+    observed = prepared["panel_c"]
+    keys = {item["region_key"] for item in observed["city_reports"]}
+    if keys != expected - fallback or set(observed["samples"].region_key) != keys:
+        raise ValueError("break-even sample differs from the existing non-missing-GEF sample")
+    stats = pd.read_csv(data / "all_region_stats.csv").set_index("region_key")
+    enriched = pd.read_csv(data / "all_region_stats_enriched.csv").set_index("region_key")
+    for record in observed["city_reports"]:
+        key = record["region_key"]
+        od = data / "city" / key / f"{key}_od_pairs.csv"
+        if od.stat().st_mtime_ns > source_cache.stat().st_mtime_ns:
+            raise ValueError(f"OD file is newer than the observed cache: {key}")
+        if record["sample"]["valid_rows"] != int(stats.loc[key, "valid_path_count"]):
+            raise ValueError(f"break-even valid OD count changed: {key}")
+        np.testing.assert_allclose(record["gef"], enriched.loc[key, "grid_emission_factor"], rtol=0, atol=1e-12)
+    # The analytic model must also reproduce the accepted mesh before reuse.
+    ebike, drone, ebike_scenario, drone_scenario = _build_break_even_scenarios(config)
+    zero, slope = _break_even_mesh_coefficients(
+        prepared["air_distance_grid_km"], prepared["detour_ratios"],
+        ebike, drone, ebike_scenario, drone_scenario,
+    )
+    np.testing.assert_allclose(zero, prepared["panel_a"]["delta_zero"], rtol=1e-12, atol=1e-10)
+    np.testing.assert_allclose(slope, prepared["panel_a"]["delta_slope"], rtol=1e-12, atol=1e-10)
+    expected_meta.update(stats_file=_file_cache_signature(str(data / "all_region_stats.csv")),
+                         gef_file=_file_cache_signature(str(gef)))
+    destination = Path(config["cache_dir"]) / "visualization/paper/break_even_phase_diagram_prepared.pkl"
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    if destination.exists():
+        raise FileExistsError(destination)
+    report = {"source": str(source_cache), "source_sha256": _sha256(source_cache),
+              "source_meta": meta, "target_meta": expected_meta,
+              "observed_city_count": len(keys), "observed_sample_rows": len(observed["samples"]),
+              "cohort_city_count": len(expected), "omitted_missing_gef_cities": sorted(fallback),
+              "reason": "existing renderer omits missing-GEF cities in both cohorts; observed samples and analytic mesh are unchanged"}
+    with destination.open("wb") as handle:
+        pickle.dump({"meta": expected_meta, "prepared": prepared, "migration": report}, handle,
+                    protocol=pickle.HIGHEST_PROTOCOL)
+    write_json(output / "break_even_cache_reuse.json", report)
+    return report
+
+
 def finalize_review(config: dict, output: Path) -> dict:
     from drone_emission.analysis_workflow import analysis_data_dir, require_current_analysis
     from drone_emission.paper_workflow import _write_source_report, figure_required_outputs, load_manifest
@@ -463,6 +539,7 @@ def main():
     actions = parser.add_mutually_exclusive_group()
     actions.add_argument("--stage-review", type=Path, metavar="SEED_ROOT")
     actions.add_argument("--finalize-review", action="store_true")
+    actions.add_argument("--reuse-break-even-cache", type=Path)
     parser.add_argument("--env", default="remote")
     args = parser.parse_args()
     from drone_emission.cli import _config
@@ -472,6 +549,8 @@ def main():
         result = stage_review(args.stage_review.resolve(), output)
     elif args.finalize_review:
         result = finalize_review(_config(args.env), output)
+    elif args.reuse_break_even_cache:
+        result = reuse_break_even_cache(_config(args.env), args.reuse_break_even_cache.resolve(), output)
     elif args.source_work_root:
         result = migrate(_config(args.env), args.source_work_root.resolve(), output)
     else:

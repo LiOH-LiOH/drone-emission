@@ -9,7 +9,7 @@ import pytest
 from drone_emission import cli, paper_cohort
 from drone_emission.analysis.pathway_scenarios import _sample_od, _valid_od
 from drone_emission.tools.migrate_cohort_exclusion import (
-    EXCLUDED_KEYS, SOURCE_COHORT_SHA256, sample_city_od, subtract_rows,
+    EXCLUDED_KEYS, SOURCE_COHORT_SHA256, original_city_rows, sample_city_od, subtract_rows,
 )
 
 
@@ -54,7 +54,8 @@ def test_subtraction_preserves_repeated_city_rows_and_values():
 
 def test_original_curve_sample_indices_survive_existing_exclusions():
     frame = pd.DataFrame({"region_key": ["already_excluded", "beijing", *sorted(EXCLUDED_KEYS), "shanghai"]})
-    original = frame.loc[frame.region_key.isin({"beijing", "shanghai"} | EXCLUDED_KEYS)]
+    frame["region_level"] = "city"
+    original = original_city_rows(frame, {"beijing", "shanghai"})
     assert original.index.tolist() == [1, 2, 3, 4]
     retained = original.loc[~original.region_key.isin(EXCLUDED_KEYS)]
     assert retained.index.tolist() == [1, 4]
