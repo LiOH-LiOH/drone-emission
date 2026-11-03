@@ -200,6 +200,10 @@ def command_calibrate_coordinates(args: argparse.Namespace) -> None:
 
 
 def command_cities(args: argparse.Namespace) -> None:
+    from .paper_cohort import require_experiment_region
+
+    for region_key in args.region or ():
+        require_experiment_region(region_key)
     config = _config(args.env)
     jobs = getattr(args, "jobs", None)
     cohort = getattr(args, "cohort", None)
@@ -429,8 +433,15 @@ def command_aggregate(args: argparse.Namespace) -> None:
         data_dir / "all_region_stats_enriched.csv",
     ]
     if not args.force and all(path.exists() for path in outputs):
-        print("Restored existing nationwide aggregates")
-        return
+        import csv
+        from .paper_cohort import experiment_excluded_region_keys
+
+        excluded = experiment_excluded_region_keys()
+        with outputs[1].open(newline="") as handle:
+            old_keys = {row["region_key"] for row in csv.DictReader(handle)}
+        if not old_keys.intersection(excluded):
+            print("Restored existing nationwide aggregates")
+            return
     from drone_emission.tools.consolidate_stats import consolidate
     from drone_emission.tools.enrich_stats import enrich
 
@@ -579,6 +590,18 @@ def command_render(args: argparse.Namespace) -> None:
 
 
 def command_compose(args: argparse.Namespace) -> None:
+    if getattr(args, "preview_only", False):
+        if args.prepare_links or args.force:
+            raise ValueError("--preview-only cannot prepare links or force composition")
+        from .paper_preview import refresh_previews
+        from .paper_workflow import _tool_path, select_figures
+
+        refresh_previews(
+            _config(args.env)["figures_dir"],
+            select_figures(_split_ids(getattr(args, "only", None))),
+            rasterizer=_tool_path("pdftoppm"),
+        )
+        return
     paths = compose(
         _config(args.env),
         only=_split_ids(getattr(args, "only", None)),
@@ -870,6 +893,10 @@ def build_parser() -> argparse.ArgumentParser:
         help="refresh linked SVGs and formal PDFs regardless of modification time",
     )
     compose_parser.set_defaults(func=command_compose)
+    compose_parser.add_argument(
+        "--preview-only", action="store_true",
+        help="refresh previews for selected staged figures without recomposing",
+    )
 
     promote_parser = subparsers.add_parser("promote", help="publish all staged PDFs to docs/paper")
     promote_parser.add_argument("--yes", action="store_true")

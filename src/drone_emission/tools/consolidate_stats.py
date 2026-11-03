@@ -73,6 +73,11 @@ def consolidate(data_dir: str):
     with open(REGIONS_JSON_PATH, "r", encoding="utf-8") as f:
         regions = json.load(f)
 
+    from drone_emission.paper_cohort import experiment_excluded_region_keys
+
+    excluded = experiment_excluded_region_keys()
+    regions = {key: value for key, value in regions.items() if key not in excluded}
+
     merged = {}
     completed = 0
     total = len(regions)

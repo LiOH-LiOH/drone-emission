@@ -1,13 +1,14 @@
 {
   "schema_version": 1,
-  "cohort_id": "paper-313-gef-0.5366-20260825",
-  "expected_city_count": 313,
+  "cohort_id": "paper-311-gef-0.5366-exclude-hk-macau-20261103",
+  "expected_city_count": 311,
   "minimum_valid_weighted_od_pairs": 30,
-  "included_region_keys_sha256": "869f23b4180521d1678200648c089d4c4eb7ed98fc425f9cb71b7971af6b515f",
+  "included_region_keys_sha256": "598e5f1adf61737101560eaa3d1a02271aec7a72345787029ce1ca4dc3a445e8",
   "excluded_regions": {
     "alashanmeng": "incomplete_city_result",
     "aleitaidiqu": "incomplete_city_result",
     "alidiqu": "incomplete_city_result",
+    "aomentebiexingzhengqu": "invalid_merchant_geography",
     "bayinguolengmengguzizhizhou": "incomplete_city_result",
     "chifeng": "incomplete_city_result",
     "eerduosi": "incomplete_city_result",
@@ -19,17 +20,16 @@
     "linzhi": "insufficient_od_pairs",
     "rikaze": "incomplete_city_result",
     "xilinguoleimeng": "incomplete_city_result",
+    "xianggangtebiexingzhengqu": "invalid_merchant_geography",
     "yushuzangzuzizhizhou": "incomplete_city_result"
   },
   "grid_emission_factor_fallback": {
     "kg_co2e_per_kwh": 0.5366,
     "source": "MEE/NBS 2022 national mean",
     "affected_region_keys": [
-      "aomentebiexingzhengqu",
       "changdou",
       "lasa",
-      "shannan",
-      "xianggangtebiexingzhengqu"
+      "shannan"
     ]
   }
 }

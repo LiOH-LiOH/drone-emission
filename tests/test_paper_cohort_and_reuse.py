@@ -27,21 +27,23 @@ from drone_emission.visualization.distance_threshold_inputs import (
 )
 
 
-def test_locked_paper_cohort_is_exactly_313_cities():
+def test_locked_paper_cohort_is_exactly_311_cities():
     contract = load_cohort_contract()
     keys = locked_region_keys(contract)
-    assert len(keys) == 313
+    assert len(keys) == 311
+    assert "xianggangtebiexingzhengqu" not in keys
+    assert "aomentebiexingzhengqu" not in keys
     assert "linzhi" not in keys
     assert "ganzizangzuzizhizhou" in keys
     assert region_keys_sha256(keys) == cohort_hash()
     assert contract["excluded_regions"]["linzhi"] == "insufficient_od_pairs"
 
 
-def test_locked_fallback_is_2022_national_mean_for_five_cities():
+def test_locked_fallback_is_2022_national_mean_for_three_cities():
     contract = load_cohort_contract()
     fallback = contract["grid_emission_factor_fallback"]
     assert fallback_factor() == pytest.approx(0.5366)
-    assert len(fallback["affected_region_keys"]) == 5
+    assert set(fallback["affected_region_keys"]) == {"changdou", "lasa", "shannan"}
     assert "linzhi" not in fallback["affected_region_keys"]
 
 
@@ -64,7 +66,7 @@ def test_explicit_reuse_directory_verifies_and_restores_hash(tmp_path):
     manifest = {
         "schema_version": REUSE_SCHEMA_VERSION,
         "cohort_sha256": cohort_hash(),
-        "city_count": 313,
+        "city_count": 311,
         "grid_emission_factor_fallback": contract[
             "grid_emission_factor_fallback"
         ],

@@ -46,7 +46,7 @@ def test_manifest_rendering_is_bound_to_tracked_city_cohort():
     cohort = json.loads(
         (root / "src" / "drone_emission" / "paper_cohort.json").read_text()
     )
-    assert cohort["expected_city_count"] == 313
+    assert cohort["expected_city_count"] == 311
     assert cohort["minimum_valid_weighted_od_pairs"] == 30
     assert cohort["grid_emission_factor_fallback"]["kg_co2e_per_kwh"] == 0.5366
     assert cohort["excluded_regions"]["linzhi"] == "insufficient_od_pairs"

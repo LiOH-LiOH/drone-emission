@@ -26,6 +26,9 @@ def _record_stage(stage: str) -> None:
 
 def run_region_analysis(region_key: str, config: dict):
     """Run region analysis"""
+    from .paper_cohort import require_experiment_region
+
+    require_experiment_region(region_key)
     registry = get_registry()
 
     if region_key not in registry:
@@ -67,6 +70,9 @@ def run_region_analysis(region_key: str, config: dict):
 
 def run_region_from_roadnet(region_key: str, config: dict):
     """Resume one city from its existing OD pairs through final emissions."""
+    from .paper_cohort import require_experiment_region
+
+    require_experiment_region(region_key)
     registry = get_registry()
     if region_key not in registry:
         raise KeyError(f"Region '{region_key}' not found in configuration")
@@ -92,6 +98,9 @@ def run_region_from_roadnet(region_key: str, config: dict):
 
 def run_region_from_road_clean(region_key: str, config: dict):
     """Resume from an already-routed OD checkpoint without loading GraphML."""
+    from .paper_cohort import require_experiment_region
+
+    require_experiment_region(region_key)
     registry = get_registry()
     if region_key not in registry:
         raise KeyError(f"Region '{region_key}' not found in configuration")
@@ -136,6 +145,10 @@ def run_all(config: dict, level: str = "city", skip_completed: bool = False):
     """Run analysis for all regions of the given level."""
     registry = get_registry()
     regions = registry.list_by_level(level)
+    from .paper_cohort import experiment_excluded_region_keys
+
+    excluded = experiment_excluded_region_keys()
+    regions = {key: region for key, region in regions.items() if key not in excluded}
 
     if not regions:
         print(f"No regions found with level '{level}'.")

@@ -89,6 +89,23 @@ def cohort_hash() -> str:
     return load_cohort_contract()["included_region_keys_sha256"]
 
 
+def experiment_excluded_region_keys(contract: dict | None = None) -> set[str]:
+    """Policy exclusions apply even when historical city results are complete."""
+    contract = contract or load_cohort_contract()
+    return {
+        key for key, reason in contract.get("excluded_regions", {}).items()
+        if reason == "invalid_merchant_geography"
+    }
+
+
+def require_experiment_region(region_key: str) -> None:
+    if region_key in experiment_excluded_region_keys():
+        raise ValueError(
+            f"{region_key} is excluded from this experiment: "
+            "raw merchant addresses conflict with the assigned geography"
+        )
+
+
 def _city_paths(data_root: Path, region_key: str, region: dict) -> tuple[Path, Path]:
     name = str(region["region_name_en"]).lower()
     city_root = data_root / "city" / name
@@ -147,6 +164,17 @@ def audit_city_cohort(config: dict, *, restrict_to_locked: bool = False) -> dict
     for region_key in audited_keys:
         region = registry[region_key]
         stats_path, od_path = _city_paths(data_root, region_key, region)
+        if region_key in experiment_excluded_region_keys(contract):
+            rows.append({
+                "region_key": region_key,
+                "eligible": False,
+                "reason": contract["excluded_regions"][region_key],
+                "valid_weighted_od_pairs": None,
+                "missing_required_stats": [],
+                "region_stats_path": str(stats_path),
+                "od_path": str(od_path),
+            })
+            continue
         reason = None
         stats: dict = {}
         if not stats_path.is_file() or not od_path.is_file():
@@ -250,6 +278,9 @@ def assert_locked_cohort(config: dict) -> Path:
 def accept_candidate_cohort(payload: dict, *, target: Path | None = None) -> Path:
     """Explicitly replace the tracked lock with a reviewed audit candidate."""
     contract = load_cohort_contract()
+    forbidden = experiment_excluded_region_keys(contract)
+    if forbidden.intersection(payload["candidate_region_keys"]):
+        raise ValueError("candidate cohort includes an experiment policy exclusion")
     excluded = {
         row["region_key"]: row["reason"]
         for row in payload["cities"]
@@ -257,6 +288,7 @@ def accept_candidate_cohort(payload: dict, *, target: Path | None = None) -> Pat
     }
     if payload.get("candidate_scope") == "locked-only":
         excluded = {**contract.get("excluded_regions", {}), **excluded}
+    excluded.update({key: contract["excluded_regions"][key] for key in forbidden})
     contract["expected_city_count"] = len(payload["candidate_region_keys"])
     contract["included_region_keys_sha256"] = payload[
         "candidate_region_keys_sha256"
