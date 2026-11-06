@@ -31,3 +31,16 @@ docs/paper/
 docs/paper-trb/
 docs/ref/
 docs/slides/**/*.pdf
+
+# Local development and retired presentation materials
+/archive/local-only/
+/CLAUDE.md
+/TODO.md
+/docs/313-city-rerun.md
+/docs/remote_storage.md
+/docs/proposal/
+/docs/poster/
+/docs/slides/
+
+# Working documentation is maintained locally; includes the separate Overleaf checkout
+/docs/
