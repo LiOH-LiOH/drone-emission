@@ -21,11 +21,17 @@ All source-region memberships survive deduplication. Regional maps preserve sour
 coverage (the San Francisco file includes the Bay Area).
 
 The 2022 comparison selects local **receipt year**, not order year. Hourly and
-weekly rhythms use actual `orderTime` only. Monthly receipt and order timestamps
-are plotted separately. Counts describe the sample, without market expansion.
+weekly rhythms use `orderTime` only. The supplied Grubhub dictionary identifies
+orderTime as local time encoded in epoch numbers; Foodpanda's email/order offsets
+support the same encoding. Decode source clock values without applying another
+UTC-to-local offset. Email receipt times use ordinary UTC-to-local conversion.
+Monthly receipt and order timestamps are plotted separately. Counts describe
+the sample, without market expansion.
 The distance is endpoint geodesic distance, not a route distance.
 
 PNG previews and PDF/SVG exports are produced remotely; default review transfers
 include PNGs and lightweight CSV/JSON/Markdown provenance only. Detailed records,
 prepared inputs and downloaded map assets remain remote. Base maps are CARTO
-Positron (OpenStreetMap/CARTO attribution) and Natural Earth 1:110m country outlines.
+Mapnik (OpenStreetMap attribution) and Natural Earth 1:110m country outlines.
+Main density windows show central 99% endpoint bounds plus padding; full-extent
+locator insets preserve every valid endpoint. All counts and grids retain all rows.

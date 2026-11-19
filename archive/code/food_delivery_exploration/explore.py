@@ -14,6 +14,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from matplotlib.colors import LogNorm
+from matplotlib.patches import Rectangle
 from matplotlib.ticker import FuncFormatter
 import numpy as np
 import pandas as pd
@@ -53,6 +54,17 @@ def timestamps(series):
     seconds = seconds.where(seconds > 0)
     seconds = seconds.where(seconds < 1e12, seconds / 1000)
     return pd.to_datetime(seconds, unit="s", errors="coerce", utc=True)
+
+
+def order_wall_time(series):
+    """Decode the source local-clock encoding, without a second timezone shift.
+
+    Grubhub's supplied dictionary explicitly marks orderTime as Local Time.
+    Foodpanda has the same encoding: UTC email time precedes encoded order time
+    by about 7.4 hours, or follows the Hong Kong local order by about 0.6 hours.
+    The UTC tag applied during numeric parsing is a storage convenience only.
+    """
+    return series.dt.tz_localize(None)
 
 
 def signature(input_dir):
@@ -178,6 +190,8 @@ class Atlas:
         self.tables.append(filename)
 
     def save(self, fig, name, note=""):
+        # Reserve a real footer band; figure text is not handled by constrained layout.
+        fig.get_layout_engine().set(rect=(0, .045, 1, .95))
         fig.text(.01, .008, "Sample receipts; no market expansion. " + note,
                  ha="left", va="bottom", fontsize=8, color=color("ink.secondary"))
         for suffix in ("png", "pdf", "svg"):
@@ -189,6 +203,9 @@ class Atlas:
     def global_map(self):
         import geopandas as gpd
         import requests
+        import contextily as ctx
+        (self.cache / "tiles").mkdir(exist_ok=True)
+        ctx.set_cache_dir(str(self.cache / "tiles"))
         target = self.cache / "maps" / "ne_110m_admin_0_countries.zip"
         target.parent.mkdir(parents=True, exist_ok=True)
         if not target.exists():
@@ -216,13 +233,21 @@ class Atlas:
             pad_y = max((bounds[3] - bounds[1]) * .08, .03)
             ax.set(xlim=(bounds[0]-pad_x, bounds[2]+pad_x), ylim=(bounds[1]-pad_y, bounds[3]+pad_y),
                    title=f"{label} | n={len(subset):,}")
+            if label == "Hong Kong":
+                ax.clear()
+                ax.set(xlim=(bounds[0]-pad_x, bounds[2]+pad_x), ylim=(bounds[1]-pad_y, bounds[3]+pad_y),
+                       title=f"{label} | n={len(subset):,}", xlabel="Longitude", ylabel="Latitude")
+                ctx.add_basemap(ax, crs="EPSG:4326", source=ctx.providers.OpenStreetMap.Mapnik,
+                                zoom=10, attribution=False, alpha=.65)
+                ax.scatter(subset.dropoffLon, subset.dropoffLat, s=.5, color=self.blue,
+                           alpha=.18, linewidths=0, rasterized=True)
         for r, (name, _, _) in REGIONS.items():
             q = self.region(r, od=True)
             x, y = q.dropoffLon.median(), q.dropoffLat.median()
             ax = axes[2] if r == "hk" else axes[1]
             ax.annotate(name, (x, y), xytext=(5, 8), textcoords="offset points", fontsize=8,
                         bbox={"facecolor": "white", "alpha": .85, "edgecolor": "none"})
-        self.save(fig, "01_global_coverage", "Valid OD destinations. Made with Natural Earth.")
+        self.save(fig, "01_global_coverage", "Valid OD destinations. Natural Earth; © OpenStreetMap contributors.")
 
     def quality(self):
         fig = plt.figure(figsize=(14, 10), layout="constrained")
@@ -251,7 +276,8 @@ class Atlas:
         names = ["City-enriched (4 files)" if "city_extracts" in s else " / ".join(s.split("/")[1:]) for s in q.source]
         ax.set_yticks(np.arange(len(q)), [f"{s}   n={n:,}" for s, n in zip(names, q.rows)])
         ax.invert_yaxis(); ax.set(xlim=(0, 100), xlabel="Share of source records (%)")
-        ax.legend(ncol=3, loc="upper center", bbox_to_anchor=(.5, -.12), frameon=False)
+        handles, legend_labels = ax.get_legend_handles_labels()
+        fig.legend(handles, legend_labels, ncol=3, loc="outside upper center", frameon=False)
         ax.set_title("Source completeness (source records; overlaps retained here)")
         self.table("source_quality", q)
         self.save(fig, "02_validity", "Donuts: unique merged receipts. Bars: each source's own denominator.")
@@ -288,17 +314,18 @@ class Atlas:
                     x, y = t.transform(full[end+"Lon"].to_numpy(), full[end+"Lat"].to_numpy())
                     coords.append(np.column_stack((x, y)))
                 points = np.concatenate(coords)
-                lo, hi = points.min(axis=0), points.max(axis=0)
+                full_lo, full_hi = points.min(axis=0), points.max(axis=0)
+                lo, hi = np.quantile(points, [.005, .995], axis=0)
                 pad = np.maximum((hi-lo)*.05, 1500)
                 xmin, ymin = to_map.transform(*(lo-pad)); xmax, ymax = to_map.transform(*(hi+pad))
                 extent = (xmin, xmax, ymin, ymax)
-                raster = self.cache / "maps" / f"{r}_positron.tif"
+                raster = self.cache / "maps" / f"{r}_osm_focus.tif"
                 if not raster.exists():
                     zoom = 11
                     while zoom > 4 and ctx.howmany(xmin, ymin, xmax, ymax, zoom, verbose=False) > 256:
                         zoom -= 1
                     ctx.bounds2raster(xmin, ymin, xmax, ymax, str(raster), zoom=zoom,
-                                      source=ctx.providers.CartoDB.Positron, n_connections=1,
+                                      source=ctx.providers.OpenStreetMap.Mapnik, n_connections=1,
                                       wait=1, max_retries=2)
                 for col, end in enumerate(("pickup", "dropoff")):
                     ax = axes[row, col]
@@ -316,15 +343,27 @@ class Atlas:
                     ax.add_collection(collection)
                     ax.set(xlim=extent[:2], ylim=extent[2:])
                     n = len(self.region(r, year, od=True))
+                    endpoint = coords[col]
+                    in_view = ((endpoint >= lo-pad) & (endpoint <= hi+pad)).all(axis=1)
                     ax.set_title(f"{name} | {'Origins' if col == 0 else 'Destinations'} | n={n:,}")
                     ax.set_aspect("equal"); ax.set_xticks([]); ax.set_yticks([])
+                    locator = ax.inset_axes([.77, .71, .22, .25])
+                    locator.scatter(endpoint[:, 0], endpoint[:, 1], s=.15, color=self.blue,
+                                    alpha=.15, linewidths=0, rasterized=True)
+                    locator.add_patch(Rectangle(lo-pad, *(hi-lo+2*pad), fill=False,
+                                                edgecolor=color("base.coral"), linewidth=1))
+                    locator.set(xlim=(full_lo[0]-pad[0], full_hi[0]+pad[0]),
+                                ylim=(full_lo[1]-pad[1], full_hi[1]+pad[1]), xticks=[], yticks=[])
+                    locator.set_title("Full extent", fontsize=6, pad=2)
+                    ax.text(.01, .96, f"Main view: {in_view.sum():,}/{n:,}", transform=ax.transAxes,
+                            fontsize=8, va="top", bbox={"facecolor":"white", "alpha":.8, "edgecolor":"none"})
                     # Use local projected distances for a calibrated scale bar.
                     length = max(1000, 10**math.floor(math.log10(max(hi-lo)/5)))
                     sx, sy = lo[0], lo[1]
                     a, b = to_map.transform([sx, sx+length], [sy, sy])
                     ax.plot(a, b, color=color("ink.text"), lw=2)
                     ax.text(a[0], b[0], f" {length/1000:g} km", va="bottom", fontsize=8)
-                    ax.text(.01, .01, "© OpenStreetMap contributors © CARTO", transform=ax.transAxes,
+                    ax.text(.01, .01, "© OpenStreetMap contributors", transform=ax.transAxes,
                             fontsize=6, bbox={"facecolor":"white", "alpha":.8, "edgecolor":"none"})
                     self.table(f"grid_{r}_{year or 'full'}_{end}", pd.DataFrame({
                         "utm_x_min_m": bins[:, 0]*1000, "utm_y_min_m": bins[:, 1]*1000,
@@ -334,7 +373,7 @@ class Atlas:
             cb.set_label("Receipt samples per 1 km² cell (logarithmic color scale)")
             fig.suptitle("Endpoint sample density | " + ("Full history" if year is None else "2022 receipt-year cohort"), fontsize=17)
             self.save(fig, "03_density_full" if year is None else "04_density_2022",
-                      "Same bounds, physical grid and color scale in both periods; source-region extent.")
+                      "Main view: central 99% endpoint bounds + padding. Insets retain full extent. Same grid and color scale.")
 
     def monthly(self):
         fig, axes = plt.subplots(4, 2, figsize=(14, 13), layout="constrained")
@@ -343,7 +382,9 @@ class Atlas:
             d = self.region(r, od=True)
             for j, (field, label) in enumerate((("receipt_time", "Email receipt month"), ("order_time", "Actual order month"))):
                 ax = axes[i, j]
-                local = d[field].dropna().dt.tz_convert(tz).dt.tz_localize(None)
+                series = d[field].dropna()
+                local = (order_wall_time(series) if field == "order_time"
+                         else series.dt.tz_convert(tz).dt.tz_localize(None))
                 if local.empty:
                     ax.text(.5, .5, "No actual order timestamps", ha="center", transform=ax.transAxes)
                 else:
@@ -368,7 +409,7 @@ class Atlas:
             records = []
             for i, (r, (name, tz, _)) in enumerate(REGIONS.items()):
                 d = self.region(r, year, od=True)
-                local = d.order_time.dropna().dt.tz_convert(tz)
+                local = order_wall_time(d.order_time.dropna())
                 hour = local.dt.hour.value_counts().reindex(range(24), fill_value=0)
                 pct = hour.to_numpy()/max(len(local), 1)*100
                 axes[i, 0].bar(range(24), pct, color=self.teal, width=.9)
@@ -387,7 +428,7 @@ class Atlas:
             name = "06_rhythms_full" if year is None else "06_rhythms_2022"
             fig.suptitle("Actual order-time distribution | " + ("Full history" if year is None else "2022 receipt cohort"), fontsize=16)
             self.table(name, pd.DataFrame(records))
-            self.save(fig, name, "Positive orderTime only; no email-time substitution. Local time with daylight saving.")
+            self.save(fig, name, "Positive orderTime only. Source local clock; no second timezone conversion or email substitution.")
 
     def distances(self):
         fig, axes = plt.subplots(2, 2, figsize=(13, 9), layout="constrained")
@@ -433,7 +474,7 @@ class Atlas:
                 else:
                     ax.set_xlim(0, 100)
         handles, labels = axes[0, 0].get_legend_handles_labels()
-        fig.legend(handles, labels, loc="outside lower center", ncol=6, frameon=False)
+        fig.legend(handles, labels, loc="outside upper center", ncol=6, frameon=False)
         self.table("platform_counts", pd.DataFrame(records))
         self.save(fig, "08_platforms", "Composition of valid OD samples, not platform market shares.")
 
@@ -449,6 +490,7 @@ class Atlas:
     def finish(self, prepared):
         self.table("region_counts", pd.DataFrame(self.summaries))
         report = {"created_utc": datetime.now(timezone.utc).isoformat(), "prepared":prepared,
+                  "time_semantics": "receivedDate: UTC epoch converted to region timezone. orderTime: source local-clock epoch encoding, decoded without offset conversion. Grubhub dictionary says Local Time; Foodpanda interpretation supported by ~-7.4h email-minus-encoded-order difference.",
                   "pngs":["00_overview.png", *self.files], "source_tables":self.tables,
                   "palette_sha256":hashlib.sha256((ROOT / "src/drone_emission/visualization/palette.toml").read_bytes()).hexdigest(),
                   "notes":self.notes}
@@ -464,14 +506,22 @@ Source bars in figure 02 retain overlapping source records intentionally.
 
 Regional membership follows supplied city files (including their surrounding
 zones) and Hong Kong country flags. No administrative clipping. 2022 selects the
-local receipt year. Monthly receipt-time coverage and true order-time coverage
+local receipt year. Monthly receipt-time coverage and source order-time coverage
 are separate. Hour/weekday plots never substitute email timestamps for orders.
+Source orderTime encodes local wall-clock values as epoch numbers: Grubhub's
+dictionary explicitly says Local Time. Foodpanda shows the same convention
+(email minus encoded order time median -7.43 hours; accounting for HK UTC+8 gives
+about 34 minutes from order to email). These values are decoded without a second
+timezone conversion. Receipt timestamps use normal UTC-to-local conversion.
 Coordinates are treated as WGS84; validity is numeric/range/non-(0,0), not a claim
 of positional accuracy. Grid cells are 1 km² in local UTM projections, with shared
 log color normalization across endpoint maps. Distances are geodesic endpoint
 distances, not roads or courier trajectories. No market expansion is applied.
 
-Basemaps: © OpenStreetMap contributors © CARTO. World: Natural Earth.
+Basemaps: © OpenStreetMap contributors. World: Natural Earth.
+Main map windows use central 99% of full-history endpoints plus padding; locator
+insets show every valid endpoint across the full source extent. No rows are
+removed from counts, grid tables, distance curves or sample statistics.
 First/last observed months are hatched because coverage may be incomplete.
 Merged counts can differ from rowwise source summaries because timestamps are
 filled from another record of the same receipt. Missing order times remain missing.
