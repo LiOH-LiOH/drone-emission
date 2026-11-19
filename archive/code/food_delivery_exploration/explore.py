@@ -38,6 +38,16 @@ FIELDS = ["accountEmailId", "receiptId", "orderId", "receivedDate", "orderTime",
           "pickupLat", "pickupLon", "dropoffLat", "dropoffLon", "countryCode", "plantform"]
 COORDS = ["pickupLat", "pickupLon", "dropoffLat", "dropoffLon"]
 VERSION = 1
+MAP_USER_AGENT = "DroneEmissionDeliveryAtlas/1.0 (+https://github.com/LiOH-LiOH/drone-emission)"
+
+
+def configure_maps(cache):
+    import contextily as ctx
+    tile_dir = cache / "tiles_esri_gray_identified"
+    tile_dir.mkdir(parents=True, exist_ok=True)
+    ctx.set_cache_dir(str(tile_dir))
+    ctx.tile.USER_AGENT = MAP_USER_AGENT
+    return ctx
 
 
 def valid_od(frame):
@@ -203,9 +213,7 @@ class Atlas:
     def global_map(self):
         import geopandas as gpd
         import requests
-        import contextily as ctx
-        (self.cache / "tiles").mkdir(exist_ok=True)
-        ctx.set_cache_dir(str(self.cache / "tiles"))
+        ctx = configure_maps(self.cache)
         target = self.cache / "maps" / "ne_110m_admin_0_countries.zip"
         target.parent.mkdir(parents=True, exist_ok=True)
         if not target.exists():
@@ -237,7 +245,7 @@ class Atlas:
                 ax.clear()
                 ax.set(xlim=(bounds[0]-pad_x, bounds[2]+pad_x), ylim=(bounds[1]-pad_y, bounds[3]+pad_y),
                        title=f"{label} | n={len(subset):,}", xlabel="Longitude", ylabel="Latitude")
-                ctx.add_basemap(ax, crs="EPSG:4326", source=ctx.providers.OpenStreetMap.Mapnik,
+                ctx.add_basemap(ax, crs="EPSG:4326", source=ctx.providers.Esri.WorldGrayCanvas,
                                 zoom=10, attribution=False, alpha=.65)
                 ax.scatter(subset.dropoffLon, subset.dropoffLat, s=.5, color=self.blue,
                            alpha=.18, linewidths=0, rasterized=True)
@@ -247,7 +255,7 @@ class Atlas:
             ax = axes[2] if r == "hk" else axes[1]
             ax.annotate(name, (x, y), xytext=(5, 8), textcoords="offset points", fontsize=8,
                         bbox={"facecolor": "white", "alpha": .85, "edgecolor": "none"})
-        self.save(fig, "01_global_coverage", "Valid OD destinations. Natural Earth; © OpenStreetMap contributors.")
+        self.save(fig, "01_global_coverage", "Valid OD destinations. Natural Earth; " + ctx.providers.Esri.WorldGrayCanvas.attribution)
 
     def quality(self):
         fig = plt.figure(figsize=(14, 10), layout="constrained")
@@ -298,10 +306,8 @@ class Atlas:
         return info, LogNorm(vmin=1, vmax=max(2, max_count))
 
     def maps(self):
-        import contextily as ctx
+        ctx = configure_maps(self.cache)
         from matplotlib.collections import PolyCollection
-        tile_dir = self.cache / "tiles"; tile_dir.mkdir(exist_ok=True)
-        ctx.set_cache_dir(str(tile_dir))
         grids, norm = self.grids()
         for year in (None, 2022):
             fig, axes = plt.subplots(4, 2, figsize=(14, 18), layout="constrained")
@@ -319,13 +325,13 @@ class Atlas:
                 pad = np.maximum((hi-lo)*.05, 1500)
                 xmin, ymin = to_map.transform(*(lo-pad)); xmax, ymax = to_map.transform(*(hi+pad))
                 extent = (xmin, xmax, ymin, ymax)
-                raster = self.cache / "maps" / f"{r}_osm_focus.tif"
+                raster = self.cache / "maps" / f"{r}_esri_gray_focus.tif"
                 if not raster.exists():
                     zoom = 11
                     while zoom > 4 and ctx.howmany(xmin, ymin, xmax, ymax, zoom, verbose=False) > 256:
                         zoom -= 1
                     ctx.bounds2raster(xmin, ymin, xmax, ymax, str(raster), zoom=zoom,
-                                      source=ctx.providers.OpenStreetMap.Mapnik, n_connections=1,
+                                      source=ctx.providers.Esri.WorldGrayCanvas, n_connections=1,
                                       wait=1, max_retries=2)
                 for col, end in enumerate(("pickup", "dropoff")):
                     ax = axes[row, col]
@@ -342,9 +348,13 @@ class Atlas:
                                                 norm=norm, linewidths=0, alpha=.85, rasterized=True)
                     ax.add_collection(collection)
                     ax.set(xlim=extent[:2], ylim=extent[2:])
-                    n = len(self.region(r, year, od=True))
-                    endpoint = coords[col]
+                    period_frame = self.region(r, year, od=True)
+                    n = len(period_frame)
+                    px, py = t.transform(period_frame[end+"Lon"].to_numpy(),
+                                         period_frame[end+"Lat"].to_numpy())
+                    endpoint = np.column_stack((px, py))
                     in_view = ((endpoint >= lo-pad) & (endpoint <= hi+pad)).all(axis=1)
+                    assert int(in_view.sum()) <= n
                     ax.set_title(f"{name} | {'Origins' if col == 0 else 'Destinations'} | n={n:,}")
                     ax.set_aspect("equal"); ax.set_xticks([]); ax.set_yticks([])
                     locator = ax.inset_axes([.77, .71, .22, .25])
@@ -363,7 +373,7 @@ class Atlas:
                     a, b = to_map.transform([sx, sx+length], [sy, sy])
                     ax.plot(a, b, color=color("ink.text"), lw=2)
                     ax.text(a[0], b[0], f" {length/1000:g} km", va="bottom", fontsize=8)
-                    ax.text(.01, .01, "© OpenStreetMap contributors", transform=ax.transAxes,
+                    ax.text(.01, .01, "Tiles © Esri", transform=ax.transAxes,
                             fontsize=6, bbox={"facecolor":"white", "alpha":.8, "edgecolor":"none"})
                     self.table(f"grid_{r}_{year or 'full'}_{end}", pd.DataFrame({
                         "utm_x_min_m": bins[:, 0]*1000, "utm_y_min_m": bins[:, 1]*1000,
@@ -373,7 +383,7 @@ class Atlas:
             cb.set_label("Receipt samples per 1 km² cell (logarithmic color scale)")
             fig.suptitle("Endpoint sample density | " + ("Full history" if year is None else "2022 receipt-year cohort"), fontsize=17)
             self.save(fig, "03_density_full" if year is None else "04_density_2022",
-                      "Main view: central 99% endpoint bounds + padding. Insets retain full extent. Same grid and color scale.")
+                      "Central 99% + padding; full-extent insets. " + ctx.providers.Esri.WorldGrayCanvas.attribution)
 
     def monthly(self):
         fig, axes = plt.subplots(4, 2, figsize=(14, 13), layout="constrained")
@@ -518,7 +528,8 @@ of positional accuracy. Grid cells are 1 km² in local UTM projections, with sha
 log color normalization across endpoint maps. Distances are geodesic endpoint
 distances, not roads or courier trajectories. No market expansion is applied.
 
-Basemaps: © OpenStreetMap contributors. World: Natural Earth.
+Basemaps: Esri World Gray Canvas (Tiles © Esri and its named data contributors).
+World outlines: Natural Earth. Full provider attribution appears on map figures.
 Main map windows use central 99% of full-history endpoints plus padding; locator
 insets show every valid endpoint across the full source extent. No rows are
 removed from counts, grid tables, distance curves or sample statistics.
