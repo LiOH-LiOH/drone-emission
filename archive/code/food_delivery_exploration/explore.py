@@ -153,7 +153,7 @@ class Atlas:
     def __init__(self, view, cache, output):
         self.df, self.cache, self.output = view, cache, output
         self.files, self.tables, self.notes = [], [], []
-        self.cmap = sequential_cmap()
+        self.cmap = sequential_cmap("sequential")
         self.blue, self.teal = color("base.blue"), color("base.green")
         self.yellow, self.gray = color("base.yellow"), color("base.gray")
         self.platform_colors = [color(f"group.{i}") for i in range(6)]
@@ -294,7 +294,10 @@ class Atlas:
                 extent = (xmin, xmax, ymin, ymax)
                 raster = self.cache / "maps" / f"{r}_positron.tif"
                 if not raster.exists():
-                    ctx.bounds2raster(xmin, ymin, xmax, ymax, str(raster), zoom=11,
+                    zoom = 11
+                    while zoom > 4 and ctx.howmany(xmin, ymin, xmax, ymax, zoom, verbose=False) > 256:
+                        zoom -= 1
+                    ctx.bounds2raster(xmin, ymin, xmax, ymax, str(raster), zoom=zoom,
                                       source=ctx.providers.CartoDB.Positron, n_connections=1,
                                       wait=1, max_retries=2)
                 for col, end in enumerate(("pickup", "dropoff")):
