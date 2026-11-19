@@ -31,7 +31,7 @@ The distance is endpoint geodesic distance, not a route distance.
 
 PNG previews and PDF/SVG exports are produced remotely; default review transfers
 include PNGs and lightweight CSV/JSON/Markdown provenance only. Detailed records,
-prepared inputs and downloaded map assets remain remote. Base maps are CARTO
+prepared inputs and downloaded map assets remain remote. Base maps are OpenStreetMap
 Mapnik (OpenStreetMap attribution) and Natural Earth 1:110m country outlines.
 Main density windows show central 99% endpoint bounds plus padding; full-extent
 locator insets preserve every valid endpoint. All counts and grids retain all rows.
